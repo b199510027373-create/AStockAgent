@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# 环境与密钥
+.env
+.env.local
+
+# 运行产物
+filtered_stocks.csv
+daily_report.txt
+temp_*.png
+
+# 编辑器
+.idea/
+.vscode/
