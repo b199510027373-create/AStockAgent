@@ -1,18 +1,22 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
+# Environment and secrets
+.env
+.env.*
+!.env.example
+env.env
+
+# Runtime data and caches
+cache/
+data/recommendations/
+.pytest_cache/
 .ipynb_checkpoints/
 
-# 环境与密钥
-.env
-.env.local
+# Python environments and bytecode
+.venv/
+venv/
+__pycache__/
+*.py[cod]
 
-# 运行产物
-filtered_stocks.csv
-daily_report.txt
-temp_*.png
-
-# 编辑器
+# Editor and OS files
+.DS_Store
 .idea/
 .vscode/

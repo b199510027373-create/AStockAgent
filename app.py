@@ -1,109 +1,83 @@
 import sys, os, time, json, datetime, requests
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+os.environ.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
+os.environ.setdefault("no_proxy", "127.0.0.1,localhost,::1")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
 
 import gradio as gr
 import pandas as pd
 import numpy as np
-import tushare as ts
-from openai import OpenAI
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
+from astock.data import load_daily as _load_daily
+from astock.indicators import add_all as _add_indicators
+from astock.ui import build_multiperiod_tab
+from astock.backtest_ui import build_backtest_tab
+from astock.recommend_ui import build_recommend_tab
+from astock.track_ui import build_track_tab
+from astock.optimize_ui import build_optimize_tab
+from astock.factor_ui import build_factor_tab
+from astock.strategy_ui import build_strategy_lab_tab
+from astock.scheduler import start_background as start_recommend_scheduler
+from astock.events import build_ai_context
+from astock.llm import chat as llm_chat
+
 # >>>>>>>>>>>> 配置区 <<<<<<<<<<<<<
-TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN", "your_tushare_token")
-DEEPSEEK_KEY  = os.getenv("DEEPSEEK_API_KEY", "your_deepseek_api_key")
+TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN", "")
+DEEPSEEK_KEY  = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE = os.getenv("DEEPSEEK_BASE", "https://api.deepseek.com")
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 # ====== 初始化 ======
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ts.set_token(TUSHARE_TOKEN)
-pro = ts.pro_api()
-if os.getenv("TUSHARE_PROXY_URL"):
-    pro._DataApi__http_url = os.getenv("TUSHARE_PROXY_URL")
-ds = OpenAI(api_key=DEEPSEEK_KEY, base_url=DEEPSEEK_BASE)
+# 行情数据走 astock.data；DeepSeek 走 astock.llm（直连/代理自动切换）
 
 DATA_CACHE = {}
-TODAY  = datetime.datetime.now().strftime("%Y%m%d")
-START  = (datetime.datetime.now() - datetime.timedelta(days=180)).strftime("%Y%m%d")
 STOCK_CSV   = os.path.join(BASE_DIR, "stocks.csv")
 FILTER_CSV  = os.path.join(BASE_DIR, "filtered_stocks.csv")
 
 # ====== 1. 数据获取 ======
 def get_df(ts_code):
+    """统一走 astock 数据层：绕过系统代理、带本地缓存。"""
     if ts_code in DATA_CACHE and time.time() - DATA_CACHE[ts_code][0] < 300:
         return DATA_CACHE[ts_code][1].copy()
-    df = pro.daily(ts_code=ts_code, start_date=START, end_date=TODAY)
-    if df is None or df.empty: return pd.DataFrame()
-    df["trade_date"] = pd.to_datetime(df["trade_date"])
-    df = df.sort_values("trade_date")
+    try:
+        today = datetime.datetime.now().strftime("%Y%m%d")
+        start = (datetime.datetime.now() - datetime.timedelta(days=180)).strftime("%Y%m%d")
+        df = _load_daily(ts_code, start=start, end=today, adj="qfq")
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty:
+        return pd.DataFrame()
+    df = df.sort_values("trade_date").reset_index(drop=True)
     DATA_CACHE[ts_code] = (time.time(), df.copy())
     return df
 
-# ====== 2. 指标计算（全指标版）======
+# ====== 2. 指标计算（统一走 astock.indicators）======
 def ind(df):
-    if df is None or df.empty or len(df) < 60: return pd.DataFrame()
-    
-    # 基础指标
-    df["ma5"]  = df["close"].rolling(5).mean()
-    df["ma20"] = df["close"].rolling(20).mean()
-    df["ma60"] = df["close"].rolling(60).mean()
-    
-    # EMA
-    df["ema12"] = df["close"].ewm(span=12, adjust=False).mean()
-    df["ema26"] = df["close"].ewm(span=26, adjust=False).mean()
-    
-    # RSI
-    d = df["close"].diff()
-    g, l = d.where(d>0,0), -d.where(d<0,0)
-    df["rsi"] = 100 - 100/(1 + g.rolling(14).mean()/l.rolling(14).mean())
-    
-    # MACD
-    df["macd"] = df["ema12"] - df["ema26"]
-    df["macd_sig"] = df["macd"].ewm(span=9, adjust=False).mean()
-    
-    # 布林带
-    df['middle_band'] = df['close'].rolling(window=20).mean()
-    std = df['close'].rolling(window=20).std()
-    df['upper_band'] = df['middle_band'] + (std * 2)
-    df['lower_band'] = df['middle_band'] - (std * 2)
-    
-    # KDJ
-    low_min = df['low'].rolling(window=9).min()
-    high_max = df['high'].rolling(window=9).max()
-    df['rsv'] = (df['close'] - low_min) / (high_max - low_min) * 100
-    df['k'] = df['rsv'].ewm(alpha=1/3, adjust=False).mean()
-    df['d'] = df['k'].ewm(alpha=1/3, adjust=False).mean()
-    df['j'] = 3 * df['k'] - 2 * df['d']
-    
-    # OBV
-    df['obv'] = (np.sign(df['close'].diff()) * df['vol']).fillna(0).cumsum()
-    
-    # CCI (20日)
-    tp = (df['high'] + df['low'] + df['close']) / 3
-    ma_tp = tp.rolling(20).mean()
-    md = (tp - ma_tp).abs().rolling(20).mean()
-    df['cci'] = (tp - ma_tp) / (0.015 * md)
-    
-    # ATR (14日)
-    high_low = df['high'] - df['low']
-    high_close = np.abs(df['high'] - df['close'].shift())
-    low_close = np.abs(df['low'] - df['close'].shift())
-    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    df['atr'] = tr.rolling(14).mean()
-    
-    # VR (26日)
-    df['vr_up'] = df['vol'].where(df['close'] > df['close'].shift(), 0)
-    df['vr_down'] = df['vol'].where(df['close'] < df['close'].shift(), 0)
-    df['vr'] = df['vr_up'].rolling(26).sum() / df['vr_down'].rolling(26).sum() * 100
-    
-    # PSY (12日)
-    df['psy'] = (df['close'] > df['close'].shift()).rolling(12).sum() / 12 * 100
-    
-    df["vol_ma20"] = df["vol"].rolling(20).mean()
-    
-    return df.dropna()
+    """兼容遗留字段名；唯一实现是 astock.indicators.add_all。"""
+    if df is None or df.empty or len(df) < 60:
+        return pd.DataFrame()
+    out = _add_indicators(df).copy()
+    aliases = {
+        "rsi": "rsi14",
+        "macd": "dif",
+        "macd_sig": "dea",
+        "middle_band": "boll_mid",
+        "upper_band": "boll_upper",
+        "lower_band": "boll_lower",
+        "cci": "cci20",
+        "atr": "atr14",
+        "vr": "vr26",
+        "psy": "psy12",
+    }
+    for old, new in aliases.items():
+        if new in out.columns:
+            out[old] = out[new]
+    # 遗留图只依赖这些列；不能因 ma250 尚未形成而把整段历史删光
+    subset = [c for c in ("ma20", "rsi", "macd", "atr", "cci", "vr") if c in out.columns]
+    return out.dropna(subset=subset).reset_index(drop=True)
 
 # ====== 3. 图形策略识别 ======
 def detect_patterns(df):
@@ -127,9 +101,22 @@ def detect_patterns(df):
 # ====== 4. DeepSeek 调用 ======
 def ds_chat(messages, max_tokens=800):
     try:
-        return ds.chat.completions.create(model="deepseek-chat", messages=messages, max_tokens=max_tokens, temperature=0.7, stream=False).choices[0].message.content
+        return llm_chat(messages, max_tokens=max_tokens, temperature=0.7)
     except Exception as e:
         return f"❌ DeepSeek 错误: {e}"
+
+
+def _citation_block(citations):
+    if not citations:
+        return ""
+    lines = ["", "---", "**数据来源**"]
+    for i, item in enumerate(citations, 1):
+        date = pd.Timestamp(item["date"]).strftime("%Y-%m-%d")
+        line = f"[{i}] {date} {item['kind']}：{item['title']}（{item.get('source', '')}）"
+        if item.get("url"):
+            line += f" [原文]({item['url']})"
+        lines.append(line)
+    return "\n".join(lines)
 
 # ====== 5. 单股体检（补齐K线图表）=====
 def single(ts_code, view_mode="basic"):
@@ -140,7 +127,16 @@ def single(ts_code, view_mode="basic"):
     L = df.iloc[-1]
     trend = "多头" if L.ma5 > L.ma20 else "空头"
     summary = f"【{ts_code}】收{L.close:.2f} MA5/20/60={L.ma5:.1f}/{L.ma20:.1f}/{L.ma60:.1f} RSI={L.rsi:.1f}"
-    ai = ds_chat([{"role":"system","content":"你是A股资深分析师，给操作建议。"}, {"role":"user","content":summary}])
+    try:
+        news_ctx, citations = build_ai_context(ts_code, limit=4)
+    except Exception:
+        news_ctx, citations = "", []
+    user_content = summary + (f"\n\n{news_ctx}" if news_ctx else "")
+    ai = ds_chat([
+        {"role": "system", "content": "你是A股资深分析师，给操作建议；有参考资料时用[1][2]标注来源，不要编造。"},
+        {"role": "user", "content": user_content},
+    ])
+    ai += _citation_block(citations)
     fig = _plot(df, ts_code) if view_mode == "basic" else _plot_full(df, ts_code)
     pattern_text = detect_patterns(df)
     return f"{summary}\n\n🤖 {ai}", fig, pattern_text
@@ -232,14 +228,14 @@ def portfolio(text):
         if L.rsi > 70: sc -= 1
         reps.append(f"{cd}: {'Bull' if sc>5 else 'Bear'} (Score:{sc})")
         score += sc * w
-        rets[cd] = df["close"].pct_change().dropna()
+        rets[cd] = df.set_index("trade_date")["close"].pct_change().dropna()
     ai = ds_chat([{"role":"system","content":"你是资产配置专家，点评风险。"}, {"role":"user","content":f"持仓{d}\n{' ; '.join(reps)}\n给总评。"}])
     return f"📊 组合健康度 {score:.1f}/10\n"+"\n".join(reps)+f"\n\n🤖 {ai}", rets, None
 
 def p_charts(rets):
     if not rets: e=go.Figure(); e.update_layout(title="无数据"); return e,e,e
-    dfr = pd.DataFrame(rets)
-    nav = (1+dfr).cumprod()
+    dfr = pd.DataFrame(rets).sort_index()
+    nav = (1 + dfr.fillna(0)).cumprod()
     f1 = go.Figure([go.Scatter(x=nav.index,y=nav[c],mode="lines",name=c) for c in nav.columns]); f1.update_layout(title="净值曲线",template="plotly_white")
     f2 = px.imshow(dfr.corr(),text_auto=".2f",title="相关性热力图",template="plotly_white")
     vol = dfr.std()*np.sqrt(252)
@@ -319,13 +315,48 @@ def rm_stock(code, cur):
     return cur, f"⚠️ 无此码"
 
 # ====== 10. AI 对话 ======
+def _latest_recommendation_context():
+    path = os.path.join(BASE_DIR, "data", "recommendations", "latest.json")
+    if not os.path.exists(path):
+        return ""
+    try:
+        data = json.loads(open(path, encoding="utf-8").read())
+        rows = data.get("table", [])[:3]
+        if not rows:
+            return ""
+        lines = ["【最新每日推荐摘要】"]
+        for row in rows:
+            lines.append(
+                f"{row.get('代码')} {row.get('名称')} 综合{row.get('综合分')} "
+                f"建议{row.get('建议')}：{str(row.get('理由', ''))[:80]}"
+            )
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def ai_chat(message, history, p_text):
     ctx = f"时间:{datetime.datetime.now():%Y-%m-%d %H:%M}\n自选:{load_stocks()}\n持仓:{p_text}"
-    msgs = [{"role":"system","content":f"你是A股投顾，上下文：{ctx}"}]
-    for m in history: msgs.append(m)
-    msgs.append({"role":"user","content":message})
+    news_ctx, citations = "", []
+    try:
+        news_ctx, citations = build_ai_context(message, limit=8)
+    except Exception as exc:  # noqa: BLE001
+        news_ctx = f"（新闻/公告检索失败：{exc}）"
+    rec_ctx = _latest_recommendation_context()
+
+    system = (
+        "你是A股投顾，回答要区分事实与推断。"
+        "如果提供了参考资料，优先使用并用 [1][2] 标注来源；资料不足时明确说明，不要编造新闻、公告或研报。\n"
+        f"上下文：{ctx}\n{rec_ctx}\n{news_ctx}"
+    )
+    msgs = [{"role": "system", "content": system}]
+    for m in history:
+        msgs.append(m)
+    msgs.append({"role": "user", "content": message})
     rep = ds_chat(msgs)
-    history.extend([{"role":"user","content":message}, {"role":"assistant","content":rep}])
+    rep += _citation_block(citations)
+
+    history.extend([{"role": "user", "content": message}, {"role": "assistant", "content": rep}])
     return "", history
 
 # ====== 11. UI ======
@@ -439,8 +470,25 @@ with gr.Blocks(title="AStockAgent") as app:
             msg.submit(lambda m, h: _send_wrapper(m, h), [msg, hist], [msg, bot])
             cb.click(lambda: ([],[]), None, [bot, hist])
 
+        # — 多周期（新）
+        build_multiperiod_tab()
+        # — 每日推荐（新）
+        build_recommend_tab()
+        # — 推荐跟踪（新）
+        build_track_tab()
+        # — 参数优化（新）
+        build_optimize_tab()
+        # — 多因子 IC（新）
+        build_factor_tab()
+        # — 策略实验室（新）
+        build_strategy_lab_tab()
+        # — 回测（新）
+        build_backtest_tab()
+
 # ====== 12. 启动 ======
 if __name__ == "__main__":
+    # 收盘后自动跑每日推荐（默认 16:00，交易日；ASTOCK_AUTO_RECOMMEND=0 可关闭）
+    start_recommend_scheduler()
     port = 7861
     for p in range(port, port+10):
         try:
