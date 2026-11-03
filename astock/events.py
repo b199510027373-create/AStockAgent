@@ -352,6 +352,7 @@ def fetch_announcements(codes: list[str], days: int = 30) -> pd.DataFrame:
                 df["kind"] = "announcement"
                 df["url"] = _col(df, "url")
                 df["name"] = _col(df, "name")
+                df["ts_code"] = _col(df, "ts_code")
                 df = df.dropna(subset=["pub_time"])[
                     ["pub_time", "ts_code", "name", "title", "content", "source", "kind", "url"]
                 ]
