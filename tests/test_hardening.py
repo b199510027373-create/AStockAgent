@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import unittest
 from dataclasses import dataclass
 from datetime import datetime
@@ -126,6 +127,65 @@ class SchedulerIdempotencyTests(unittest.TestCase):
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45))
                 self.assertEqual(fn.call_count, 1)
+
+    def test_stale_exception_marks_stale_without_last_run(self):
+        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
+            with patch.object(
+                scheduler,
+                "run_daily_recommendation",
+                side_effect=scheduler.StaleDataError("数据未更新"),
+            ):
+                result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+        self.assertIsNone(result)
+        state = json.loads(scheduler.STATE_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(state["jobs"]["2026-11-02:close"]["status"], "stale")
+        self.assertIn("StaleDataError", state["last_error"])
+        self.assertNotIn("last_run_date", state)
+
+    def test_generic_failure_increments_attempts(self):
+        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
+            with patch.object(
+                scheduler,
+                "run_daily_recommendation",
+                side_effect=RuntimeError("boom"),
+            ):
+                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45))
+        state = json.loads(scheduler.STATE_PATH.read_text(encoding="utf-8"))
+        job = state["jobs"]["2026-11-02:close"]
+        self.assertEqual(job["status"], "failed")
+        self.assertEqual(job["attempts"], 2)
+        self.assertIn("RuntimeError: boom", state["last_error"])
+        self.assertNotIn("last_run_date", state)
+
+    def test_force_reruns_success(self):
+        fake = FakeResult(data_as_of="2026-11-02", as_of="2026-11-02")
+        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
+            with patch.object(scheduler, "run_daily_recommendation", return_value=fake) as fn:
+                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45), force=True)
+                self.assertEqual(fn.call_count, 2)
+
+    def test_no_trade_date_returns_none(self):
+        with patch.object(scheduler, "last_completed_trade_date", return_value=None):
+            with patch.object(scheduler, "run_daily_recommendation") as fn:
+                result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+        self.assertIsNone(result)
+        self.assertEqual(fn.call_count, 0)
+
+    def test_start_background_skips_when_lock_held(self):
+        with (
+            patch.object(scheduler, "_THREAD", None),
+            patch.object(scheduler, "_acquire_lock", return_value=None),
+        ):
+            self.assertIsNone(scheduler.start_background())
+
+    def test_loop_exits_when_stop_is_set(self):
+        stop = threading.Event()
+        stop.set()
+        with patch.object(scheduler, "_log") as log:
+            scheduler.loop(stop)
+        self.assertTrue(log.called)
 
 
 class PitSnapshotTests(unittest.TestCase):

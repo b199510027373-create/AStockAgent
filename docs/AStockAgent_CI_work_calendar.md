@@ -8,7 +8,7 @@
 
 - CI 已配置、已提交、已推送。
 - GitHub Actions 对应提交已运行完成，结果为 `success`。
-- 本地 29 个单元测试全部通过（提交 e8cd9af 时；当前代码已增至 47 个）。
+- 本地 29 个单元测试全部通过（提交 e8cd9af 时；当前代码已增至 57 个）。
 - 当前 `main` 与 `origin/main` 一致。
 - 发布仓库工作区干净。
 - 没有提交 `.env`、密钥、虚拟环境、缓存、推荐产物或 Python 字节码。
@@ -182,10 +182,10 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 - 本地 `HEAD`、`origin/main`、远端 `refs/heads/main` 均为 `e8cd9af`；该提交时 `git status --short` 为空。
 - **当前工作区已有 v1.2 未提交改动**（SQLite ledger、PIT 快照、原始价/ST、研究语义等）；推送后需要重新跑 GitHub Actions，不能沿用 `e8cd9af` 的 CI 结果。
 - GitHub Actions API 核验：run `41402554097` 为 `completed / success`，`head_sha=e8cd9af`。
-- 本地 47 个 unittest 通过；根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希一致。
+- 本地 57 个 unittest 通过；根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希一致。
 - `git ls-files` 未发现 `.env`、`env.env`、`.venv/`、`cache/`、`data/recommendations/`、`__pycache__/`、`*.pyc`；`.env.example` 已跟踪。
 - CI 当前覆盖「依赖安装 + 敏感文件检查 + 语法编译 + ruff 基础规则 + 核心模块 mypy + 覆盖率门槛（50%）+ 单元测试」；UI/图表模块在 `.coveragerc` 中排除。
-- 2026-11-03 基线：`mypy astock app.py` 通过 22 个源文件；覆盖率（排除 UI/图表）**54%**（3492 statements / 1600 miss）。
+- 2026-11-03 基线：`mypy astock app.py` 通过 22 个源文件；覆盖率（排除 UI/图表）**57%**（3492 statements / 1493 miss）。
 
 ## 5. 安全红线
 

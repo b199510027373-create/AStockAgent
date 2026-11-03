@@ -28,6 +28,21 @@ class FakeTushare:
         raise AssertionError(f"unexpected api: {api_name}")
 
 
+class FakeMinuteClient:
+    def __init__(self, minute: pd.DataFrame, factors: pd.DataFrame | None = None):
+        self.minute = minute
+        self.factors = factors
+        self.calls: list[str] = []
+
+    def query(self, api_name, **kwargs):
+        self.calls.append(api_name)
+        if api_name == "rt_min":
+            return self.minute.copy()
+        if api_name == "adj_factor" and self.factors is not None:
+            return self.factors.copy()
+        raise AssertionError(f"unexpected api: {api_name}")
+
+
 class DataCacheAndQfqTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -85,6 +100,106 @@ class DataCacheAndQfqTests(unittest.TestCase):
             )
             self.assertEqual(len(second), 3)
             self.assertEqual(fake2.calls, [])
+
+    def test_normalize_minute_units_and_missing_time(self):
+        raw = pd.DataFrame(
+            {
+                "trade_time": ["2025-01-02 09:35:00"],
+                "open": ["10"],
+                "high": ["10.5"],
+                "low": ["9.8"],
+                "close": ["10.2"],
+                "vol": ["10000"],
+                "amount": ["500000"],
+            }
+        )
+        out = data._normalize_minute(raw)
+        self.assertEqual(float(out["vol"].iloc[0]), 100.0)
+        self.assertEqual(float(out["amount"].iloc[0]), 500.0)
+        self.assertEqual(out["trade_date"].iloc[0], pd.Timestamp("2025-01-02"))
+        with self.assertRaises(data.TushareError):
+            data._normalize_minute(pd.DataFrame({"close": [1.0]}))
+
+    def test_load_adj_factors_cache_and_empty_error(self):
+        fake = FakeTushare(self.raw, self.factors)
+        with (
+            patch.object(data, "_ADJ_MEM", {}),
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")),
+        ):
+            first = data.load_adj_factors("600519.SH", client=fake)
+            self.assertEqual(len(first), 3)
+            second = data.load_adj_factors("600519.SH", client=fake)
+            self.assertEqual(len(second), 3)
+        empty = FakeTushare(self.raw, pd.DataFrame())
+        with (
+            patch.object(data, "_ADJ_MEM", {}),
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")),
+            self.assertRaises(data.TushareError),
+        ):
+            data.load_adj_factors("600519.SH", client=empty)
+
+    def test_load_minute_rt_qfq_cache(self):
+        minute = pd.DataFrame(
+            {
+                "time": ["2025-01-02 09:35:00", "2025-01-02 09:40:00"],
+                "open": [10.0, 10.2],
+                "high": [10.1, 10.3],
+                "low": [9.9, 10.1],
+                "close": [10.0, 10.2],
+                "vol": [1000, 2000],
+                "amount": [10000, 20000],
+            }
+        )
+        fake = FakeMinuteClient(minute, self.factors)
+        with (
+            patch.object(data, "_MINUTE_MEM", {}),
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-06")),
+        ):
+            out = data.load_minute("600519.SH", freq="5min", days=1, adj="qfq", client=fake)
+            self.assertEqual(len(out), 2)
+            self.assertEqual(float(out["vol"].iloc[0]), 10.0)
+            self.assertAlmostEqual(float(out["close"].iloc[-1]), 10.2 * 0.25)
+            fake2 = FakeMinuteClient(minute, self.factors)
+            out2 = data.load_minute("600519.SH", freq="5min", days=1, adj="qfq", client=fake2)
+            self.assertEqual(len(out2), 2)
+            self.assertEqual(fake2.calls, [])
+
+    def test_load_minute_history_uses_calendar(self):
+        minute = pd.DataFrame(
+            {
+                "time": ["2025-01-02 09:35:00", "2025-01-03 09:35:00"],
+                "open": [10.0, 11.0],
+                "high": [10.1, 11.1],
+                "low": [9.9, 10.9],
+                "close": [10.0, 11.0],
+                "vol": [1000, 2000],
+                "amount": [10000, 20000],
+            }
+        )
+        cal = pd.DataFrame(
+            {
+                "cal_date": pd.to_datetime(["2025-01-02", "2025-01-03"]),
+                "is_open": [1, 1],
+            }
+        )
+
+        class HistClient(FakeTushare):
+            def query(self, api_name, **kwargs):
+                if api_name == "stk_mins":
+                    return minute.copy()
+                if api_name == "rt_min":
+                    return pd.DataFrame()
+                return super().query(api_name, **kwargs)
+
+        fake = HistClient(minute, self.factors)
+        with (
+            patch.object(data, "_MINUTE_MEM", {}),
+            patch.object(data, "load_trade_cal", return_value=cal),
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-03")),
+        ):
+            out = data.load_minute("600519.SH", freq="5min", days=2, adj=None, client=fake)
+        self.assertEqual(len(out), 2)
+        self.assertEqual(set(pd.to_datetime(out["trade_date"]).dt.date), {pd.Timestamp("2025-01-02").date(), pd.Timestamp("2025-01-03").date()})
 
 
 class PitSnapshotBuildTests(unittest.TestCase):
