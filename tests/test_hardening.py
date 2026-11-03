@@ -11,9 +11,12 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
+import astock.ledger as ledger
+import astock.pit as pit
 import astock.scheduler as scheduler
-from astock.backtest import limit_pct
-from astock.events import _col
+from astock.pit import snapshot_maps
+from astock.backtest import _one_price_limit, limit_pct, run_backtest
+from astock.events import _col, score_events
 from astock.recommend import _clean_json, _pick_diverse
 from astock.stats import benjamini_hochberg, effective_n, newey_west, student_t_p
 from astock.track import _forward_return
@@ -27,6 +30,47 @@ class FakeResult:
     csv_path: str = "/tmp/a.csv"
     json_path: str = "/tmp/a.json"
     run_id: str = "run_test"
+
+
+class LedgerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.patch = patch.object(ledger, "DB_PATH", Path(self.tmp.name) / "test.db")
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        self.tmp.cleanup()
+
+    def test_run_and_job_roundtrip(self):
+        payload = {
+            "run_id": "rec_test",
+            "schema_version": 2,
+            "data_as_of": "2026-10-30",
+            "tradable_from": "2026-11-03",
+            "generated_at": "2026-11-02T09:00:00",
+            "source": "live",
+            "table": [
+                {"排名": 1, "代码": "600519.SH", "名称": "贵州茅台", "行业": "白酒",
+                 "综合分": 82.4, "技术分": 80, "事件分": 86, "建议": "关注", "理由": "test"}
+            ],
+            "evidence": {"600519.SH": [{"kind": "新闻", "date": "2026-10-30", "title": "t", "url": ""}]},
+            "params": {"top_n": 5},
+            "diagnostics": {"failed_codes": []},
+        }
+        ledger.save_run(payload, json_path="/tmp/x.json")
+        got = ledger.get_run("rec_test")
+        self.assertIsNotNone(got)
+        self.assertEqual(got["data_as_of"], "2026-10-30")
+        self.assertEqual(len(got["items"]), 1)
+        self.assertEqual(len(got["evidence"]), 1)
+        self.assertEqual(ledger.stats()["runs"], 1)
+
+        ledger.save_job("2026-11-02:close", trade_date="2026-11-02", slot="close",
+                        status="success", run_id="rec_test")
+        job = ledger.get_job("2026-11-02:close")
+        self.assertEqual(job["status"], "success")
+        self.assertEqual(job["run_id"], "rec_test")
 
 
 class SchedulerIdempotencyTests(unittest.TestCase):
@@ -84,6 +128,56 @@ class SchedulerIdempotencyTests(unittest.TestCase):
                 self.assertEqual(fn.call_count, 1)
 
 
+class PitSnapshotTests(unittest.TestCase):
+    def test_snapshot_maps(self):
+        snap = pd.DataFrame(
+            {
+                "date": pd.to_datetime(["2026-10-30", "2026-10-30"]),
+                "code": ["600519.SH", "000001.SZ"],
+                "weight": [1.0, 2.0],
+                "name": ["贵州茅台", "平安银行"],
+                "industry": ["白酒", "银行"],
+                "total_mv": [1e7, 2e7],
+                "is_st": [0, 0],
+            }
+        )
+        membership, sizes, industries = snapshot_maps(snap)
+        self.assertEqual(membership[pd.Timestamp("2026-10-30")], {"600519.SH", "000001.SZ"})
+        self.assertEqual(industries[pd.Timestamp("2026-10-30")]["600519.SH"], "白酒")
+        self.assertEqual(sizes[pd.Timestamp("2026-10-30")]["000001.SZ"], 2e7)
+
+    def test_sw_industry_asof(self):
+        members = pd.DataFrame(
+            {
+                "code": ["000001.SZ", "000001.SZ", "000002.SZ"],
+                "industry": ["银行", "综合", "房地产"],
+                "in_date": pd.to_datetime(["2014-02-21", "2000-01-01", "1991-01-29"]),
+                "out_date": pd.to_datetime([None, "2014-02-20", None]),
+            }
+        )
+        with patch.object(pit, "sw_l1_members", return_value=members):
+            got = pit.sw_industry_on("2015-06-01")
+        self.assertEqual(got["000001.SZ"], "银行")
+        self.assertEqual(got["000002.SZ"], "房地产")
+
+
+class EventScoreTests(unittest.TestCase):
+    def test_event_score_is_neutral_for_neutral_evidence(self):
+        evidence = [
+            {"kind": "新闻", "title": "公司发布日常公告", "date": "2026-11-01"}
+            for _ in range(8)
+        ]
+        score, stats = score_events(evidence)
+        self.assertAlmostEqual(score, 50.0, delta=2.0)
+        self.assertEqual(stats["n"], 8)
+
+    def test_event_score_direction(self):
+        pos = [{"kind": "公告", "title": "预增 回购 中标 订单", "date": "2026-11-01"}]
+        neg = [{"kind": "公告", "title": "亏损 减持 诉讼 处罚", "date": "2026-11-01"}]
+        self.assertGreater(score_events(pos)[0], 50)
+        self.assertLess(score_events(neg)[0], 50)
+
+
 class JsonContractTests(unittest.TestCase):
     def test_clean_json_is_strict(self):
         payload = _clean_json(
@@ -105,6 +199,38 @@ class QuantitativeRuleTests(unittest.TestCase):
     def test_st_limit_is_five_percent(self):
         self.assertEqual(limit_pct("600000.SH", "*ST某某"), 0.05)
         self.assertEqual(limit_pct("300001.SZ"), 0.20)
+
+    def test_ipo_first_day_has_no_limit(self):
+        row = pd.Series({"trade_date": pd.Timestamp("2026-10-30"), "pre_close": 10.0,
+                         "high": 11.0, "low": 11.0, "raw_pre_close": 10.0,
+                         "raw_high": 11.0, "raw_low": 11.0})
+        self.assertTrue(_one_price_limit(row, 0.10, "buy"))
+        self.assertFalse(_one_price_limit(row, 0.10, "buy", list_date="2026-10-30"))
+
+    def test_walk_forward_state_carries_position(self):
+        def bars(start, n):
+            dates = pd.bdate_range(start, periods=n)
+            return pd.DataFrame(
+                {
+                    "trade_date": dates,
+                    "open": [10.0 + i * 0.1 for i in range(n)],
+                    "high": [10.2 + i * 0.1 for i in range(n)],
+                    "low": [9.9 + i * 0.1 for i in range(n)],
+                    "close": [10.1 + i * 0.1 for i in range(n)],
+                    "vol": [1000] * n,
+                }
+            )
+
+        first = bars("2026-01-05", 3)
+        r1 = run_backtest(first, pd.Series([1, 1, 1]), "600000.SH", prev_signal=1)
+        self.assertGreater(r1.state["shares"], 0)
+        second = bars("2026-01-08", 3)
+        r2 = run_backtest(
+            second, pd.Series([1, 1, 1]), "600000.SH",
+            initial_state=r1.state, prev_signal=1,
+        )
+        self.assertEqual(r2.state["shares"], r1.state["shares"])
+        self.assertEqual(r2.state["entry_price"], r1.state["entry_price"])
 
     def test_industry_cap_is_preserved(self):
         rows = [{"code": f"60000{i}.SH", "industry": "银行", "composite": 90 - i} for i in range(6)]

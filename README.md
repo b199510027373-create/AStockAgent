@@ -17,8 +17,16 @@ A 股智能投顾本地系统，基于 Gradio + Tushare + DeepSeek。在原有�
 - **缓存**：Parquet/meta 原子写（唯一临时文件）、日历加载锁、读侧容错、内存缓存上限。
 - **统计**：Newey-West `lag=horizon-1`、Student-t p 值、有效独立样本 <10 隐藏 p、BH 多重检验；跟踪改为 `tradable_from` 开盘入场。
 - **口径**：遗留 Tab 统一 `astock.indicators.add_all` + qfq；ST 5% 涨跌停；Beta ddof 统一；`load_many(years=...)`；PIT union 按出现频次取前 400；`parse_universe` 支持别名。
+- **台账**：新增 SQLite `data/astock.db`，推荐/证据/调度任务双写；`python -m astock.ledger stats` 可查。
+- **PIT 指数池**：新增 `astock/pit.py`，用 `index_weight` 历史成分 + `stock_basic(D)` 退市过滤 + `bak_basic` 历史行业；因子 IC 支持 PIT沪深300/中证500/中证1000。
 
-测试从 18 个增加到 29 个（`tests/test_hardening.py`）。
+测试从 18 个增加到 39 个（`tests/test_hardening.py`）。
+
+文档分工：
+
+- 产品快照：[docs/AStockAgent_product_snapshot_v1.3.md](docs/AStockAgent_product_snapshot_v1.3.md)
+- 架构说明：[docs/AStockAgent_architecture_v1.3.md](docs/AStockAgent_architecture_v1.3.md)
+- 研究结论：[docs/AStockAgent_research_conclusions_v1.3.md](docs/AStockAgent_research_conclusions_v1.3.md)
 
 
 ## 功能
@@ -141,14 +149,14 @@ DEEPSEEK_BASE=https://api.deepseek.com
 
 - 「🧪 参数优化」Tab 对 MA 的 `fast × slow` 做网格，指标可选夏普/年化；输出参数热力图与全样本前 5 组。
 - Walk-forward：滚动训练窗口（默认 1.5 年）选最优参数，下一个测试窗口（默认 3 个月）做样本外验证，滚动前进。
-- 输出每个窗口的最优参数、测试收益/夏普/回撤/超额，以及拼接后的样本外净值 vs 沪深300。
+- 跨窗口**连续持仓**：现金、持股、成本价、T+1 状态和最后信号延续到下一个测试窗口；窗口边界不强制平仓。
+- 输出每个窗口的最优参数、测试收益/夏普/回撤/超额，以及连续拼接后的样本外净值 vs 沪深300。
 - **全样本最优只是 in-sample 参考**；判断策略要看 walk-forward 样本外与参数平原，而不是单个最高分。
-- 注意：当前 Walk-forward 拼接是「每个窗口独立重开仓」的样本外收益，不是跨窗口连续持仓；首日建仓收益与现金拖累会与连续回测不同。
 
 ## 策略实验室（MACD/RSI/多标的）
 
 - 「🧪 策略实验室」支持 MA双均线、MACD、RSI反转 的固定参数网格。
-- 每只股票独立做 walk-forward，选择训练窗口最优参数，在下一个测试窗口做样本外；再把各标的样本外收益**等权拼接**成组合。
+- 每只股票独立做 walk-forward，选择训练窗口最优参数，在下一个测试窗口做样本外；持仓跨窗口连续，再把各标的样本外收益**等权拼接**成组合。
 - 输出分标的样本外指标、每个窗口的最优参数/测试收益/超额，以及等权组合净值 vs 沪深300。
 - 最多 10 只股票；MACD 27 组、RSI 27 组、MA 12 组参数，首次运行约 20 秒。
 - 这只是研究工具，不代表实盘可复制。
@@ -158,9 +166,10 @@ DEEPSEEK_BASE=https://api.deepseek.com
 - 「📊 因子 IC」Tab 在股票池横截面上计算 RankIC：20/60 日动量、5 日反转、20 日波动、量比、成交额比、Amihud 非流动性、MA20 乖离、RSI14、MACD 柱、ATR 占比。
 - 指标：IC 均值、IC 标准差、ICIR、IC>0 占比、t 值、p 值、有效日数；另给 Q1–Q5 分层平均收益、Q5-Q1 与单调性。
 - 不使用未来数据：因子取当日及以前数据，前向收益从当日收盘往后 T+5/T+20。
-- 股票池支持：自选池、按最新总市值排序的前 100 / 前 300、**动态前 100/300（PIT）**（每个调仓日按当日总市值选前 N）；也可手填代码。
-- 默认做**行业 + 市值中性化**：每日横截面对行业哑变量 + log(总市值) 回归，取残差；PIT 模式用当日历史市值，非 PIT 用最新快照近似。
-- PIT 仍只覆盖“今天仍上市”的股票，且日期少时 IC 噪声大；扩到前 100 后约 12k 行、130+ 个 IC 日，结论仍只作研究。
+- 股票池支持：自选池、按最新总市值排序的前 100 / 前 300、**动态前 100/300（PIT）**、**PIT 沪深300/中证500/中证1000**（`index_weight` 历史成分 + 退市过滤 + 历史行业）；也可手填代码。
+- 默认做**行业 + 市值中性化**：每日横截面对行业哑变量 + log(总市值) 回归，取残差；PIT 指数模式用历史成分/历史行业/历史市值，动态市值模式仍只含当前上市公司。
+- 行业版本：**2021-12-13 之前用 SW2014 L1，之后用 SW2021 L1**（`index_classify` + `index_member` 历史成员）；`bak_basic` 只补历史名称/ST，缺失时用 `stock_basic` 行业兜底。
+- 日期少时 IC 噪声大；扩到前 100 后约 12k 行、130+ 个 IC 日，PIT 指数模式约 2.4k 行/18 个 IC 日（1 年），结论仍只作研究。
 
 ## 项目结构
 
@@ -189,6 +198,8 @@ astock/
   factors.py           多因子面板、RankIC、行业/市值中性化、分层收益
   factor_ui.py         「📊 因子 IC」Tab
   universe.py          市值前 N / PIT 动态市值股票池、市值快照
+  pit.py               PIT 指数成分/退市/历史行业快照
+  ledger.py            SQLite runs/items/evidence/jobs/tracking
   stats.py             NW / Student-t / 有效独立样本 / BH
   scheduler.py         交易日 16:40 自动推荐（单实例锁、幂等任务）
   jobs.py              独立调度进程 / --once 任务入口
@@ -198,7 +209,7 @@ tests/
   test_quant.py        T+1、涨跌停、成本、重采样、指标边界、分钟复权、前向收益
   test_recommend.py    技术分、事件情感、别名、行业分散、JSON 解析
   test_optimize.py     参数网格、walk-forward、策略实验室、显著性、因子 IC
-  test_hardening.py    调度幂等、严格 JSON、ST、行业上限、NW/BH、t 分布
+  test_hardening.py    调度幂等、严格 JSON、ST、行业上限、NW/BH、t 分布、ledger、PIT 映射
 ```
 
 ## 测试
@@ -207,12 +218,12 @@ tests/
 python -m unittest discover -s tests -v
 ```
 
-当前覆盖：信号次日成交、资金不足一手、一字涨停不可买、T+1、成本侵蚀、平价数据指标无 `inf`、周线聚合、分钟前复权、前向收益；技术分、事件情感、别名、行业分散、LLM JSON 解析；参数网格、walk-forward、策略实验室、显著性、因子 IC；调度幂等、严格 JSON、ST 5%、行业上限、NW/BH、t 分布。共 29 个测试。
+当前覆盖：信号次日成交、资金不足一手、一字涨停不可买、T+1、成本侵蚀、平价数据指标无 `inf`、周线聚合、分钟前复权、前向收益；技术分、事件情感、别名、行业分散、LLM JSON 解析；参数网格、walk-forward、连续持仓、策略实验室、显著性、因子 IC；调度幂等、严格 JSON、ST 5%、行业上限、NW/BH、t 分布、SQLite ledger、PIT 快照。共 39 个测试。
 
 ## 已知待办
 
 - 用回填批次先看技术分，再等实盘批次积累 20+ 天，比较“技术分回填”和“完整推荐（技术+事件）”的差异。
-- PIT 股票池仍缺退市股/历史指数成分；下一步接入 point-in-time 指数成分或历史退市列表，彻底去掉幸存者偏差。
+- PIT 动态市值模式仍只含当前上市公司；要完全消除幸存者偏差，请使用 PIT 指数模式（`index_weight` + 退市过滤）。
 - 因子池继续扩到前 300/全市场，增加质量、估值、资金流因子；PIT/统计修好前不继续扩因子。
 - 策略实验室扩到布林/多策略组合，做交易成本敏感性、参数平原稳定性与多市场环境分层；当前 WF 是独立窗口重开仓，需注明。
 - 组合页把「算收益」与「调 LLM」拆开，避免重复调用 API；自动任务挂 Windows 任务计划并加失败告警。

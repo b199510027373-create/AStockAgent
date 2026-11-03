@@ -16,6 +16,7 @@ from .events import stock_basic
 from .recommend import load_many, parse_universe
 from .track import _forward_return
 from .universe import latest_size_map, market_cap_universe, pit_market_cap_universe
+from . import pit
 from .stats import benjamini_hochberg, effective_n, student_t_p
 
 FACTORS = {
@@ -80,37 +81,41 @@ def build_panel(
     size_map: dict[str, float] | None = None,
     universe_by_date: dict[pd.Timestamp, set[str]] | None = None,
     size_by_date: dict[pd.Timestamp, dict[str, float]] | None = None,
+    industry_by_date: dict[pd.Timestamp, dict[str, str]] | None = None,
 ) -> pd.DataFrame:
     if not daily_map:
         return pd.DataFrame()
     prepared: dict[str, pd.DataFrame] = {}
-    all_dates = None
+    all_dates: set[pd.Timestamp] = set()
     for code, df in daily_map.items():
         if df is None or len(df) < 80:
             continue
         x = _add_factors(df).sort_values("trade_date").reset_index(drop=True)
         prepared[code] = x
         dates = set(x["trade_date"].tail(250 * 3))
-        all_dates = dates if all_dates is None else all_dates | dates
+        all_dates |= dates
     if not prepared or not all_dates:
         return pd.DataFrame()
 
-    dates = sorted(all_dates)
-    dates = dates[60:]
-    dates = dates[:: max(1, int(rebalance))]
+    date_values = sorted(all_dates)
+    date_values = date_values[60:]
+    date_values = date_values[:: max(1, int(rebalance))]
     rows = []
     membership_dates = sorted(universe_by_date) if universe_by_date else []
-    for date in dates:
+    membership = universe_by_date or {}
+    for date in date_values:
         date = pd.Timestamp(date)
         allowed = None
         current_sizes = size_map or {}
+        current_industry = industry_map or {}
         if membership_dates:
             past = [d for d in membership_dates if d <= date]
             if not past:
                 continue
             mdate = past[-1]
-            allowed = universe_by_date.get(mdate, set())
+            allowed = membership.get(mdate, set())
             current_sizes = (size_by_date or {}).get(mdate, current_sizes)
+            current_industry = (industry_by_date or {}).get(mdate, current_industry)
         for code, df in prepared.items():
             if allowed is not None and code not in allowed:
                 continue
@@ -125,7 +130,7 @@ def build_panel(
                 "date": date,
                 "code": code,
                 "fwd": fwd,
-                "industry": (industry_map or {}).get(code, "其他") or "其他",
+                "industry": current_industry.get(code, "其他") or "其他",
                 "size": current_sizes.get(code, np.nan),
             }
             ok = True
@@ -328,10 +333,27 @@ def run_factor_ic(
     sizes: dict[str, float] = {}
     membership = None
     size_by_date = None
-    pit = "PIT" in universe_mode
+    industry_by_date = None
+    pit_daily = "PIT" in universe_mode
+    index_mode = universe_mode in {"PIT沪深300", "PIT中证500", "PIT中证1000"}
     if universe_text.strip():
         codes = parse_universe(universe_text)
-    elif pit:
+    elif index_mode:
+        index_code = {
+            "PIT沪深300": "000300.SH",
+            "PIT中证500": "000905.SH",
+            "PIT中证1000": "000852.SH",
+        }[universe_mode]
+        if progress is not None:
+            progress(0.10, desc=f"构建 {universe_mode} 快照")
+        snapshot = pit.build_index_snapshot(
+            index_code,
+            start=(pd.Timestamp.today() - pd.Timedelta(days=days)).strftime("%Y-%m-%d"),
+            end=pd.Timestamp.today().strftime("%Y-%m-%d"),
+        )
+        membership, size_by_date, industry_by_date = pit.snapshot_maps(snapshot)
+        codes = sorted(set().union(*membership.values())) if membership else []
+    elif pit_daily:
         n = int(re.sub(r"\D", "", universe_mode) or 100)
         cal = load_trade_cal()
         dates = cal[
@@ -363,7 +385,7 @@ def run_factor_ic(
             for code, df in daily_map.items()
             if len(df[df["trade_date"] >= cutoff]) >= 80
         }
-    if not sizes and not pit:
+    if not sizes and not pit_daily and not index_mode:
         sizes = latest_size_map() if neutralize else {}
     basic = stock_basic()
     industry_map = dict(zip(basic["ts_code"], basic["industry"].fillna("其他")))
@@ -377,12 +399,15 @@ def run_factor_ic(
         size_map=sizes,
         universe_by_date=membership,
         size_by_date=size_by_date,
+        industry_by_date=industry_by_date,
     )
     if progress is not None:
         progress(0.75, desc="计算 RankIC 与分层收益")
     result = compute_ic(panel, horizon=horizon, neutralize=neutralize, rebalance=rebalance)
-    if pit:
+    if pit_daily and not index_mode:
         result.status += " 股票池为每个调仓日按总市值选前 N（PIT，仍只含当前仍上市股票）。"
+    if index_mode:
+        result.status += " 股票池来自 index_weight 历史成分 + stock_basic 退市过滤 + bak_basic 历史行业。"
     if progress is not None:
         progress(1.0, desc="完成")
     return result

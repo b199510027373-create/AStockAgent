@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any, cast
 
 import httpx
 from openai import OpenAI
@@ -62,7 +63,7 @@ def chat(
             client = _CLIENT if (_CLIENT is not None and mode == _MODE) else _build(mode)
             resp = client.chat.completions.create(
                 model=model,
-                messages=messages,
+                messages=cast(Any, messages),
                 max_tokens=max_tokens,
                 temperature=temperature,
             )

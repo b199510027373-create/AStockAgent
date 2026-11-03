@@ -11,6 +11,7 @@ import pandas as pd
 
 from .config import BASE_DIR
 from .data import last_completed_trade_date, load_trade_cal
+from .ledger import save_job
 from .recommend import StaleDataError, run_daily_recommendation
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
@@ -97,6 +98,25 @@ def _set_job(state: dict, key: str, **values) -> None:
     job.update(values)
 
 
+def _sync_job(state: dict, key: str) -> None:
+    job = (state.get("jobs") or {}).get(key) or {}
+    try:
+        save_job(
+            key,
+            trade_date=job.get("trade_date"),
+            slot=job.get("slot"),
+            status=job.get("status", "unknown"),
+            attempts=int(job.get("attempts", 0) or 0),
+            started_at=job.get("started_at"),
+            finished_at=job.get("finished_at"),
+            error=job.get("error"),
+            late_by_min=job.get("late_by_min"),
+            run_id=job.get("run_id"),
+        )
+    except Exception:
+        pass
+
+
 def _acquire_lock():
     """Single-process scheduler lock. Returns an open handle or None."""
     global _LOCK_HANDLE
@@ -114,7 +134,7 @@ def _acquire_lock():
 
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         else:
-            import fcntl
+            fcntl = __import__("fcntl")
 
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         _LOCK_HANDLE = handle
@@ -138,7 +158,7 @@ def _release_lock() -> None:
 
             msvcrt.locking(_LOCK_HANDLE.fileno(), msvcrt.LK_UNLCK, 1)
         else:
-            import fcntl
+            fcntl = __import__("fcntl")
 
             fcntl.flock(_LOCK_HANDLE.fileno(), fcntl.LOCK_UN)
     except Exception:
@@ -187,6 +207,7 @@ def run_once(
         started_at=datetime.now().isoformat(timespec="seconds"),
     )
     _atomic_write_state(state)
+    _sync_job(state, key)
     try:
         result = run_daily_recommendation(
             universe_text="",
@@ -209,6 +230,7 @@ def run_once(
                 error=f"as_of={data_as_of} < expected={trade_date:%Y-%m-%d}",
             )
             _atomic_write_state(state)
+            _sync_job(state, key)
             _log(f"数据未更新：as_of={data_as_of} < 预期 {trade_date:%Y-%m-%d}，本次不记成功")
             return None
 
@@ -221,11 +243,14 @@ def run_once(
             finished_at=datetime.now().isoformat(timespec="seconds"),
             error=None,
         )
-        state["last_run_date"] = datetime.now().strftime("%Y-%m-%d")
+        state["last_run_date"] = now.strftime("%Y-%m-%d")
         state["last_status"] = result.status
         state["last_csv"] = result.csv_path
         state["last_json"] = result.json_path
+        state["last_error"] = None
+        state["last_error_at"] = None
         _atomic_write_state(state)
+        _sync_job(state, key)
         _log("完成：" + result.status)
         return result
     except StaleDataError as exc:
@@ -240,6 +265,7 @@ def run_once(
         state["last_error"] = f"StaleDataError: {exc}"
         state["last_error_at"] = datetime.now().isoformat(timespec="seconds")
         _atomic_write_state(state)
+        _sync_job(state, key)
         _log(f"数据未更新，本次不发布：{exc}")
         return None
     except Exception as exc:  # noqa: BLE001
@@ -255,6 +281,7 @@ def run_once(
         state["last_error"] = f"{type(exc).__name__}: {exc}"
         state["last_error_at"] = datetime.now().isoformat(timespec="seconds")
         _atomic_write_state(state)
+        _sync_job(state, key)
         _log("失败：" + traceback.format_exc())
         return None
 

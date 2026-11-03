@@ -29,6 +29,7 @@ class BacktestResult:
     signals: pd.Series
     config: CostConfig
     open_position: dict[str, Any] = field(default_factory=dict)
+    state: dict[str, Any] = field(default_factory=dict)
 
 
 def limit_pct(code: str, name: str = "") -> float:
@@ -43,18 +44,30 @@ def limit_pct(code: str, name: str = "") -> float:
     return 0.10
 
 
-def _one_price_limit(row: pd.Series, pct: float, side: str) -> bool:
-    """一字涨/跌停：全天只有一个价格，无法成交。"""
-    pre = row.get("pre_close")
+def _one_price_limit(row: pd.Series, pct: float, side: str, list_date=None) -> bool:
+    """一字涨/跌停：全天只有一个价格，无法成交。
+
+    优先使用未复权原始价；复权价只用于收益，不用于交易所限价。
+    新股上市首日通常不设涨跌幅，直接视为可成交。
+    """
+    if list_date is not None and pd.notna(list_date):
+        try:
+            if pd.Timestamp(row.get("trade_date")).normalize() == pd.Timestamp(list_date).normalize():
+                return False
+        except Exception:
+            pass
+    pre = row.get("raw_pre_close", row.get("pre_close"))
+    high = row.get("raw_high", row.get("high"))
+    low = row.get("raw_low", row.get("low"))
     if pd.isna(pre) or pre <= 0:
         return False
-    if row.get("high") != row.get("low"):
+    if high != low:
         return False
     if side == "buy":
-        limit_price = round(pre * (1 + pct), 2)
-        return row["low"] >= limit_price - 0.005
-    limit_price = round(pre * (1 - pct), 2)
-    return row["high"] <= limit_price + 0.005
+        limit_price = round(float(pre) * (1 + pct), 2)
+        return float(low) >= limit_price - 0.005
+    limit_price = round(float(pre) * (1 - pct), 2)
+    return float(high) <= limit_price + 0.005
 
 
 def run_backtest(
@@ -64,8 +77,15 @@ def run_backtest(
     config: CostConfig | None = None,
     benchmark: pd.Series | None = None,
     name: str = "",
+    list_date=None,
+    initial_state: dict[str, Any] | None = None,
+    prev_signal: int | None = None,
 ) -> BacktestResult:
     """日线、long-only、信号次日开盘成交的轻量回测。
+
+    ``initial_state`` / ``prev_signal`` 用于 Walk-forward 跨窗口连续持仓：
+    传入上一段的现金、持股、成本价和最后信号，测试窗口首日开盘继续执行，
+    而不是每段重置现金/空仓。
 
     交易规则：
     - t 日收盘生成信号，t+1 日开盘成交（避免未来函数）
@@ -90,21 +110,22 @@ def run_backtest(
     )
 
     pct = limit_pct(code, name)
-    cash = float(cfg.initial_cash)
-    shares = 0
-    position = 0
-    entry_price = 0.0
-    entry_date = None
-    entry_cost = 0.0
-    trades: list[dict[str, Any]] = []
+    initial_state = initial_state or {}
+    cash = float(initial_state.get("cash", cfg.initial_cash))
+    shares = int(initial_state.get("shares", 0) or 0)
+    position = int(initial_state.get("position", 1 if shares > 0 else 0))
+    entry_price = float(initial_state.get("entry_price", 0.0) or 0.0)
+    entry_date = initial_state.get("entry_date")
+    entry_cost = float(initial_state.get("entry_cost", 0.0) or 0.0)
+    trades: list[dict[str, Any]] = list(initial_state.get("trades", []))
     equity_rows: list[dict[str, Any]] = []
 
     for i, row in data.iterrows():
-        # 执行前一日收盘信号，今日开盘成交
-        if i > 0:
-            target = sig[i - 1]
+        # 常规回测：执行前一日收盘信号；连续 WF：首日执行上一窗口最后信号
+        target = sig[i - 1] if i > 0 else prev_signal
+        if target is not None:
             has_volume = pd.notna(row.get("vol")) and float(row["vol"]) > 0
-            if target == 1 and position == 0 and has_volume and not _one_price_limit(row, pct, "buy"):
+            if target == 1 and position == 0 and has_volume and not _one_price_limit(row, pct, "buy", list_date):
                 price = float(row["open"]) * (1 + cfg.slippage)
                 lots = int(cash // (price * cfg.lot_size * (1 + cfg.commission_rate)))
                 while lots > 0:
@@ -123,7 +144,7 @@ def run_backtest(
                     entry_date = row["trade_date"]
                     entry_cost = amount + fee
 
-            elif target == 0 and position == 1 and has_volume and not _one_price_limit(row, pct, "sell"):
+            elif target == 0 and position == 1 and has_volume and not _one_price_limit(row, pct, "sell", list_date):
                 price = float(row["open"]) * (1 - cfg.slippage)
                 amount = shares * price
                 fee = max(cfg.min_commission, amount * cfg.commission_rate)
@@ -186,6 +207,15 @@ def run_backtest(
             "unrealized_pnl": market_value - entry_cost,
             "unrealized_return": market_value / entry_cost - 1 if entry_cost else np.nan,
         }
+    state = {
+        "cash": cash,
+        "shares": shares,
+        "position": position,
+        "entry_price": entry_price,
+        "entry_date": entry_date,
+        "entry_cost": entry_cost,
+        "trades": trades,
+    }
     return BacktestResult(
         equity=equity,
         trades=trades_df,
@@ -193,6 +223,7 @@ def run_backtest(
         signals=pd.Series(sig, index=data["trade_date"], name="signal"),
         config=cfg,
         open_position=open_info,
+        state=state,
     )
 
 
@@ -385,6 +416,8 @@ def run_strategy(
     fast: int = 5,
     slow: int = 20,
     initial_cash: float = 500_000.0,
+    name: str = "",
+    list_date=None,
 ) -> tuple[BacktestResult, pd.DataFrame]:
     year_days = {"1年": 365, "3年": 365 * 3, "5年": 365 * 5, "全部": None}
     end = pd.Timestamp.today().strftime("%Y%m%d")
@@ -407,5 +440,5 @@ def run_strategy(
     if not benchmark_df.empty:
         benchmark = benchmark_df.set_index("trade_date")["close"]
     cfg = CostConfig(initial_cash=initial_cash)
-    result = run_backtest(daily_e, signals, code, cfg, benchmark)
+    result = run_backtest(daily_e, signals, code, cfg, benchmark, name=name, list_date=list_date)
     return result, daily_e

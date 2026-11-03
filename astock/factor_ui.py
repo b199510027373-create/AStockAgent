@@ -45,7 +45,16 @@ def build_factor_tab() -> None:
                 scale=3,
             )
             universe_mode = gr.Radio(
-                ["自选池", "市值前100", "市值前300", "动态前100（PIT）", "动态前300（PIT）"],
+                [
+                    "自选池",
+                    "市值前100",
+                    "市值前300",
+                    "动态前100（PIT）",
+                    "动态前300（PIT）",
+                    "PIT沪深300",
+                    "PIT中证500",
+                    "PIT中证1000",
+                ],
                 value="自选池",
                 label="股票池",
                 scale=2,
@@ -59,8 +68,8 @@ def build_factor_tab() -> None:
         gr.Markdown(
             "<sub>因子：20/60 日动量、5 日反转、20 日波动、量比、成交额比、Amihud 非流动性、"
             "MA20 乖离、RSI14、MACD 柱、ATR 占比。中性化对每日横截面回归行业哑变量 + log(总市值)，"
-            "取残差；PIT 模式按每个调仓日的历史总市值选前 N，但仍只含当前仍上市股票。"
-            "PIT/前300 首次加载较慢，建议先用自选池或前100。</sub>"
+            "取残差；PIT 模式按历史总市值/指数成分选股，PIT 指数模式使用 index_weight 历史成分 + "
+            "stock_basic 退市过滤 + bak_basic 历史行业。PIT/前300 首次加载较慢，建议先用自选池或前100。</sub>"
         )
         status = gr.Markdown()
         ic_table = gr.Dataframe(label="RankIC 汇总", interactive=False, wrap=True)

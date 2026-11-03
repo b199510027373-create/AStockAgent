@@ -6,6 +6,7 @@ import pandas as pd
 from .backtest import STRATEGIES, run_strategy
 from .backtest_chart import backtest_figure, metrics_markdown
 from .charts import empty_figure
+from .events import stock_basic
 from .utils import is_code, normalize_code
 
 TRADE_COLUMNS = [
@@ -42,6 +43,10 @@ def run(
         return message, empty_figure("参数不合法"), _empty_trades(), message
 
     try:
+        basic = stock_basic()
+        row = basic[basic["ts_code"] == code]
+        name = str(row.iloc[0]["name"]) if len(row) else ""
+        list_date = row.iloc[0].get("list_date") if len(row) else None
         result, daily = run_strategy(
             code,
             strategy,
@@ -49,6 +54,8 @@ def run(
             fast=int(fast),
             slow=int(slow),
             initial_cash=float(initial_cash),
+            name=name,
+            list_date=list_date,
         )
     except Exception as exc:  # noqa: BLE001
         message = f"❌ 回测失败：{exc}"

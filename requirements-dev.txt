@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Development / CI only
+ruff>=0.17
+mypy>=2.4
+coverage>=7.17

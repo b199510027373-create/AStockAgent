@@ -7,8 +7,14 @@ env.env
 # Runtime data and caches
 cache/
 data/recommendations/
+data/*.db
 .pytest_cache/
 .ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
 
 # Python environments and bytecode
 .venv/

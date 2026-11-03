@@ -186,7 +186,47 @@ def significance_table(detail: pd.DataFrame) -> pd.DataFrame:
 
 
 
+def _from_ledger() -> list[dict]:
+    try:
+        from .ledger import recommendation_batches
+    except Exception:
+        return []
+    batches: list[dict] = []
+    for data in recommendation_batches(limit=500):
+        try:
+            as_of_ts = pd.Timestamp(data.get("as_of"))
+            opened = last_open_date(as_of_ts)
+            if opened is not None:
+                as_of_ts = opened
+            tradable = (
+                pd.Timestamp(data["tradable_from"])
+                if data.get("tradable_from")
+                else next_open_date(as_of_ts)
+            )
+        except Exception:
+            continue
+        batches.append(
+            {
+                "path": None,
+                "as_of": as_of_ts.normalize(),
+                "tradable_from": tradable.normalize() if tradable is not None else None,
+                "generated_at": data.get("generated_at", ""),
+                "source": data.get("source", "live"),
+                "run_id": data.get("run_id", ""),
+                "rows": data.get("rows", []),
+            }
+        )
+    by_date: dict[pd.Timestamp, dict] = {}
+    for batch in sorted(batches, key=lambda x: x["generated_at"]):
+        by_date[batch["as_of"]] = batch
+    return sorted(by_date.values(), key=lambda x: x["as_of"], reverse=True)
+
+
 def _load_batches() -> list[dict]:
+    # Prefer the SQLite ledger; fall back to JSON only if the ledger is empty.
+    ledger_batches = _from_ledger()
+    if ledger_batches:
+        return ledger_batches
     if not REC_DIR.exists():
         return []
     batches: list[dict] = []
@@ -364,7 +404,32 @@ def track_recommendations() -> tuple[pd.DataFrame, pd.DataFrame, str]:
         if n_dates / 5 < 10 or n_dates / 20 < 10:
             status += " T+5/T+20 有效独立样本 <10，p 值已隐藏。"
     status += " 跟踪口径：T+1 起从 tradable_from（下一交易日）开盘买入，持有到第 N 个交易日收盘；超额=个股收益-沪深300。"
+    status += " 数据源：SQLite ledger（缺失时回退 JSON）。"
     detail = detail.sort_values(["推荐日", "排名"], ascending=[False, True]).reset_index(drop=True)
+    try:
+        from .ledger import save_tracking
+
+        for run_id, group in detail.groupby("run_id"):
+            if not run_id:
+                continue
+            rows = []
+            for _, r in group.iterrows():
+                for n in HORIZONS:
+                    ret = pd.to_numeric(pd.Series([r.get(f"T+{n}")]), errors="coerce").iloc[0]
+                    exc = pd.to_numeric(pd.Series([r.get(f"超额T+{n}")]), errors="coerce").iloc[0]
+                    rows.append(
+                        {
+                            "code": r.get("代码"),
+                            "horizon": n,
+                            "entry_date": str(r.get("入场日")),
+                            "exit_date": None,
+                            "ret": None if pd.isna(ret) else float(ret) / 100.0,
+                            "excess": None if pd.isna(exc) else float(exc) / 100.0,
+                        }
+                    )
+            save_tracking(str(run_id), rows)
+    except Exception:
+        pass
     return detail, summary, status
 
 

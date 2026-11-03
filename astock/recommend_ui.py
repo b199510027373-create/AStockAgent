@@ -3,6 +3,7 @@ from __future__ import annotations
 import gradio as gr
 import pandas as pd
 
+from . import ledger
 from .recommend import run_daily_recommendation
 
 NEWS_CHOICES = {"3日": 3, "7日": 7, "30日": 30}
@@ -42,6 +43,54 @@ def run_recommend(
         )
 
 
+def load_latest_ledger():
+    """Load the latest recommendation from SQLite without re-running the pipeline."""
+    run = ledger.latest_run()
+    if not run:
+        return "台账里还没有推荐记录。先运行一次生成，或执行 `python -m astock.ledger sync`。", pd.DataFrame(), "", "", None
+    rows = []
+    for item in run.get("items") or []:
+        rows.append(
+            {
+                "排名": item.get("rank"),
+                "代码": item.get("code"),
+                "名称": item.get("name"),
+                "行业": item.get("industry"),
+                "综合分": item.get("composite"),
+                "技术分": item.get("technical"),
+                "事件分": item.get("event"),
+                "建议": item.get("action"),
+                "理由": item.get("reason"),
+            }
+        )
+    table = pd.DataFrame(rows)
+    report = (
+        f"### SQLite 最近一次推荐\n"
+        f"- run_id：`{run.get('run_id')}`\n"
+        f"- data_as_of：`{run.get('data_as_of')}`\n"
+        f"- tradable_from：`{run.get('tradable_from')}`\n"
+        f"- generated_at：`{run.get('generated_at')}`\n"
+        f"- source：`{run.get('source')}`\n"
+    )
+    lines = ["### 证据链（SQLite）", ""]
+    for ev in (run.get("evidence") or [])[:30]:
+        title = str(ev.get("title") or "")
+        if ev.get("url"):
+            title = f"[{title}]({ev['url']})"
+        lines.append(
+            f"- {str(ev.get('pub_time') or '')[:10]} · {ev.get('kind','')} · "
+            f"{title}（{ev.get('source','')}）"
+        )
+    evidence_md = "\n".join(lines) if len(lines) > 2 else "暂无证据记录。"
+    files = [x for x in (run.get("json_path"), run.get("csv_path")) if x]
+    status = (
+        f"✅ 已从 SQLite 读取 {run.get('run_id')}；"
+        f"data_as_of={run.get('data_as_of')}，tradable_from={run.get('tradable_from')}；"
+        f"{len(table)} 条推荐。"
+    )
+    return status, table, report, evidence_md, files or None
+
+
 def build_recommend_tab() -> None:
     with gr.Tab("📰 每日推荐"):
         gr.Markdown(
@@ -68,6 +117,7 @@ def build_recommend_tab() -> None:
         with gr.Row():
             use_llm = gr.Checkbox(value=True, label="用 DeepSeek 生成理由与风险")
             btn = gr.Button("生成今日推荐", variant="primary", scale=2)
+            ledger_btn = gr.Button("加载最近一次（SQLite）", variant="secondary", scale=1)
 
         status = gr.Markdown()
         table = gr.Dataframe(label="推荐结果", interactive=False, wrap=True)
@@ -79,6 +129,10 @@ def build_recommend_tab() -> None:
         btn.click(
             run_recommend,
             inputs=[universe, top_n, candidate_n, news_range, use_llm],
+            outputs=[status, table, report, evidence, files],
+        )
+        ledger_btn.click(
+            load_latest_ledger,
             outputs=[status, table, report, evidence, files],
         )
         universe.submit(

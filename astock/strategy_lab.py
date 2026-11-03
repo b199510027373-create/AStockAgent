@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -108,10 +109,12 @@ def walk_forward_strategy(
         _param_text(p): _signals(daily_e, strategy, p)
         for p in params
     }
-    windows = []
+    windows: list[dict] = []
     returns = []
     bench_returns = []
     start = 0
+    state: dict | None = None
+    prev_equity = cfg.initial_cash
     while start + train_bars + test_bars <= len(daily_e):
         train = daily_e.iloc[start : start + train_bars].reset_index(drop=True)
         test = daily_e.iloc[start + train_bars : start + train_bars + test_bars].reset_index(drop=True)
@@ -120,32 +123,56 @@ def walk_forward_strategy(
         test_start = test["trade_date"].iloc[0]
         test_end = test["trade_date"].iloc[-1]
 
-        best = None
+        best_params: dict[str, Any] | None = None
+        best_value: float = float("-inf")
         for p in params:
             key = _param_text(p)
             sig = signals_cache[key].iloc[start : start + train_bars].reset_index(drop=True)
             result = run_backtest(train, sig, code, cfg, benchmark)
             m = result.metrics
             value = m.get("sharpe") if metric == "sharpe" else m.get("annual_return")
-            if value is None or not math.isfinite(value):
-                value = -9.99
-            if best is None or value > best["value"]:
-                best = {"params": p, "value": value}
+            value = float(value) if value is not None and math.isfinite(float(value)) else -9.99
+            if best_params is None or value > best_value:
+                best_params, best_value = p, value
 
-        if best is None:
+        if best_params is None:
             break
-        key = _param_text(best["params"])
+        key = _param_text(best_params)
         test_sig = signals_cache[key].iloc[
             start + train_bars : start + train_bars + test_bars
         ].reset_index(drop=True)
-        test_result = run_backtest(test, test_sig, code, cfg, benchmark)
+        prev_signal = int(signals_cache[key].iloc[start + train_bars - 1])
+        test_result = run_backtest(
+            test,
+            test_sig,
+            code,
+            cfg,
+            benchmark,
+            initial_state=state,
+            prev_signal=prev_signal,
+        )
+        state = test_result.state
         tm = test_result.metrics
-        ret = test_result.equity.set_index("trade_date")["equity"].pct_change().dropna()
-        returns.append(ret)
+        test_eq = test_result.equity.set_index("trade_date")["equity"]
+        test_ret = test_eq.pct_change().dropna()
+        if len(test_eq):
+            first_ret = float(test_eq.iloc[0]) / prev_equity - 1
+            test_ret = pd.concat(
+                [pd.Series({test_eq.index[0]: first_ret}), test_ret]
+            ).sort_index()
+            window_ret = float(test_eq.iloc[-1]) / prev_equity - 1
+            prev_equity = float(test_eq.iloc[-1])
+        else:
+            window_ret = 0.0
+        returns.append(test_ret)
 
+        window_bench = None
         if benchmark is not None and not benchmark.empty:
             b = benchmark.reindex(test["trade_date"]).ffill()
             if b.notna().any():
+                vals = b.dropna()
+                if len(vals) > 1:
+                    window_bench = float(vals.iloc[-1]) / float(vals.iloc[0]) - 1
                 bench_returns.append(b.pct_change().dropna())
 
         windows.append(
@@ -155,11 +182,11 @@ def walk_forward_strategy(
                 "训练区间": f"{train_start:%Y-%m-%d}~{train_end:%Y-%m-%d}",
                 "测试区间": f"{test_start:%Y-%m-%d}~{test_end:%Y-%m-%d}",
                 "best": key,
-                "训练目标": round(best["value"], 3) if best["value"] is not None and math.isfinite(best["value"]) else None,
-                "测试收益%": round(tm.get("total_return", 0) * 100, 2),
+                "训练目标": round(best_value, 3) if math.isfinite(best_value) else None,
+                "测试收益%": round(window_ret * 100, 2),
                 "测试夏普": round(tm.get("sharpe", 0), 3) if tm.get("sharpe") is not None and math.isfinite(tm.get("sharpe", np.nan)) else None,
                 "测试回撤%": round(tm.get("max_drawdown", 0) * 100, 2),
-                "测试超额%": round(tm.get("excess_return", 0) * 100, 2) if tm.get("excess_return") is not None and math.isfinite(tm.get("excess_return", np.nan)) else None,
+                "测试超额%": round((window_ret - window_bench) * 100, 2) if window_bench is not None else None,
             }
         )
         start += test_bars
@@ -202,6 +229,7 @@ def walk_forward_strategy(
         "windows": len(windows),
         "train_bars": train_bars,
         "test_bars": test_bars,
+        "continuous": True,
     }
     return WalkForwardResult(
         walk=pd.DataFrame(windows),
@@ -211,6 +239,7 @@ def walk_forward_strategy(
         years="",
         metric=metric,
         windows=windows,
+        state=state or {},
     )
 
 
@@ -228,8 +257,10 @@ def portfolio_walk_forward(
         raise ValueError("股票池为空")
     params = STRATEGY_GRIDS[strategy]
     wfs: dict[str, WalkForwardResult] = {}
+    benchmarks: dict[str, pd.Series] = {}
     for code in codes:
         daily, bench = load_data(code, years)
+        benchmarks[code] = bench
         wfs[code] = walk_forward_strategy(
             daily, code, strategy, params, bench, train_years, test_months, metric
         )
@@ -260,12 +291,12 @@ def portfolio_walk_forward(
     ret_df = pd.concat(ret_frames, axis=1).sort_index()
     port_ret = ret_df.mean(axis=1).dropna()
     nav = (1 + port_ret).cumprod()
-    first = next(iter(wfs.values()))
     bench_nav = None
-    if "benchmark" in first.equity.columns:
-        b = first.equity.set_index("trade_date")["benchmark"].dropna()
+    bench_full = benchmarks.get(codes[0]) if benchmarks else None
+    if bench_full is not None and not bench_full.empty:
+        b = bench_full.reindex(nav.index).ffill().dropna()
         b_ret = b.pct_change().dropna()
-        b_ret = b_ret.reindex(nav.index).fillna(0)
+        b_ret = b_ret.reindex(nav.index).ffill().fillna(0)
         bench_nav = (1 + b_ret).cumprod()
 
     equity = pd.DataFrame({"trade_date": nav.index, "strategy": nav.values})
@@ -293,7 +324,8 @@ def portfolio_walk_forward(
     }
     status = (
         f"{strategy} · {len(codes)} 只 · 股票池等权组合 · {len(params)} 组参数 · "
-        f"训练 {train_years} 年 / 测试 {test_months} 月 · 每只最少 {metrics['windows']} 个窗口。"
+        f"训练 {train_years} 年 / 测试 {test_months} 月 · 每只最少 {metrics['windows']} 个窗口 · "
+        "测试窗口连续持仓。"
     )
     return PortfolioResult(
         per_stock=pd.DataFrame(per_rows),

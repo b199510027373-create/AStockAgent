@@ -1,0 +1,11 @@
+[run]
+source = astock
+omit =
+    astock/ui.py
+    astock/charts.py
+    astock/*_ui.py
+    astock/backtest_chart.py
+
+[report]
+show_missing = True
+skip_empty = True

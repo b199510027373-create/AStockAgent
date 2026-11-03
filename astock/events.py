@@ -593,39 +593,58 @@ def evidence_for_stock(
 
 
 def score_events(evidence: list[dict]) -> tuple[float, dict]:
-    """把证据聚合成 0–100 的事件分，并返回统计。
+    """把证据聚合成 0–100 的事件分（加权情绪均值）。
 
-    证据条数不再线性放大分数：3 条以内保留原强度，超过 3 条按 3/n 收敛，
-    避免“新闻多 = 接近 100、没新闻 = 50”的机械偏置。
+    - 每条证据先算极性（正/负词、研报评级），再按类型权重和时效权重加权；
+    - 证据条数只影响平均的稳定性，不再让“新闻多 = 接近 100”；
+    - 没有证据时固定 50，中性证据也接近 50。
     """
-    if not evidence:
-        return 50.0, {"pos": 0, "neg": 0, "news": 0, "anns": 0, "reports": 0, "policy": 0, "n": 0}
-
-    score = 50.0
     stats = {"pos": 0, "neg": 0, "news": 0, "anns": 0, "reports": 0, "policy": 0, "n": len(evidence)}
+    if not evidence:
+        return 50.0, stats
+
+    type_weights = {"公告": 1.0, "研报": 1.2, "新闻": 0.8, "政策": 0.7}
+    now = pd.Timestamp.now()
+    weighted_sum = 0.0
+    weight_sum = 0.0
     for item in evidence:
-        title = item.get("title", "")
+        title = str(item.get("title", ""))
         positive, negative = sentiment(title)
         stats["pos"] += positive
         stats["neg"] += negative
-        kind = item.get("kind", "")
+        kind = str(item.get("kind", ""))
         if kind == "公告":
             stats["anns"] += 1
-            score += 4 * min(positive, 2) - 7 * min(negative, 2)
         elif kind == "研报":
             stats["reports"] += 1
-            rating = str(item.get("rating", ""))
-            rating_bonus = next((v for k, v in RATING_WORDS.items() if k in rating), 0.0)
-            score += 3 * rating_bonus + 2 * min(positive, 2) - 2 * min(negative, 2)
         elif kind == "新闻":
             stats["news"] += 1
-            score += 2.5 * min(positive, 2) - 3 * min(negative, 2)
         elif kind == "政策":
             stats["policy"] += 1
-            score += 1.5
-    if len(evidence) > 3:
-        score = 50.0 + (score - 50.0) * (3.0 / len(evidence))
-    return max(0.0, min(100.0, score)), stats
+
+        denom = max(1, positive + negative)
+        polarity = (positive - negative) / denom
+        if kind == "研报":
+            rating = str(item.get("rating", ""))
+            rating_bonus = next((v for k, v in RATING_WORDS.items() if k in rating), 0.0)
+            polarity += 0.35 * (rating_bonus / 2.0)
+        elif kind == "政策":
+            polarity += 0.05
+        polarity = max(-1.0, min(1.0, polarity))
+        item_score = 50.0 + 50.0 * polarity
+
+        weight = type_weights.get(kind, 0.7)
+        try:
+            pub = pd.Timestamp(item.get("date"))
+            age = max(0, (now.normalize() - pub.normalize()).days)
+            weight *= 1.0 / (1.0 + age / 45.0)
+        except Exception:
+            pass
+        weighted_sum += item_score * weight
+        weight_sum += weight
+
+    score = weighted_sum / weight_sum if weight_sum > 0 else 50.0
+    return round(max(0.0, min(100.0, score)), 1), stats
 
 
 def build_ai_context(message: str, limit: int = 8) -> tuple[str, list[dict]]:

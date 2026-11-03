@@ -17,7 +17,7 @@ import pandas as pd
 
 from . import llm
 from .config import BASE_DIR
-from .data import enrich, last_completed_trade_date, load_daily, load_index_daily, next_open_date
+from .data import enrich, last_completed_trade_date, load_daily, load_index_daily, load_trade_cal, next_open_date
 from .events import (
     evidence_for_stock,
     fetch_announcements,
@@ -250,11 +250,12 @@ def technical_score(df: pd.DataFrame) -> dict | None:
 
 
 def _action(score: float) -> str:
+    """研究语义：只描述技术面强弱，不做买卖动作。"""
     if score >= 68:
-        return "关注"
+        return "技术面强"
     if score >= 52:
-        return "观察"
-    return "回避"
+        return "技术面中性"
+    return "技术面弱"
 
 
 def _fallback_reason(row: dict, evidence: list[dict]) -> tuple[str, list[str], list[str], str, float]:
@@ -300,8 +301,8 @@ def _parse_json(text: str) -> dict:
 def _llm_rank(rows: list[dict], evidence_map: dict[str, list[dict]], market: str) -> dict:
     lines = [
         "你是A股研究员。只能使用下面提供的数据，不得编造新闻、价格或业绩。",
-        "为每只候选给出 action（关注/观察/回避）、confidence(0-1)、reason、catalysts、risks、evidence（引用的 E 编号）。",
-        "输出严格 JSON：{\"market\":\"一句话市场判断\",\"items\":[{\"code\":\"600519.SH\",\"action\":\"关注\",\"confidence\":0.7,\"reason\":\"...\",\"catalysts\":[\"...\"],\"risks\":[\"...\"],\"evidence\":[\"E1\"]}],\"risk_note\":\"...\"}",
+        "为每只候选给出 action（技术面强/技术面中性/技术面弱）、confidence(0-1)、reason、catalysts、risks、evidence（引用的 E 编号）。",
+        "输出严格 JSON：{\"market\":\"一句话市场判断\",\"items\":[{\"code\":\"600519.SH\",\"action\":\"技术面强\",\"confidence\":0.7,\"reason\":\"...\",\"catalysts\":[\"...\"],\"risks\":[\"...\"],\"evidence\":[\"E1\"]}],\"risk_note\":\"...\"}",
         "",
         f"市场背景：{market}",
         "",
@@ -390,7 +391,7 @@ def _report_markdown(
         "",
         f"**市场背景**：{market}",
         "",
-        "## 今日关注",
+        "## 今日候选",
     ]
     for i, row in enumerate(result_rows, 1):
         ai_row = ai_items.get(row["code"], {})
@@ -551,6 +552,13 @@ def _save(
     json_path = REC_DIR / f"recommend_{stamp}_{suffix}.json"
     _atomic_write_text(json_path, text)
     _atomic_write_text(REC_DIR / "latest.json", text)
+    try:
+        from .ledger import save_run
+
+        save_run(payload, json_path=str(json_path), csv_path=str(csv_path))
+    except Exception:
+        # JSON 仍是主产物；ledger 故障不应阻断推荐生成
+        pass
     return str(csv_path), str(json_path)
 
 
@@ -616,9 +624,17 @@ def run_daily_recommendation(
             f"日线数据未更新：data_as_of={market_as_of:%Y-%m-%d} < expected={expected:%Y-%m-%d}；"
             "本次不生成推荐，等待数据源更新后重试。"
         )
+    trade_cal = load_trade_cal()
+    open_days = trade_cal.loc[trade_cal["is_open"] == 1, "cal_date"]
+
+    def _gap(last, market) -> int:
+        return int(
+            ((open_days > pd.Timestamp(last)) & (open_days <= pd.Timestamp(market))).sum()
+        )
+
     stale_codes = [
         code for code, last in last_dates.items()
-        if (market_as_of - last).days > 10
+        if _gap(last, market_as_of) > 5
     ]
     for code in stale_codes:
         daily_map.pop(code, None)
@@ -719,7 +735,13 @@ def run_daily_recommendation(
     for row in candidates:
         ai_row = ai_items.get(row["code"])
         if ai_row:
-            row["action"] = ai_row.get("action") or row["action"]
+            ai_action = str(ai_row.get("action") or "")
+            if ai_action:
+                row["action"] = {
+                    "关注": "技术面强",
+                    "观察": "技术面中性",
+                    "回避": "技术面弱",
+                }.get(ai_action, ai_action)
             row["reason"] = ai_row.get("reason") or row["reason"]
             if ai_row.get("catalysts"):
                 row["catalysts"] = ai_row["catalysts"]

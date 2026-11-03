@@ -88,7 +88,11 @@ def backfill_technical(
             row["technical_score"] = round(0.45 * row["technical_score"] + 0.55 * rank, 1)
             row["event_score"] = 50.0
             row["composite"] = 0.65 * row["technical_score"] + 0.35 * 50.0
-            row["action"] = "关注" if row["composite"] >= 68 else ("观察" if row["composite"] >= 52 else "回避")
+            row["action"] = (
+                "技术面强"
+                if row["composite"] >= 68
+                else ("技术面中性" if row["composite"] >= 52 else "技术面弱")
+            )
             row["reason"] = (
                 f"技术分回填：{row.get('trend', '震荡')}；"
                 f"20日 {row['ret20']*100:+.1f}%；RSI {row['rsi']:.1f}；事件分固定 50。"

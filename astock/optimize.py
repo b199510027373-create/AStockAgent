@@ -32,6 +32,7 @@ class WalkForwardResult:
     metric: str
     grid: GridResult | None = None
     windows: list[dict] = field(default_factory=list)
+    state: dict = field(default_factory=dict)
 
 
 def _load(code: str, years: str):
@@ -153,10 +154,12 @@ def walk_forward(
     }
     key = "夏普" if metric == "sharpe" else "年化收益%"
 
-    windows = []
+    windows: list[dict] = []
     returns = []
     bench_returns = []
     start = 0
+    state: dict | None = None
+    prev_equity = cfg.initial_cash
     while start + train_bars + test_bars <= len(daily_e):
         train = daily_e.iloc[start : start + train_bars].reset_index(drop=True)
         test = daily_e.iloc[start + train_bars : start + train_bars + test_bars].reset_index(drop=True)
@@ -182,15 +185,39 @@ def walk_forward(
         test_sig = signals_cache[(fast, slow)].iloc[
             start + train_bars : start + train_bars + test_bars
         ].reset_index(drop=True)
-        test_result = run_backtest(test, test_sig, code, cfg, benchmark)
+        prev_signal = int(signals_cache[(fast, slow)].iloc[start + train_bars - 1])
+        test_result = run_backtest(
+            test,
+            test_sig,
+            code,
+            cfg,
+            benchmark,
+            initial_state=state,
+            prev_signal=prev_signal,
+        )
+        state = test_result.state
         tm = test_result.metrics
-        test_ret = test_result.equity.set_index("trade_date")["equity"].pct_change().dropna()
+        test_eq = test_result.equity.set_index("trade_date")["equity"]
+        test_ret = test_eq.pct_change().dropna()
+        if len(test_eq):
+            first_ret = float(test_eq.iloc[0]) / prev_equity - 1
+            test_ret = pd.concat(
+                [pd.Series({test_eq.index[0]: first_ret}), test_ret]
+            ).sort_index()
+            window_ret = float(test_eq.iloc[-1]) / prev_equity - 1
+            prev_equity = float(test_eq.iloc[-1])
+        else:
+            window_ret = 0.0
         returns.append(test_ret)
 
         b = None
+        window_bench = None
         if benchmark is not None and not benchmark.empty:
             b = benchmark.reindex(test["trade_date"]).ffill()
             if b.notna().any():
+                vals = b.dropna()
+                if len(vals) > 1:
+                    window_bench = float(vals.iloc[-1]) / float(vals.iloc[0]) - 1
                 bench_returns.append(b.pct_change().dropna())
 
         windows.append(
@@ -201,10 +228,10 @@ def walk_forward(
                 "best_fast": fast,
                 "best_slow": slow,
                 "训练夏普": round(best["value"], 3) if best["value"] is not None and math.isfinite(best["value"]) else None,
-                "测试收益%": round(tm.get("total_return", 0) * 100, 2),
+                "测试收益%": round(window_ret * 100, 2),
                 "测试夏普": round(tm.get("sharpe", 0), 3) if tm.get("sharpe") is not None and math.isfinite(tm.get("sharpe", np.nan)) else None,
                 "测试回撤%": round(tm.get("max_drawdown", 0) * 100, 2),
-                "测试超额%": round(tm.get("excess_return", 0) * 100, 2) if tm.get("excess_return") is not None and math.isfinite(tm.get("excess_return", np.nan)) else None,
+                "测试超额%": round((window_ret - window_bench) * 100, 2) if window_bench is not None else None,
             }
         )
         start += test_bars
@@ -250,6 +277,7 @@ def walk_forward(
         "windows": len(windows),
         "test_bars": test_bars,
         "train_bars": train_bars,
+        "continuous": True,
     }
     return WalkForwardResult(
         walk=walk,
@@ -259,6 +287,7 @@ def walk_forward(
         years="",
         metric=metric,
         windows=windows,
+        state=state or {},
     )
 
 

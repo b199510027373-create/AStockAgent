@@ -189,8 +189,8 @@ def non_trading_days(start: str | pd.Timestamp, end: str | pd.Timestamp) -> list
 
 
 def _cache_paths(ts_code: str, adj: str | None) -> tuple[Path, Path]:
-    # qfq 口径在 v2 调整为“以最新复权因子为基准”，旧缓存不再复用
-    suffix = (adj or "raw") + ("_v2" if adj else "")
+    # qfq 口径 v3：保留原始价列（raw_*），用于涨跌停/交易规则判断
+    suffix = (adj or "raw") + ("_v3" if adj else "")
     stem = f"{ts_code.replace('.', '_')}_{suffix}"
     return DAILY_DIR / f"{stem}.parquet", DAILY_DIR / f"{stem}.json"
 
@@ -233,6 +233,10 @@ def _fetch_daily(
             fct[["trade_date", "adj_factor"]], on="trade_date", how="left"
         )
         merged["adj_factor"] = merged["adj_factor"].ffill().bfill()
+        # 保留原始价：涨跌停/ST/新股规则必须用交易所原始价判断
+        for col in PRICE_COLS:
+            if col in merged.columns:
+                merged[f"raw_{col}"] = merged[col].astype(float)
         # 以前复权基准：使用区间内最新的复权因子（可能对应今天，即使今天日线尚未更新）
         base = float(fct["adj_factor"].iloc[-1])
         ratio = merged["adj_factor"] / base if base else 1.0
@@ -244,6 +248,7 @@ def _fetch_daily(
         raw = merged
 
     keep = [c for c in RAW_COLS if c in raw.columns]
+    keep += [f"raw_{c}" for c in PRICE_COLS if f"raw_{c}" in raw.columns]
     if adj and "adj_factor" in raw.columns:
         keep.append("adj_factor")
     return raw[keep].reset_index(drop=True)
@@ -306,11 +311,18 @@ def load_daily(
         if result.empty:
             raise TushareError(f"{ts_code} 无行情数据（区间 {_fmt(start_eff)}-{_fmt(end_eff)}）")
         _atomic_parquet(result, path)
+        base_factor = None
+        if "adj_factor" in result.columns and len(result):
+            try:
+                base_factor = float(result["adj_factor"].iloc[-1])
+            except Exception:
+                base_factor = None
         _atomic_text(
             json.dumps(
                 {
                     "ts_code": ts_code,
                     "adj": adj,
+                    "base_factor": base_factor,
                     "start": _fmt(start_eff),
                     "end": _fmt(end_eff),
                     "rows": int(len(result)),

@@ -33,7 +33,7 @@ DEEPSEEK_BASE = os.getenv("DEEPSEEK_BASE", "https://api.deepseek.com")
 # ====== 初始化 ======
 # 行情数据走 astock.data；DeepSeek 走 astock.llm（直连/代理自动切换）
 
-DATA_CACHE = {}
+DATA_CACHE: dict[str, tuple[float, pd.DataFrame]] = {}
 STOCK_CSV   = os.path.join(BASE_DIR, "stocks.csv")
 FILTER_CSV  = os.path.join(BASE_DIR, "filtered_stocks.csv")
 
@@ -403,15 +403,15 @@ with gr.Blocks(title="AStockAgent") as app:
                 macd_cb = gr.Checkbox(label="MACD过滤", info="动量指标")
             
             with gr.Row():
-                ma_th = gr.Slider(0.98, 1.02, 1.0, 0.01, label="MA阈值")
-                ema_th = gr.Slider(0.98, 1.02, 1.0, 0.01, label="EMA阈值")
+                ma_th = gr.Slider(minimum=0.98, maximum=1.02, value=1.0, step=0.01, label="MA阈值")
+                ema_th = gr.Slider(minimum=0.98, maximum=1.02, value=1.0, step=0.01, label="EMA阈值")
                 rsi_low = gr.Number(label="RSI≥", value=30)
                 rsi_high = gr.Number(label="RSI≤", value=70)
             
             with gr.Row():
                 macd_cond = gr.Radio(["positive","above_signal"], value="positive", label="MACD条件")
                 bb_cb = gr.Checkbox(label="跌破布林下轨", info="价格支撑")
-                bb_w = gr.Slider(0.95, 1.05, 1.0, 0.01, label="布林带宽系数")
+                bb_w = gr.Slider(minimum=0.95, maximum=1.05, value=1.0, step=0.01, label="布林带宽系数")
                 kdj_cb = gr.Checkbox(label="KDJ超卖", info="随机指标")
             
             with gr.Row():
@@ -490,11 +490,11 @@ if __name__ == "__main__":
     # 收盘后自动跑每日推荐（默认 16:00，交易日；ASTOCK_AUTO_RECOMMEND=0 可关闭）
     start_recommend_scheduler()
     port = 7861
-    for p in range(port, port+10):
+    for candidate in range(port, port + 10):
         try:
-            app.launch(server_port=p, share=False, theme="soft")
+            app.launch(server_port=candidate, share=False, theme="soft")
             break
         except OSError:
-            print(f"端口{p}被占，试{p+1}")
+            print(f"端口{candidate}被占，试{candidate + 1}")
     else:
         print("❌ 无可用端口")

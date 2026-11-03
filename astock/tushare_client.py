@@ -49,7 +49,7 @@ class TushareClient:
 
     def query(self, api_name: str, fields: str = "", **params: Any) -> pd.DataFrame:
         """调用一个 Tushare 接口，返回 DataFrame；空结果返回空表。"""
-        payload = {
+        payload: dict[str, Any] = {
             "api_name": api_name,
             "token": self.token,
             "params": params,
