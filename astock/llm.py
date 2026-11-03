@@ -24,7 +24,7 @@ def _build(mode: str) -> OpenAI:
     return OpenAI(
         api_key=DEEPSEEK_API_KEY,
         base_url=DEEPSEEK_BASE,
-        http_client=http_client,
+        http_client=cast(Any, http_client),
         max_retries=1,
     )
 

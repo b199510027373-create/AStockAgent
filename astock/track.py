@@ -38,14 +38,14 @@ def _block_bootstrap_ci(
     if block <= 1 or n < 2 * block:
         means = rng.choice(arr, size=(n_boot, n), replace=True).mean(axis=1)
     else:
-        means = []
+        boot_means: list[float] = []
         for _ in range(n_boot):
             idx: list[int] = []
             while len(idx) < n:
                 start = int(rng.integers(0, n))
                 idx.extend((start + np.arange(block)) % n)
-            means.append(float(arr[np.asarray(idx[:n])].mean()))
-        means = np.asarray(means)
+            boot_means.append(float(arr[np.asarray(idx[:n])].mean()))
+        means = np.asarray(boot_means)
     low, high = np.percentile(means, [2.5, 97.5])
     p_boot = min(1.0, 2 * min(float((means <= 0).mean()), float((means >= 0).mean())))
     return float(low), float(high), p_boot

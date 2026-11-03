@@ -130,7 +130,7 @@ def _acquire_lock():
             handle.flush()
         handle.seek(0)
         if os.name == "nt":
-            import msvcrt
+            msvcrt = __import__("msvcrt")
 
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         else:
@@ -154,7 +154,7 @@ def _release_lock() -> None:
     try:
         _LOCK_HANDLE.seek(0)
         if os.name == "nt":
-            import msvcrt
+            msvcrt = __import__("msvcrt")
 
             msvcrt.locking(_LOCK_HANDLE.fileno(), msvcrt.LK_UNLCK, 1)
         else:
