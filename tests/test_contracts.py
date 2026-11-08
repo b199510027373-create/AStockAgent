@@ -302,31 +302,31 @@ class EventsEntryContractTests(unittest.TestCase):
             patch.object(events, "get_client", return_value=client),
             patch.object(events, "_cache_get", return_value=None),
             patch.object(events, "_cache_put", side_effect=lambda key, value: value),
-            patch.object(
-                events,
-                "_meta_for",
-                return_value={
-                    "ts_code": "600519.SH",
-                    "name": "贵州茅台",
-                    "industry": "白酒",
-                    "aliases": "贵州茅台",
-                },
-            ),
         ):
             out = events.fetch_announcements(["600519.SH"], days=30)
         self.assertEqual(len(out), 1)
         self.assertEqual(out["code"].iloc[0], "600519.SH")
 
-        evidence = events.evidence_for_stock(
-            "600519.SH",
-            "贵州茅台",
-            "白酒",
-            out,
-            pd.DataFrame(),
-            pd.DataFrame(),
-            pd.DataFrame(),
-            pd.DataFrame(),
-        )
+        with patch.object(
+            events,
+            "_meta_for",
+            return_value={
+                "ts_code": "600519.SH",
+                "name": "贵州茅台",
+                "industry": "白酒",
+                "aliases": "贵州茅台",
+            },
+        ):
+            evidence = events.evidence_for_stock(
+                "600519.SH",
+                "贵州茅台",
+                "白酒",
+                out,
+                pd.DataFrame(),
+                pd.DataFrame(),
+                pd.DataFrame(),
+                pd.DataFrame(),
+            )
         self.assertEqual(len(evidence), 1)
         self.assertIn("pub_time", evidence[0])
         self.assertEqual(evidence[0]["kind"], "公告")
