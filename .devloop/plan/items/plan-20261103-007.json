@@ -1,0 +1,32 @@
+{
+  "id": "plan-20261103-007",
+  "title": "调度状态机迁移 jobs 表 + 心跳告警",
+  "description": "ADR-004 已实现锁、墙钟、幂等与补偿，但调度状态仍主要写 scheduler_state.json，jobs 表只记录了少量任务。目标：状态机与 attempts/late_by_min 完整落 jobs 表，启动时从表判断\"该跑但没跑\"，并加心跳检查（超时告警）。这是评审 §4.6 P0 验收\"连续 5 个交易日 job 全 success\"的基础。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-quality",
+  "owner": "human",
+  "start": "2026-11-18",
+  "due": "2026-11-22",
+  "estimateH": 8,
+  "progress": 0,
+  "acceptance": [
+    "jobs 表能完整表达 pending/running/success/stale/failed 与 attempts",
+    "scheduler_state.json 可停用或降级为只读迁移源",
+    "心跳超过阈值（如 2 个交易日未运行）触发告警",
+    "连续 5 个交易日 job 全 success 的验收可复现"
+  ],
+  "tags": [
+    "scheduler",
+    "ledger",
+    "alerting"
+  ],
+  "links": {
+    "adr": [
+      "ADR-004",
+      "ADR-003"
+    ]
+  },
+  "createdAt": "2026-11-03T12:10:40.568Z",
+  "updatedAt": "2026-11-03T12:10:40.568Z"
+}

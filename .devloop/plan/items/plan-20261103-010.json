@@ -1,0 +1,31 @@
+{
+  "id": "plan-20261103-010",
+  "title": "事件分权重单点化与标注校准",
+  "description": "事件分目前是「加权情绪均值」，权重（公告/研报/新闻/政策、正负词）是人工设定，没有标注校准。这会让事件面 35% 的贡献不可解释。目标：把权重收敛到 scoring.py 单点配置并写入 run.params；用人工标注样本（≥100 条）校准一次，给出准确率/IC 与前后排序对比；不引入 LLM 排序。",
+  "status": "backlog",
+  "priority": "P2",
+  "milestone": "ms-research",
+  "owner": "human",
+  "start": null,
+  "due": null,
+  "estimateH": 12,
+  "progress": 0,
+  "acceptance": [
+    "权重集中到 scoring.py 常量，并写入 run.params 可审计",
+    "构造至少 100 条标注样本（正面/中性/负面），给出权重与 IC/准确率",
+    "校准前后推荐排序变化有对比报告",
+    "不改变 LLM 只解释的边界"
+  ],
+  "tags": [
+    "events",
+    "calibration",
+    "scoring"
+  ],
+  "links": {
+    "adr": [
+      "ADR-002"
+    ]
+  },
+  "createdAt": "2026-11-03T12:10:51.628Z",
+  "updatedAt": "2026-11-07T14:13:40.630Z"
+}

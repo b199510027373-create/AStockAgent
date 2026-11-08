@@ -1,0 +1,34 @@
+{
+  "id": "plan-20261103-001",
+  "title": "契约层 contracts.py：DataFrame schema 校验",
+  "description": "依据 ADR-002 新增 astock/contracts.py，把隐式列约定变成显式契约：BarFrame（ts_code/trade_date/OHLC/vol/amount/adj_factor）、EventFrame（code/kind/pub_time/title/source/url）、Evidence、RecommendationRun（schema_version=2）。先接入 data.py / events.py / recommend.py 三个入口，校验失败抛带列名的显式异常，不再静默降级。参考评审 D18（ts_code 缺列被 except 吞掉）与 §4.2。",
+  "status": "in_review",
+  "priority": "P1",
+  "milestone": "ms-contracts",
+  "owner": "human",
+  "start": "2026-11-04",
+  "due": "2026-11-10",
+  "estimateH": 12,
+  "progress": 100,
+  "acceptance": [
+    "四个契约（BarFrame/EventFrame/Evidence/RecommendationRun）有实现与 docstring",
+    "data/events/recommend 的关键入口全部过校验",
+    "缺列或类型错误在测试中抛显式异常，而非返回空结果",
+    "新增测试覆盖 4 类以上缺失/类型错误"
+  ],
+  "tags": [
+    "contracts",
+    "dataframe",
+    "architecture"
+  ],
+  "links": {
+    "adr": [
+      "ADR-002"
+    ],
+    "module": "contracts",
+    "branch": "feat/contracts"
+  },
+  "createdAt": "2026-11-03T12:10:24.821Z",
+  "updatedAt": "2026-11-08T09:40:59.343Z",
+  "devSessionId": "session-1431a9d2-f63a-41d5-8013-6ee35f20c3c9"
+}

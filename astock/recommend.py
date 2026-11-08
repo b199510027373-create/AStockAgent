@@ -17,6 +17,7 @@ import pandas as pd
 
 from . import llm
 from .config import BASE_DIR
+from .contracts import ContractError, validate_recommendation_run
 from .data import enrich, last_completed_trade_date, load_daily, load_index_daily, load_trade_cal, next_open_date
 from .events import (
     evidence_for_stock,
@@ -112,6 +113,9 @@ def _load_one(code: str, start: str, end: str) -> tuple[str, pd.DataFrame | None
             client=_thread_client(),
         )
         return code, (enrich(df) if not df.empty else None), ""
+    except ContractError:
+        # schema 漂移不是"单票缺数据"：直接失败整轮 run，不静默退出候选池。
+        raise
     except Exception as exc:  # noqa: BLE001
         return code, None, f"{type(exc).__name__}: {exc}"
 
@@ -133,6 +137,8 @@ def load_many(
         for i, future in enumerate(as_completed(futures), 1):
             try:
                 code, df, error = future.result()
+            except ContractError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 code, df, error = futures[future], None, f"{type(exc).__name__}: {exc}"
             if df is not None and not df.empty:
@@ -301,8 +307,9 @@ def _parse_json(text: str) -> dict:
 def _llm_rank(rows: list[dict], evidence_map: dict[str, list[dict]], market: str) -> dict:
     lines = [
         "你是A股研究员。只能使用下面提供的数据，不得编造新闻、价格或业绩。",
-        "为每只候选给出 action（技术面强/技术面中性/技术面弱）、confidence(0-1)、reason、catalysts、risks、evidence（引用的 E 编号）。",
-        "输出严格 JSON：{\"market\":\"一句话市场判断\",\"items\":[{\"code\":\"600519.SH\",\"action\":\"技术面强\",\"confidence\":0.7,\"reason\":\"...\",\"catalysts\":[\"...\"],\"risks\":[\"...\"],\"evidence\":[\"E1\"]}],\"risk_note\":\"...\"}",
+        "为每只候选给出 reason、catalysts、risks、evidence（引用的 E 编号）；"
+        "不要给出 action/建议——「建议」由规则按综合分决定，你只负责解释。",
+        "输出严格 JSON：{\"market\":\"一句话市场判断\",\"items\":[{\"code\":\"600519.SH\",\"reason\":\"...\",\"catalysts\":[\"...\"],\"risks\":[\"...\"],\"evidence\":[\"E1\"]}],\"risk_note\":\"...\"}",
         "",
         f"市场背景：{market}",
         "",
@@ -318,7 +325,7 @@ def _llm_rank(rows: list[dict], evidence_map: dict[str, list[dict]], market: str
         )
         for ev in evidence_map.get(row["code"], [])[:3]:
             eid += 1
-            date = pd.Timestamp(ev["date"]).strftime("%Y-%m-%d")
+            date = pd.Timestamp(ev["pub_time"]).strftime("%Y-%m-%d")
             lines.append(f"E{eid} [{date} {ev['kind']}] {ev['title'][:70]}（{ev.get('source','')}）")
     lines.append("")
     lines.append("只输出 JSON，不要输出其他文字。")
@@ -351,6 +358,9 @@ def _market_snapshot(
         idx_ret20 = last["close"] / idx_e["close"].iloc[-21] - 1 if len(idx_e) > 21 else np.nan
         idx_trend = "站上MA20" if last["close"] > last["ma20"] else "低于MA20"
         idx_text = f"沪深300 近20日 {idx_ret20:+.1%}，{idx_trend}" if math.isfinite(idx_ret20) else "沪深300 数据不足"
+    except ContractError:
+        # 指数 schema 漂移与其他入口一致：显式失败，不降级成"数据不可用"。
+        raise
     except Exception:
         idx_text = "沪深300 数据不可用"
 
@@ -395,15 +405,13 @@ def _report_markdown(
     ]
     for i, row in enumerate(result_rows, 1):
         ai_row = ai_items.get(row["code"], {})
-        action = ai_row.get("action") or row.get("action") or _action(row["composite"])
+        action = row.get("action") or _action(row["composite"])
         reason = ai_row.get("reason") or row.get("reason", "")
-        conf = ai_row.get("confidence")
-        conf_text = f"（置信度 {float(conf):.0%}）" if isinstance(conf, (int, float)) else ""
         lines.append(
             f"### {i}. {row['code']} {row['name']} · 综合 {row['composite']:.1f}"
         )
         lines.append(
-            f"- **建议**：{action}{conf_text}；技术 {row['technical_score']:.1f} / 事件 {row['event_score']:.1f}；"
+            f"- **建议**：{action}；技术 {row['technical_score']:.1f} / 事件 {row['event_score']:.1f}；"
             f"收盘 {row['close']}，20日 {row['ret20']*100:+.1f}%，RSI {row['rsi']:.1f}"
         )
         lines.append(f"- **逻辑**：{reason}")
@@ -438,7 +446,7 @@ def _evidence_markdown(result_rows: list[dict], evidence_map: dict[str, list[dic
             lines.append("- 暂无可匹配的公告/研报/新闻/政策。")
         for ev in items[:4]:
             eid += 1
-            date = pd.Timestamp(ev["date"]).strftime("%Y-%m-%d")
+            date = pd.Timestamp(ev["pub_time"]).strftime("%Y-%m-%d")
             title = str(ev["title"])
             if ev.get("url"):
                 title = f"[{title}]({ev['url']})"
@@ -515,9 +523,6 @@ def _save(
     )
     suffix = run_id[-8:] if run_id else uuid.uuid4().hex[:8]
     csv_path = REC_DIR / f"recommend_{stamp}_{suffix}.csv"
-    tmp_csv = csv_path.with_suffix(".csv.tmp")
-    table.to_csv(tmp_csv, index=False, encoding="utf-8-sig")
-    os.replace(tmp_csv, csv_path)
 
     payload = {
         "schema_version": SCHEMA_VERSION,
@@ -536,7 +541,7 @@ def _save(
             code: [
                 {
                     "kind": ev.get("kind", ""),
-                    "date": pd.Timestamp(ev["date"]).isoformat() if ev.get("date") is not None else "",
+                    "pub_time": pd.Timestamp(ev.get("pub_time")).isoformat() if ev.get("pub_time") is not None else "",
                     "title": ev.get("title", ""),
                     "source": ev.get("source", ""),
                     "url": ev.get("url", ""),
@@ -548,7 +553,13 @@ def _save(
         },
     }
     payload = _clean_json(payload)
+    # 写盘前过 RecommendationRun 契约（DATA-01：schema_version=2、必填字段、
+    # 证据字段、无 NaN）；失败抛 ContractError，不再静默产出残缺 JSON 或空结果。
+    payload = validate_recommendation_run(payload, source=f"recommend._save({run_id})")
     text = json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
+    tmp_csv = csv_path.with_suffix(".csv.tmp")
+    table.to_csv(tmp_csv, index=False, encoding="utf-8-sig")
+    os.replace(tmp_csv, csv_path)
     json_path = REC_DIR / f"recommend_{stamp}_{suffix}.json"
     _atomic_write_text(json_path, text)
     _atomic_write_text(REC_DIR / "latest.json", text)
@@ -702,7 +713,7 @@ def run_daily_recommendation(
         kept = []
         for ev in evidence:
             try:
-                pub = pd.Timestamp(ev.get("date"))
+                pub = pd.Timestamp(ev.get("pub_time"))
                 if pub > generated_ts:
                     evidence_dropped += 1
                     continue
@@ -735,13 +746,7 @@ def run_daily_recommendation(
     for row in candidates:
         ai_row = ai_items.get(row["code"])
         if ai_row:
-            ai_action = str(ai_row.get("action") or "")
-            if ai_action:
-                row["action"] = {
-                    "关注": "技术面强",
-                    "观察": "技术面中性",
-                    "回避": "技术面弱",
-                }.get(ai_action, ai_action)
+            # AI-01：action 由规则决定，LLM 只能补充理由/催化/风险。
             row["reason"] = ai_row.get("reason") or row["reason"]
             if ai_row.get("catalysts"):
                 row["catalysts"] = ai_row["catalysts"]

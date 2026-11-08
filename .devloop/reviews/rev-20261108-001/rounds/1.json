@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261108-001-r1",
+  "threadId": "rev-20261108-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮（scope=full）静态评审完成，结论 request_changes。说明：工作区不是 git 仓库（git status 报 fatal: not a git repository），devloop_git diff 无法生成，本轮按工作区文件逐行阅读评审；环境无执行工具，未运行 pytest，不对测试是否通过做任何结论。\n\n已核对四份契约（BarFrame/EventFrame/Evidence/RecommendationRun）的实现、docstring、__all__ 导出，以及 data.py / events.py / recommend.py 的接入点：data.py 的 _fetch_daily（:220、:257-261）、load_daily（:305-310、:357-362）、load_index_daily（:392-399、:409）、load_minute（:639-648）均已接入；events.py 的各 fetch_* 与 evidence_for_stock（:684-688）已接入并在缺列时抛 ContractError；recommend._save（:551）在写盘前校验，顺序正确。验收标准 (1)(3)(4) 基本满足，(2)「关键入口全部过校验且失败不静默降级」未满足：recommend._load_one/load_many 把 ContractError 吞成单票失败（P1-1）。\n\n3 条 P1：\n1. astock/recommend.py:106-117,120-145 —— load_daily 的 ContractError 被 except Exception 吞掉，坏票从候选池静默消失，run 仍成功。\n2. astock/contracts.py:330-338,240-250,100-102 —— require_code/non_empty 放过 NaN（astype(str) 把 NaN 变 \"nan\"，_check_strings 又 dropna 跳过），与\"强制非空\"承诺不符；:241-250 是 :240 之后的重复不可达检查。\n3. astock/recommend.py:739-753,399 —— LLM 返回的 action 覆盖规则算出的「建议」（仅换词包装），违反契约 AI-01。\n\n3 条 P2：allow_empty 空帧提前返回跳过列校验（与 docstring 及 data.py:305 注释矛盾）；事件日期格式漂移被 coerce+dropna 静默清空；RecommendationRun 契约未实现 DATA-02 校验。\n\n另有一个未记录的次要观察（同文件 P2 配额已满）：contracts.py:505 浅拷贝 + :575-577 就地写 evidence，validate 会改写调用方 payload；建议先全部校验成功后再整体替换 evidence。",
+  "startedAt": "2026-11-08T09:10:35.513Z",
+  "finishedAt": "2026-11-08T09:17:14.461Z",
+  "rulesVersion": "v1",
+  "counts": {
+    "P0": 0,
+    "P1": 3,
+    "P2": 3,
+    "total": 6
+  }
+}

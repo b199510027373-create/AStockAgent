@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw7mbo6x-d66364",
+  "threadId": "rev-20261108-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/contracts.py",
+  "lines": "330-338,240-250,100-102",
+  "title": "require_code/non_empty 放过 NaN：code 为 NaN 的事件表与行情表仍通过校验",
+  "evidence": "EventFrame.validate 在 require_code=True 时的空值判定是 `blank = frame[\"code\"].astype(str).str.strip().eq(\"\")`（contracts.py:332），`astype(str)` 把 NaN 变成字符串 \"nan\"，与 \"\" 不等 → 通过；上游 `_check_strings(frame, [\"code\"], cls.name, non_empty=require_code)` 又先 `values = df[col].dropna()`，`if values.empty: continue`（contracts.py:100-102）把 NaN 整行跳过。两处叠加的结果是 code 全为 NaN 的 EventFrame 在 require_code=True 下也返回成功，而该参数的 docstring/报错文案宣称\"强制非空/拒绝返回空结果\"。BarFrame 同样：`_check_strings(frame, [\"ts_code\"], cls.name, non_empty=True)`（contracts.py:240）与 :241-250 的 `blank = ... .str.strip().eq(\"\") & frame[\"ts_code\"].notna()` 都显式排除 NaN，所以 ts_code=NaN 的行情表也能通过；:241-250 这段在 :240 之后基本不可达（:240 已对空串抛错），属重复检查。tests/test_contracts.py 只测了空字符串 code 与\"全市场空 code\"，没有一条 NaN 用例，所以回归无人拦截。",
+  "suggestion": "把\"空\"定义改成同时覆盖 NaN 与空串，并让 _check_strings 在 non_empty=True 时把 NaN 视为违规而不是 dropna 跳过：`bad = frame[\"code\"].isna() | frame[\"code\"].astype(str).str.strip().eq(\"\")`，BarFrame 的 ts_code 同理（并删掉 :241-250 的重复块）。补测试：code=[np.nan]、ts_code=[np.nan] 在 require_code/默认情形下都应抛 ContractError。",
+  "confidence": 0.78,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-08T09:16:44.217Z"
+}

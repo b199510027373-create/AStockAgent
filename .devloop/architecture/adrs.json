@@ -1,0 +1,232 @@
+[
+  {
+    "id": "ADR-001",
+    "title": "本地单用户 Gradio 研究台",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "交付形态保持本地单用户 Gradio，app.py 只装配；不引入 FastAPI、微服务与多用户鉴权。",
+    "tags": [
+      "交付形态",
+      "分层"
+    ],
+    "file": "adr/ADR-001-local-single-user-gradio.md"
+  },
+  {
+    "id": "ADR-002",
+    "title": "六层分层与契约层（contracts.py）",
+    "status": "proposed",
+    "date": "2026-11-03",
+    "summary": "交互/用例/领域/适配/契约/平台六层；新增 contracts.py 校验 BarFrame/EventFrame/Evidence/RecommendationRun，用例统一返回 RunResult。",
+    "tags": [
+      "架构",
+      "契约",
+      "DataFrame"
+    ],
+    "file": "adr/ADR-002-layered-architecture-contracts.md"
+  },
+  {
+    "id": "ADR-003",
+    "title": "SQLite ledger 作为运行台账",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "runs/items/evidence/jobs/tracking 五表；推荐 JSON + SQLite 双写，跟踪优先读库，运行数据不入库。",
+    "tags": [
+      "台账",
+      "SQLite",
+      "可审计"
+    ],
+    "file": "adr/ADR-003-sqlite-ledger.md"
+  },
+  {
+    "id": "ADR-004",
+    "title": "调度器：独立进程 + 墙钟 + 幂等 + 补偿窗口",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "python -m astock.jobs 独立进程、单实例锁、(last_completed_trade_date, slot) 幂等、墙钟循环与 16:40–23:00 补偿。",
+    "tags": [
+      "调度",
+      "可靠性"
+    ],
+    "file": "adr/ADR-004-scheduler-idempotent-jobs.md"
+  },
+  {
+    "id": "ADR-005",
+    "title": "时间语义：data_as_of / tradable_from / 证据截止",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "拆分数据截止与可成交起点，证据 pub_time ≤ generated_at，严格 JSON，跟踪从 tradable_from 开盘且不后移。",
+    "tags": [
+      "前视",
+      "数据契约"
+    ],
+    "file": "adr/ADR-005-time-semantics-strict-json.md"
+  },
+  {
+    "id": "ADR-006",
+    "title": "统计单一入口：stats.py",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "所有 p 值只从 stats.py 产出；NW lag=horizon−1、Student-t、有效独立样本、BH；有效样本 <10 隐藏 p。",
+    "tags": [
+      "统计",
+      "显著性"
+    ],
+    "file": "adr/ADR-006-statistics-single-source.md"
+  },
+  {
+    "id": "ADR-007",
+    "title": "PIT 股票池：历史成分 + 退市 + 行业版本",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "index_weight 历史成分 + stock_basic(L/D) 退市过滤 + daily_basic 市值 + 申万 L1 历史成员（2021-12-13 切 SW2021）。",
+    "tags": [
+      "PIT",
+      "幸存者偏差",
+      "申万"
+    ],
+    "file": "adr/ADR-007-pit-universe.md"
+  },
+  {
+    "id": "ADR-008",
+    "title": "价格口径：qfq 信号 + raw 限价 + ST/IPO",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "信号与展示统一 qfq，成交/涨跌停只用原始价；ST 5%；缓存记录 base_factor。",
+    "tags": [
+      "复权",
+      "回测",
+      "涨跌停"
+    ],
+    "file": "adr/ADR-008-price-adjustment-limits.md"
+  },
+  {
+    "id": "ADR-009",
+    "title": "LLM 只解释，不参与排序",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "DeepSeek 只写逻辑/催化/风险，不改 action、confidence 与排序；失败退回规则理由。",
+    "tags": [
+      "LLM",
+      "可复现"
+    ],
+    "file": "adr/ADR-009-llm-explain-only.md"
+  },
+  {
+    "id": "ADR-010",
+    "title": "研究语义与「无 alpha」一等公民",
+    "status": "proposed",
+    "date": "2026-11-03",
+    "summary": "动作词改技术面强弱 + 池内分位；推荐页实时展示未验证状态；对外唯一指标改为 Top5 组合净值 vs 沪深300。",
+    "tags": [
+      "产品",
+      "统计诚实",
+      "净值"
+    ],
+    "file": "adr/ADR-010-research-semantics.md"
+  },
+  {
+    "id": "ADR-011",
+    "title": "缓存契约：base_factor + 原子写 + LRU",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "缓存 meta 记录 base_factor，基准变化即失效；唯一临时文件 + os.replace；读侧容错；LRU 上限；qfq/raw 路径分离。",
+    "tags": [
+      "缓存",
+      "复权基准",
+      "原子写"
+    ],
+    "file": "adr/ADR-011-cache-contract.md"
+  },
+  {
+    "id": "ADR-012",
+    "title": "产品边界与研究闭环（需求基线）",
+    "status": "accepted",
+    "date": "2026-11-03",
+    "summary": "定位为本地研究台而非荐股产品；13 Tab 功能边界；数据→评分→推荐→台账→跟踪→统计→结论必须端到端可复现，并写明非目标。",
+    "tags": [
+      "需求",
+      "产品边界",
+      "验收"
+    ],
+    "file": "adr/ADR-012-product-scope-requirements.md"
+  },
+  {
+    "id": "ADR-013",
+    "title": "自研 Agent 运行时：工具调用循环",
+    "status": "proposed",
+    "date": "2026-11-07",
+    "summary": "进程内 Agent：plan→act→observe→reflect，最多 12 步；数字与图形只来自工具；会话/工作记忆持久化；对推荐只读。",
+    "tags": [
+      "Agent",
+      "工具调用",
+      "运行时"
+    ],
+    "file": "adr/ADR-013-agent-runtime.md"
+  },
+  {
+    "id": "ADR-014",
+    "title": "模型网关：供应商可替换，Agent 不绑定 DeepSeek",
+    "status": "proposed",
+    "date": "2026-11-07",
+    "summary": "ChatModel 抽象 + DeepSeek/OpenAI-compatible/规则兜底三个适配器；配置化 provider/model/base_url；DeepSeek 只是默认值。",
+    "tags": [
+      "Agent",
+      "模型网关",
+      "供应商解耦"
+    ],
+    "file": "adr/ADR-014-model-gateway.md"
+  },
+  {
+    "id": "ADR-015",
+    "title": "文件导入与检索：PDF / Excel / CSV / DOCX",
+    "status": "proposed",
+    "date": "2026-11-07",
+    "summary": "上传→解析→内容寻址存储→FTS5 文本索引 + DuckDB 只读表格查询；回答强制带文件名+页码/工作表引用。",
+    "tags": [
+      "文件导入",
+      "PDF",
+      "Excel",
+      "检索"
+    ],
+    "file": "adr/ADR-015-file-ingestion.md"
+  },
+  {
+    "id": "ADR-016",
+    "title": "图表即工具产物：声明式 chart spec",
+    "status": "proposed",
+    "date": "2026-11-07",
+    "summary": "ChartSpec 声明式规格（K线/折线/柱/散点/热力/直方）+ 白名单 transforms，spec→Plotly→artifact；v1 不执行任意 Python。",
+    "tags": [
+      "Agent",
+      "图表",
+      "ChartSpec"
+    ],
+    "file": "adr/ADR-016-chart-spec.md"
+  },
+  {
+    "id": "ADR-017",
+    "title": "Agent 运行审计与安全边界",
+    "status": "proposed",
+    "date": "2026-11-07",
+    "summary": "agent_runs/agent_steps/agent_artifacts 三表全量记录；工具权限分级、路径白名单、提示注入防护、步数/token/时长限额。",
+    "tags": [
+      "Agent",
+      "审计",
+      "安全"
+    ],
+    "file": "adr/ADR-017-agent-audit-security.md"
+  },
+  {
+    "id": "ADR-018",
+    "title": "「实时」行情口径与 Agent 数据时点",
+    "status": "proposed",
+    "date": "2026-11-07",
+    "summary": "实时=rt_min 最新一根+30s 缓存；每个行情结果带 data_as_of 与 data_time；非交易时段/延迟/停牌显式标注。",
+    "tags": [
+      "实时行情",
+      "数据时点",
+      "K线"
+    ],
+    "file": "adr/ADR-018-realtime-quotes.md"
+  }
+]

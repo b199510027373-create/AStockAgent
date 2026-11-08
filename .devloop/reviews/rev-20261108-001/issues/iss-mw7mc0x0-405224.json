@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw7mc0x0-405224",
+  "threadId": "rev-20261108-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/contracts.py",
+  "lines": "235-236,322-323,230-231",
+  "title": "allow_empty 空帧提前返回跳过列校验，与 docstring 约定不符",
+  "evidence": "BarFrame.validate 的 `allow_empty` docstring 写着「仍要求列齐全，除非是完全没有列的 pd.DataFrame()」（contracts.py:230-231），但实现是 `if frame.empty and allow_empty: return frame.copy()`（:235-236），在 `_require_columns`（:239）之前就返回；EventFrame 同样（:322-323）。也就是说 0 行但缺 close/amount 列的帧会通过。数据层正好把这条路用在了\"旧缓存\"上：data.py:305-310 `validate_bars(cached, allow_empty=True, source=f\"load_daily 缓存({ts_code})\")`，注释声称旧缓存缺列要显式报错，实际空缓存（0 行）缺列时被放行并原样返回，下游 enrich/technical_score 才以 KeyError/NaN 形式暴露。",
+  "suggestion": "把提前返回收紧成只放过\"完全无列\"的哨兵：`if frame.empty and allow_empty and not len(frame.columns): return frame.copy()`，其余空帧继续走 _require_columns；或在返回前补 `_require_columns(frame, required, cls.name, source=source)`。同时在 tests/test_contracts.py 增加 `pd.DataFrame(columns=[])` 与 `pd.DataFrame({\"ts_code\": []})` 两个 allow_empty 用例，固定这两种语义。",
+  "confidence": 0.8,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-08T09:17:00.708Z"
+}

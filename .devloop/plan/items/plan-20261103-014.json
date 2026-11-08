@@ -1,0 +1,32 @@
+{
+  "id": "plan-20261103-014",
+  "title": "实盘样本复核：20+ 批次显著性重跑",
+  "description": "研究结论当前是「alpha 仍未证明」：39 批次中实盘仅 20 条，T+5/T+20 有效独立样本 <10。本项是定期复核而非开发：等实盘批次积累到 20+ 个交易日后，重跑 Top2−其余 的 NW/BH 检验，更新 docs/AStockAgent_research_conclusions_v1.3.md 与推荐页横幅。防止\"结论过期\"。",
+  "status": "backlog",
+  "priority": "P3",
+  "milestone": "ms-research",
+  "owner": "human",
+  "start": null,
+  "due": null,
+  "estimateH": 4,
+  "progress": 0,
+  "acceptance": [
+    "实盘批次达到 20+ 时自动重跑一遍显著性并出报告",
+    "报告明确区分实盘批次与技术分回填批次",
+    "若仍无显著 alpha，更新研究结论与产品横幅",
+    "若出现显著，说明多重检验与样本独立性是否满足"
+  ],
+  "tags": [
+    "research",
+    "significance",
+    "review"
+  ],
+  "links": {
+    "adr": [
+      "ADR-006",
+      "ADR-007"
+    ]
+  },
+  "createdAt": "2026-11-03T12:11:02.745Z",
+  "updatedAt": "2026-11-07T14:13:40.688Z"
+}

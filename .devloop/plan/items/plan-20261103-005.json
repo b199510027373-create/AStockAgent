@@ -1,0 +1,32 @@
+{
+  "id": "plan-20261103-005",
+  "title": "「无显著 alpha」实时横幅（ledger 驱动）",
+  "description": "依据 ADR-010 与评审 §6.1。当前推荐页只有静态风险提示（recommend_ui.py:98），没有数字。目标：顶部灰底横幅实时显示「实盘样本 N 个交易日、独立窗口≈K、Top2−其余 p=…」，数字从 ledger 聚合、经 stats.py 计算；有效样本 <10 时显示\"样本不足，不显示显著性\"。样本够了自动隐藏。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-product",
+  "owner": "human",
+  "start": "2026-11-15",
+  "due": "2026-11-17",
+  "estimateH": 4,
+  "progress": 0,
+  "acceptance": [
+    "横幅数字来自 ledger/stats 实时聚合，而非硬编码",
+    "展示实盘样本数、有效独立窗口、Top2−其余 p（或「样本不足，暂不显示」）",
+    "样本达到门槛后横幅自动消失或转为正向提示",
+    "无可信统计时不得显示任何显著性结论"
+  ],
+  "tags": [
+    "product",
+    "statistics",
+    "honesty"
+  ],
+  "links": {
+    "adr": [
+      "ADR-010",
+      "ADR-006"
+    ]
+  },
+  "createdAt": "2026-11-03T12:10:35.581Z",
+  "updatedAt": "2026-11-03T12:10:35.581Z"
+}

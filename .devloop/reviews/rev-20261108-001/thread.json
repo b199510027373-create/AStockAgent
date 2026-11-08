@@ -1,0 +1,11 @@
+{
+  "id": "rev-20261108-001",
+  "title": "评审：契约层 contracts.py：DataFrame schema 校验",
+  "planItemId": "plan-20261103-001",
+  "branch": "feat/contracts",
+  "base": "main",
+  "status": "changes_requested",
+  "createdAt": "2026-11-08T09:10:35.510Z",
+  "updatedAt": "2026-11-08T09:17:14.461Z",
+  "reviewSessionId": "session-08e2bfdf-b838-434a-8fec-8a8c0631ee85"
+}
