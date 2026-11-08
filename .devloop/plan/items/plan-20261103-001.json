@@ -25,10 +25,10 @@
     "adr": [
       "ADR-002"
     ],
-    "module": "contracts",
-    "branch": "feat/contracts"
+    "branch": "main",
+    "module": "contracts"
   },
   "createdAt": "2026-11-03T12:10:24.821Z",
-  "updatedAt": "2026-11-08T16:34:49.358Z",
+  "updatedAt": "2026-11-08T16:45:03.694Z",
   "devSessionId": "session-1431a9d2-f63a-41d5-8013-6ee35f20c3c9"
 }
