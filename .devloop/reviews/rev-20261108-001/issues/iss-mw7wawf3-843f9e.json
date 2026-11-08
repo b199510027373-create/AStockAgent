@@ -10,7 +10,24 @@
   "evidence": "contracts.py:565-577 是本次新加的 DATA-02 实现：`pub = pd.Timestamp(item[\"pub_time\"])` 直接与 `gen_ts = pd.Timestamp(data[\"generated_at\"])`（naive，通常是 \"2026-11-08 17:14:02\" 这种无时区字符串）比较，`if pub > gen_ts:` 外层没有 try/except。而上游明确允许带时区的时间：Evidence.validate 对 pub_time 只做 `pd.Timestamp(record[\"pub_time\"])` 解析并原样保留调用方表示（:393-406），`_to_datetime` 对 `pd.DatetimeTZDtype` 直接放行（:132-140）。因此一份 `evidence[a].pub_time = \"2026-11-06T09:00:00+08:00\"` 的 payload 能通过 Evidence 校验，却在 :570 抛 `TypeError: Cannot compare tz-naive and tz-aware timestamps`——不是 ContractError，绕过 contracts.py 统一的异常语义，调用方 `_save` 的契约错误处理（recommend.py:558 附近）也抓不到，且异常信息不指出是哪个契约/字段。",
   "suggestion": "比较前统一时区：`gen_ts = pd.Timestamp(data[\"generated_at\"]); gen_ts = gen_ts.tz_localize(None) if gen_ts.tzinfo else gen_ts`，并对 `pub` 同样处理（或改用 `pub.astimezone(gen_ts.tzinfo) if gen_ts.tzinfo else pub.tz_convert(None)`）；把整个比较包在 `try/except TypeError` 里转成 ContractError 作为兜底，并补一个带 +08:00 偏移的 evidence 用例，断言要么正常比较、要么抛 ContractError。",
   "confidence": 0.7,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-08T13:56:04.383Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-08T16:31:21.111Z"
+  },
+  "createdAt": "2026-11-08T13:56:04.383Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-08T16:31:21.111Z"
+    }
+  ]
 }

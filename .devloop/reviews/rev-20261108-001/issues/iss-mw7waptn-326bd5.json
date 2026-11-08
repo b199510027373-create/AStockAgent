@@ -10,7 +10,24 @@
   "evidence": "全仓 grep BAR_SCHEMA|EVENT_SCHEMA 只有 6 处命中，全部是「定义 + __all__ 导出」（contracts.py:26-27 导出、:184-194 定义、:278-285 定义），没有任何校验逻辑或测试读取它们；真正的必需列由 BarFrame.required(:209-218) 与 EventFrame.required(:298-305) 另行硬编码。两份 schema 已经漂移：BAR_SCHEMA:184-194 含 adj_factor 且标注 dtype（\"datetime64[ns]\"、\"float64\"），而 required 不含 adj_factor（它由 require_adj 条件要求，:255-257），validate 也不校验这些标注的 dtype。后续按 BAR_SCHEMA 改 schema 的人会以为改了契约，实际不生效。",
   "suggestion": "消除双份真相：二选一——(a) 让 required 从 schema 派生，如 `required = tuple(k for k in BAR_SCHEMA if k != \"adj_factor\")`（EventFrame 同），并让 dtype 标注真正参与校验（或删掉 dtype 值只留列名集合）；(b) 删除 BAR_SCHEMA/EVENT_SCHEMA 并从 __all__(:26-27) 移出。两种都补一个测试断言 `set(BarFrame.required) <= set(BAR_SCHEMA)`，防止再漂移。",
   "confidence": 0.85,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-08T13:55:55.835Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-08T16:31:13.799Z"
+  },
+  "createdAt": "2026-11-08T13:55:55.835Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-08T16:31:13.799Z"
+    }
+  ]
 }

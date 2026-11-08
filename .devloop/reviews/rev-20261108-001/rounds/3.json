@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261108-001-r3",
+  "threadId": "rev-20261108-001",
+  "roundNo": 3,
+  "scope": "full",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "第 3 轮（scope=full；增量 diff 885c6d8..455f419：app.py +15、astock/contracts.py +103/−43、tests/test_contracts.py +96，另 docs/ 与 requirements-dev.txt 不计入代码）。\n\n一、前两轮 9 条全部复核通过（逐条对码）\n- iss-mw7wair1-e5fb1d（P1 引用块 KeyError）：app.py:113-121 改为 `raw_time = item.get(\"pub_time\") or item.get(\"date\")`，坏时间/NaT 走 try+`pd.isna` 降级为空串，kind/title 用 `.get`；新增 CitationBlockTests 4 例（pub_time 渲染、legacy date 兼容、缺键/坏日期不抛、空入参）。\n- iss-mw7waptn-326bd5（P2 schema 双份真相）：contracts.py:199-209 BAR_SCHEMA 改为列元组且去掉 dtype 标注，:230-232 `required = tuple(c for c in BAR_SCHEMA if c != \"adj_factor\")`，:291-298 EVENT_SCHEMA、:315 `required = EVENT_SCHEMA`；新增 test_schema_is_single_source_of_truth 断言两边同源且 adj_factor 仍在列集合内。\n- iss-mw7wawf3-843f9e（P2 时区 TypeError）：contracts.py:156-170 新增 `_naive_timestamp`（解析失败→ContractError，带时区 `tz_localize(None)`），:532/:575-582 用于 generated_at 与每条 evidence，比较处再包 `except TypeError` 转 ContractError；新增 tz 正例/反例两个用例（+08:00 过去时间通过且原表示保留、+08:00 未来时间报 DATA-02）。\n- 更早 6 条（recommend 吞 ContractError、NaN 放过、AI-01、日期漂移、allow_empty、DATA-02 缺失）本轮重查仍在位：contracts.py:90-120 / :253-255 / :522-531 / :575-600，recommend.py:116/140/361、:749-754，events.py:111-133 与各 fetch_* 的 `except ContractError: raise`。\n- 全仓无残留读取 evidence `[\"date\"]` 的消费方（grep 12 处命中，app.py:115、contracts.py:380、events.py:763 均为显式兼容分支）。\n\n二、验收标准 4 条全部满足：四契约有实现+docstring（contracts.py:218 BarFrame / :302 EventFrame / :359 Evidence / :480 RecommendationRun）、data/events/recommend 关键入口过校验、缺列与类型错误均抛 ContractError（测试断言 `assertRaises(ContractError)` 而非空结果）、测试覆盖远超 4 类（缺失列、坏日期、NaN code、非数值 close、require_adj 缺列/NaN、schema_version、越界证据、时区）。\n\n三、本轮新开 1 条 P2：iss-mw81x690-cbec5c（backfill.py:120-130 写出的 recommend_*.json 缺 schema_version/run_id/tradable_from，仍会被 ledger.py:346-353 sync_json_dir 以 legacy run_id 收进 SQLite）。属交接文档 §8 已声明的后续项，不在本计划项验收范围内，不阻塞。\n\n四、说明：本会话无命令执行能力，未运行 pytest，未独立复核交接文档所称「97 passed」；上述结论基于对 8c5e0e9/455f419 工作树与测试源码的静态核对。结论：契约层改造完成且质量达标，可以合并；backfill 迁移与 track 接入作为后续计划项跟进。",
+  "startedAt": "2026-11-08T16:33:10.244Z",
+  "finishedAt": "2026-11-08T16:33:29.848Z",
+  "rulesVersion": "v1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 1,
+    "total": 1
+  }
+}
