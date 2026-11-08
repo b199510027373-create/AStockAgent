@@ -302,6 +302,16 @@ class EventsEntryContractTests(unittest.TestCase):
             patch.object(events, "get_client", return_value=client),
             patch.object(events, "_cache_get", return_value=None),
             patch.object(events, "_cache_put", side_effect=lambda key, value: value),
+            patch.object(
+                events,
+                "_meta_for",
+                return_value={
+                    "ts_code": "600519.SH",
+                    "name": "贵州茅台",
+                    "industry": "白酒",
+                    "aliases": "贵州茅台",
+                },
+            ),
         ):
             out = events.fetch_announcements(["600519.SH"], days=30)
         self.assertEqual(len(out), 1)
@@ -484,6 +494,7 @@ class ReviewRegressionTests(unittest.TestCase):
     def test_load_many_propagates_contract_error(self):
         error = ContractError("BarFrame", "缺少必需列 ['close']", missing=["close"])
         with (
+            patch.object(recommend, "_thread_client", return_value=object()),
             patch.object(recommend, "load_daily", side_effect=error),
             self.assertRaises(ContractError),
         ):
