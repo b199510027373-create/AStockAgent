@@ -20,6 +20,8 @@ from .stats import (
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
 HORIZONS = (1, 5, 20)
+TOP_N = 5
+NAV_COLUMNS = ("交易日", "组合净值", "沪深300净值", "推荐日", "入场日", "换仓")
 
 
 def _normal_p(t: float) -> float:
@@ -299,6 +301,321 @@ def _forward_return(
     if not base or not math.isfinite(base):
         return None
     return float(df["close"].iloc[j]) / base - 1
+
+
+def _as_ts(value) -> pd.Timestamp | None:
+    try:
+        ts = pd.Timestamp(value)
+    except Exception:
+        return None
+    if pd.isna(ts):
+        return None
+    return ts.normalize()
+
+
+def _positive(value) -> float | None:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    return num if math.isfinite(num) and num > 0 else None
+
+
+def _frame_price(frame: pd.DataFrame, date: pd.Timestamp, column: str = "open") -> float | None:
+    if frame is None or frame.empty or column not in frame.columns or date not in frame.index:
+        return None
+    return _positive(frame.at[date, column])
+
+
+def _bar_frame(df: pd.DataFrame | None) -> pd.DataFrame:
+    """Normalize a daily frame to a trade_date-indexed frame (unique, sorted)."""
+    if df is None or df.empty or "trade_date" not in df.columns:
+        return pd.DataFrame()
+    out = df.copy()
+    out["trade_date"] = pd.to_datetime(out["trade_date"]).dt.normalize()
+    out = out.drop_duplicates("trade_date").sort_values("trade_date")
+    return out.set_index("trade_date")
+
+
+def _batch_plans(detail: pd.DataFrame, top_n: int) -> list[dict]:
+    """One plan per 入场日: the top-N rows of the batch, bought at tradable_from open."""
+    if detail is None or detail.empty or "代码" not in detail.columns:
+        return []
+    has_rank = "排名" in detail.columns
+    plans: list[dict] = []
+    for as_of, group in detail.groupby("推荐日", sort=True, dropna=True):
+        as_of_ts = _as_ts(as_of)
+        if as_of_ts is None:
+            continue
+        rows = group.copy()
+        rows["_rank"] = (
+            pd.to_numeric(rows["排名"], errors="coerce") if has_rank else np.nan
+        )
+        rows = rows.sort_values("_rank", na_position="last").drop_duplicates("代码")
+        rows = rows.head(top_n)
+        codes = [str(code) for code in rows["代码"].tolist() if str(code)]
+        if not codes:
+            continue
+        entry = None
+        if "入场日" in rows.columns:
+            for value in rows["入场日"].tolist():
+                entry = _as_ts(value)
+                if entry is not None:
+                    break
+        if entry is None:
+            # 没有 tradable_from 记录时，与 track_recommendations 同口径回退到下一交易日
+            entry = next_open_date(as_of_ts)
+        if entry is None:
+            continue
+        plans.append({"推荐日": as_of_ts, "入场日": entry.normalize(), "codes": codes})
+    # 同一入场日只保留最后一次生成
+    by_entry: dict[pd.Timestamp, dict] = {}
+    for plan in plans:
+        prev = by_entry.get(plan["入场日"])
+        if prev is None or plan["推荐日"] >= prev["推荐日"]:
+            by_entry[plan["入场日"]] = plan
+    return sorted(by_entry.values(), key=lambda p: p["入场日"])
+
+
+def portfolio_nav(
+    detail: pd.DataFrame,
+    bench: pd.DataFrame | None = None,
+    start: str | pd.Timestamp | None = None,
+    end: str | pd.Timestamp | None = None,
+    top_n: int = TOP_N,
+    require_full_batch: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """等权买入每批 Top5、按交易日拼接组合净值，并与沪深300对齐。
+
+    口径（与 ADR-005 / DATA-03 一致）：
+    - 每个批次在 tradable_from 的**开盘**等权买入 Top5，持有到下一批次入场日开盘换仓；
+    - 批次之间按收盘 → 开盘拼接，不计隔夜跳空与交易成本；
+    - 成分股当日缺 bar（停牌）按上一收盘持有，当日收益记 0；入场日缺 bar 的批次剔除，
+      其持仓延续到下一个可用批次（不后移入场日、不使用未来数据）；
+    - 沪深300 从首个批次入场日开盘买入持有，作为对照。
+    """
+    empty_nav = pd.DataFrame(columns=list(NAV_COLUMNS))
+    empty_dropped = pd.DataFrame(columns=["推荐日", "入场日", "原因"])
+    plans = _batch_plans(detail, top_n)
+    if not plans:
+        return empty_nav, empty_dropped
+
+    start_ts = (
+        pd.Timestamp(start) if start is not None else plans[0]["入场日"] - pd.Timedelta(days=10)
+    )
+    end_ts = pd.Timestamp(end) if end is not None else pd.Timestamp.today().normalize()
+    start_s, end_s = start_ts.strftime("%Y%m%d"), end_ts.strftime("%Y%m%d")
+
+    if bench is None:
+        try:
+            bench = load_index_daily("000300.SH", start=start_s, end=end_s)
+        except Exception:
+            bench = pd.DataFrame()
+    bench_bars = _bar_frame(bench)
+    bench_dates = bench_bars.index if len(bench_bars) else pd.DatetimeIndex([])
+
+    daily: dict[str, pd.DataFrame] = {}
+    included: list[dict] = []
+    dropped: list[dict] = []
+    for plan in plans:
+        entry = plan["入场日"]
+        reason = None
+        if len(bench_dates) and entry not in bench_dates:
+            reason = f"入场日 {entry:%Y-%m-%d} 不是沪深300交易日（缺基准 bar）"
+        frames: dict[str, pd.DataFrame] = {}
+        missing: list[str] = []
+        if reason is None:
+            for code in plan["codes"]:
+                if code not in daily:
+                    try:
+                        daily[code] = _bar_frame(
+                            load_daily(code, start=start_s, end=end_s, adj="qfq")
+                        )
+                    except Exception:
+                        daily[code] = pd.DataFrame()
+                frame = daily[code]
+                if _frame_price(frame, entry) is None:
+                    missing.append(code)
+                else:
+                    frames[code] = frame
+            if missing and require_full_batch:
+                shown = "、".join(missing[:3]) + ("等" if len(missing) > 3 else "")
+                reason = f"入场日 {entry:%Y-%m-%d} 缺 bar：{shown}"
+            elif not frames:
+                reason = f"入场日 {entry:%Y-%m-%d} 无可用成分股（全部缺 bar）"
+        if reason is not None:
+            dropped.append(
+                {"推荐日": plan["推荐日"], "入场日": entry, "原因": reason}
+            )
+            continue
+        included.append({"plan": plan, "frames": frames, "missing": missing})
+
+    dropped_df = pd.DataFrame(dropped) if dropped else empty_dropped
+    if not included:
+        return empty_nav, dropped_df
+
+    first_entry = included[0]["plan"]["入场日"]
+    bench_nav: pd.Series | None = None
+    if len(bench_dates):
+        calendar = bench_dates[bench_dates >= first_entry]
+        base = _frame_price(bench_bars, first_entry)
+        if base is None:
+            base = _frame_price(bench_bars, first_entry, "close")
+        if base is not None and len(calendar):
+            closes = pd.to_numeric(
+                bench_bars["close"].reindex(calendar, method="ffill"), errors="coerce"
+            )
+            bench_nav = closes / base
+    else:
+        # 基准缺失时仍给出组合曲线（沪深300 列留空），日期用成分股并集
+        union: set[pd.Timestamp] = set()
+        for item in included:
+            for frame in item["frames"].values():
+                union.update(d for d in frame.index if d >= first_entry)
+        calendar = pd.DatetimeIndex(sorted(union))
+
+    rows: list[dict] = []
+    nav_base = 1.0
+    for idx, item in enumerate(included):
+        entry = item["plan"]["入场日"]
+        next_entry = (
+            included[idx + 1]["plan"]["入场日"] if idx + 1 < len(included) else None
+        )
+        segment = calendar[calendar >= entry]
+        if next_entry is not None:
+            segment = segment[segment < next_entry]
+        if not len(segment):
+            continue
+        ratios: list[pd.Series] = []
+        for frame in item["frames"].values():
+            base = _frame_price(frame, entry)
+            if base is None:
+                continue
+            closes = pd.to_numeric(
+                frame["close"].reindex(segment, method="ffill"), errors="coerce"
+            )
+            ratios.append(closes / base)
+        if not ratios:
+            continue
+        segment_nav = nav_base * pd.concat(ratios, axis=1).mean(axis=1)
+        for trade_date, value in segment_nav.items():
+            bench_value = np.nan
+            if bench_nav is not None and trade_date in bench_nav.index:
+                bench_value = float(bench_nav.loc[trade_date])
+            rows.append(
+                {
+                    "交易日": trade_date,
+                    "组合净值": float(value),
+                    "沪深300净值": bench_value,
+                    "推荐日": item["plan"]["推荐日"],
+                    "入场日": entry,
+                    "换仓": bool(trade_date == entry),
+                }
+            )
+        nav_base = float(segment_nav.iloc[-1])
+
+    if not rows:
+        return empty_nav, dropped_df
+    nav = pd.DataFrame(rows).sort_values("交易日").reset_index(drop=True)
+    return nav, dropped_df
+
+
+def nav_status_text(nav: pd.DataFrame, dropped: pd.DataFrame | None = None) -> str:
+    """首屏净值区的一句统计口径说明（含剔除批次提示）。"""
+    if nav is None or nav.empty:
+        text = "组合净值：暂无可拼接的批次（需要至少一个批次在 tradable_from 有完整 Top5 开盘 bar）。"
+    else:
+        start = pd.Timestamp(nav["交易日"].iloc[0])
+        end = pd.Timestamp(nav["交易日"].iloc[-1])
+        n_batches = int(nav["入场日"].nunique())
+        port = float(nav["组合净值"].iloc[-1])
+        bench_values = pd.to_numeric(nav["沪深300净值"], errors="coerce").dropna()
+        parts = [
+            f"组合净值：{n_batches} 个批次 / {len(nav)} 个交易日"
+            f"（{start:%Y-%m-%d} → {end:%Y-%m-%d}）",
+            f"Top5 等权累计 {port - 1:+.2%}",
+        ]
+        if len(bench_values):
+            bench = float(bench_values.iloc[-1])
+            parts.append(f"沪深300 {bench - 1:+.2%}")
+            parts.append(f"超额 {port - bench:+.2f}pp")
+        else:
+            parts.append("沪深300 数据缺失，仅显示组合")
+        text = "，".join(parts) + "。"
+        text += (
+            " 口径：每个批次在 tradable_from 开盘等权买入 Top5（qfq 收盘计价），"
+            "持有到下一批次入场日开盘换仓；沪深300 从首个入场日开盘买入持有；不计交易成本。"
+        )
+        if n_batches < 20:
+            text += " 批次 < 20，净值仅作跟踪记录，不构成 alpha 证据。"
+    if dropped is not None and not dropped.empty:
+        items = []
+        for _, row in dropped.head(3).iterrows():
+            items.append(f"{pd.Timestamp(row['入场日']):%Y-%m-%d}（{row['原因']}）")
+        more = f" 等 {len(dropped)} 个" if len(dropped) > 3 else ""
+        text += (
+            f" 已剔除 {len(dropped)} 个批次（入场日缺 bar，原持仓延续到下一批）："
+            + "；".join(items)
+            + more
+        )
+    return text
+
+
+def nav_figure(nav: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    if nav is None or nav.empty:
+        fig.update_layout(
+            title="Top5 等权组合净值 vs 沪深300（暂无可用批次）",
+            template="plotly_white",
+            height=420,
+        )
+        return fig
+    dates = pd.to_datetime(nav["交易日"])
+    fig.add_trace(
+        go.Scatter(
+            x=dates,
+            y=nav["组合净值"],
+            mode="lines",
+            name="Top5 等权组合",
+            line=dict(color="#d62728", width=2),
+            hovertemplate="%{x|%Y-%m-%d}<br>组合净值 %{y:.4f}<extra></extra>",
+        )
+    )
+    bench = pd.to_numeric(nav["沪深300净值"], errors="coerce")
+    if bench.notna().any():
+        fig.add_trace(
+            go.Scatter(
+                x=dates,
+                y=bench,
+                mode="lines",
+                name="沪深300",
+                line=dict(color="#7f7f7f", width=2, dash="dot"),
+                hovertemplate="%{x|%Y-%m-%d}<br>沪深300 %{y:.4f}<extra></extra>",
+            )
+        )
+    rebalance = nav[nav["换仓"] == True]  # noqa: E712
+    if len(rebalance):
+        fig.add_trace(
+            go.Scatter(
+                x=pd.to_datetime(rebalance["交易日"]),
+                y=rebalance["组合净值"],
+                mode="markers",
+                name="批次换仓",
+                marker=dict(symbol="triangle-up", size=9, color="#1f77b4"),
+                hovertemplate="批次 %{x|%Y-%m-%d}<br>净值 %{y:.4f}<extra></extra>",
+            )
+        )
+    fig.add_hline(y=1.0, line_color="#bbb", line_width=1)
+    fig.update_layout(
+        title="Top5 等权组合净值 vs 沪深300（起点 = 首个批次入场日开盘）",
+        template="plotly_white",
+        height=420,
+        margin=dict(t=50, b=30, l=40, r=20),
+        legend=dict(orientation="h", y=1.08, x=0),
+        hovermode="x unified",
+    )
+    fig.update_yaxes(title="净值", tickformat=".3f")
+    return fig
 
 
 def track_recommendations() -> tuple[pd.DataFrame, pd.DataFrame, str]:
