@@ -16,7 +16,7 @@
 - Jupyter Notebook 当前正在运行。
 - Tushare token 与 HTTP 地址已配置在未跟踪的 `.env`。
 - `.env` 没有被 Git 跟踪。
-- 根目录仍有一批未提交的 notebook 改动和未跟踪文件，后续会话不要直接执行 `git add -A`。
+- 根目录的 notebook 改动已保存到本地保险分支 `wip/notebooks-20261108`；2026-11-08 清理记录见第 12 节。
 
 ## 2. 仓库信息
 
@@ -460,3 +460,13 @@ Tushare 已配置在未跟踪的 .env，且 trade_cal 和 daily 已验证可用�
 
 开始工作前先查看 docs/AStockAgent_development_status_2026-11-08.md。
 ```
+
+## 12. 2026-11-08 清理完成（最新）
+
+- 7 个 notebook 修改已提交到本地保险分支 `wip/notebooks-20261108`（提交 `27df40d`），未推送。
+- `main` 工作区已恢复干净。
+- 提交 `.gitignore`、本状态文档、`notebooks/ts_init.py`、`tools/build_product_doc.py` 到分支 `chore/status-and-cleanup`（提交 `1337a4e`），该分支已推送到 origin。
+- 以下本地生成物/临时文件已加入 `.gitignore`：`deliverables/`、`01_test.ipynb`、`daily_report.txt`、`my_stocks.csv`、`notebooks/Untitled.ipynb`、`notebooks/test.ipynb`、`notebooks/app_write.ipynb`、`tools/*.pkl`。
+- 待办：在 GitHub 创建并合并 PR：`https://github.com/b199510027373-create/AStockAgent/pull/new/chore/status-and-cleanup`。
+- 合并后 `release/AStockAgent` 执行 `git pull --ff-only` 同步。
+
