@@ -36,3 +36,13 @@ coverage_report.txt
 coverage_run.txt
 temp_*.png
 filtered_stocks.csv
+
+# Local scratch notebooks and generated deliverables
+deliverables/
+01_test.ipynb
+daily_report.txt
+my_stocks.csv
+notebooks/Untitled.ipynb
+notebooks/test.ipynb
+notebooks/app_write.ipynb
+tools/*.pkl
