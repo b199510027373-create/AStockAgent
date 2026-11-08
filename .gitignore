@@ -29,6 +29,7 @@ __pycache__/
 
 # Local tooling, generated reports, and nested repository
 release/
+anaconda_projects/
 .tmp-tests/
 mypy_*.txt
 coverage_report.txt
