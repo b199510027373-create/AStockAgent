@@ -10,7 +10,24 @@
   "evidence": "events.py:386 `df[\"ann_date\"] = pd.to_datetime(df[\"ann_date\"], format=\"%Y%m%d\", errors=\"coerce\")` 之后 :398 `df = df.dropna(subset=[\"pub_time\"])`（_normalize_news 的 :246 同理，fetch_policy/fetch_reports 同构）。列缺失这一层已经由 _require_source_columns 显式抛 ContractError 了，但\"列还在、值格式变了\"这一层仍是静默丢行：若 Tushare 把 ann_date 改成 \"2026-11-06\" 或带时分秒，format=\"%Y%m%d\" 全部 coerce 成 NaT → 所有行被 dropna 丢掉 → fetch_announcements 返回空表、evidence_for_stock 证据链为空，而 run 依旧 status=ok。这与 ADR-002「不再静默降级」以及本分支给 _to_datetime 定的原则（contracts.py:123-148 对无法解析值抛错、不静默丢行）不一致，tests/test_contracts.py 的事件用例也只覆盖\"缺列\"，没有日期漂移用例。",
   "suggestion": "在 dropna 前统计坏行：`bad = df[\"pub_time\"].isna() & df[\"ann_date\"].notna()`，若 bad.any() 抛 ContractError(\"EventFrame\", f\"{int(bad.sum())} 行 pub_time 无法解析\")，而不是整表静默清空；确实允许部分坏行时至少把计数写进 diagnostics。补一条测试：ann_date 用 \"2026-11-06\" 格式，断言抛错而不是返回空 DataFrame。",
   "confidence": 0.8,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-08T09:16:57.026Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-08T13:24:31.031Z"
+  },
+  "createdAt": "2026-11-08T09:16:57.026Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-08T13:24:31.031Z"
+    }
+  ]
 }

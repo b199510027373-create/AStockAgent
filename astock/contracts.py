@@ -153,6 +153,21 @@ def _to_datetime(
     return parsed
 
 
+def _naive_timestamp(value: Any, contract: str, field: str) -> pd.Timestamp:
+    """把时间解析成 naive :class:`pandas.Timestamp`（带时区的先去掉时区）。
+
+    用于跨字段比较（DATA-02）：上游允许证据时间带 ``+08:00`` 之类的时区，
+    而 ``generated_at`` 通常是 naive 字符串，直接比较会抛 ``TypeError``。
+    """
+    try:
+        ts = pd.Timestamp(value)
+    except (ValueError, TypeError) as exc:
+        raise ContractError(
+            contract, f"{field} 无法解析：{value!r}（{exc}）", invalid=[field]
+        ) from exc
+    return ts.tz_localize(None) if ts.tzinfo is not None else ts
+
+
 def _to_numeric(df: pd.DataFrame, columns: Iterable[str], contract: str) -> None:
     """校验列为数值（必要时尝试转换，转换失败报错；NaN 原样保留）。"""
     bad_cols: list[str] = []
@@ -181,17 +196,23 @@ def _to_numeric(df: pd.DataFrame, columns: Iterable[str], contract: str) -> None
 # --------------------------------------------------------------------------- #
 # BarFrame
 # --------------------------------------------------------------------------- #
-BAR_SCHEMA: dict[str, str] = {
-    "ts_code": "string",
-    "trade_date": "datetime64[ns]",
-    "open": "float64",
-    "high": "float64",
-    "low": "float64",
-    "close": "float64",
-    "vol": "float64",
-    "amount": "float64",
-    "adj_factor": "float64",
-}
+BAR_SCHEMA: tuple[str, ...] = (
+    "ts_code",
+    "trade_date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "vol",
+    "amount",
+    "adj_factor",
+)
+"""行情表的列集合，是 :class:`BarFrame` 的唯一真相。
+
+这里只声明列名、不声明 dtype：契约做的是"可解析性"归一化（时间字符串转
+``datetime``、数字字符串转数值），而不是强制精确 dtype；写成 dtype 标注会与
+``validate`` 的实际行为漂移。``adj_factor`` 只在 ``require_adj=True`` 时必需。
+"""
 
 
 class BarFrame:
@@ -206,16 +227,8 @@ class BarFrame:
     """
 
     name = "BarFrame"
-    required: tuple[str, ...] = (
-        "ts_code",
-        "trade_date",
-        "open",
-        "high",
-        "low",
-        "close",
-        "vol",
-        "amount",
-    )
+    # 必需列直接由 BAR_SCHEMA 派生，避免两处清单各自漂移。
+    required: tuple[str, ...] = tuple(c for c in BAR_SCHEMA if c != "adj_factor")
     price_columns: tuple[str, ...] = ("open", "high", "low", "close", "vol", "amount")
 
     @classmethod
@@ -275,14 +288,15 @@ def validate_bars(
 # --------------------------------------------------------------------------- #
 # EventFrame
 # --------------------------------------------------------------------------- #
-EVENT_SCHEMA: dict[str, str] = {
-    "code": "string",
-    "kind": "string",
-    "pub_time": "datetime64[ns]",
-    "title": "string",
-    "source": "string",
-    "url": "string",
-}
+EVENT_SCHEMA: tuple[str, ...] = (
+    "code",
+    "kind",
+    "pub_time",
+    "title",
+    "source",
+    "url",
+)
+"""事件流的列集合，是 :class:`EventFrame` 的唯一真相（同样只声明列名）。"""
 
 
 class EventFrame:
@@ -295,14 +309,8 @@ class EventFrame:
     """
 
     name = "EventFrame"
-    required: tuple[str, ...] = (
-        "code",
-        "kind",
-        "pub_time",
-        "title",
-        "source",
-        "url",
-    )
+    # 必需列直接由 EVENT_SCHEMA 派生，避免两处清单各自漂移。
+    required: tuple[str, ...] = EVENT_SCHEMA
 
     @classmethod
     def validate(
@@ -521,7 +529,7 @@ class RecommendationRun:
                     f"{key} 无法解析：{data[key]!r}（{exc}）",
                     invalid=[key],
                 ) from exc
-        gen_ts = pd.Timestamp(data["generated_at"])
+        gen_ts = _naive_timestamp(data["generated_at"], cls.name, "generated_at")
         for key in ("data_as_of", "tradable_from"):
             value = data.get(key)
             if value in (None, ""):
@@ -566,11 +574,24 @@ class RecommendationRun:
         for code, items in evidence.items():
             records = Evidence.validate_list(items, field=f"evidence[{code}]")
             for i, item in enumerate(records):
-                pub = pd.Timestamp(item["pub_time"])
-                if pub > gen_ts:
+                where = f"evidence[{code}][{i}]"
+                pub = _naive_timestamp(
+                    item["pub_time"], cls.name, f"{where}.pub_time"
+                )
+                try:
+                    # 两边都去掉时区后再比较，带 +08:00 的证据不会抛 TypeError。
+                    is_late = bool(pub > gen_ts)
+                except TypeError as exc:  # 兜底：仍不可比较时转成契约错误
                     raise ContractError(
                         cls.name,
-                        f"evidence[{code}][{i}] pub_time {pub} 晚于 generated_at "
+                        f"{where} pub_time {pub} 与 generated_at {gen_ts} 无法比较"
+                        f"（{exc}）",
+                        invalid=["evidence", str(code)],
+                    ) from exc
+                if is_late:
+                    raise ContractError(
+                        cls.name,
+                        f"{where} pub_time {pub} 晚于 generated_at "
                         f"{gen_ts}（DATA-02）",
                         invalid=["evidence", str(code)],
                     )

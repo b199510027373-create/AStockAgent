@@ -111,8 +111,19 @@ def _citation_block(citations):
         return ""
     lines = ["", "---", "**数据来源**"]
     for i, item in enumerate(citations, 1):
-        date = pd.Timestamp(item["date"]).strftime("%Y-%m-%d")
-        line = f"[{i}] {date} {item['kind']}：{item['title']}（{item.get('source', '')}）"
+        # Evidence 契约（ADR-002）用 pub_time；旧缓存/外部调用仍可能是 date 键。
+        raw_time = item.get("pub_time") or item.get("date")
+        date = ""
+        if raw_time not in (None, ""):
+            try:
+                ts = pd.Timestamp(raw_time)
+                date = "" if pd.isna(ts) else ts.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                date = ""
+        line = (
+            f"[{i}] {date} {item.get('kind', '')}：{item.get('title', '')}"
+            f"（{item.get('source', '')}）"
+        )
         if item.get("url"):
             line += f" [原文]({item['url']})"
         lines.append(line)

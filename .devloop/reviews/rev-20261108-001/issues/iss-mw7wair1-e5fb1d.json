@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw7wair1-e5fb1d",
+  "threadId": "rev-20261108-001",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "app.py",
+  "lines": "109-119, 139, 357",
+  "title": "证据字典键从 date 改为 pub_time 后，AI 引用区块仍读 item[\"date\"]，单股体检与问答页只要有引用就 KeyError",
+  "evidence": "events.py 本次把 Evidence 的键统一为 pub_time（contracts.py:348-406 required_keys 含 pub_time；events.py:833 validate_evidence_list(items) 校验，:837-843 读 item[\"pub_time\"] 构造引用），evidence_for_stock 也不再写 \"date\" 键。但 app.py:114 `date = pd.Timestamp(item[\"date\"]).strftime(\"%Y-%m-%d\")` 未同步：app.py:139 `ai += _citation_block(citations)` 位于 :130-133 的 try 之外（该 try 只包住 build_ai_context），app.py:357 问答页同样在 try 外调用。因此只要有任意一条引用资料，就抛 `KeyError: 'date'`：单股体检整页报错、问答回复为空。这是本次契约改造引入的回归——改造前 build_ai_context 返回的是 \"date\" 键。",
+  "suggestion": "改为兼容读取：`ts = item.get(\"pub_time\") or item.get(\"date\")`，`date = pd.Timestamp(ts).strftime(\"%Y-%m-%d\")`（或直接只用 pub_time）；同时给 `_citation_block` 补一个单测，用 events.build_ai_context 的真实返回结构（evidence_for_stock 的 items）断言不抛异常且渲染出日期。",
+  "confidence": 0.9,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-08T13:55:46.669Z"
+}
