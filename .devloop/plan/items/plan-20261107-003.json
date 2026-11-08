@@ -1,0 +1,34 @@
+{
+  "id": "plan-20261107-003",
+  "title": "文件导入解析：PDF / Excel / CSV / DOCX",
+  "description": "依据 ADR-015 实现 astock/agent/files.py：PDF（pdfplumber 文本+表格，保留页码）、Excel（openpyxl/pandas，多 sheet、行列坐标）、CSV（编码/分隔符探测）、DOCX（python-docx）、TXT/MD。统一 ExtractedDoc {file_id, pages[], tables[]}；按 sha256 落 data/agent/files/<hash>/（original/extracted.jsonl/tables/*.parquet/meta.json）。明确拒绝扫描件 OCR、加密 PDF、宏文件，并提示原因。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-15",
+  "due": "2026-11-22",
+  "estimateH": 16,
+  "progress": 0,
+  "acceptance": [
+    "PDF（文本层）、XLSX/XLS、CSV、DOCX、TXT/MD 均可解析",
+    "文件按 sha256 内容寻址存储，原始文件不可变",
+    "PDF 保留页码，Excel 保留 sheet/行列坐标",
+    "20MB / 5 文件 / 200 页限制生效并给出提示",
+    "扫描件/加密 PDF 明确提示不支持，而不是返回空文本"
+  ],
+  "tags": [
+    "agent",
+    "files",
+    "pdf",
+    "excel"
+  ],
+  "deps": [],
+  "links": {
+    "adr": [
+      "ADR-015"
+    ]
+  },
+  "createdAt": "2026-11-07T14:12:00.858Z",
+  "updatedAt": "2026-11-07T14:13:12.158Z"
+}

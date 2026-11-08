@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ms-agent",
+    "title": "自研 Agent：文件、图表与实时行情",
+    "status": "doing",
+    "due": "2026-12-20"
+  },
+  {
+    "id": "ms-contracts",
+    "title": "契约层与用例收敛",
+    "status": "doing",
+    "due": "2026-11-21"
+  },
+  {
+    "id": "ms-product",
+    "title": "产品表达：研究语义与净值",
+    "status": "todo",
+    "due": "2026-11-21"
+  },
+  {
+    "id": "ms-quality",
+    "title": "工程质量与运行可靠性",
+    "status": "todo",
+    "due": "2026-12-08"
+  },
+  {
+    "id": "ms-research",
+    "title": "研究口径与 PIT 校准",
+    "status": "todo",
+    "due": "2026-12-18"
+  }
+]

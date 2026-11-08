@@ -180,7 +180,7 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
                         run_id,
                         code,
                         ev.get("kind"),
-                        ev.get("date"),
+                        ev.get("pub_time"),
                         ev.get("title"),
                         ev.get("url"),
                         ev.get("source"),

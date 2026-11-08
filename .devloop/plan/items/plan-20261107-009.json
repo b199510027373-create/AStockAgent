@@ -1,0 +1,37 @@
+{
+  "id": "plan-20261107-009",
+  "title": "Agent 评测集与离线回归",
+  "description": "依据 ADR-013/017，建立 Agent 评测集与回归：20 条任务，覆盖①PDF 研报问答（带页码引用）②Excel 表格统计图③指定股票+指标的分钟 K 线④边界拒答（扫描件/无数据/超范围）。用 FakeModel + 固定工具桩离线跑，记录工具选择准确率、任务成功率、平均步数/时延；结果落 .devloop/evals 或 tests/fixtures，供 CI 回归。",
+  "status": "todo",
+  "priority": "P2",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-12-05",
+  "due": "2026-12-12",
+  "estimateH": 10,
+  "progress": 0,
+  "acceptance": [
+    "20 条评测任务覆盖文件问答/表格图/K线指标/拒答四类",
+    "离线 FakeModel 可回归，CI 不依赖网络",
+    "记录工具选择准确率、任务成功率、平均步数/时延",
+    "对「扫描件 PDF」「无该股票」等边界有明确拒答",
+    "每次改动后跑评测，结果可对比"
+  ],
+  "tags": [
+    "agent",
+    "eval",
+    "regression"
+  ],
+  "deps": [
+    "plan-20261107-006",
+    "plan-20261107-007"
+  ],
+  "links": {
+    "adr": [
+      "ADR-013",
+      "ADR-017"
+    ]
+  },
+  "createdAt": "2026-11-07T14:12:19.320Z",
+  "updatedAt": "2026-11-07T14:13:12.231Z"
+}

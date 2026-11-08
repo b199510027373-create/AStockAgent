@@ -1,0 +1,36 @@
+{
+  "id": "plan-20261107-008",
+  "title": "Agent 审计表与安全限额",
+  "description": "依据 ADR-017 实现 astock/agent/store.py：agent_runs / agent_steps / agent_artifacts 三表（与 ledger 同库），每次工具调用记录工具名/参数/结果摘要/耗时；artifact 不可变、按 hash 去重。安全：路径白名单（仅 data/agent/files 与只读缓存）、上传类型/大小校验、文件内容按不可信数据包裹、禁止 shell/任意 HTTP、步数/token/时长限额。留存默认 90 天，清理只删 artifact 文件不删 run/step。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-29",
+  "due": "2026-12-04",
+  "estimateH": 8,
+  "progress": 0,
+  "acceptance": [
+    "agent_runs/agent_steps/agent_artifacts 三表落库，run 可查全部步骤",
+    "工具调用参数/结果摘要/耗时完整记录",
+    "路径白名单与上传类型/大小校验生效",
+    "文件内容按不可信数据包裹，注入指令不被执行",
+    "留存清理任务可删 artifact 但保留 run/step"
+  ],
+  "tags": [
+    "agent",
+    "audit",
+    "security",
+    "ledger"
+  ],
+  "deps": [
+    "plan-20261107-001"
+  ],
+  "links": {
+    "adr": [
+      "ADR-017"
+    ]
+  },
+  "createdAt": "2026-11-07T14:12:15.935Z",
+  "updatedAt": "2026-11-07T14:13:12.221Z"
+}

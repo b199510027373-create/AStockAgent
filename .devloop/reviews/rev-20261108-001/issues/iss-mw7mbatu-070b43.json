@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw7mbatu-070b43",
+  "threadId": "rev-20261108-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "contract-enforcement",
+  "file": "astock/recommend.py",
+  "lines": "106-117,120-145",
+  "title": "recommend 入口把 ContractError 吞成单票失败，schema 漂移静默降级",
+  "evidence": "_load_one 的 `except Exception as exc:  # noqa: BLE001`（recommend.py:116）与 load_many 的 `except Exception`（recommend.py:137）会一起吞掉 load_daily 内部 validate_bars 抛出的 ContractError：`return code, None, f\"{type(exc).__name__}: {exc}\"`，随后 load_many 里 `elif diagnostics is not None: diagnostics.append({\"code\": code, \"error\": error or \"empty dataframe\"})`。该票从 out 里消失、不进候选池，流程继续出推荐。即 Tushare 某天把 close 换成字符串或删掉 adj_factor 时，契约层报错只在 diagnostics 里留一行，推荐照常生成——与 ADR-002「校验失败抛出显式异常，不再静默降级」相反，也是 D18 那类\"上游坏数据 → 结果静默变空\"的复发路径。现有 tests/test_contracts.py 只 patch data._fetch_daily 断言缺列抛错，没有覆盖 recommend 真实入口，所以没有测试能拦住。",
+  "suggestion": "在 _load_one 里把契约错误单独放行：`except ContractError: raise` 放在 `except Exception` 之前（load_many 的 future.result() 外围同理），让 schema 漂移直接失败整轮 run；网络/单票缺失仍走 diagnostics。再补一条测试：monkeypatch recommend.load_daily 抛 ContractError，断言 run_daily_recommendation 抛错而不是返回 status=ok 的推荐表。",
+  "confidence": 0.85,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-08T09:16:26.898Z"
+}

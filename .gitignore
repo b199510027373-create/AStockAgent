@@ -26,3 +26,13 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Local tooling, generated reports, and nested repository
+release/
+anaconda_projects/
+.tmp-tests/
+mypy_*.txt
+coverage_report.txt
+coverage_run.txt
+temp_*.png
+filtered_stocks.csv

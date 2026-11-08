@@ -1,0 +1,533 @@
+{
+  "version": "v1",
+  "updatedAt": "2026-11-07",
+  "modules": [
+    {
+      "id": "app",
+      "title": "app.py",
+      "description": "Gradio 13 Tab 装配入口，不含业务逻辑",
+      "layer": 0
+    },
+    {
+      "id": "ui",
+      "title": "ui.py",
+      "description": "多周期 K 线 Tab",
+      "layer": 0
+    },
+    {
+      "id": "recommend_ui",
+      "title": "recommend_ui.py",
+      "description": "每日推荐 Tab（生成 / 历史读取）",
+      "layer": 0
+    },
+    {
+      "id": "track_ui",
+      "title": "track_ui.py",
+      "description": "推荐跟踪 Tab",
+      "layer": 0
+    },
+    {
+      "id": "backtest_ui",
+      "title": "backtest_ui.py",
+      "description": "回测 Tab",
+      "layer": 0
+    },
+    {
+      "id": "optimize_ui",
+      "title": "optimize_ui.py",
+      "description": "参数优化 Tab",
+      "layer": 0
+    },
+    {
+      "id": "strategy_ui",
+      "title": "strategy_ui.py",
+      "description": "策略实验室 Tab",
+      "layer": 0
+    },
+    {
+      "id": "factor_ui",
+      "title": "factor_ui.py",
+      "description": "因子 IC Tab",
+      "layer": 0
+    },
+    {
+      "id": "charts",
+      "title": "charts.py",
+      "description": "K 线与区间对比图",
+      "layer": 0
+    },
+    {
+      "id": "backtest_chart",
+      "title": "backtest_chart.py",
+      "description": "回测净值/买卖点/回撤图",
+      "layer": 0
+    },
+    {
+      "id": "recommend",
+      "title": "recommend.py",
+      "description": "推荐编排：技术分 + 事件分 + LLM 归因 + 严格 JSON",
+      "layer": 1
+    },
+    {
+      "id": "track",
+      "title": "track.py",
+      "description": "T+1/5/20 跟踪、分组超额、显著性",
+      "layer": 1
+    },
+    {
+      "id": "backfill",
+      "title": "backfill.py",
+      "description": "历史技术分回填（事件分固定 50）",
+      "layer": 1
+    },
+    {
+      "id": "indicators",
+      "title": "indicators.py",
+      "description": "向量化指标唯一实现",
+      "layer": 2
+    },
+    {
+      "id": "backtest",
+      "title": "backtest.py",
+      "description": "回测引擎、A 股规则、连续持仓状态",
+      "layer": 2
+    },
+    {
+      "id": "factors",
+      "title": "factors.py",
+      "description": "因子面板、RankIC、中性化",
+      "layer": 2
+    },
+    {
+      "id": "stats",
+      "title": "stats.py",
+      "description": "NW / Student-t / 有效独立样本 / BH",
+      "layer": 2
+    },
+    {
+      "id": "optimize",
+      "title": "optimize.py",
+      "description": "MA 网格与 walk-forward",
+      "layer": 2
+    },
+    {
+      "id": "strategy_lab",
+      "title": "strategy_lab.py",
+      "description": "MACD/RSI/MA 多标的 walk-forward",
+      "layer": 2
+    },
+    {
+      "id": "data",
+      "title": "data.py",
+      "description": "日线/分钟/复权/缓存/交易日历",
+      "layer": 3
+    },
+    {
+      "id": "events",
+      "title": "events.py",
+      "description": "公告 / 研报 / 新闻 / 政策 / 基础信息",
+      "layer": 3
+    },
+    {
+      "id": "tushare_client",
+      "title": "tushare_client.py",
+      "description": "无系统代理的 Tushare 客户端",
+      "layer": 3
+    },
+    {
+      "id": "llm",
+      "title": "llm.py",
+      "description": "DeepSeek 客户端，只解释",
+      "layer": 3
+    },
+    {
+      "id": "universe",
+      "title": "universe.py",
+      "description": "市值前 N / PIT 动态股票池",
+      "layer": 3
+    },
+    {
+      "id": "pit",
+      "title": "pit.py",
+      "description": "PIT 指数成分/退市/历史行业快照",
+      "layer": 3
+    },
+    {
+      "id": "contracts",
+      "title": "contracts.py",
+      "description": "计划新增：BarFrame/EventFrame/Evidence/RecommendationRun 校验",
+      "layer": 4
+    },
+    {
+      "id": "ledger",
+      "title": "ledger.py",
+      "description": "SQLite runs/items/evidence/jobs/tracking",
+      "layer": 5
+    },
+    {
+      "id": "scheduler",
+      "title": "scheduler.py",
+      "description": "墙钟 + 锁 + 幂等 + 补偿的调度核心",
+      "layer": 5
+    },
+    {
+      "id": "jobs",
+      "title": "jobs.py",
+      "description": "独立调度进程 / --once 入口",
+      "layer": 5
+    },
+    {
+      "id": "config",
+      "title": "config.py",
+      "description": ".env、路径与常量",
+      "layer": 5
+    },
+    {
+      "id": "agent_runtime",
+      "title": "agent/runtime.py",
+      "description": "Agent 循环：plan→act→observe→reflect，步数/预算/中断",
+      "layer": 1
+    },
+    {
+      "id": "agent_tools",
+      "title": "agent/tools/",
+      "description": "工具注册表与实现：行情/指标/图表/文件/研究/澄清",
+      "layer": 1
+    },
+    {
+      "id": "agent_session",
+      "title": "agent/session.py",
+      "description": "会话历史与工作记忆（代码/区间/指标/文件）",
+      "layer": 1
+    },
+    {
+      "id": "chart_spec",
+      "title": "agent/chart_spec.py",
+      "description": "声明式 ChartSpec 校验与规范化",
+      "layer": 2
+    },
+    {
+      "id": "llm_gateway",
+      "title": "agent/gateway.py",
+      "description": "ChatModel 抽象 + DeepSeek/本地/规则适配器",
+      "layer": 3
+    },
+    {
+      "id": "file_ingest",
+      "title": "agent/files.py",
+      "description": "PDF/XLSX/CSV/DOCX 解析、内容寻址存储、FTS5 索引",
+      "layer": 3
+    },
+    {
+      "id": "chart_render",
+      "title": "agent/chart_render.py",
+      "description": "ChartSpec → Plotly → HTML/PNG artifact",
+      "layer": 3
+    },
+    {
+      "id": "agent_store",
+      "title": "agent/store.py",
+      "description": "agent_runs/steps/artifacts 审计表与留存清理",
+      "layer": 5
+    }
+  ],
+  "edges": [
+    {
+      "from": "app",
+      "to": "ui"
+    },
+    {
+      "from": "app",
+      "to": "recommend_ui"
+    },
+    {
+      "from": "app",
+      "to": "track_ui"
+    },
+    {
+      "from": "app",
+      "to": "backtest_ui"
+    },
+    {
+      "from": "app",
+      "to": "optimize_ui"
+    },
+    {
+      "from": "app",
+      "to": "strategy_ui"
+    },
+    {
+      "from": "app",
+      "to": "factor_ui"
+    },
+    {
+      "from": "ui",
+      "to": "charts"
+    },
+    {
+      "from": "ui",
+      "to": "data"
+    },
+    {
+      "from": "recommend_ui",
+      "to": "recommend"
+    },
+    {
+      "from": "recommend_ui",
+      "to": "ledger"
+    },
+    {
+      "from": "track_ui",
+      "to": "track"
+    },
+    {
+      "from": "backtest_ui",
+      "to": "backtest"
+    },
+    {
+      "from": "backtest_ui",
+      "to": "backtest_chart"
+    },
+    {
+      "from": "optimize_ui",
+      "to": "optimize"
+    },
+    {
+      "from": "strategy_ui",
+      "to": "strategy_lab"
+    },
+    {
+      "from": "factor_ui",
+      "to": "factors"
+    },
+    {
+      "from": "recommend",
+      "to": "indicators"
+    },
+    {
+      "from": "recommend",
+      "to": "events"
+    },
+    {
+      "from": "recommend",
+      "to": "data"
+    },
+    {
+      "from": "recommend",
+      "to": "llm"
+    },
+    {
+      "from": "recommend",
+      "to": "ledger"
+    },
+    {
+      "from": "recommend",
+      "to": "universe"
+    },
+    {
+      "from": "recommend",
+      "to": "contracts",
+      "label": "planned"
+    },
+    {
+      "from": "track",
+      "to": "data"
+    },
+    {
+      "from": "track",
+      "to": "ledger"
+    },
+    {
+      "from": "track",
+      "to": "stats"
+    },
+    {
+      "from": "track",
+      "to": "contracts",
+      "label": "planned"
+    },
+    {
+      "from": "backfill",
+      "to": "recommend"
+    },
+    {
+      "from": "backfill",
+      "to": "data"
+    },
+    {
+      "from": "backtest",
+      "to": "indicators"
+    },
+    {
+      "from": "factors",
+      "to": "pit"
+    },
+    {
+      "from": "factors",
+      "to": "universe"
+    },
+    {
+      "from": "factors",
+      "to": "stats"
+    },
+    {
+      "from": "factors",
+      "to": "data"
+    },
+    {
+      "from": "optimize",
+      "to": "backtest"
+    },
+    {
+      "from": "optimize",
+      "to": "data"
+    },
+    {
+      "from": "strategy_lab",
+      "to": "backtest"
+    },
+    {
+      "from": "strategy_lab",
+      "to": "data"
+    },
+    {
+      "from": "data",
+      "to": "tushare_client"
+    },
+    {
+      "from": "data",
+      "to": "contracts",
+      "label": "planned"
+    },
+    {
+      "from": "events",
+      "to": "tushare_client"
+    },
+    {
+      "from": "pit",
+      "to": "tushare_client"
+    },
+    {
+      "from": "pit",
+      "to": "data"
+    },
+    {
+      "from": "universe",
+      "to": "data"
+    },
+    {
+      "from": "ledger",
+      "to": "config"
+    },
+    {
+      "from": "scheduler",
+      "to": "recommend"
+    },
+    {
+      "from": "scheduler",
+      "to": "ledger"
+    },
+    {
+      "from": "scheduler",
+      "to": "config"
+    },
+    {
+      "from": "jobs",
+      "to": "scheduler"
+    },
+    {
+      "from": "llm",
+      "to": "config"
+    },
+    {
+      "from": "recommend",
+      "to": "config"
+    },
+    {
+      "from": "app",
+      "to": "agent_runtime"
+    },
+    {
+      "from": "agent_runtime",
+      "to": "agent_tools"
+    },
+    {
+      "from": "agent_runtime",
+      "to": "agent_session"
+    },
+    {
+      "from": "agent_runtime",
+      "to": "llm_gateway"
+    },
+    {
+      "from": "agent_runtime",
+      "to": "agent_store"
+    },
+    {
+      "from": "agent_session",
+      "to": "agent_store"
+    },
+    {
+      "from": "agent_tools",
+      "to": "agent_store"
+    },
+    {
+      "from": "agent_tools",
+      "to": "data"
+    },
+    {
+      "from": "agent_tools",
+      "to": "indicators"
+    },
+    {
+      "from": "agent_tools",
+      "to": "events"
+    },
+    {
+      "from": "agent_tools",
+      "to": "factors"
+    },
+    {
+      "from": "agent_tools",
+      "to": "stats"
+    },
+    {
+      "from": "agent_tools",
+      "to": "recommend",
+      "label": "read-only"
+    },
+    {
+      "from": "agent_tools",
+      "to": "ledger",
+      "label": "read-only"
+    },
+    {
+      "from": "agent_tools",
+      "to": "file_ingest"
+    },
+    {
+      "from": "agent_tools",
+      "to": "chart_spec"
+    },
+    {
+      "from": "agent_tools",
+      "to": "chart_render"
+    },
+    {
+      "from": "chart_render",
+      "to": "chart_spec"
+    },
+    {
+      "from": "file_ingest",
+      "to": "agent_store"
+    },
+    {
+      "from": "llm_gateway",
+      "to": "config"
+    },
+    {
+      "from": "agent_store",
+      "to": "config"
+    }
+  ]
+}

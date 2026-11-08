@@ -1,0 +1,31 @@
+{
+  "id": "plan-20261103-011",
+  "title": "日线缓存按 trade_date 分区 + 横截面扫描",
+  "description": "评审 §4.5：当前日线缓存是逐 (code, adj) 文件，横截面研究要\"49 只股票逐个 load 再拼面板\"，PIT 因子对齐约 86 秒。改为按 trade_date 分区的 Parquet dataset 后，因子/回测可直接 scan，目标 10 秒级。属于性能与可扩展性改造，需先保证 ADR-011 的 base_factor 契约不回退。",
+  "status": "backlog",
+  "priority": "P2",
+  "milestone": "ms-research",
+  "owner": "human",
+  "start": null,
+  "due": null,
+  "estimateH": 16,
+  "progress": 0,
+  "acceptance": [
+    "日线缓存按 trade_date 分区落 Parquet dataset",
+    "横截面/因子面板可直接 scan，不再逐股 load 拼接",
+    "PIT 因子对齐耗时从 ~86s 降到 10s 级（同机对比）",
+    "读取 API 保持向后兼容，旧缓存可迁移"
+  ],
+  "tags": [
+    "data",
+    "parquet",
+    "performance"
+  ],
+  "links": {
+    "adr": [
+      "ADR-011"
+    ]
+  },
+  "createdAt": "2026-11-03T12:10:54.575Z",
+  "updatedAt": "2026-11-07T14:13:40.682Z"
+}

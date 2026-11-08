@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw7mbrki-aaeb66",
+  "threadId": "rev-20261108-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "contract-violation",
+  "file": "astock/recommend.py",
+  "lines": "739-753,399",
+  "title": "LLM 的 action 覆盖规则算出的「建议」，违反 AI-01",
+  "evidence": "契约 AI-01 明文规定「LLM 不得修改 action、confidence、综合分或排序」。但 recommend.py:739-748 在拿到 ai_row 后执行 `ai_action = str(ai_row.get(\"action\") or \"\")`，非空时 `row[\"action\"] = {\"关注\": \"技术面强\", \"观察\": \"技术面中性\", \"回避\": \"技术面弱\"}.get(ai_action, ai_action)`，直接覆盖 730 行之前由规则算出的 `row[\"action\"]`（`_action(row[\"composite\"])` 结果写进 729 行）。这个 action 随后进入 `final_rows = _pick_diverse(...)`（755）并落进 _save 的 table（RECOMMENDATION_TABLE_COLUMNS 含「建议」）与台账，所以 LLM 的一次 `\"action\": \"回避\"` 就能把一只综合分很高的票显示成\"技术面弱\"。`_report_markdown` 里 `action = ai_row.get(\"action\") or row.get(\"action\") or _action(row[\"composite\"])`（:399）同样是 LLM 优先。映射表只是把 LLM 的三档词换了包装，\"由谁决定 action\"依然在 LLM 手上；`_llm_rank` 的 prompt（:302-338）也确实要求模型产出 action，与 AI-01 直接冲突。",
+  "suggestion": "让 action 只由规则产生：删掉 :743-748 的赋值（保留 reason/catalysts/risks 的覆盖），`_report_markdown` 改成始终取 `row[\"action\"]`；`_llm_rank` 的 prompt 去掉 action 字段要求，只留 reason/catalysts/risks。补一条测试：给 ai 结果注入与综合分相反的 action，断言最终 table 的「建议」仍等于 `_action(composite)` 而 reason 用了 AI 文本。",
+  "confidence": 0.72,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-08T09:16:48.594Z"
+}

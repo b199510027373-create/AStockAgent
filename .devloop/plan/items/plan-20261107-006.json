@@ -1,0 +1,37 @@
+{
+  "id": "plan-20261107-006",
+  "title": "行情/指标工具：实时 K 线与指标",
+  "description": "依据 ADR-018 实现行情/指标工具：quote（最新价/涨跌幅/成交额）、kline（日/周/月 + 1/5/15/30/60 分钟，支持 MA/BOLL/成交量叠加）、indicator（MA/EMA/RSI/MACD/BOLL/KDJ/ATR）。复用 data.load_daily/load_minute 与 indicators.add_all；rt_min 走 30s 缓存；每个结果带 data_as_of + data_time；默认 qfq、涨跌停/成交用 raw；非交易时段、延迟、停牌均显式标注。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-23",
+  "due": "2026-11-29",
+  "estimateH": 12,
+  "progress": 0,
+  "acceptance": [
+    "工具：quote / kline / indicator 可被 Agent 调用",
+    "交易时段返回带 data_time 的最新分钟 K 线",
+    "非交易时段明确标注「最近交易日收盘」，不伪造实时",
+    "rt_min 延迟/失败时标记 delayed 并回退，图上有提示",
+    "指标值与 astock.indicators 对同一序列的计算一致"
+  ],
+  "tags": [
+    "agent",
+    "realtime",
+    "kline",
+    "indicators"
+  ],
+  "deps": [
+    "plan-20261107-005"
+  ],
+  "links": {
+    "adr": [
+      "ADR-016",
+      "ADR-018"
+    ]
+  },
+  "createdAt": "2026-11-07T14:12:10.292Z",
+  "updatedAt": "2026-11-07T14:13:12.196Z"
+}

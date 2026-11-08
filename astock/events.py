@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from .config import CACHE_DIR
+from .contracts import ContractError, validate_events, validate_evidence_list
 from .tushare_client import TushareError, get_client
 
 EVENT_DIR = CACHE_DIR / "events"
@@ -107,6 +108,33 @@ def _col(df: pd.DataFrame, name: str, default: str = "") -> pd.Series:
     return pd.Series([default] * len(df), index=df.index, dtype=object)
 
 
+def _require_source_columns(
+    df: pd.DataFrame, columns: list[str], source: str
+) -> None:
+    """供应商返回缺少关键列时显式报错，不进入"补空串→过滤后为空"的静默路径。"""
+    missing = [c for c in columns if c not in df.columns]
+    if missing:
+        raise ContractError(
+            "EventFrame",
+            f"{source} 返回缺少列 {missing}；实际列: {list(df.columns)}",
+            missing=missing,
+        )
+
+
+def _require_parseable_dates(
+    raw: pd.Series, parsed: pd.Series, source: str, *, column: str = "pub_time"
+) -> None:
+    """列还在、值格式变了时显式报错，而不是 coerce 成 NaT 后被 dropna 静默清空。"""
+    bad = parsed.isna() & raw.notna() & raw.astype(str).str.strip().ne("")
+    if bad.any():
+        raise ContractError(
+            "EventFrame",
+            f"{source} 有 {int(bad.sum())} 行 {column} 无法解析"
+            f"（例如 {raw[bad].iloc[0]!r}）",
+            invalid=[column],
+        )
+
+
 def _date_str(days_ago: int) -> str:
     return (datetime.now() - timedelta(days=days_ago)).strftime("%Y%m%d")
 
@@ -204,12 +232,19 @@ def extract_entities(text: str) -> tuple[list[str], list[dict]]:
 def _normalize_news(df: pd.DataFrame, source: str, kind: str = "news") -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
+    _require_source_columns(df, ["title"], f"news[{source}]")
     df = df.copy()
     if "datetime" in df.columns:
         df = df.rename(columns={"datetime": "pub_time"})
     if "pub_time" not in df.columns:
-        return pd.DataFrame()
+        raise ContractError(
+            "EventFrame",
+            f"news[{source}] 返回缺少列 ['datetime'/'pub_time']；实际列: {list(df.columns)}",
+            missing=["pub_time"],
+        )
+    raw_time = df["pub_time"]
     df["pub_time"] = pd.to_datetime(df["pub_time"], errors="coerce")
+    _require_parseable_dates(raw_time, df["pub_time"], f"news[{source}]")
     df["title"] = df["title"].map(_clean_text)
     if "content" not in df.columns:
         df["content"] = ""
@@ -222,8 +257,13 @@ def _normalize_news(df: pd.DataFrame, source: str, kind: str = "news") -> pd.Dat
     if "url" not in df.columns:
         df["url"] = ""
     df["url"] = df["url"].fillna("").astype(str)
+    # 全市场快讯不对应单只股票；code 仍必须存在（EventFrame 契约）
+    df["code"] = ""
     df = df.dropna(subset=["pub_time"])
-    return df[["pub_time", "title", "content", "source", "kind", "url"]]
+    return validate_events(
+        df[["code", "pub_time", "title", "content", "source", "kind", "url"]],
+        source=f"news[{source}]",
+    )
 
 
 def fetch_news(days: int = 2, limit: int = 800, refresh: bool = False) -> pd.DataFrame:
@@ -250,6 +290,9 @@ def fetch_news(days: int = 2, limit: int = 800, refresh: bool = False) -> pd.Dat
             n = _normalize_news(df, src, "news")
             if not n.empty:
                 frames.append(n)
+        except ContractError:
+            # 契约错误必须冒泡：供应商列漂移不能被当成"这个源没新闻"
+            raise
         except Exception:
             continue
 
@@ -261,6 +304,7 @@ def fetch_news(days: int = 2, limit: int = 800, refresh: bool = False) -> pd.Dat
         .sort_values("pub_time", ascending=False)
         .reset_index(drop=True)
     )
+    out = validate_events(out, source="fetch_news")
     return _cache_put(key, out)
 
 
@@ -282,9 +326,11 @@ def fetch_major_news(days: int = 7, refresh: bool = False) -> pd.DataFrame:
             limit=500,
         )
         out = _normalize_news(df, "新华网", "news")
+    except ContractError:
+        raise
     except Exception:
         out = pd.DataFrame()
-    return _cache_put(key, out)
+    return _cache_put(key, validate_events(out, allow_empty=True, source="fetch_major_news"))
 
 
 def fetch_policy(days: int = 7, refresh: bool = False) -> pd.DataFrame:
@@ -305,16 +351,25 @@ def fetch_policy(days: int = 7, refresh: bool = False) -> pd.DataFrame:
         )
         if df.empty:
             return _cache_put(key, pd.DataFrame())
+        _require_source_columns(df, ["pubtime", "title"], "npr")
         df = df.rename(columns={"pubtime": "pub_time"})
+        raw_time = df["pub_time"]
         df["pub_time"] = pd.to_datetime(df["pub_time"], errors="coerce")
+        _require_parseable_dates(raw_time, df["pub_time"], "npr")
         df["title"] = df["title"].map(_clean_text)
         df["content"] = _col(df, "ptype").map(_clean_text)
         df["source"] = _col(df, "puborg", "政策")
         df["kind"] = "policy"
         df["url"] = ""
-        out = df.dropna(subset=["pub_time"])[
-            ["pub_time", "title", "content", "source", "kind", "url"]
-        ]
+        df["code"] = ""
+        out = validate_events(
+            df.dropna(subset=["pub_time"])[
+                ["code", "pub_time", "title", "content", "source", "kind", "url"]
+            ],
+            source="npr",
+        )
+    except ContractError:
+        raise
     except Exception:
         out = pd.DataFrame()
     return _cache_put(key, out)
@@ -345,7 +400,10 @@ def fetch_announcements(codes: list[str], days: int = 30) -> pd.DataFrame:
             )
             if not df.empty:
                 df = df.copy()
+                _require_source_columns(df, ["ann_date", "title"], f"anns_d[{code}]")
+                raw_date = df["ann_date"]
                 df["pub_time"] = pd.to_datetime(df["ann_date"], format="%Y%m%d", errors="coerce")
+                _require_parseable_dates(raw_date, df["pub_time"], f"anns_d[{code}]")
                 df["title"] = df["title"].map(_clean_text)
                 df["content"] = ""
                 df["source"] = "公告"
@@ -353,18 +411,29 @@ def fetch_announcements(codes: list[str], days: int = 30) -> pd.DataFrame:
                 df["url"] = _col(df, "url")
                 df["name"] = _col(df, "name")
                 df["ts_code"] = _col(df, "ts_code")
-                df = df.dropna(subset=["pub_time"])[
-                    ["pub_time", "ts_code", "name", "title", "content", "source", "kind", "url"]
-                ]
+                # 供应商不回 ts_code 时用请求代码补全；旧实现补空串后按 code 过滤，
+                # 结果"公告永远为空"（评审 D18）。
+                df["code"] = df["ts_code"].where(df["ts_code"].str.strip().ne(""), code)
+                df = validate_events(
+                    df.dropna(subset=["pub_time"])[
+                        ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url"]
+                    ],
+                    require_code=True,
+                    source=f"anns_d[{code}]",
+                )
                 _cache_put(key, df)
                 frames.append(df)
             else:
                 _cache_put(key, pd.DataFrame())
+        except ContractError:
+            raise
         except Exception:
             continue
     if not frames:
         return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True).sort_values("pub_time", ascending=False)
+    out = pd.concat(frames, ignore_index=True)
+    out = validate_events(out, require_code=True, source="fetch_announcements")
+    return out.sort_values("pub_time", ascending=False)
 
 
 def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame:
@@ -391,16 +460,28 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
             )
             if not rc.empty:
                 rc = rc.copy()
+                _require_source_columns(
+                    rc, ["ts_code", "report_date", "report_title"], "report_rc"
+                )
+                raw_date = rc["report_date"]
                 rc["pub_time"] = pd.to_datetime(rc["report_date"], format="%Y%m%d", errors="coerce")
+                _require_parseable_dates(raw_date, rc["pub_time"], "report_rc")
                 rc["title"] = rc["report_title"].map(_clean_text)
                 rc["content"] = _col(rc, "rating")
                 rc["source"] = _col(rc, "org_name")
                 rc["kind"] = "rating"
                 rc["url"] = ""
-                rc = rc.dropna(subset=["pub_time"])[
-                    ["pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
-                ]
+                rc["code"] = rc["ts_code"].fillna("").astype(str)
+                rc = validate_events(
+                    rc.dropna(subset=["pub_time"])[
+                        ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
+                    ],
+                    require_code=True,
+                    source="report_rc",
+                )
                 frames.append(rc)
+        except ContractError:
+            raise
         except Exception:
             pass
 
@@ -415,17 +496,29 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
             )
             if not rr.empty:
                 rr = rr.copy()
+                _require_source_columns(
+                    rr, ["ts_code", "trade_date", "title"], "research_report"
+                )
+                raw_date = rr["trade_date"]
                 rr["pub_time"] = pd.to_datetime(rr["trade_date"], format="%Y%m%d", errors="coerce")
+                _require_parseable_dates(raw_date, rr["pub_time"], "research_report")
                 rr["title"] = rr["title"].map(_clean_text)
                 rr["content"] = _col(rr, "ind_name")
                 rr["source"] = _col(rr, "inst_csname")
                 rr["kind"] = "research"
                 rr["url"] = _col(rr, "url")
                 rr["rating"] = ""
-                rr = rr.dropna(subset=["pub_time"])[
-                    ["pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
-                ]
+                rr["code"] = rr["ts_code"].fillna("").astype(str)
+                rr = validate_events(
+                    rr.dropna(subset=["pub_time"])[
+                        ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
+                    ],
+                    require_code=True,
+                    source="research_report",
+                )
                 frames.append(rr)
+        except ContractError:
+            raise
         except Exception:
             pass
     else:
@@ -441,15 +534,25 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                 )
                 if not rc.empty:
                     rc = rc.copy()
+                    _require_source_columns(
+                        rc, ["ts_code", "report_date", "report_title"], f"report_rc[{code}]"
+                    )
+                    raw_date = rc["report_date"]
                     rc["pub_time"] = pd.to_datetime(rc["report_date"], format="%Y%m%d", errors="coerce")
+                    _require_parseable_dates(raw_date, rc["pub_time"], f"report_rc[{code}]")
                     rc["title"] = rc["report_title"].map(_clean_text)
                     rc["content"] = _col(rc, "rating")
                     rc["source"] = _col(rc, "org_name")
                     rc["kind"] = "rating"
                     rc["url"] = ""
-                    rc = rc.dropna(subset=["pub_time"])[
-                        ["pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
-                    ]
+                    rc["code"] = rc["ts_code"].fillna("").astype(str)
+                    rc = validate_events(
+                        rc.dropna(subset=["pub_time"])[
+                            ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
+                        ],
+                        require_code=True,
+                        source=f"report_rc[{code}]",
+                    )
                     frames.append(rc)
                 rr = get_client().query(
                     "research_report",
@@ -461,23 +564,36 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                 )
                 if not rr.empty:
                     rr = rr.copy()
+                    _require_source_columns(
+                        rr, ["ts_code", "trade_date", "title"], f"research_report[{code}]"
+                    )
+                    raw_date = rr["trade_date"]
                     rr["pub_time"] = pd.to_datetime(rr["trade_date"], format="%Y%m%d", errors="coerce")
+                    _require_parseable_dates(raw_date, rr["pub_time"], f"research_report[{code}]")
                     rr["title"] = rr["title"].map(_clean_text)
                     rr["content"] = _col(rr, "ind_name")
                     rr["source"] = _col(rr, "inst_csname")
                     rr["kind"] = "research"
                     rr["url"] = _col(rr, "url")
                     rr["rating"] = ""
-                    rr = rr.dropna(subset=["pub_time"])[
-                        ["pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
-                    ]
+                    rr["code"] = rr["ts_code"].fillna("").astype(str)
+                    rr = validate_events(
+                        rr.dropna(subset=["pub_time"])[
+                            ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
+                        ],
+                        require_code=True,
+                        source=f"research_report[{code}]",
+                    )
                     frames.append(rr)
+            except ContractError:
+                raise
             except Exception:
                 continue
 
     if not frames:
         return _cache_put(key, pd.DataFrame())
     out = pd.concat(frames, ignore_index=True).drop_duplicates("title")
+    out = validate_events(out, require_code=True, source="fetch_reports")
     return _cache_put(key, out.sort_values("pub_time", ascending=False).reset_index(drop=True))
 
 
@@ -522,11 +638,16 @@ def evidence_for_stock(
     items: list[dict] = []
 
     if announcements is not None and not announcements.empty:
-        for _, r in announcements[announcements["ts_code"] == code].iterrows():
+        anns = announcements
+        if "code" in anns.columns:
+            anns = anns[anns["code"] == code]
+        elif "ts_code" in anns.columns:
+            anns = anns[anns["ts_code"] == code]
+        for _, r in anns.iterrows():
             items.append(
                 {
                     "kind": "公告",
-                    "date": r["pub_time"],
+                    "pub_time": r["pub_time"],
                     "title": r["title"],
                     "source": "公告",
                     "url": r.get("url", ""),
@@ -542,7 +663,7 @@ def evidence_for_stock(
             items.append(
                 {
                     "kind": "研报",
-                    "date": r["pub_time"],
+                    "pub_time": r["pub_time"],
                     "title": r["title"],
                     "source": r.get("source", ""),
                     "url": r.get("url", ""),
@@ -560,7 +681,7 @@ def evidence_for_stock(
                 items.append(
                     {
                         "kind": kind,
-                        "date": r["pub_time"],
+                        "pub_time": r["pub_time"],
                         "title": r["title"],
                         "source": r.get("source", ""),
                         "url": r.get("url", ""),
@@ -578,7 +699,7 @@ def evidence_for_stock(
                 items.append(
                     {
                         "kind": "政策",
-                        "date": r["pub_time"],
+                        "pub_time": r["pub_time"],
                         "title": r["title"],
                         "source": r.get("source", "政策"),
                         "url": "",
@@ -589,8 +710,10 @@ def evidence_for_stock(
     if not items:
         return []
     out = pd.DataFrame(items).drop_duplicates("title")
-    out = out.sort_values("date", ascending=False).head(limit)
-    return out.to_dict("records")
+    out = out.sort_values("pub_time", ascending=False).head(limit)
+    return validate_evidence_list(
+        out.to_dict("records"), field=f"evidence_for_stock({code})"
+    )
 
 
 def score_events(evidence: list[dict]) -> tuple[float, dict]:
@@ -636,7 +759,8 @@ def score_events(evidence: list[dict]) -> tuple[float, dict]:
 
         weight = type_weights.get(kind, 0.7)
         try:
-            pub = pd.Timestamp(item.get("date"))
+            # pub_time 是契约字段；date 是旧版证据 dict 的兼容字段
+            pub = pd.Timestamp(item.get("pub_time") or item.get("date"))
             age = max(0, (now.normalize() - pub.normalize()).days)
             weight *= 1.0 / (1.0 + age / 45.0)
         except Exception:
@@ -657,6 +781,9 @@ def build_ai_context(message: str, limit: int = 8) -> tuple[str, list[dict]]:
         policy = fetch_policy(days=7)
         announcements = fetch_announcements(codes, days=30) if codes else pd.DataFrame()
         reports = fetch_reports(days=7, codes=codes or None)
+    except ContractError:
+        # 契约错误不能退化成"没有上下文"，否则供应商列漂移会被当成无新闻
+        raise
     except Exception:
         return "", []
 
@@ -693,7 +820,7 @@ def build_ai_context(message: str, limit: int = 8) -> tuple[str, list[dict]]:
                 items.append(
                     {
                         "kind": kind,
-                        "date": r["pub_time"],
+                        "pub_time": r["pub_time"],
                         "title": r["title"],
                         "source": r.get("source", ""),
                         "url": r.get("url", ""),
@@ -703,11 +830,12 @@ def build_ai_context(message: str, limit: int = 8) -> tuple[str, list[dict]]:
 
     if not items:
         return "", []
-    items = sorted(items, key=lambda x: x["date"], reverse=True)[:limit]
+    items = validate_evidence_list(items, field="build_ai_context")
+    items = sorted(items, key=lambda x: x["pub_time"], reverse=True)[:limit]
     lines = [f"【参考资料，截至 {datetime.now():%Y-%m-%d %H:%M}】"]
     citations = []
     for i, item in enumerate(items, 1):
-        date = pd.Timestamp(item["date"]).strftime("%Y-%m-%d")
+        date = pd.Timestamp(item["pub_time"]).strftime("%Y-%m-%d")
         line = f"[{i}] {date} {item['kind']}｜{item['title']}（{item.get('source', '')}）"
         if item.get("url"):
             line += f" {item['url']}"

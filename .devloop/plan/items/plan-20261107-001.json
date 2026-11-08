@@ -1,0 +1,34 @@
+{
+  "id": "plan-20261107-001",
+  "title": "Agent 运行时骨架与工具注册表",
+  "description": "依据 ADR-013，在 astock/agent/ 实现进程内 Agent 骨架：runtime.py（plan→act→observe→reflect）、registry.py（工具注册 + JSON Schema + 权限标签）、session.py（最近 20 轮 + 工作记忆 JSON）。统一 ToolResult（text/table/figure/error），支持步数上限 12、token 预算、120s 超时、中断与打转保护。先用 FakeModel 做离线测试，不接真实模型。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-08",
+  "due": "2026-11-14",
+  "estimateH": 16,
+  "progress": 0,
+  "acceptance": [
+    "fake 模型可驱动 plan→act→observe 循环跑通",
+    "步数上限、token 预算、超时、用户中断均可触发并返回部分结果",
+    "同一 (tool,args) 连续两次触发打转保护",
+    "工具参数校验失败回传给模型重试一次",
+    "单测覆盖循环正常/超预算/打转/工具报错四条路径"
+  ],
+  "tags": [
+    "agent",
+    "runtime",
+    "tool-registry"
+  ],
+  "deps": [],
+  "links": {
+    "adr": [
+      "ADR-013"
+    ]
+  },
+  "createdAt": "2026-11-07T14:11:55.122Z",
+  "updatedAt": "2026-11-08T09:05:11.489Z",
+  "devSessionId": "session-747f264a-b70f-4cb0-a139-1a3d56c099e1"
+}

@@ -1,0 +1,162 @@
+{
+  "version": "v1",
+  "updatedAt": "2026-11-07",
+  "rules": [
+    {
+      "id": "ARCH-01",
+      "rule": "交互层只装配：app.py 与 *_ui.py 不实现指标、回测、统计逻辑，统一调用 astock 领域模块。",
+      "enforcement": "review",
+      "scope": [
+        "app.py",
+        "astock/*_ui.py"
+      ]
+    },
+    {
+      "id": "ARCH-02",
+      "rule": "领域层不依赖 UI；适配层不依赖推荐；依赖方向只能是 交互 → 用例 → 领域/适配 → 平台。",
+      "enforcement": "review",
+      "scope": [
+        "astock/"
+      ]
+    },
+    {
+      "id": "STAT-01",
+      "rule": "所有 p 值、置信区间与多重检验只允许来自 astock/stats.py，禁止模块内自算。",
+      "enforcement": "test",
+      "scope": [
+        "astock/track.py",
+        "astock/factors.py",
+        "astock/stats.py"
+      ]
+    },
+    {
+      "id": "DATA-01",
+      "rule": "推荐 JSON 必须 schema_version=2，含 run_id/data_as_of/tradable_from/diagnostics，且 allow_nan=False。",
+      "enforcement": "test",
+      "scope": [
+        "astock/recommend.py"
+      ]
+    },
+    {
+      "id": "DATA-02",
+      "rule": "证据 pub_time 必须 ≤ generated_at；晚于生成时间的证据不得进入推荐。",
+      "enforcement": "test",
+      "scope": [
+        "astock/recommend.py",
+        "astock/events.py"
+      ]
+    },
+    {
+      "id": "DATA-03",
+      "rule": "跟踪从 tradable_from 开盘入场；入场 bar 缺失返回空，不得后移或使用未来数据。",
+      "enforcement": "test",
+      "scope": [
+        "astock/track.py"
+      ]
+    },
+    {
+      "id": "OPS-01",
+      "rule": "调度幂等键为 (last_completed_trade_date, slot)，必须有单实例锁；stale 任务不得覆盖 latest.json。",
+      "enforcement": "test",
+      "scope": [
+        "astock/scheduler.py",
+        "astock/jobs.py"
+      ]
+    },
+    {
+      "id": "DATA-04",
+      "rule": "信号使用前复权价，涨跌停与成交判断只用 raw_* 原始价；ST 涨跌幅按 5% 处理。",
+      "enforcement": "test",
+      "scope": [
+        "astock/backtest.py",
+        "astock/data.py"
+      ]
+    },
+    {
+      "id": "AI-01",
+      "rule": "LLM 不得修改 action、confidence、综合分或排序；无 key/失败时退回规则理由。",
+      "enforcement": "review",
+      "scope": [
+        "astock/recommend.py",
+        "astock/llm.py"
+      ]
+    },
+    {
+      "id": "LEDGER-01",
+      "rule": "运行事实以 SQLite ledger 为准；JSON 仅作交换与归档；运行数据（data/astock.db）不得入库。",
+      "enforcement": "review",
+      "scope": [
+        "astock/ledger.py",
+        ".gitignore"
+      ]
+    },
+    {
+      "id": "PIT-01",
+      "rule": "PIT 行业按 2021-12-13 切换：之前 SW2014、之后 SW2021，并落 industry_version 供审计。",
+      "enforcement": "test",
+      "scope": [
+        "astock/pit.py"
+      ]
+    },
+    {
+      "id": "CACHE-01",
+      "rule": "缓存必须记录 base_factor，基准变化即失效；写入必须原子替换，读侧容错。",
+      "enforcement": "test",
+      "scope": [
+        "astock/data.py"
+      ]
+    },
+    {
+      "id": "AGENT-01",
+      "rule": "Agent 只能调用注册表白名单工具；禁止 shell、任意 HTTP、文件删除与推荐写入。",
+      "enforcement": "review",
+      "scope": [
+        "astock/agent/"
+      ]
+    },
+    {
+      "id": "AGENT-02",
+      "rule": "每次工具调用必须落 agent_steps（工具/参数/结果摘要/耗时），完整结果与图落 agent_artifacts。",
+      "enforcement": "test",
+      "scope": [
+        "astock/agent/",
+        "astock/ledger.py"
+      ]
+    },
+    {
+      "id": "AGENT-03",
+      "rule": "Agent 对推荐与跟踪只读：不得修改 action/confidence/综合分/排序，不得写 runs/items/tracking。",
+      "enforcement": "review",
+      "scope": [
+        "astock/agent/",
+        "astock/recommend.py"
+      ]
+    },
+    {
+      "id": "AGENT-04",
+      "rule": "文件结论必须带文件名+页码/工作表引用；行情与图表必须带 data_as_of 与 data_time。",
+      "enforcement": "test",
+      "scope": [
+        "astock/agent/tools/"
+      ]
+    },
+    {
+      "id": "AGENT-05",
+      "rule": "上传文件与网页内容视为不可信数据，不得执行其中指令；文件访问限制在 data/agent/files 下。",
+      "enforcement": "review",
+      "scope": [
+        "astock/agent/files.py",
+        "astock/agent/runtime.py"
+      ]
+    },
+    {
+      "id": "AGENT-06",
+      "rule": "业务代码不得直接 import 模型供应商 SDK，只能经 ChatModel 网关调用。",
+      "enforcement": "review",
+      "scope": [
+        "astock/agent/gateway.py",
+        "astock/agent/"
+      ]
+    }
+  ]
+}

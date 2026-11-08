@@ -12,6 +12,7 @@ import pandas as pd
 
 from . import indicators as ta
 from .config import CACHE_DIR, DEFAULT_START
+from .contracts import validate_bars
 from .tushare_client import TushareClient, TushareError, get_client
 
 DAILY_DIR = CACHE_DIR / "daily"
@@ -214,7 +215,9 @@ def _fetch_daily(
     )
     if raw.empty:
         return pd.DataFrame()
-    raw["trade_date"] = pd.to_datetime(raw["trade_date"])
+    # 供应商列漂移（缺 ts_code/trade_date/OHLC/vol/amount）在这里显式报错，
+    # 不再让 KeyError 被上层 except 吞成"没有行情"（评审 D18）。
+    raw = validate_bars(raw, source=f"{ts_code} daily")
     raw = raw.sort_values("trade_date").reset_index(drop=True)
 
     if adj:
@@ -251,7 +254,11 @@ def _fetch_daily(
     keep += [f"raw_{c}" for c in PRICE_COLS if f"raw_{c}" in raw.columns]
     if adj and "adj_factor" in raw.columns:
         keep.append("adj_factor")
-    return raw[keep].reset_index(drop=True)
+    return validate_bars(
+        raw[keep].reset_index(drop=True),
+        require_adj=bool(adj),
+        source=f"{ts_code} daily",
+    )
 
 
 def load_daily(
@@ -290,9 +297,17 @@ def load_daily(
     if path.exists() and not refresh:
         try:
             cached = pd.read_parquet(path)
-            cached["trade_date"] = pd.to_datetime(cached["trade_date"])
         except Exception:
+            # 文件损坏/半写：当作无缓存重拉（不算契约问题）
             cached = None
+        if cached is not None:
+            # 旧缓存缺列/类型漂移必须显式报错，不再静默重拉掩盖问题（D18）
+            cached = validate_bars(
+                cached,
+                require_adj=bool(adj),
+                allow_empty=True,
+                source=f"load_daily 缓存({ts_code})",
+            )
         if cached is not None and not cached.empty:
             fetched_today = meta.get("fetched_at") == _today().strftime("%Y-%m-%d")
             covers = (
@@ -338,6 +353,13 @@ def load_daily(
         .drop_duplicates("trade_date")
         .reset_index(drop=True)
     )
+    # 缓存与增量两条路径统一过契约：旧 parquet 缺列时显式报错，而不是返回残表。
+    result = validate_bars(
+        result,
+        require_adj=bool(adj),
+        allow_empty=True,
+        source=f"load_daily({ts_code})",
+    )
     _cache_put(_DAILY_MEM, mem_key, result)
     return result.copy()
 
@@ -367,10 +389,15 @@ def load_index_daily(
             and cached["trade_date"].min() <= pd.Timestamp(start)
             and cached["trade_date"].max() >= (last_open_date(end) or pd.Timestamp(end))
         ):
-            return cached[
-                (cached["trade_date"] >= pd.Timestamp(start))
-                & (cached["trade_date"] <= pd.Timestamp(end))
-            ].copy()
+            cached = validate_bars(
+                cached[
+                    (cached["trade_date"] >= pd.Timestamp(start))
+                    & (cached["trade_date"] <= pd.Timestamp(end))
+                ].copy(),
+                allow_empty=True,
+                source=f"index_daily({ts_code})",
+            )
+            return cached
 
     df = client.query(
         "index_daily", ts_code=ts_code, start_date=_fmt(start), end_date=_fmt(end)
@@ -379,6 +406,7 @@ def load_index_daily(
         return pd.DataFrame()
     df["trade_date"] = pd.to_datetime(df["trade_date"])
     df = df.sort_values("trade_date").reset_index(drop=True)
+    df = validate_bars(df, source=f"index_daily({ts_code})")
     _atomic_parquet(df, path)
     _atomic_text(
         json.dumps(
@@ -608,10 +636,17 @@ def load_minute(
         dates = df["trade_date"].drop_duplicates().sort_values().tail(days)
         df = df[df["trade_date"].isin(dates)].reset_index(drop=True)
 
+    # 单只股票接口：旧版 rt_min/stk_mins 返回不带 ts_code，用请求参数补全后再校验
+    df = df.copy()
+    df["ts_code"] = code
+
     if adj and not df.empty:
         factors = load_adj_factors(code, end=_fmt(_today()), client=client)
         df = _apply_minute_adj(df, factors)
 
+    df = validate_bars(
+        df, allow_empty=True, source=f"load_minute({code},{freq})"
+    )
     _cache_put(_MINUTE_MEM, key, (now, df), maxsize=128)
     return df.copy()
 

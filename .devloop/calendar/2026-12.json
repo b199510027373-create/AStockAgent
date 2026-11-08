@@ -1,0 +1,16 @@
+{
+  "month": "2026-12",
+  "events": [
+    {
+      "id": "cal-plan-20261107-009-planned",
+      "type": "planned",
+      "title": "Agent 评测集与离线回归",
+      "start": "2026-12-05T00:00:00+08:00",
+      "end": "2026-12-12T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261107-009",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    }
+  ]
+}

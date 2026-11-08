@@ -1,0 +1,34 @@
+{
+  "id": "plan-20261103-003",
+  "title": "推荐 UI 生成/历史读取统一到 ledger",
+  "description": "依据 ADR-003 与修复记录 §5.1。目前推荐页已有「加载最近一次（SQLite）」按钮，但生成路径仍走实时流水线，二者未统一。目标：历史批次列表、单批详情、证据链全部从 ledger 读；生成成功后立即写入并回到同一读取路径。避免\"同一按钮两种口径\"。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-contracts",
+  "owner": "human",
+  "start": "2026-11-18",
+  "due": "2026-11-21",
+  "estimateH": 8,
+  "progress": 0,
+  "acceptance": [
+    "推荐页的「生成」与「历史读取」都走 ledger",
+    "页面能看到 run_id / data_as_of / tradable_from / diagnostics",
+    "ledger 缺记录时给出明确空状态，不回退到重新跑流水线",
+    "保留 JSON 归档可读，但不再作为 UI 主读源"
+  ],
+  "tags": [
+    "ledger",
+    "ui",
+    "read-switch"
+  ],
+  "links": {
+    "adr": [
+      "ADR-003"
+    ]
+  },
+  "createdAt": "2026-11-03T12:10:29.795Z",
+  "updatedAt": "2026-11-03T12:10:29.795Z",
+  "deps": [
+    "plan-20261103-002"
+  ]
+}
