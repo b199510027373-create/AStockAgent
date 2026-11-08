@@ -2,14 +2,14 @@
   "id": "plan-20261103-004",
   "title": "推荐跟踪：Top5 等权组合净值 vs 沪深300",
   "description": "依据 ADR-010 与评审 §6.3。当前「推荐跟踪」首屏是 38 个重叠窗口的平均超额表，用户会读成\"跟着买能赚\"。改为：每个批次等权买入 Top5，按交易日拼接组合净值，对比沪深300；平均超额表降级折叠。这是唯一可估、也最接近用户真实问题的指标。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-product",
   "owner": "human",
   "start": "2026-11-11",
   "due": "2026-11-14",
   "estimateH": 8,
-  "progress": 0,
+  "progress": 85,
   "acceptance": [
     "「推荐跟踪」首屏为组合净值曲线（Top5 等权 vs 沪深300）",
     "平均超额表降级到折叠区，仍可查看",
@@ -24,8 +24,13 @@
   "links": {
     "adr": [
       "ADR-010"
-    ]
+    ],
+    "branch": "feat/track-nav",
+    "commit": "0c07814",
+    "module": "track_ui",
+    "test": "1) pytest tests/test_track_nav.py -q → 14 passed\n2) pytest tests/track_nav+test_core_paths+test_quant+test_optimize -q → 28 passed, 2 failed\n3) pytest tests -q → 88 passed, 23 failed, 11 errors\n4) mypy astock/track.py astock/track_ui.py → Success: 2 files\n失败均为沙箱禁止写临时目录 PermissionError（dsh-* 临时目录 / recommendations / sqlite / state.json），集中在 test_contracts、test_data_pit_events、test_hardening、test_core_paths 的落盘用例；TEMP 指向工作区仍被拒，无法取得干净全量，建议 CI 复核。"
   },
   "createdAt": "2026-11-03T12:10:32.427Z",
-  "updatedAt": "2026-11-03T12:10:32.427Z"
+  "updatedAt": "2026-11-08T16:54:26.143Z",
+  "devSessionId": "session-d4244044-2816-4935-bf9d-2fa6f0a87d69"
 }
