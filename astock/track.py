@@ -538,7 +538,7 @@ def nav_status_text(nav: pd.DataFrame, dropped: pd.DataFrame | None = None) -> s
         if len(bench_values):
             bench = float(bench_values.iloc[-1])
             parts.append(f"沪深300 {bench - 1:+.2%}")
-            parts.append(f"超额 {port - bench:+.2f}pp")
+            parts.append(f"超额 {(port - bench) * 100:+.2f}pp")
         else:
             parts.append("沪深300 数据缺失，仅显示组合")
         text = "，".join(parts) + "。"

@@ -222,6 +222,8 @@ class NavPresentationTests(unittest.TestCase):
         self.assertIn("沪深300", text)
         self.assertIn("口径", text)
         self.assertIn("不构成 alpha 证据", text)
+        # 净值是小数比率，超额必须以百分点展示（1.2 - 1.12 = +8.00pp，而不是 +0.08pp）
+        self.assertIn("+8.00pp", text)
 
     def test_status_text_mentions_dropped_batches(self):
         dropped = pd.DataFrame(
