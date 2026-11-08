@@ -8,11 +8,11 @@
 
 - 项目根目录现在已经是正式 Git 仓库。
 - 当前分支：`main`
-- 当前提交：`4abe388033682c4a34d97efced8d61a61c265c3f`
+- 当前提交：`3bf61a2`（PR #2 合并提交）
 - 本地 `main` 与 `origin/main` 完全一致。
-- PR #1 已合并。
+- PR #1、PR #2 均已合并。
 - 最新 `main` CI 已通过。
-- 根目录和 `release/AStockAgent` 均已同步到 `4abe388`。
+- 根目录和 `release/AStockAgent` 均已同步到 `3bf61a2`。
 - Jupyter Notebook 当前正在运行。
 - Tushare token 与 HTTP 地址已配置在未跟踪的 `.env`。
 - `.env` 没有被 Git 跟踪。
@@ -444,13 +444,13 @@ C:\Anaconda\python.exe -m mypy astock app.py
 项目根目录：C:\Users\b1995\Documents\AStockAgent
 GitHub：https://github.com/b199510027373-create/AStockAgent.git
 当前分支：main
-当前提交：4abe388
-PR #1 已合并，最新 CI 已通过。
+当前提交：3bf61a2
+PR #1、PR #2 已合并，最新 CI 已通过。
 
 根目录现在已经是 Git 仓库，但存在 Windows 所有权提示；读取 Git 状态时使用：
 git -c "safe.directory=C:\Users\b1995\Documents\AStockAgent" -C "C:\Users\b1995\Documents\AStockAgent" status --short
 
-当前有 7 个 notebook 未提交修改，以及多个未跟踪文件。不要执行 git add -A，不要自动回滚用户文件。
+7 个 notebook 的旧改动保存在本地分支 wip/notebooks-20261108（27df40d），main 工作区是干净的。不要执行 git add -A，不要自动回滚用户文件。
 
 Jupyter 正在：
 http://127.0.0.1:1234/tree?token=codex-local
@@ -467,6 +467,6 @@ Tushare 已配置在未跟踪的 .env，且 trade_cal 和 daily 已验证可用�
 - `main` 工作区已恢复干净。
 - 提交 `.gitignore`、本状态文档、`notebooks/ts_init.py`、`tools/build_product_doc.py` 到分支 `chore/status-and-cleanup`（提交 `1337a4e`），该分支已推送到 origin。
 - 以下本地生成物/临时文件已加入 `.gitignore`：`deliverables/`、`01_test.ipynb`、`daily_report.txt`、`my_stocks.csv`、`notebooks/Untitled.ipynb`、`notebooks/test.ipynb`、`notebooks/app_write.ipynb`、`tools/*.pkl`。
-- 待办：在 GitHub 创建并合并 PR：`https://github.com/b199510027373-create/AStockAgent/pull/new/chore/status-and-cleanup`。
-- 合并后 `release/AStockAgent` 执行 `git pull --ff-only` 同步。
+- PR #2 已合并到 `main`，合并提交 `3bf61a2`。
+- `release/AStockAgent` 已执行 `git pull --ff-only`，同步到 `3bf61a2`。
 
