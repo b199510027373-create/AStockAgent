@@ -22,7 +22,11 @@ import astock.events as events
 import astock.ledger as ledger
 import astock.recommend as recommend
 from astock.contracts import (
+    BAR_SCHEMA,
+    EVENT_SCHEMA,
+    BarFrame,
     ContractError,
+    EventFrame,
     validate_bars,
     validate_events,
     validate_evidence,
@@ -499,6 +503,98 @@ class ReviewRegressionTests(unittest.TestCase):
             self.assertRaises(ContractError),
         ):
             recommend.load_many(["600519.SH"], years=1)
+
+    def test_schema_is_single_source_of_truth(self):
+        """r2 P2：Schema 常量与 required 不能各写一份清单。"""
+        self.assertEqual(
+            BarFrame.required, tuple(c for c in BAR_SCHEMA if c != "adj_factor")
+        )
+        self.assertTrue(set(BarFrame.required) <= set(BAR_SCHEMA))
+        self.assertIn("adj_factor", BAR_SCHEMA)
+        self.assertEqual(EventFrame.required, EVENT_SCHEMA)
+        self.assertTrue(set(EventFrame.required) <= set(EVENT_SCHEMA))
+
+    def test_tz_aware_pub_time_compares_instead_of_type_error(self):
+        """r2 P2：带 +08:00 的证据时间不能抛 TypeError。"""
+        payload = _recommend_payload()
+        payload["evidence"]["600519.SH"][0]["pub_time"] = "2025-01-05T09:00:00+08:00"
+        out = validate_recommendation_run(payload)
+        self.assertEqual(
+            out["evidence"]["600519.SH"][0]["pub_time"], "2025-01-05T09:00:00+08:00"
+        )
+
+    def test_tz_aware_future_pub_time_raises_contract_error(self):
+        payload = _recommend_payload()
+        payload["evidence"]["600519.SH"][0]["pub_time"] = "2099-01-01T09:00:00+08:00"
+        with self.assertRaises(ContractError) as ctx:
+            validate_recommendation_run(payload)
+        self.assertIn("DATA-02", str(ctx.exception))
+
+
+class CitationBlockTests(unittest.TestCase):
+    """r2 P1：app._citation_block 必须消费 Evidence 的 pub_time 结构。"""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import app  # noqa: PLC0415 - UI 模块导入较重，按需加载
+        except Exception as exc:  # pragma: no cover - 缺 UI 依赖时跳过
+            raise unittest.SkipTest(f"app 无法导入（{type(exc).__name__}: {exc}）")
+        cls.app = app
+
+    def _citations(self, item: dict) -> list[dict]:
+        return validate_evidence_list([item], field="build_ai_context")
+
+    def test_renders_pub_time_from_evidence_contract(self):
+        citations = self._citations(
+            {
+                "kind": "news",
+                "pub_time": "2025-01-05T09:00:00",
+                "title": "央行开展逆回购",
+                "source": "sina",
+                "url": "http://example.com/n",
+                "content": "",
+            }
+        )
+        text = self.app._citation_block(citations)
+        self.assertIn("2025-01-05", text)
+        self.assertIn("央行开展逆回购", text)
+        self.assertIn("[原文](http://example.com/n)", text)
+
+    def test_accepts_legacy_date_key(self):
+        """迁移期旧缓存可能还是 date 键，渲染层需要兼容。"""
+        text = self.app._citation_block(
+            [
+                {
+                    "kind": "announcement",
+                    "date": "2025-01-06",
+                    "title": "关于回购的公告",
+                    "source": "公告",
+                    "url": "",
+                }
+            ]
+        )
+        self.assertIn("2025-01-06", text)
+
+    def test_missing_or_bad_time_does_not_raise(self):
+        text = self.app._citation_block(
+            [
+                {"kind": "news", "title": "无日期", "source": "sina", "url": ""},
+                {
+                    "kind": "news",
+                    "pub_time": "not-a-date",
+                    "title": "坏日期",
+                    "source": "sina",
+                    "url": "",
+                },
+            ]
+        )
+        self.assertIn("无日期", text)
+        self.assertIn("坏日期", text)
+
+    def test_empty_citations(self):
+        self.assertEqual(self.app._citation_block([]), "")
+        self.assertEqual(self.app._citation_block(None), "")
 
 
 def _synthetic_daily(n: int = 140, start: str = "2025-01-02") -> pd.DataFrame:

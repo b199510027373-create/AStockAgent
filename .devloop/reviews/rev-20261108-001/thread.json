@@ -4,8 +4,16 @@
   "planItemId": "plan-20261103-001",
   "branch": "feat/contracts",
   "base": "main",
-  "status": "changes_requested",
+  "status": "approved",
   "createdAt": "2026-11-08T09:10:35.510Z",
-  "updatedAt": "2026-11-08T09:17:14.461Z",
-  "reviewSessionId": "session-08e2bfdf-b838-434a-8fec-8a8c0631ee85"
+  "updatedAt": "2026-11-08T16:33:29.848Z",
+  "reviewSessionId": "session-08e2bfdf-b838-434a-8fec-8a8c0631ee85",
+  "files": [
+    "app.py",
+    "astock/contracts.py",
+    "docs/AStockAgent_contracts_PR_handoff_2026-11-09.md",
+    "docs/AStockAgent_contracts_delivery_2026-11-09.md",
+    "requirements-dev.txt",
+    "tests/test_contracts.py"
+  ]
 }

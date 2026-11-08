@@ -10,7 +10,24 @@
   "evidence": "RecommendationRun.validate 只检查了 generated_at 可解析（contracts.py:525-534），完全没有把证据时间与生成时间比较：:575-578 只是 `data[\"evidence\"][code] = Evidence.validate_list(...)`，Evidence.validate 也只校验 pub_time 能解析且非 NaT（:373-417）。DATA-02 目前唯一实现点在 recommend.py:693-716 的生成循环里（`if pub > generated_ts: evidence_dropped += 1; continue`），一旦有别的写入路径（backfill/手工补跑/未来 agent 层）直接构造 payload 调 validate_recommendation_run + json.dump，未来证据就会落盘且契约层不拦。而这个契约的存在意义正是\"任何队列/写入都过同一道闸门\"（ADR-002）。",
   "suggestion": "在 evidence 循环里加 DATA-02 检查：`gen = pd.Timestamp(data[\"generated_at\"])`，逐条 `pub = pd.Timestamp(item[\"pub_time\"])`，`if pub > gen: raise ContractError(cls.name, f\"evidence[{code}] pub_time {pub} 晚于 generated_at {gen}\", invalid=[\"evidence\", code])`（或统一截断并回写）。补测试：payload 里塞一条 2099 年的证据，断言抛错。",
   "confidence": 0.75,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-08T09:17:04.389Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-08T13:24:44.120Z"
+  },
+  "createdAt": "2026-11-08T09:17:04.389Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-08T13:24:44.120Z"
+    }
+  ]
 }

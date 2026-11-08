@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261108-001-r2",
+  "threadId": "rev-20261108-001",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 2 轮（scope=full，diff d756231..2fce08f：contracts.py/data.py/events.py/ledger.py/recommend.py/test_contracts.py）。r1 六条已逐条复核，全部按建议修复：contracts.py:90-120 非空/NaN 检查（non_empty 用 isna()|空串，非字符串也报错）、:240-242/:318-320 allow_empty 收紧为无列哨兵、:565-580 DATA-02 改为先全量校验再整体替换（不再就地改写 payload）；recommend.py:116-118/:140-141/:361-362 ContractError 先于 Exception 重新抛出、:749-754 只采纳 reason/catalysts/risks 且 prompt 明确禁止输出 action、_report_markdown 建议完全由 _action(综合分) 决定；events.py:111-133 新增 _require_source_columns/_require_parseable_dates，各 fetch_* 均让 ContractError 冒泡；data.py 在 _fetch_daily 原始列、复权合并后、缓存命中、指数、分钟线各路径都过了 validate_bars。验收标准 1/3/4 满足，第 2 条（关键入口全部过校验）在 data/events/recommend 侧成立，但交互层消费方未同步。\n\n本轮新开 3 条：P1 app.py:114 引用了本次已移除的 evidence \"date\" 键（citations 现只有 pub_time），且调用点在 try 之外 → 单股体检与问答页只要有引用资料即 KeyError，属本次改造引入的回归，必修；P2 contracts.py:184-194/278-285 BAR_SCHEMA/EVENT_SCHEMA 导出但无人使用、与 required 重复且已漂移（adj_factor、dtype 标注）；P2 contracts.py:565-577 DATA-02 比较未处理时区，带 +08:00 的 pub_time 会抛 TypeError 而非 ContractError。\n\n说明：本环境无命令执行能力，未运行 pytest；结论基于静态审阅与测试源码核对（tests/test_contracts.py 43 个用例，ReviewRegressionTests/LlmActionContractTests 覆盖了 r1 各项）。conclusion: 契约层本身质量达标，剩一条 P1 回归在 app.py 与两处 P2，修完即可 approve。",
+  "startedAt": "2026-11-08T13:55:09.509Z",
+  "finishedAt": "2026-11-08T13:56:10.330Z",
+  "rulesVersion": "v1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 2,
+    "total": 3
+  }
+}
