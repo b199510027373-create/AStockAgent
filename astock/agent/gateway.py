@@ -36,6 +36,7 @@ DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MAX_STEPS = 12
 DEFAULT_TOKEN_BUDGET = 64_000
 DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_USAGE_PATH = BASE_DIR / "data" / "agent" / "usage.jsonl"
 PROBE_TOOL_NAME = "gateway_probe"
 PROBE_TOOL: dict[str, Any] = {
     "type": "function",
@@ -137,6 +138,7 @@ class UsageRecord:
     elapsed_ms: float = 0.0
     ok: bool = True
     error: str | None = None
+    dropped_tool_calls: int = 0
     created_at: str = field(default_factory=_utc_now)
 
     def to_dict(self) -> dict[str, Any]:
@@ -151,6 +153,7 @@ class UsageRecord:
             "elapsed_ms": round(self.elapsed_ms, 2),
             "ok": self.ok,
             "error": self.error,
+            "dropped_tool_calls": self.dropped_tool_calls,
             "created_at": self.created_at,
         }
 
@@ -206,6 +209,7 @@ class UsageLogger:
             "prompt_tokens": sum(record.prompt_tokens for record in records),
             "completion_tokens": sum(record.completion_tokens for record in records),
             "total_tokens": sum(record.total_tokens for record in records),
+            "dropped_tool_calls": sum(record.dropped_tool_calls for record in records),
         }
 
 
@@ -424,6 +428,72 @@ def to_openai_messages(
             )
             if pending_ids:
                 pending_ids.pop(0)
+            continue
+
+        wire.append({"role": role, "content": content_text})
+    return wire
+
+
+def to_json_protocol_messages(
+    messages: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """把内部消息压成纯文本，供不支持 function calling 的后端使用。
+
+    JSON 协议后端只认识 ``system/user/assistant`` 普通消息，不能出现
+    ``tool_calls``、``role="tool"`` 或 ``tool_call_id``。这里把工具调用与
+    工具结果改写成可读文本，既保留上下文，又避免严格后端直接 400。
+    """
+
+    wire: list[dict[str, Any]] = []
+    for raw in messages:
+        if not isinstance(raw, Mapping):
+            raise ChatProtocolError(f"消息必须是 Mapping，收到 {type(raw).__name__}")
+        role = str(raw.get("role") or "")
+        content = raw.get("content")
+        content_text = "" if content is None else str(content)
+
+        if role == "assistant":
+            lines: list[str] = []
+            if content_text.strip():
+                lines.append(content_text)
+            calls_raw = raw.get("tool_calls")
+            calls = calls_raw if isinstance(calls_raw, list) else []
+            rendered = 0
+            for item in calls:
+                if not isinstance(item, Mapping):
+                    continue
+                function = item.get("function")
+                if not isinstance(function, Mapping):
+                    continue
+                name = str(function.get("name") or "").strip()
+                if not name:
+                    continue
+                arguments = function.get("arguments", "{}")
+                if not isinstance(arguments, str):
+                    arguments = json.dumps(arguments, ensure_ascii=False, default=str)
+                lines.append(f"调用工具 {name}，参数 {arguments}")
+                rendered += 1
+            single_call = raw.get("tool_call")
+            if rendered == 0 and isinstance(single_call, Mapping):
+                name = str(single_call.get("name") or "").strip()
+                if name:
+                    arguments = single_call.get("arguments", {})
+                    if not isinstance(arguments, str):
+                        arguments = json.dumps(
+                            arguments, ensure_ascii=False, default=str
+                        )
+                    lines.append(f"调用工具 {name}，参数 {arguments}")
+            wire.append({"role": "assistant", "content": "\n".join(lines)})
+            continue
+
+        if role == "tool":
+            name = str(raw.get("name") or "tool")
+            wire.append(
+                {
+                    "role": "user",
+                    "content": f"工具 {name} 返回：{content_text}",
+                }
+            )
             continue
 
         wire.append({"role": role, "content": content_text})
@@ -854,6 +924,7 @@ class ChatGateway:
         self.usage = usage_logger or UsageLogger()
         self.probe_passed: bool | None = None
         self.last_error: str | None = None
+        self.last_warning: str | None = None
         self._probe_degraded = primary.provider == "rule"
         self._probe_reason = (
             "未配置可用大模型，使用规则兜底" if primary.provider == "rule" else None
@@ -950,6 +1021,8 @@ class ChatGateway:
             parts.append("使用 JSON 工具协议")
         if self.last_error:
             parts.append(f"最近错误：{self.last_error}")
+        if self.last_warning:
+            parts.append(f"提示：{self.last_warning}")
         return "；".join(parts)
 
     def mark_degraded(self, reason: str) -> None:
@@ -1014,7 +1087,14 @@ class ChatGateway:
             result, elapsed = self._invoke(messages, tools, temperature, protocol)
         except ChatProtocolError as exc:
             return self._fallback(messages, tools, exc)
-        self._record(result, protocol, elapsed)
+        dropped = max(len(result.tool_calls) - 1, 0)
+        self._record(result, protocol, elapsed, dropped_tool_calls=dropped)
+        self.last_warning = (
+            f"模型一次返回 {len(result.tool_calls)} 个工具调用，"
+            f"当前运行时每步只执行第一个，已忽略 {dropped} 个"
+            if dropped
+            else None
+        )
         self.last_error = None
         self.degraded = self._probe_degraded
         self.degraded_reason = self._probe_reason
@@ -1026,7 +1106,9 @@ class ChatGateway:
         tools: Sequence[Mapping[str, Any]],
         temperature: float,
     ) -> ChatResult:
-        first_messages = _with_json_instruction(messages, tools)
+        first_messages = _with_json_instruction(
+            to_json_protocol_messages(messages), tools
+        )
         try:
             first, first_elapsed = self._invoke(first_messages, [], temperature, "json")
         except ChatProtocolError as exc:
@@ -1037,7 +1119,7 @@ class ChatGateway:
         except ChatProtocolError as first_error:
             self._record(first, "json", first_elapsed, ok=False, error=str(first_error))
             correction = [
-                *messages,
+                *to_json_protocol_messages(messages),
                 {"role": "assistant", "content": first.content},
                 {
                     "role": "user",
@@ -1157,6 +1239,7 @@ class ChatGateway:
         *,
         ok: bool = True,
         error: str | None = None,
+        dropped_tool_calls: int = 0,
     ) -> None:
         self.usage.record(
             UsageRecord(
@@ -1170,6 +1253,7 @@ class ChatGateway:
                 elapsed_ms=elapsed_ms,
                 ok=ok,
                 error=error,
+                dropped_tool_calls=dropped_tool_calls,
             )
         )
 
@@ -1285,8 +1369,8 @@ class GatewaySettings:
             source, "AGENT_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS
         )
         usage_raw = _env_value(source, "AGENT_USAGE_LOG")
-        usage_path = Path(usage_raw) if usage_raw else None
-        if usage_path is not None and not usage_path.is_absolute():
+        usage_path = Path(usage_raw) if usage_raw else DEFAULT_USAGE_PATH
+        if not usage_path.is_absolute():
             usage_path = BASE_DIR / usage_path
         return cls(
             provider=provider,
@@ -1403,6 +1487,7 @@ __all__ = [
     "DEFAULT_PROVIDER",
     "DEFAULT_TIMEOUT_SECONDS",
     "DEFAULT_TOKEN_BUDGET",
+    "DEFAULT_USAGE_PATH",
     "JSON_PROTOCOL_INSTRUCTION",
     "PROBE_TOOL",
     "PROBE_TOOL_NAME",
@@ -1422,5 +1507,6 @@ __all__ = [
     "UsageRecord",
     "build_gateway",
     "create_agent_model",
+    "to_json_protocol_messages",
     "to_openai_messages",
 ]

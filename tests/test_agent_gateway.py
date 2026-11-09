@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 
 from astock.agent.gateway import (
+    DEFAULT_USAGE_PATH,
     PROBE_TOOL_NAME,
     ChatGateway,
     ChatProtocolError,
@@ -26,6 +27,7 @@ from astock.agent.gateway import (
     UsageLogger,
     build_gateway,
     create_agent_model,
+    to_json_protocol_messages,
     to_openai_messages,
 )
 from astock.agent.registry import Permission, ToolRegistry, ToolSpec
@@ -334,6 +336,129 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("JSON", stub.calls[0]["messages"][0]["content"])
         self.assertEqual(len(stub.calls), 1)
 
+    def test_json_protocol_wire_history_has_no_native_tool_fields(self) -> None:
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if len(requests) == 1:
+                return httpx.Response(
+                    200,
+                    json=_completion(
+                        content='{"tool": "lookup_price", "args": {"code": "600519"}}'
+                    ),
+                )
+            return httpx.Response(
+                200,
+                json=_completion(content='{"answer": "600519 最新价 1500 元。"}'),
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        adapter = OpenAICompatibleAdapter(
+            base_url="http://localhost:11434/v1",
+            model="qwen2.5",
+            client=client,
+        )
+        logger = UsageLogger()
+        gateway = ChatGateway(adapter, function_calling=False, usage_logger=logger)
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "查询 600519"},
+        ]
+
+        first = gateway.complete(messages, [TOOL_SCHEMA])
+        self.assertEqual(first.tool_call, ToolCall("lookup_price", {"code": "600519"}))
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_call": {
+                        "name": "lookup_price",
+                        "arguments": {"code": "600519"},
+                    },
+                },
+                {
+                    "role": "tool",
+                    "name": "lookup_price",
+                    "content": '{"ok": true, "text": "最新价 1500 元"}',
+                },
+            ]
+        )
+        result = gateway.complete(messages, [TOOL_SCHEMA])
+
+        self.assertEqual(result.content, "600519 最新价 1500 元。")
+        self.assertEqual(result.protocol, "json")
+        self.assertFalse(result.degraded)
+        self.assertEqual(len(requests), 2)
+        for request in requests:
+            payload = json.loads(request.content)
+            self.assertNotIn("tools", payload)
+            for message in payload["messages"]:
+                self.assertNotIn("tool_calls", message)
+                self.assertNotIn("tool_call_id", message)
+                self.assertNotEqual(message["role"], "tool")
+        second = json.loads(requests[1].content)
+        contents = [message["content"] for message in second["messages"]]
+        self.assertTrue(any("调用工具 lookup_price" in text for text in contents))
+        self.assertTrue(any("工具 lookup_price 返回" in text for text in contents))
+        self.assertTrue(logger.records[-1].ok)
+
+    def test_json_protocol_converts_tool_history_to_plain_text(self) -> None:
+        converted = to_json_protocol_messages(
+            [
+                {
+                    "role": "assistant",
+                    "content": "先查价",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "function": {
+                                "name": "lookup_price",
+                                "arguments": '{"code": "600519"}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "name": "lookup_price",
+                    "tool_call_id": "call_1",
+                    "content": "1500",
+                },
+            ]
+        )
+        self.assertEqual(converted[0]["role"], "assistant")
+        self.assertIn("先查价", converted[0]["content"])
+        self.assertIn("调用工具 lookup_price", converted[0]["content"])
+        self.assertNotIn("tool_calls", converted[0])
+        self.assertEqual(converted[1]["role"], "user")
+        self.assertIn("工具 lookup_price 返回：1500", converted[1]["content"])
+        self.assertNotIn("tool_call_id", converted[1])
+
+    def test_multiple_tool_calls_record_dropped_count(self) -> None:
+        stub = StubModel(
+            [
+                _result(
+                    tool_calls=(
+                        ToolCall("lookup_price", {"code": "1"}),
+                        ToolCall("lookup_price", {"code": "2"}),
+                    ),
+                    total_tokens=5,
+                )
+            ]
+        )
+        logger = UsageLogger()
+        gateway = ChatGateway(stub, usage_logger=logger)
+
+        result = gateway.complete([{"role": "user", "content": "q"}], [TOOL_SCHEMA])
+
+        self.assertEqual(result.tool_call, ToolCall("lookup_price", {"code": "1"}))
+        record = logger.records[-1]
+        self.assertEqual(record.dropped_tool_calls, 1)
+        self.assertEqual(record.to_dict()["dropped_tool_calls"], 1)
+        self.assertIn("2 个工具调用", gateway.status_note())
+
     def test_json_protocol_retries_once_after_invalid_output(self) -> None:
         stub = StubModel(
             [
@@ -508,6 +633,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.api_key, "dk")
         self.assertEqual(settings.max_steps, 12)
         self.assertEqual(settings.token_budget, 64000)
+
+    def test_from_env_uses_default_usage_path(self) -> None:
+        settings = GatewaySettings.from_env({})
+        self.assertEqual(settings.usage_path, DEFAULT_USAGE_PATH)
 
     def test_from_env_rejects_invalid_integer(self) -> None:
         with self.assertRaises(ValueError):

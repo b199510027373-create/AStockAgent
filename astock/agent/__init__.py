@@ -29,6 +29,7 @@ from astock.agent.gateway import (
     UsageRecord,
     build_gateway,
     create_agent_model,
+    to_json_protocol_messages,
     to_openai_messages,
 )
 from astock.agent.registry import (
@@ -105,6 +106,7 @@ __all__ = [
     "apply_defaults",
     "build_gateway",
     "create_agent_model",
+    "to_json_protocol_messages",
     "to_openai_messages",
     "validate_tool_arguments",
 ]
