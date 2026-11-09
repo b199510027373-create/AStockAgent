@@ -514,6 +514,7 @@ def portfolio_nav(
 
     bench_nav: pd.Series | None = None
     bench_last: pd.Timestamp | None = None
+    bench_anchor: pd.Timestamp | None = None
     if len(bench_bars) and "close" in bench_bars.columns:
         bench_close = pd.to_numeric(bench_bars["close"], errors="coerce")
         bench_close = bench_close[bench_close > 0]
@@ -521,10 +522,9 @@ def portfolio_nav(
             bench_last = pd.Timestamp(bench_close.index.max())
             # 基准起算点分三种情况，不能用“入场日之后第一根 bar 的收盘”直接当基：
             # (a) 入场日有 bar → 该日开盘为基（与组合同口径）；
-            # (b) 入场日缺 bar、其后有 bar → 以其后第一根 bar 的开盘为基，
+            # (b) 入场日缺 bar、其后有 bar → 以其后第一根 bar 的收盘为基（anchor 日 = 1.0），
             #     入场日到该日之间留 NaN（不拿 ffill 前收去除以未来的基）；
-            # (c) 入场日及其后都没有 bar → 用最后有效收盘做基，净值全留 NaN，
-            #     状态行注明“数据截至 X，尚未覆盖入场日”。
+            # (c) 入场日及其后都没有 bar → 无可用基准线，状态行注明“数据截至 X，尚未覆盖入场日”。
             later = bench_close[bench_close.index > first_entry]
             anchor: pd.Timestamp | None = None
             if first_entry in bench_bars.index and (
@@ -534,14 +534,8 @@ def portfolio_nav(
                 anchor = first_entry
             elif len(later):
                 anchor = pd.Timestamp(later.index[0])
-            base = None
+            bench_anchor = anchor
             if anchor is not None:
-                base = _frame_price(bench_bars, anchor) or _frame_price(
-                    bench_bars, anchor, "close"
-                )
-            elif len(bench_close):
-                base = float(bench_close.iloc[-1])
-            if base is not None and base > 0:
                 aligned = (
                     bench_close.reindex(bench_close.index.union(calendar))
                     .ffill()
@@ -549,10 +543,19 @@ def portfolio_nav(
                 )
                 # 基准末端缺 bar 时保留 NaN，让曲线停在最后有效日，而不是把旧值延伸成新值
                 aligned = aligned.where(calendar <= bench_last)
-                if anchor is not None:
-                    # 入场日缺 bar 时，起算日之前不补前收，避免凭空造出基准涨跌
+                if anchor == first_entry:
+                    base = _frame_price(bench_bars, anchor) or _frame_price(
+                        bench_bars, anchor, "close"
+                    )
+                else:
+                    # 入场日缺 bar：anchor 日按收盘起算（两侧同为收盘口径），
+                    # anchor 之前不补前收、不把当日盘中涨幅算进超额
                     aligned = aligned.where(calendar >= anchor)
-                bench_nav = aligned / base
+                    base = _frame_price(bench_bars, anchor, "close") or _frame_price(
+                        bench_bars, anchor
+                    )
+                if base is not None and base > 0:
+                    bench_nav = aligned / base
 
     rows: list[dict] = []
     nav_base = 1.0
@@ -602,6 +605,7 @@ def portfolio_nav(
         return empty_nav, dropped_df
     nav = pd.DataFrame(rows).sort_values("交易日").reset_index(drop=True)
     nav.attrs["bench_last"] = bench_last
+    nav.attrs["bench_anchor"] = bench_anchor
     return nav, dropped_df
 
 
@@ -617,6 +621,7 @@ def nav_status_text(nav: pd.DataFrame, dropped: pd.DataFrame | None = None) -> s
         port = float(nav["组合净值"].iloc[-1])
         bench_series = pd.to_numeric(nav["沪深300净值"], errors="coerce")
         bench_values = bench_series.dropna()
+        bench_anchor = nav.attrs.get("bench_anchor") if hasattr(nav, "attrs") else None
         parts = [
             f"组合净值：{n_batches} 个批次 / {len(nav)} 个交易日"
             f"（{start:%Y-%m-%d} → {end:%Y-%m-%d}）",
@@ -640,12 +645,21 @@ def nav_status_text(nav: pd.DataFrame, dropped: pd.DataFrame | None = None) -> s
                     f"沪深300 数据截至 {pd.Timestamp(bench_last):%Y-%m-%d}，尚未覆盖入场日"
                 )
             else:
-                parts.append("沪深300 数据缺失，仅显示组合")
+                parts.append("沪深300 本次无可用数据")
         text = "，".join(parts) + "。"
         text += (
             " 口径：每个批次在 tradable_from 开盘等权买入 Top5（qfq 收盘计价），"
-            "持有到下一批次入场日开盘换仓；沪深300 从首个入场日开盘买入持有；不计交易成本。"
+            "持有到下一批次入场日开盘换仓；"
         )
+        if not len(bench_values):
+            text += "沪深300 本次无可用数据，不展示基准与超额；不计交易成本。"
+        elif bench_anchor is not None and pd.Timestamp(bench_anchor) > start:
+            text += (
+                f"沪深300 自 {pd.Timestamp(bench_anchor):%Y-%m-%d} 收盘起算"
+                f"（{start:%Y-%m-%d} 缺基准 bar），此前不参与超额；不计交易成本。"
+            )
+        else:
+            text += "沪深300 从首个入场日开盘买入持有；不计交易成本。"
         if n_batches < 20:
             text += " 批次 < 20，净值仅作跟踪记录，不构成 alpha 证据。"
     if dropped is not None and not dropped.empty:

@@ -215,10 +215,10 @@ class PortfolioNavTests(unittest.TestCase):
         self.assertEqual(len(dropped), 1)
         self.assertIn("3 只", dropped["原因"].iloc[0])
 
-    def test_bench_missing_entry_bar_uses_later_open_not_previous_close(self):
+    def test_bench_missing_entry_bar_uses_later_close_as_anchor(self):
         detail = detail_rows([("2026-01-02", "2026-01-05", [f"A{i}" for i in range(1, 6)])])
         prices = {f"A{i}": flat() for i in range(1, 6)}
-        # 基准在入场日之前有 bar、入场日缺一根、次日恢复：起算点应取次日开盘，
+        # 基准在入场日之前有 bar、入场日缺一根、次日恢复：起算点应取次日收盘，
         # 入场日留 NaN，而不是拿前收除以次日收盘造出一段基准下跌
         bench = bars(
             ["2026-01-02", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09", "2026-01-12"],
@@ -230,9 +230,10 @@ class PortfolioNavTests(unittest.TestCase):
 
         entry_bench = nav.loc[nav["交易日"] == DATES[0], "沪深300净值"]
         self.assertTrue(pd.isna(entry_bench.iloc[0]))
-        self.assertAlmostEqual(nav.loc[nav["交易日"] == DATES[1], "沪深300净值"].iloc[0], 1.2)
+        self.assertAlmostEqual(nav.loc[nav["交易日"] == DATES[1], "沪深300净值"].iloc[0], 1.0)
         text = track.nav_status_text(nav)
-        self.assertNotIn("数据缺失", text)
+        self.assertIn("自 2026-01-06 收盘起算", text)
+        self.assertIn("此前不参与超额", text)
 
     def test_bench_ends_before_entry_reports_data_until_not_missing(self):
         detail = detail_rows([("2026-01-02", "2026-01-05", [f"A{i}" for i in range(1, 6)])])
@@ -247,7 +248,8 @@ class PortfolioNavTests(unittest.TestCase):
         text = track.nav_status_text(nav)
         self.assertIn("数据截至 2026-01-02", text)
         self.assertIn("尚未覆盖入场日", text)
-        self.assertNotIn("数据缺失", text)
+        self.assertIn("本次无可用数据", text)
+        self.assertNotIn("从首个入场日开盘买入持有", text)
 
     def test_partial_rank_does_not_fill_top5_with_unranked_rows(self):
         rows = []
