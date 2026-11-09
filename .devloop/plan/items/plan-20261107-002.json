@@ -9,7 +9,7 @@
   "start": "2026-11-10",
   "due": "2026-11-15",
   "estimateH": 12,
-  "progress": 95,
+  "progress": 98,
   "acceptance": [
     "切换 AGENT_PROVIDER 不需要改业务代码",
     "支持 function calling 的模型走 tool_calls；不支持的走 JSON 协议",
@@ -34,7 +34,8 @@
       "astock/config.py",
       "astock/agent/__init__.py",
       "requirements.txt",
-      ".env.example"
+      ".env.example",
+      ".gitignore"
     ],
     "test": [
       "pytest tests/test_agent_gateway.py -q -> 27 passed",
@@ -42,13 +43,17 @@
       "mypy astock -> Success: no issues found in 29 source files",
       "mypy astock app.py -> Success: no issues found in 30 source files",
       "ruff check ... -> All checks passed",
-      "GitHub Actions CI run 42579213540 -> success"
+      "GitHub Actions CI run 42579213540 -> success",
+      "pytest tests/test_agent_gateway.py -q -> 31 passed, 1 warning (review fixes 6450a2c)",
+      "pytest tests -q -> 189 passed, 1 warning (review fixes 6450a2c)",
+      "mypy astock app.py -> Success: no issues found in 30 source files (review fixes 6450a2c)",
+      "ruff check astock/agent/gateway.py astock/agent/__init__.py astock/config.py tests/test_agent_gateway.py -> All checks passed (review fixes 6450a2c)"
     ],
-    "commit": "6cf81f4",
+    "commit": "6450a2c",
     "branch": "main",
-    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/42579213540"
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/42580971887"
   },
   "createdAt": "2026-11-07T14:11:58.008Z",
-  "updatedAt": "2026-11-09T07:26:45.213Z",
+  "updatedAt": "2026-11-09T07:44:10.059Z",
   "devSessionId": "session-0602def4-0be7-452c-b8b3-178e0364f1e7"
 }

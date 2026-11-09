@@ -1,0 +1,183 @@
+{
+  "id": "ho-20261109-021",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-002",
+  "threadId": "rev-20261109-003",
+  "sessionId": "",
+  "title": "模型网关与工具调用协议 · 评审修复更新（6450a2c）",
+  "summary": "相对上一份交付 ho-20261109-019（代码 6cf81f4），本轮按评审线程 rev-20261109-003 完成 1 条 P1 + 3 条 P2 修复并提交 6450a2c：JSON 协议分支将历史工具调用压成纯文本，避免非 function-calling 后端收到原生 tool_calls/tool/tool_call_id；并行 tool_calls 截断写入 UsageRecord.dropped_tool_calls 并在 status_note 提示；用量默认落 data/agent/usage.jsonl（可用 AGENT_USAGE_LOG 覆盖）；删除 config.py 中未使用且与 GatewaySettings.from_env 重复的 AGENT_* 常量，收敛为单一配置源。新增 4 个回归测试，目标 31 passed、全量 189 passed、mypy 30 files、ruff 通过；6450a2c 已推送 origin/main，GitHub Actions run 42580971887 success。ACC-05 仍为网关层提示，app.py/UI 接线与真实模型联调未做。",
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "依据 ADR-014 新增 astock/agent/gateway.py：ChatModel 协议 + DeepSeekAdapter + OpenAICompatibleAdapter（可指 Ollama/vLLM）+ RuleFallback。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-02",
+      "text": "统一 tool_calls 解析；对不支持 function calling 的模型退化为 JSON 协议。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-03",
+      "text": "配置全部走 .env：AGENT_PROVIDER/AGENT_MODEL/AGENT_BASE_URL/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-04",
+      "text": "业务代码禁止 import 供应商 SDK；llm.py 保留给推荐文案，先不动。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "ACC-01",
+      "text": "切换 AGENT_PROVIDER 不需要改业务代码。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-02",
+      "text": "支持 function calling 的模型走 tool_calls；不支持的走 JSON 协议。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-03",
+      "text": "无 key / 全部失败时规则兜底，流程不崩。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-04",
+      "text": "每次调用记录 provider/model/token 用量。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-05",
+      "text": "启动能力探测失败时标记 degraded 并提示。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "REV-01",
+      "text": "修复 JSON 协议模式仍按原生 tool_calls/tool 线格式回放历史的问题（P1 iss-mw8y5wgw-ddc6f6）。",
+      "source": "devloop_review rev-20261109-003"
+    },
+    {
+      "id": "REV-02",
+      "text": "并行 tool_calls 截断需在 usage/日志留痕并补双调用单测（P2 iss-mw8y5whm-15342d）。",
+      "source": "devloop_review rev-20261109-003"
+    },
+    {
+      "id": "REV-03",
+      "text": "用量默认持久化或接 sink，明确 ACC-04 证据级别（P2 iss-mw8y5wio-4b8327）。",
+      "source": "devloop_review rev-20261109-003"
+    },
+    {
+      "id": "REV-04",
+      "text": "收敛 config.py 的 AGENT_* 常量与 GatewaySettings.from_env 为单一配置源（P2 iss-mw8y5wjh-b0137b）。",
+      "source": "devloop_review rev-20261109-003"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/gateway.py",
+      "summary": "新增 to_json_protocol_messages：JSON 分支把 assistant tool_calls/tool 历史转纯文本，首次与重试均不再发送原生工具字段；UsageRecord 增加 dropped_tool_calls，ChatGateway 记录并提示多个 tool_calls 被截断；新增 DEFAULT_USAGE_PATH 并让 GatewaySettings.from_env 默认落 JSONL；导出 to_json_protocol_messages。",
+      "commit": "6450a2c"
+    },
+    {
+      "path": "tests/test_agent_gateway.py",
+      "summary": "新增 4 个回归测试：MockTransport 两步 JSON 线格式无 tools/tool_calls/tool_call_id/role:tool、转换函数、双 tool_calls 丢弃计数、默认 usage 路径。",
+      "commit": "6450a2c"
+    },
+    {
+      "path": "astock/config.py",
+      "summary": "删除未被引用的 AGENT_* 常量与 _env_int/_env_float，唯一解析/校验入口收敛到 GatewaySettings.from_env。",
+      "commit": "6450a2c"
+    },
+    {
+      "path": "astock/agent/__init__.py",
+      "summary": "导出 to_json_protocol_messages。",
+      "commit": "6450a2c"
+    },
+    {
+      "path": ".env.example",
+      "summary": "AGENT_USAGE_LOG 说明改为留空默认 data/agent/usage.jsonl。",
+      "commit": "6450a2c"
+    },
+    {
+      "path": ".gitignore",
+      "summary": "忽略 data/agent/ 运行时用量文件。",
+      "commit": "6450a2c"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_gateway.py -q",
+      "result": "31 passed, 1 warning",
+      "passed": true,
+      "evidence": "2026-11-09 本地 .venv Python 3.13.5；仅 anyio pytest 插件弃用 warning。相对上一轮 27 个用例新增 4 个。"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "189 passed, 1 warning",
+      "passed": true,
+      "evidence": "全量 tests 目录；根目录 pytest 会重复收集 release/AStockAgent 副本，故不用。"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "与 CI 类型检查目标一致。"
+    },
+    {
+      "command": "ruff check astock/agent/gateway.py astock/agent/__init__.py astock/config.py tests/test_agent_gateway.py",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "ruff format 后 4 files already formatted。"
+    },
+    {
+      "command": "GitHub Actions CI (push 6450a2c)",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42580971887 / job 129039337481。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push origin main",
+      "reason": "6450a2c 已推送 origin/main（070e6ca..6450a2c）。",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub Actions check-runs 只读",
+      "reason": "读取 run 42580971887 状态为 success。",
+      "status": "granted"
+    },
+    {
+      "name": "真实 DeepSeek/Ollama/vLLM 联调",
+      "reason": "本轮仍为 httpx.MockTransport 离线验证；真实服务需要 API Key 或本地端点。",
+      "status": "needed"
+    },
+    {
+      "name": "app.py/UI 接线与启动冒烟",
+      "reason": "ACC-05 目前只有网关 status_note() 的库级证据；评审观察项建议后续接线计划补启动冒烟。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "6450a2c",
+    "pr": "无（按项目惯例直接推送 main）",
+    "ci": "success: GitHub Actions run 42580971887 (job 129039337481)",
+    "merge": "6450a2c 已推送 origin/main；无独立 PR/合并流程",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261109-019",
+  "next": "等待评审方基于 rev-20261109-003 复评并关闭 4 条 issue。后续独立工作：在 app.py/UI 接线网关并在无 key 场景展示 degraded/规则兜底提示（补启动冒烟）；用真实 DeepSeek 或本地 Ollama/vLLM 做一次端到端联调；agent_runs 落库/流式输出可另立计划项。",
+  "createdAt": "2026-11-09T07:44:26.334Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-021.md"
+}
