@@ -1,0 +1,153 @@
+{
+  "id": "ho-20261109-019",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "模型网关与工具调用协议 · 交付状态更新（元数据/CI）",
+  "summary": "相对首次交付无代码变更；补记 plan-20261107-002 的 links.test/CI、worklog 与首次 handoff 提交 9c50868（仅 .devloop 元数据），并将 main 推送到 origin。代码提交仍为 6cf81f4；两次 GitHub Actions CI 均成功（6cf81f4 run 42579213540、9c50868 run 42579447767）。",
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "依据 ADR-014 新增 astock/agent/gateway.py：ChatModel 协议 + DeepSeekAdapter + OpenAICompatibleAdapter（可指 Ollama/vLLM）+ RuleFallback。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-02",
+      "text": "统一 tool_calls 解析；对不支持 function calling 的模型退化为 JSON 协议。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-03",
+      "text": "配置全部走 .env：AGENT_PROVIDER/AGENT_MODEL/AGENT_BASE_URL/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-04",
+      "text": "业务代码禁止 import 供应商 SDK；llm.py 保留给推荐文案，先不动。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "ACC-01",
+      "text": "切换 AGENT_PROVIDER 不需要改业务代码。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-02",
+      "text": "支持 function calling 的模型走 tool_calls；不支持的走 JSON 协议。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-03",
+      "text": "无 key / 全部失败时规则兜底，流程不崩。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-04",
+      "text": "每次调用记录 provider/model/token 用量。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-05",
+      "text": "启动能力探测失败时标记 degraded 并提示。",
+      "source": "plan-20261107-002 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-002.json",
+      "summary": "状态 in_review/progress 95；links 增加 module/files/test/commit/branch/ci（保留 adr=ADR-014）。",
+      "commit": "9c50868"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "记录开发工作单元与测试证据。",
+      "commit": "9c50868"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261109-018.json",
+      "summary": "首次交付 handoff（需求、变更、测试、权限、交付）。",
+      "commit": "9c50868"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261109-018.md",
+      "summary": "首次交付 handoff Markdown。",
+      "commit": "9c50868"
+    },
+    {
+      "path": "（无代码变更）",
+      "summary": "相对 ho-20261109-018 未修改 astock/ 或 tests/ 代码；仅补记元数据与 CI。",
+      "commit": "9c50868"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions CI (push 9c50868)",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42579447767 / job 129034456056；验证 main 上的元数据提交。"
+    },
+    {
+      "command": "GitHub Actions CI (push 6cf81f4)",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42579213540 / job 129033723534；代码提交的完整测试/类型检查。"
+    },
+    {
+      "command": "pytest tests/test_agent_gateway.py -q",
+      "result": "27 passed, 1 warning",
+      "passed": true,
+      "evidence": "首次交付本地执行；本轮无代码变化。"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "185 passed, 1 warning",
+      "passed": true,
+      "evidence": "首次交付本地执行；本轮无代码变化。"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "首次交付本地执行，与 CI 目标一致。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push origin main",
+      "reason": "代码 6cf81f4 与元数据 9c50868 均已推送 origin/main。",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub Actions check-runs 只读",
+      "reason": "读取两次 run 状态均为 success。",
+      "status": "granted"
+    },
+    {
+      "name": "真实 DeepSeek/OpenAI 兼容服务调用",
+      "reason": "仍为离线 mock 验证；联调需 API Key 或本地 Ollama/vLLM。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "9c50868",
+    "pr": "无（按项目惯例直接推送 main）",
+    "ci": "success: run 42579213540 (code 6cf81f4) / run 42579447767 (metadata 9c50868)",
+    "merge": "main 与 origin/main 同步；无独立 PR/合并流程",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261109-018",
+  "next": "等待评审。本轮仅元数据更新；代码评审仍以提交 6cf81f4 为准。评审后如提出修改，用 devloop_review 读取问题并补测试；真实模型联调与流式输出可另立计划项。",
+  "createdAt": "2026-11-09T07:28:47.997Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-019.md"
+}
