@@ -1,0 +1,156 @@
+{
+  "id": "ho-20261109-012",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261107-001",
+  "threadId": null,
+  "sessionId": "session-45c39c78-ceab-48e0-872f-be3854ecc85c",
+  "title": "Agent 运行时骨架与工具注册表 · 首次交付",
+  "summary": "已在 astock/agent/ 完成进程内 Agent 骨架并提交 092f563。runtime.py 实现 plan→act→observe→reflect 循环，支持步数上限 12、token 预算 64k、120s 超时、request_interrupt/外部 cancel_event、同 (tool,args) 连续两次打转保护、参数校验失败回传模型重试一次；触发任一保护均返回带原因与最近工具结果的中文部分答案。registry.py 提供工具注册、OpenAI function calling JSON Schema、权限标签与调用参数校验，表格超过 200 行时先落 artifact 再截断。session.py 仅保留最近 20 个 user 轮并持久化工作记忆 JSON，采用临时文件+os.replace 原子保存。types.py 统一 ToolResult（text/table/figure/error + data_as_of/source）。fake.py 提供 FakeModel 离线驱动，未接真实模型。23 个单测覆盖正常循环、步数上限、token 预算、超时、中断、打转、参数重试、工具报错恢复、未知工具、模型异常、注册表/权限/截断及会话持久化。目标测试 23 passed，全量 147 passed，mypy astock 无问题；计划项已置 in_review/progress 90，等待评审。",
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "依据 ADR-013，在 astock/agent/ 实现进程内 runtime.py，按 plan→act→observe→reflect 驱动循环。",
+      "source": "m00001 任务描述"
+    },
+    {
+      "id": "REQ-02",
+      "text": "实现 registry.py：工具注册、JSON Schema 参数声明与权限标签。",
+      "source": "m00001 任务描述"
+    },
+    {
+      "id": "REQ-03",
+      "text": "实现 session.py：保留最近 20 轮对话，并以 JSON 保存工作记忆。",
+      "source": "m00001 任务描述"
+    },
+    {
+      "id": "REQ-04",
+      "text": "统一 ToolResult（text/table/figure/error），支持步数上限 12、token 预算、120s 超时、用户中断与打转保护。",
+      "source": "m00001 任务描述"
+    },
+    {
+      "id": "REQ-05",
+      "text": "先用 FakeModel 做离线测试，不接真实模型。",
+      "source": "m00001 任务描述"
+    },
+    {
+      "id": "ACC-01",
+      "text": "fake 模型可驱动 plan→act→observe 循环跑通。",
+      "source": "m00001 验收标准"
+    },
+    {
+      "id": "ACC-02",
+      "text": "步数上限、token 预算、超时、用户中断均可触发并返回部分结果。",
+      "source": "m00001 验收标准"
+    },
+    {
+      "id": "ACC-03",
+      "text": "同一 (tool,args) 连续两次触发打转保护。",
+      "source": "m00001 验收标准"
+    },
+    {
+      "id": "ACC-04",
+      "text": "工具参数校验失败回传给模型重试一次。",
+      "source": "m00001 验收标准"
+    },
+    {
+      "id": "ACC-05",
+      "text": "单测覆盖循环正常/超预算/打转/工具报错四条路径。",
+      "source": "m00001 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/types.py",
+      "summary": "新增 StopReason、ToolCall、ToolResult、ModelReply、StepRecord、AgentRunResult；表格 200 行截断与统一结果归一化。",
+      "commit": "092f563"
+    },
+    {
+      "path": "astock/agent/registry.py",
+      "summary": "新增 ToolRegistry/ToolSpec/Permission、JSON Schema 校验与默认值、权限白名单、工具调用异常转 ToolResult、超长表格 artifact writer。",
+      "commit": "092f563"
+    },
+    {
+      "path": "astock/agent/session.py",
+      "summary": "新增 WorkingMemory 与 AgentSession：最近 20 轮裁剪、工作记忆 JSON、临时文件+os.replace 原子保存与容错加载。",
+      "commit": "092f563"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "新增 AgentRuntime/AgentModel：plan→act→observe→reflect 循环、步数/token/超时/中断/打转保护、参数校验重试、部分结果生成、会话自动保存。",
+      "commit": "092f563"
+    },
+    {
+      "path": "astock/agent/fake.py",
+      "summary": "新增 FakeModel：脚本化回复与工具调用、调用记录、离线 reflect 摘要。",
+      "commit": "092f563"
+    },
+    {
+      "path": "astock/agent/__init__.py",
+      "summary": "导出 Agent 运行时公共类型、注册表、会话与 FakeModel。",
+      "commit": "092f563"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 23 个 unittest，覆盖正常/超预算/打转/工具报错及注册表、会话、权限等边界。",
+      "commit": "092f563"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_runtime.py -q",
+      "result": "23 passed, 1 warning in 1.98s",
+      "passed": true,
+      "evidence": "覆盖 ACC-01～ACC-05 的目标测试全绿；唯一 warning 为 anyio 对 pytest 10 的弃用提示。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "147 passed, 1 warning in 23.26s",
+      "passed": true,
+      "evidence": "全量测试全绿。此前 workspace-write 沙箱因禁止系统临时目录写入导致 tempfile/parquet 用例失败；用户切换 danger-full-access（m00134）后复跑通过。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock",
+      "result": "Success: no issues found in 28 source files",
+      "passed": true,
+      "evidence": "包含新增 astock/agent 全部模块的包级类型检查通过。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "系统临时目录写入（全量测试）",
+      "reason": "pytest/parquet 用例需在系统 temp 建文件；workspace-write 下被拒，用户已切换 danger-full-access（m00134）。",
+      "status": "granted"
+    },
+    {
+      "name": "git 提交到 main",
+      "reason": "按仓库既有流程在当前 main 分支提交代码；本次未 push。",
+      "status": "granted"
+    },
+    {
+      "name": "真实模型/行情 API",
+      "reason": "本任务按需求仅使用 FakeModel 离线验证，未申请也未使用真实 API。",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "092f563",
+    "pr": "无",
+    "ci": "仓库未配置 CI，未运行",
+    "merge": "已提交本地 main，未 push",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "等待评审。评审通过后可将 plan-20261107-001 置 done；后续接入真实模型适配器、工具调用审计存储与 ask_user 工具时，沿用本骨架的 ToolResult/ToolSpec 契约。",
+  "createdAt": "2026-11-09T02:51:27.006Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-012.md"
+}
