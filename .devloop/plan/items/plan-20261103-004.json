@@ -28,9 +28,9 @@
     "branch": "feat/track-nav",
     "commit": "00c6b05",
     "module": "track_ui",
-    "test": "1) pytest tests -q → 120 passed\n2) pytest tests/test_track_nav.py -q → 23 passed\n3) mypy astock/track.py astock/track_ui.py → Success\n4) 离线真数据冒烟：nav 41 批/44 日（2026-08-31→11-06），Top5 +4.34% vs 沪深300 -11.13%，超额 +15.47pp；dropped 2（仅1只/入场缺bar）；最新批次保留，沪深300 截至 11-06\n5) gr.Blocks 构建 15 组件、两 Accordion open=False；P1 两条新用例 + 折叠结构断言"
+    "test": "1) pytest tests -q → 120 passed\n2) pytest tests/test_track_nav.py -q → 23 passed\n3) mypy astock/track.py astock/track_ui.py → Success\n4) 离线真数据冒烟：nav 41 批/44 日（2026-08-31→11-06），Top5 +4.34% vs 沪深300 -11.13%，超额 +15.47pp；dropped 2；最新批次保留\n5) gr.Blocks 构建 15 组件、两 Accordion open=False\n6) Jupyter nbconvert 执行输出 plotly MIME，净值图可内联渲染（入口见 handoff）"
   },
   "createdAt": "2026-11-03T12:10:32.427Z",
-  "updatedAt": "2026-11-09T01:11:19.493Z",
+  "updatedAt": "2026-11-09T01:19:48.344Z",
   "devSessionId": "session-d4244044-2816-4935-bf9d-2fa6f0a87d69"
 }
