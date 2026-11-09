@@ -631,9 +631,23 @@ def nav_status_text(nav: pd.DataFrame, dropped: pd.DataFrame | None = None) -> s
             last_idx = bench_values.index[-1]
             bench = float(bench_values.iloc[-1])
             port_at_bench = float(nav.loc[last_idx, "组合净值"])
+            # 基准可能从 anchor 日起算（case b）：组合净值需同样在 anchor 日归一，
+            # 否则会把 start→anchor 的组合涨跌算进超额，与「此前不参与超额」矛盾。
+            # case (a)（anchor == start）不归一：入场日组合与基准都从开盘起算，
+            # 当日收益属于正常超额，不能拿收盘净值再除一次。
+            port_base = 1.0
+            if bench_anchor is not None and pd.Timestamp(bench_anchor) > start:
+                anchor_ts = pd.Timestamp(bench_anchor)
+                after_anchor = nav.index[nav["交易日"] >= anchor_ts]
+                if len(after_anchor):
+                    port_base = float(nav.loc[after_anchor[0], "组合净值"])
             last_bench_date = pd.Timestamp(nav.loc[last_idx, "交易日"])
             parts.append(f"沪深300 {bench - 1:+.2%}")
-            parts.append(f"超额 {(port_at_bench - bench) * 100:+.2f}pp")
+            if port_base > 0:
+                excess = (port_at_bench / port_base - 1.0 - (bench - 1.0)) * 100
+            else:
+                excess = (port_at_bench - bench) * 100
+            parts.append(f"超额 {excess:+.2f}pp")
             if last_bench_date < end:
                 parts.append(
                     f"沪深300 数据截至 {last_bench_date:%Y-%m-%d}，超额只算到该日"

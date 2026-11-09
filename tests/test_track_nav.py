@@ -235,6 +235,26 @@ class PortfolioNavTests(unittest.TestCase):
         self.assertIn("自 2026-01-06 收盘起算", text)
         self.assertIn("此前不参与超额", text)
 
+    def test_excess_excludes_pre_anchor_drift(self):
+        detail = detail_rows([("2026-01-02", "2026-01-05", [f"A{i}" for i in range(1, 6)])])
+        # 组合在入场日→anchor 之间涨 10%（10→11），anchor 之后横盘；
+        # 基准从 anchor 收盘起算并横盘 → 超额应为 0，而不是把这段漂移算成 +10pp
+        prices = {
+            f"A{i}": bars(DATES, [10.0] * len(DATES), [10.0, 11.0, 11.0, 11.0, 11.0, 11.0])
+            for i in range(1, 6)
+        }
+        bench = bars(
+            ["2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09", "2026-01-12"],
+            [10.0] * 5,
+            [10.0] * 5,
+        )
+
+        nav, _ = self._run(detail, prices, bench=bench)
+
+        text = track.nav_status_text(nav)
+        self.assertIn("超额 +0.00pp", text)
+        self.assertIn("此前不参与超额", text)
+
     def test_bench_ends_before_entry_reports_data_until_not_missing(self):
         detail = detail_rows([("2026-01-02", "2026-01-05", [f"A{i}" for i in range(1, 6)])])
         prices = {f"A{i}": flat() for i in range(1, 6)}
