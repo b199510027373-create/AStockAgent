@@ -1,0 +1,33 @@
+{
+  "id": "iss-mw8y5whm-15342d",
+  "threadId": "rev-20261109-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "observability",
+  "file": "astock/agent/gateway.py",
+  "lines": "249-251, 1221-1232",
+  "title": "并行 tool_calls 被静默截断为第一个，无日志/用量痕迹且无测试",
+  "evidence": "ChatResult.tool_call（249-251）固定 `return self.tool_calls[0]`，AgentModelAdapter.complete（1221-1232）只把 `result.tool_call` 交给 runtime，多余调用既不进 usage 记录、也不写日志、也不进入 ModelReply 的任何字段；runtime 侧每步只执行一个工具（runtime.py:185-213），因此模型一次请求多个数据点时，除第一个外全部无声丢弃，且排查时从 agent_runs/usage 里看不出发生过截断。现有测试只构造单个 tool_call（tests/test_agent_gateway.py:269 附近），无多调用用例。ADR-013 规定每步一次工具调用，但「规定」不等于「静默丢弃」，缺少可观测性会让模型反复请求同一批工具却查不出原因。",
+  "suggestion": "在 AgentModelAdapter.complete（或 ChatGateway 记录处）检测 len(result.tool_calls) > 1，把「请求了 N 个工具、仅执行第一个」写入 UsageRecord 的额外字段/日志（并可给 runtime 的 observation 附加一条提示），保持执行语义不变。补一个单测：模型返回两个 tool_calls，断言只执行第一个且 usage/日志中出现截断记录。二者完成即关闭。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T07:51:41.349Z"
+  },
+  "createdAt": "2026-11-09T07:35:56.602Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T07:51:41.349Z"
+    }
+  ]
+}

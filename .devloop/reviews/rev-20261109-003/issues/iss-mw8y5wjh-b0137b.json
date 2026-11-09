@@ -1,0 +1,33 @@
+{
+  "id": "iss-mw8y5wjh-b0137b",
+  "threadId": "rev-20261109-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "maintainability",
+  "file": "astock/config.py",
+  "lines": "42-49",
+  "title": "config.py 新增的 AGENT_* 常量无任何引用，且与 GatewaySettings.from_env 形成两套不一致的解析规则",
+  "evidence": "config.py:42-49 在模块加载时读取 AGENT_PROVIDER/AGENT_MODEL/AGENT_BASE_URL/AGENT_API_KEY/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET/AGENT_TIMEOUT_SECONDS/AGENT_USAGE_LOG，但 grep 显示这些常量除定义外没有任何引用；真正生效的是 gateway.py:1273-1300 的 GatewaySettings.from_env，它重新读一遍 os.environ，并把 AGENT_USAGE_LOG 相对路径解析到 BASE_DIR。两套解析的校验也不同：config 侧只做 int/float 转换，AGENT_TIMEOUT_SECONDS<=0 也能通过，AGENT_USAGE_LOG 不做路径解析。后续维护者改 config.py 里的常量（例如调 AGENT_MAX_STEPS）不会影响网关行为，属于典型「看着像单一配置源、实际不生效」的陷阱。",
+  "suggestion": "收敛为单一来源：要么 GatewaySettings.from_env 从 astock.config 读取这些常量（config 侧补 timeout>0、budget>0 校验与 usage 路径解析），要么删除 config.py:42-49 并让 .env.example 只指向网关解析。补一条测试断言 config 常量与 from_env 结果一致（若保留常量），防止再次分叉。二选一完成后关闭。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T07:51:49.293Z"
+  },
+  "createdAt": "2026-11-09T07:35:56.669Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T07:51:49.293Z"
+    }
+  ]
+}

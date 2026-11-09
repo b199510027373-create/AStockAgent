@@ -1,0 +1,13 @@
+{
+  "id": "rev-20261109-003",
+  "title": "评审：模型网关与工具调用协议",
+  "planItemId": "plan-20261107-002",
+  "sourceDevSessionId": "session-0602def4-0be7-452c-b8b3-178e0364f1e7",
+  "branch": "main",
+  "base": "main",
+  "files": [],
+  "status": "approved",
+  "createdAt": "2026-11-09T07:32:27.434Z",
+  "updatedAt": "2026-11-09T07:59:21.960Z",
+  "reviewSessionId": "session-d7db8402-42f9-44c9-ab8f-5f382db55169"
+}
