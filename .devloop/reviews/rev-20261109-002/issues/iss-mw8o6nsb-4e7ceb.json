@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw8o6nsb-4e7ceb",
+  "threadId": "rev-20261109-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/runtime.py",
+  "lines": "144,150-153,295,314,349-361",
+  "title": "120s 超时与用户中断只在步骤边界生效，单次模型调用/工具执行不受约束，阻塞时无法按时返回部分结果",
+  "evidence": "runtime.py:349-361 的 `_guard` 只在两个位置被调用：步骤开头 :144 与工具执行后 :314。也就是说超时/中断/预算都是「协作式」的：`self.model.complete(...)`（:153）与 `self.registry.invoke(...)`（:295）在执行期间无法被打断。真实场景下模型调用是网络请求（DeepSeek/其他网关，最长可到几十秒甚至挂住），Tushare 拉全量行情也可能几十秒——一次 120s 的超时承诺会被单个阻塞调用突破，且用户点「中断」也只能等到该次调用返回后才生效。ADR-013 决策 2 写的是「超时（默认 120s）返回已完成的部分结果」，验收标准 (2) 也把超时列为必须可触发；当前实现只保证「步骤之间」的超时，测试 test_timeout 用 FakeClock 在 handler 内 advance(200) 模拟，恰好掩盖了这一点（FakeModel 同步立即返回，用例根本走不到模型阻塞的情形），所以 23 passed 不能证明该路径可用。",
+  "suggestion": "明确定位并写进 docstring：v1 是「协作式超时」（步骤边界判定），这本身可接受，但必须 (1) 在 `run()` 的 docstring 与 ADR-013 里写明，避免后续误以为能中断阻塞调用；(2) 在 `AgentModel` protocol 上增加可选参数（如 `deadline: float | None`）或在 adapter 层给 httpx 设 read timeout，使模型调用自身有上限；(3) 工具侧由各工具自己设 timeout（工具 handler 内部），并在 ToolSpec.description 里约定。测试补一条：FakeModel 的 complete 抛 `TimeoutError`（模拟网关超时）→ 断言 run 返回 StopReason.MODEL_ERROR（或新增 TIMEOUT）且 answer 非空。若不做 (2)(3)，请在交付说明里写明「阻塞调用无法被打断」为已知限制，不要留成隐含假设。",
+  "confidence": 0.72,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-09T02:56:35.819Z"
+}

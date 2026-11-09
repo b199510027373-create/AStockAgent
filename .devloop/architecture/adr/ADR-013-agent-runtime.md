@@ -45,6 +45,13 @@
 - 可靠性策略：工具参数校验失败时把错误回传给模型重试一次；仍失败则返回"无法完成 + 建议"。
 - 依赖：需要一个支持 function calling 的模型；不支持时走 JSON 协议兜底（ADR-014）。
 
+## 实现注记（2026-11-09，v1）
+
+- **超时与中断为协作式**：运行时只在每步开始和工具执行后检查截止时间/中断标志，无法抢占正在阻塞的 `model.complete()` 或工具 handler。模型适配器应为 HTTP 客户端设置 read timeout，具体工具应自行约束数据源超时；否则单次阻塞调用可能突破 `timeout_seconds`（默认 120s），待其返回后才在下一个检查点返回部分结果。
+- **中断语义**：`AgentRuntime.request_interrupt()` 可中断当前运行；若运行尚未开始，标记保留到下一次 `run()` 的第一次检查点，运行结束后清除。外部 `cancel_event` 在同样的检查点生效。
+- **artifact 缺失可见**：未注入 artifact writer 时，表格超过 200 行仍截断返回，但在 `metadata` 标记 `artifact_missing=True` 与 `dropped_rows`，避免完整数据被静默丢弃；接入真实行情前应注入 writer（ADR-017）。
+- **打转保护覆盖未知工具**：同一 `(tool, args)` 连续两次调用，无论工具是否注册，都会在第二次触发 `SPINNING`，避免模型反复调用幻觉工具名。
+
 ## 证据
 
 - `astock/llm.py`（当前只有 `chat()` 单次调用）

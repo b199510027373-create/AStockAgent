@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw8o5r8h-9ccd42",
+  "threadId": "rev-20261109-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "robustness",
+  "file": "astock/agent/registry.py",
+  "lines": "377-385",
+  "title": "工具返回畸形 Mapping 时 ToolResult.coerce 抛未捕获异常，整轮 run 直接崩溃而不是回传 observation",
+  "evidence": "registry.py:377-383 只把 `spec.handler(**prepared)` 包在 try/except 里，紧接着第 385 行 `result = ToolResult.coerce(raw)` 在保护范围之外。coerce 对「键集合是 ToolResult 字段子集」的 Mapping 走 types.py:171-174 的 `cls(**dict(value))`，而 types.py:100-111 的 `__post_init__` 只校验 table 与 metadata，于是 `{\"text\": 123}`、`{\"table\": \"bad\"}` 这类返回值会一路通过 coerce。前者随后在 runtime.py:373-376 的 `len(text)` 上抛 `TypeError: object of type 'int' has no len()`，后者在 `__post_init__` 抛 `TypeError: ToolResult.table 必须是 list[dict]`；两处都不在 runtime.run 的任何 try 中（runtime.py:295 `result = self.registry.invoke(...)` 是裸调用，整个 run 只有 322 行的 `finally`，没有 except）。后果与设计承诺相反：模块 docstring（registry.py:12-13）写「工具异常统一转成 ToolResult(error=...)」，ADR-013 也要求工具失败回传模型重试；实际是一个字段类型写错的新工具（tools/ 目录正要在后续 plan item 里加）会让整轮 run 抛出到 Gradio，用户丢失已经执行的所有步骤，且 AgentRunResult/steps 一并丢失。tests/test_agent_runtime.py 的 23 个用例里没有任何一条构造畸形工具返回值，因此该路径全无覆盖。",
+  "suggestion": "两处一起修：(1) 在 types.py:100-111 的 `ToolResult.__post_init__` 里补齐字段类型校验——`text`/`figure`/`error`/`data_as_of`/`data_time`/`source` 必须是 str 或 None，`truncated` 必须是 bool，违者抛 TypeError 并在错误信息里点名字段；(2) 在 registry.py:385 把 coerce 纳入 try/except，失败时返回 `ToolResult(error=f\"工具返回结构非法：{type(exc).__name__}: {exc}\", source=f\"tool:{name}\")`，与 handler 异常同一条回传路径。同时给 runtime.py:369-401 的 `_format_observation` 加防御（`text = str(result.text)`）。配套补用例：(a) 工具返回 `{\"table\": \"bad\"}` → run 正常结束、`steps[0].result.error` 含「工具返回结构非法」，模型仍收到一条 tool 消息；(b) 工具返回 `{\"text\": 123}` → 同上，不抛异常、observation 里是字符串化文本。验收判定：这两条用例通过、且 `registry.invoke` 对任意畸形返回值都只产生 error ToolResult。",
+  "confidence": 0.85,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-09T02:55:53.633Z"
+}

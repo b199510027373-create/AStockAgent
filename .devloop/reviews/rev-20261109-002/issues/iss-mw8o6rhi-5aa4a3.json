@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw8o6rhi-5aa4a3",
+  "threadId": "rev-20261109-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/runtime.py",
+  "lines": "117-124",
+  "title": "run() 开头清空中断标志，导致 run 前设置的 request_interrupt() 被丢弃，与 docstring「或下一次运行」矛盾；cancel_event 分支无测试",
+  "evidence": "runtime.py:117-119：`request_interrupt()` 的 docstring 是「请求中断当前正在运行（或下一次运行）的 Agent 循环」，实现只做 `self._interrupt.set()`；但 `run()` 在 :124 一进来就 `self._interrupt.clear()`。因此在没有 run 进行时调用 request_interrupt() 会立刻被下一次 run 清掉，与 docstring 承诺的「下一次运行」相反。这不是纯文档问题：Gradio 的「中断」按钮如果在 run 提交与真正开始之间（队列等待）被点击，中断会丢失，用户看到 Agent 照常跑完 12 步。同类问题：`cancel_event` 参数（:121、:349-361）没有任何测试覆盖，`_guard` 里 cancel_event 分支与 interrupt 分支是两套并行的判断，行为一致性未经核对。现有 test_user_interrupt 是在 handler 内部调用 request_interrupt()（run 已经开始），所以测不到这个时序。",
+  "suggestion": "选一种语义并落实：(a) 若确实支持「下一次运行」，把 `self._interrupt.clear()` 从 :124 移到 run 的 `finally`（或改成消费式：`if self._interrupt.is_set(): self._interrupt.clear(); return INTERRUPTED` 放到循环开始前的第一次 `_guard` 里，让 run 开头那次检查先看到它）；(b) 若不支持，把 docstring 改成「中断当前正在进行的 run，未运行时调用无效果」。两种都要补用例：`rt.request_interrupt(); rt.run()` → stop_reason==INTERRUPTED 且 `len(model.calls)==0`；再补一条 `cancel_event`（threading.Event 预先 set）→ 同样在第一次 _guard 处返回 INTERRUPTED。验收判定：这两条用例通过，且 docstring 与实现一致。",
+  "confidence": 0.8,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-09T02:56:40.614Z"
+}

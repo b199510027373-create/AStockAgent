@@ -1,0 +1,13 @@
+{
+  "id": "rev-20261109-002",
+  "title": "评审：Agent 运行时骨架与工具注册表",
+  "planItemId": "plan-20261107-001",
+  "sourceDevSessionId": "session-45c39c78-ceab-48e0-872f-be3854ecc85c",
+  "branch": "main",
+  "base": "main",
+  "files": [],
+  "status": "changes_requested",
+  "createdAt": "2026-11-09T02:53:27.633Z",
+  "updatedAt": "2026-11-09T02:57:17.531Z",
+  "reviewSessionId": "session-3460dba7-eec5-482f-90a3-ec99df29a306"
+}

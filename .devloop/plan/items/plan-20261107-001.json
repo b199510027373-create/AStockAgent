@@ -9,7 +9,7 @@
   "start": "2026-11-08",
   "due": "2026-11-14",
   "estimateH": 16,
-  "progress": 90,
+  "progress": 95,
   "acceptance": [
     "fake 模型可驱动 plan→act→observe 循环跑通",
     "步数上限、token 预算、超时、用户中断均可触发并返回部分结果",
@@ -28,15 +28,16 @@
       "ADR-013"
     ],
     "test": [
-      "`.venv\\Scripts\\python.exe -m pytest tests/test_agent_runtime.py -q` → 23 passed, 1 warning",
-      "`.venv\\Scripts\\python.exe -m pytest tests -q` → 147 passed, 1 warning",
+      "`.venv\\Scripts\\python.exe -m pytest tests/test_agent_runtime.py -q` → 34 passed, 1 warning",
+      "`.venv\\Scripts\\python.exe -m pytest tests -q` → 158 passed, 1 warning",
       "`.venv\\Scripts\\python.exe -m mypy astock` → Success: no issues found in 28 source files"
     ],
     "branch": "main",
-    "commit": "092f563",
-    "module": "astock/agent"
+    "commit": "e119504",
+    "module": "astock/agent",
+    "review": "rev-20261109-002"
   },
   "createdAt": "2026-11-07T14:11:55.122Z",
-  "updatedAt": "2026-11-09T02:50:57.021Z",
+  "updatedAt": "2026-11-09T06:45:28.216Z",
   "devSessionId": "session-45c39c78-ceab-48e0-872f-be3854ecc85c"
 }
