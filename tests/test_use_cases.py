@@ -153,6 +153,8 @@ class GenerateRecommendationTests(unittest.TestCase):
         self.assertEqual(result.payload["table"].empty, True)
         self.assertIn("日线数据未更新", result.message)
         self.assertIn("⚠️", result.payload["status_text"])
+        self.assertEqual(result.payload["report"], "")
+        self.assertEqual(result.payload["evidence_md"], "")
 
     def test_contract_error_is_failed(self):
         with patch.object(

@@ -180,10 +180,11 @@ def _render_recommendation(
         table = pd.DataFrame(columns=list(RECOMMEND_COLUMNS))
 
     report = str(payload.get("report") or "")
-    if not report:
+    if not report and payload.get("run_id"):
+        # 只有真正读到了批次才补台账摘要；失败/未生成时留空，避免伪造“SQLite 记录”。
         report = _history_report(payload)
     evidence_md = str(payload.get("evidence_md") or "")
-    if not evidence_md:
+    if not evidence_md and payload.get("run_id"):
         evidence_md = _evidence_markdown_from_ledger(payload.get("evidence"))
 
     csv_path = payload.get("csv_path") or None
