@@ -98,6 +98,12 @@ class ToolResult:
         return not self.error
 
     def __post_init__(self) -> None:
+        for field_name in ("text", "figure", "error", "data_as_of", "data_time", "source"):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, str):
+                raise TypeError(f"ToolResult.{field_name} 必须是字符串或 None")
+        if not isinstance(self.truncated, bool):
+            raise TypeError("ToolResult.truncated 必须是 bool")
         if self.table is not None:
             if not isinstance(self.table, list) or any(
                 not isinstance(row, Mapping) for row in self.table

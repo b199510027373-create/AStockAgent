@@ -9,8 +9,9 @@
   :class:`ToolArgumentError`，由 runtime 回传给模型重试一次；
 - 权限标签只能是 :class:`Permission` 中的只读/计算/渲染类目，注册即拒绝
   ``shell:exec`` 之类的任意字符串（契约 ``AGENT-03``：Agent 对推荐只读）；
-- 工具异常统一转成 ``ToolResult(error=...)``；表格超过上限时截断，完整行交给
-  可选的 ``artifact_writer`` 落盘（ADR-016 / ADR-017）。
+- 工具异常与畸形返回值统一转成 ``ToolResult(error=...)``；表格超过上限时截断，
+  完整行交给可选的 ``artifact_writer`` 落盘；未提供 writer 时在 ``metadata``
+  标记 ``artifact_missing=True`` 与 ``dropped_rows``，避免静默丢弃（ADR-017）。
 """
 
 from __future__ import annotations
@@ -308,7 +309,12 @@ ArtifactWriter = Callable[[str, dict[str, Any], list[dict[str, Any]]], str]
 
 
 class ToolRegistry:
-    """工具白名单与调用入口。"""
+    """工具白名单与调用入口。
+
+    表格超过 ``table_row_limit`` 时只保留前 N 行；传入 ``artifact_writer`` 时
+    完整行先交给 writer 落盘，未传入时在结果 ``metadata`` 标记
+    ``artifact_missing=True``。
+    """
 
     def __init__(
         self,
@@ -382,7 +388,13 @@ class ToolRegistry:
                 source=f"tool:{name}",
             )
 
-        result = ToolResult.coerce(raw)
+        try:
+            result = ToolResult.coerce(raw)
+        except Exception as exc:  # noqa: BLE001 - 工具返回结构非法也必须回传模型
+            return ToolResult(
+                error=f"工具返回结构非法：{type(exc).__name__}: {exc}",
+                source=f"tool:{name}",
+            )
         if result.table is not None and len(result.table) > self.table_row_limit:
             full_rows = [dict(row) for row in result.table]
             artifact_id: str | None = None
@@ -394,6 +406,8 @@ class ToolRegistry:
                     artifact_error = f"{type(exc).__name__}: {exc}"
             result = result.trim_table(self.table_row_limit)
             metadata = dict(result.metadata)
+            if self.artifact_writer is None:
+                metadata["artifact_missing"] = True
             if artifact_id:
                 metadata["table_artifact_id"] = artifact_id
             if artifact_error:

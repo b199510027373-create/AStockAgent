@@ -7,6 +7,7 @@ JSON 落盘。
 
 from __future__ import annotations
 
+import threading
 import unittest
 import uuid
 from pathlib import Path
@@ -31,6 +32,7 @@ from astock.agent.runtime import (
     DEFAULT_MAX_STEPS,
     DEFAULT_TIMEOUT_SECONDS,
     DEFAULT_TOKEN_BUDGET,
+    SYSTEM_PROMPT,
 )
 from astock.agent.types import MAX_TABLE_ROWS, ToolResult as ResultAlias
 
@@ -207,6 +209,35 @@ class RuntimeLoopTests(unittest.TestCase):
         self.assertIn("中断", result.answer)
         self.assertEqual(model.call_count, 1)
 
+    def test_interrupt_requested_before_run_stops_at_first_guard(self) -> None:
+        model = FakeModel(["不应到达"])
+        runtime = AgentRuntime(model, ToolRegistry())
+        runtime.request_interrupt()
+
+        result = runtime.run("查价格")
+
+        self.assertEqual(result.stop_reason, StopReason.INTERRUPTED)
+        self.assertEqual(model.call_count, 0)
+        self.assertEqual(result.steps, [])
+        self.assertIn("中断", result.answer)
+
+        # 中断标记被本次运行消费，下一次运行应恢复正常。
+        follow_up = runtime.run("再查一次")
+        self.assertEqual(follow_up.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(model.call_count, 1)
+
+    def test_pre_set_cancel_event_stops_at_first_guard(self) -> None:
+        model = FakeModel(["不应到达"])
+        cancel_event = threading.Event()
+        cancel_event.set()
+        runtime = AgentRuntime(model, ToolRegistry())
+
+        result = runtime.run("查价格", cancel_event=cancel_event)
+
+        self.assertEqual(result.stop_reason, StopReason.INTERRUPTED)
+        self.assertEqual(model.call_count, 0)
+        self.assertEqual(result.steps, [])
+
     def test_identical_call_twice_triggers_spin_guard(self) -> None:
         calls: list[str] = []
 
@@ -333,6 +364,45 @@ class RuntimeLoopTests(unittest.TestCase):
         self.assertTrue(result.steps[1].result.ok)
         self.assertIn("10.00", result.answer)
 
+    def test_malformed_table_return_becomes_error_result(self) -> None:
+        registry = ToolRegistry()
+        registry.register(price_spec(lambda *, code: {"table": "bad"}))
+        model = FakeModel(
+            [ToolCall("lookup_price", {"code": "600519"}), "工具返回结构有误，已记录。"]
+        )
+        runtime = AgentRuntime(model, registry)
+
+        result = runtime.run("查价格")
+
+        self.assertEqual(result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(len(result.steps), 1)
+        self.assertIn("工具返回结构非法", result.steps[0].result.error or "")
+        self.assertIn("ToolResult.table", result.steps[0].result.error or "")
+        tool_messages = [
+            message
+            for message in model.calls[1]["messages"]
+            if message["role"] == "tool"
+        ]
+        self.assertTrue(
+            any("工具返回结构非法" in message["content"] for message in tool_messages)
+        )
+
+    def test_malformed_text_return_becomes_error_result(self) -> None:
+        registry = ToolRegistry()
+        registry.register(price_spec(lambda *, code: {"text": 123}))
+        model = FakeModel(
+            [ToolCall("lookup_price", {"code": "600519"}), "工具返回结构有误，已记录。"]
+        )
+        runtime = AgentRuntime(model, registry)
+
+        result = runtime.run("查价格")
+
+        self.assertEqual(result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(len(result.steps), 1)
+        self.assertIn("工具返回结构非法", result.steps[0].result.error or "")
+        self.assertIn("ToolResult.text", result.steps[0].result.error or "")
+        self.assertIn("工具返回结构非法", result.steps[0].observation)
+
     def test_unknown_tool_is_reported_without_crashing(self) -> None:
         model = FakeModel(
             [ToolCall("delete_everything", {}), "我没有这个工具，改用可用工具。"]
@@ -345,6 +415,24 @@ class RuntimeLoopTests(unittest.TestCase):
         self.assertEqual(len(result.steps), 1)
         self.assertIn("未知工具", result.steps[0].result.error or "")
         self.assertIn("未知工具", result.steps[0].observation)
+
+    def test_identical_unknown_tool_twice_triggers_spin_guard(self) -> None:
+        model = FakeModel(
+            [
+                ToolCall("ghost_tool", {"query": "x"}),
+                ToolCall("ghost_tool", {"query": "x"}),
+                "不应到达",
+            ]
+        )
+        runtime = AgentRuntime(model, ToolRegistry())
+
+        result = runtime.run("调用不存在的工具")
+
+        self.assertEqual(result.stop_reason, StopReason.SPINNING)
+        self.assertEqual(len(result.steps), 2)
+        self.assertEqual(model.call_count, 2)
+        self.assertIn("重复", result.steps[1].result.error or "")
+        self.assertIn("打转", result.answer)
 
     def test_model_exception_becomes_model_error(self) -> None:
         class BrokenModel:
@@ -359,10 +447,27 @@ class RuntimeLoopTests(unittest.TestCase):
         self.assertIn("connection reset", result.answer)
         self.assertIn("connection reset", result.error or "")
 
+    def test_model_timeout_error_becomes_model_error(self) -> None:
+        class TimeoutModel:
+            def complete(self, *, messages: list[dict[str, Any]], tools: list[Any]):
+                raise TimeoutError("gateway read timeout")
+
+        runtime = AgentRuntime(TimeoutModel(), ToolRegistry())  # type: ignore[arg-type]
+
+        result = runtime.run("你好")
+
+        self.assertEqual(result.stop_reason, StopReason.MODEL_ERROR)
+        self.assertIn("TimeoutError", result.answer)
+        self.assertIn("gateway read timeout", result.answer)
+
     def test_default_guard_constants(self) -> None:
         self.assertEqual(DEFAULT_MAX_STEPS, 12)
         self.assertEqual(DEFAULT_TOKEN_BUDGET, 64_000)
         self.assertEqual(DEFAULT_TIMEOUT_SECONDS, 120.0)
+
+    def test_system_prompt_marks_tool_content_untrusted(self) -> None:
+        self.assertIn("不可信", SYSTEM_PROMPT)
+        self.assertIn("不得执行", SYSTEM_PROMPT)
 
 
 class RegistryTests(unittest.TestCase):
@@ -501,6 +606,28 @@ class RegistryTests(unittest.TestCase):
         self.assertTrue(result.truncated)
         self.assertIn("disk full", result.metadata["artifact_error"])
 
+    def test_long_table_without_writer_marks_artifact_missing(self) -> None:
+        rows = [{"code": str(index)} for index in range(5)]
+        registry = ToolRegistry(table_row_limit=3)
+        registry.register(
+            ToolSpec(
+                name="dump_prices",
+                description="导出价格",
+                parameters={"type": "object"},
+                handler=lambda: rows,
+                permissions=(Permission.MARKET_READ,),
+            )
+        )
+
+        result = registry.invoke("dump_prices", {})
+
+        self.assertEqual(len(result.table or []), 3)
+        self.assertTrue(result.truncated)
+        self.assertEqual(result.metadata["total_rows"], 5)
+        self.assertEqual(result.metadata["dropped_rows"], 2)
+        self.assertIs(result.metadata["artifact_missing"], True)
+        self.assertNotIn("table_artifact_id", result.metadata)
+
 
 class SessionTests(unittest.TestCase):
     def test_recent_twenty_turns_are_kept(self) -> None:
@@ -545,9 +672,35 @@ class SessionTests(unittest.TestCase):
             target.unlink(missing_ok=True)
             target.with_name(target.name + ".tmp").unlink(missing_ok=True)
 
+    def test_recent_messages_limit_zero_returns_empty(self) -> None:
+        session = AgentSession()
+        session.add_user("问题")
+        session.add_assistant("回答")
+
+        self.assertEqual(session.recent_messages(limit=0), [])
+        self.assertEqual(session.recent_messages(limit=-1), [])
+        self.assertEqual(len(session.recent_messages(limit=1)), 1)
+
     def test_save_without_path_raises(self) -> None:
         with self.assertRaises(ValueError):
             AgentSession().save()
+
+    def test_runtime_reports_session_save_failure(self) -> None:
+        blocker = Path(__file__).parent / f"_agent_blocked_{uuid.uuid4().hex}.tmp"
+        blocker.write_text("not a directory", encoding="utf-8")
+        target = blocker / "session.json"
+        try:
+            runtime = AgentRuntime(
+                FakeModel(["完成"]), session=AgentSession(path=target)
+            )
+
+            result = runtime.run("问题")
+
+            self.assertEqual(result.stop_reason, StopReason.COMPLETED)
+            self.assertIn("会话保存失败", result.answer)
+            self.assertIsNotNone(result.error)
+        finally:
+            blocker.unlink(missing_ok=True)
 
     def test_corrupt_or_missing_working_memory_is_tolerated(self) -> None:
         memory = WorkingMemory.from_dict({"codes": None, "extras": "bad"})
@@ -556,6 +709,16 @@ class SessionTests(unittest.TestCase):
 
 
 class TypeTests(unittest.TestCase):
+    def test_dataframe_result_is_coerced_to_table(self) -> None:
+        import pandas as pd
+
+        result = ToolResult.coerce(
+            pd.DataFrame([{"code": "600519", "close": 1680.0}])
+        )
+
+        self.assertEqual(result.table, [{"code": "600519", "close": 1680.0}])
+        self.assertEqual(result.metadata["columns"], ["code", "close"])
+
     def test_tool_result_trim_and_signature(self) -> None:
         result = ResultAlias(table=[{"i": index} for index in range(205)])
         trimmed = result.trim_table()

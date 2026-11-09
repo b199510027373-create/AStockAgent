@@ -136,7 +136,12 @@ class AgentSession:
 
     def recent_messages(self, limit: int | None = None) -> list[dict[str, Any]]:
         self._trim()
-        messages = self.history if limit is None else self.history[-limit:]
+        if limit is None:
+            messages = self.history
+        elif limit <= 0:
+            messages = []
+        else:
+            messages = self.history[-limit:]
         return copy.deepcopy(messages)
 
     def _trim(self) -> None:
