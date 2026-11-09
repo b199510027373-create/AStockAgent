@@ -1,13 +1,13 @@
 # PR 评审：评审：推荐跟踪：Top5 等权组合净值 vs 沪深300
 
-> 自动生成于 2026-11-09T01:38:55.096Z；可直接转交开发会话。
+> 自动生成于 2026-11-09T01:59:30.690Z；可直接转交开发会话。
 
 ## 概览
 
 - 线程：`rev-20261109-001`
 - 计划项：`plan-20261103-004`
 - 分支：`feat/track-nav` → `main`
-- 轮次：第 3 轮（diff）
+- 轮次：第 4 轮（diff）
 - 结论：需要修改（request_changes）
 - 开发会话：`session-d4244044-2816-4935-bf9d-2fa6f0a87d69`
 - 本轮问题：1（P0 0 / P1 0 / P2 1）
@@ -15,39 +15,37 @@
 
 ## 本轮结论
 
-第 3 轮 diff 评审（范围 00c6b05→056c7de，仅 astock/track.py + tests/test_track_nav.py 两个文件，+97/−11）。先读了开发交付 ho-20261109-003…005 与上一份评审交付 ho-20261109-004，逐条核对后结论如下。
+第 4 轮 diff 评审（056c7de→13e5cea，仅 astock/track.py + tests/test_track_nav.py）。
 
-【本轮重点一：基准起算三分支 —— 成立】[track.py:528-555](astock/track.py#L528-L555) 按「入场日有 bar / 入场日缺 bar 但其后有 bar / 入场日及其后都无 bar」分别取 anchor：有 bar 时 anchor=first_entry 且 base 为开盘；缺失但后续有 bar 时 anchor=其后首根 bar、`aligned.where(calendar >= anchor)` 把之前置 NaN；都无 bar 时 base=最后有效收盘、`calendar <= bench_last` 令整列 NaN。`bench_last` 写入 `nav.attrs` 供状态行用（:604、:637-643）。我手算了新用例：旧实现在 2026-01-05 会是 10/12=0.833、01-06 是 1.0，新实现是 NaN 与 12/10=1.2，断言确实能区分新旧路径，不是复述实现的空断言。「基准止于入场日前」用例同时校验了 dropped 为空、nav 覆盖全 6 日、沪深300 全 NaN、文案含「数据截至 2026-01-02」「尚未覆盖入场日」且不含「数据缺失」，与 :642 的 attrs 分支一一对应。
+交付覆盖核对：ho-20261109-007 的 requirements/changes/tests/delivery 四项齐全，与 commit 13e5cea 实际改动一致（track.py 三分支收紧 + nav_status_text 三态口径句；tests 两例更新）。links.test 6 条与交付表一致：26 passed / 123 passed / mypy Success / 离线冒烟 41 批 44 日 dropped 2 / gr.Blocks 15 组件两 Accordion open=False / case(b)(c) 文案断言。
 
-【本轮重点二：部分行缺排名 —— 已修】[track.py:388-395](astock/track.py#L388-L395) 在 `sort_values("_order").head(top_n)` 之前先 `rows = rows[rows["_order"].notna()]`，无排名行不再按文件行序占位；`len(codes) < top_n` 仍记「成分不足 Top5（仅 N 只）」并整批剔除。`test_partial_rank_does_not_fill_top5_with_unranked_rows`（[tests/test_track_nav.py:252-273](tests/test_track_nav.py#L252-L273)）覆盖了 8 行仅 2 行有排名（只取 P1/P2 + 记「仅 2 只」）与 5 行有排名（取满 P1..P5、无 skip_reason）两种情形，正是上一轮指出的漏洞。采用「过滤而非用综合分补位」的处置我认可：同批排名由同一次推荐产生，部分缺失属数据损坏，整批剔除比混入推测成分更符合「口径可解释」；整列缺排名时仍保留综合分兜底，两种路径语义不同但都写清了原因。
+已修并逐条验证：
+- iss-mw8lei8u-2f0ca8（第 3 轮唯一 open P2）——已修复。track.py:516-518/608 写 nav.attrs["bench_anchor"]；:531-536 case (a)/(b) 分派，:544-550 case (b) 先 aligned.where(calendar >= anchor) 再以 anchor 收盘为基，anchor 日净值 = 1.0（旧实现 1.2 的口径偏差消失）；:654-662 口径句三态化，case (c) 走「本次无可用数据，不展示基准与超额」，case (b) 走「自 X 收盘起算，此前不参与超额」，case (a) 保留「从首个入场日开盘买入持有」。tests/test_track_nav.py:218-235、:237-251 的断言已能区分三态（1.0 vs 1.2、assertIn 起算句、assertNotIn 旧口径句），不再是只断言「不含数据缺失」的空断言。请在 handoff 或线程 feedback 里把 iss-mw8lei8u-2f0ca8 置为 fixed，评审侧无关闭入口。
+- 其余 6 条（含 iss-mw8joahc-4fc16e）代码与用例仍成立，未回归；iss-mw8joahc 线程内状态仍显示 deferred，请开发在下一份 handoff 里一并改回 fixed（本轮已核对 :390 过滤 + 对应用例，判定已修）。
 
-【6 条历史 issue 逐条核对（全部有代码+测试证据）】P1 iss-mw8jo6dd（交易日历判定、组合日历取成分股并集、基准末端 NaN、超额只在共同有效日）已修并有三条用例；iss-mw8jodh9（值级 ffill + `ratio.fillna(1.0)`）已修；iss-mw8jogea（run_track 净值段 try/except）已修；iss-mw8jopos（build_track_tab 折叠区结构断言）已修；iss-mw8joahc 本轮补齐残留并有用例；iss-mw8kwygq 的三分支与两条用例本轮补齐。测试文件现为 26 个 `def test_`（我逐行数过，与 links.test 的 26 passed 一致），全量 123 passed、mypy Success、离线冒烟 41 批/44 日且数值与上一轮一致，证据链完整，无「声称已修但代码未改」的情况。
+本轮新增 1 条 P2：iss-mw8m51bp-dd9930——case (b) 下超额两侧起点不同（bench 从 anchor 收盘重置为 1.0，组合仍从首个入场日起算），把 start→anchor 的组合涨跌算进了超额，而新增文案恰恰承诺「此前不参与超额」；现有用例个股价格恒为 10，测不出该偏差。修法：nav_status_text 按 bench_values.index[0] 归一组合净值后再算超额，并补 test_excess_excludes_pre_anchor_drift。
 
-【仍存在的问题：1 条 P2】iss-mw8lei8u-2f0ca8（[track.py:552-555,645-648](astock/track.py#L645-L648)）：起算逻辑改了，文案没跟着改。[track.py:645-648](astock/track.py#L645-L648) 仍无条件拼接「沪深300 从首个入场日开盘买入持有」，而 case (b) 实际从 anchor 开盘起算、case (c) 根本没有基准线——case (c) 正是最常见的「今天入场、指数 bar 未生成」，此时同一段文字里「沪深300 数据截至 X，尚未覆盖入场日」与「从首个入场日开盘买入持有」互相矛盾；case (b) 也没有「基准自 X 起算」的说明（只有 `last_bench_date < end` 才提示末端，:632-635）。另建议 case (b) 的基准从 anchor 日**收盘**起算，避免把指数当日盘中涨幅直接算成一天超额。补 attrs 里的 anchor + 条件化口径句 + 两条断言即可，改法已写在该 issue 的 suggestion 里。
-
-【流程记账】iss-mw8joahc-4fc16e 在线程里的最新反馈是 `deferred`（`effective=false`，覆盖了此前的 `fixed`），但交付表与本轮代码都表明它已修（:390 + 用例 + 5 行有排名取满 5 只）。请开发在下次 update 时把它改回 `fixed`，或写明延后的具体后续项（例如「后续想让部分缺排名的批次用综合分补位」），否则线程会长期挂一个 deferred 计数，plan 关闭时说不清。
-
-【结论】verdict=request_changes（本轮 openP0=0、openP1=0、openP2=1）。P0/P1 均无，6 条历史 issue 已全部有代码与测试证据，剩余只有 1 条文案口径 P2。完全解决的判定条件：开发在 feat/track-nav 上处理 iss-mw8lei8u-2f0ca8（anchor 写入 attrs、口径句条件化、case (b) 改收盘起算、补两条断言），并把 iss-mw8joahc 的状态改回 fixed 或说明延后项；下一轮 diff 评审确认 openP2=0（且 deferred 有明确解释）后我给 approve 并标记完全解决。合并前仍需开 PR 跑远端 CI（当前只有本地 123 passed，delivery.status=branch-ready；在线冒烟因 Tushare read timeout 未执行，属环境限制，不记问题）。
+结论：仍有 1 条 P2 未闭环，本轮 request_changes。由开发在 feat/track-nav 按 iss-mw8m51bp-dd9930 修改 astock/track.py:630-636 的超额归一逻辑并补 1 条用例、把 iss-mw8lei8u/iss-mw8joahc 状态回填为 fixed 后，进入第 5 轮 diff 评审；第 5 轮确认 openP2=0（或仅剩已书面延后的项）且 openP0=0/openP1=0 时我再 approve 并标记完全解决。合并前仍需开 PR 跑远端 CI（当前 delivery.status=branch-ready，仅本地 123 passed）。
 
 ## 本轮问题
 
-### P2 · 基准起算分支改了，但状态行与口径句没有跟着改：case (b)/(c) 下「沪深300 从首个入场日开盘买入持有」与实际相反
+### P2 · case (b) 文案称「此前不参与超额」，但超额仍含入场日→anchor 的组合涨跌（两侧起点不同）
 
-- 位置：`astock/track.py:552-555,637-648`
+- 位置：`astock/track.py:630-636, 656-660`
 - 状态：未闭环
-- 置信度：0.7
+- 置信度：0.75
 
 **证据**
 
-三分支实现本身成立，我逐条核对了 [track.py:528-555](astock/track.py#L528-L555)：(a) 入场日有 bar → anchor=first_entry、base=开盘；(b) 入场日缺 bar、其后有 bar → anchor=其后首根 bar 的开盘，且 `aligned.where(calendar >= anchor)` 把 anchor 之前的日期置 NaN；(c) 入场日及其后都无 bar → base=最后有效收盘、`calendar <= bench_last` 使整列 NaN，状态行走「数据截至 X，尚未覆盖入场日」。两条新用例确实能区分旧实现（旧代码下 2026-01-05 会是 10/12=0.833、01-06 是 1.0，新实现是 NaN 与 1.2）。问题在文案层没有同步：(1) [track.py:645-648](astock/track.py#L645-L648) 是一句**无条件拼接**的固定口径「沪深300 从首个入场日开盘买入持有」，而 case (b) 实际是从 anchor 日开盘起算、case (c) 干脆没有基准数据；case (c) 恰恰是最常见的现场（首个入场日＝今天、当日指数 bar 未生成），此时上下文同时出现「沪深300 数据截至 2026-11-06，尚未覆盖入场日」与「沪深300 从首个入场日开盘买入持有」，两句互相矛盾。(2) case (b) 下基准线比组合线晚开始，但状态行只在 `last_bench_date < end` 时才提示（[track.py:632-635](astock/track.py#L632-L635)），`last_bench_date == end` 时完全没有任何「基准自 X 起算」的说明，读者会把两条线当成同一天起算，而 ADR-010 把这条曲线定为对外唯一指标，起点口径必须自洽。(3) `nav.attrs["bench_last"]` 只记了末端，没有记 anchor，所以文案层拿不到「起算日晚于首个入场日」这一事实。(4) 两条新用例只断言 `assertNotIn("数据缺失", text)`（[tests/test_track_nav.py:218-250](tests/test_track_nav.py#L218-L250)），没有断言起算说明，因此这个不一致不会被测试拦住。附带一点同源风险：case (b) 的 anchor 日基准净值取的是 open→close 的一日收益（新用例里 1.2），而组合在 anchor 日走的是「入场日收盘 → anchor 日收盘」，两侧当天收益窗口不同，会凭空产生一天的单边超额；当日缺 bar 时应把基准从 anchor 日**收盘**起算更公平。
+track.py:630-636 超额 = port_at_bench − bench，其中 port_at_bench = nav.loc[last_idx, "组合净值"] 是自首个入场日起的累计值；而 case (b) 的 bench 在 anchor 日被重置为 1.0（:552-556 `bench_nav = aligned / base`，base 取 anchor 收盘）。因此当 anchor > start 时，bench 只度量 anchor→末日，组合却度量 start→末日，两者之差把 start→anchor 的组合涨跌算进了超额。:656-660 新增文案「沪深300 自 X 收盘起算（Y 缺基准 bar），此前不参与超额」正好承诺了相反的语义，数字与说明不一致。现有用例 test_bench_missing_entry_bar_uses_later_close_as_anchor（tests/test_track_nav.py:218-235）中个股用 flat() 全 10 元，anchor 日组合净值恰为 1.0，所以超额恒为 0，测不出这段偏差。
 
 **建议**
 
-让文案与起算口径同源：(1) 在 `portfolio_nav` 里把 anchor 也写进 attrs（`nav.attrs["bench_anchor"] = anchor`，case (c) 为 None、`bench_last` 已有）；(2) `nav_status_text` 里把固定的口径句改成条件化——`len(bench_values)==0` 时输出「沪深300 本次无可用数据，不展示基准与超额」而不是「从首个入场日开盘买入持有」；`bench_anchor` 非空且 `bench_anchor > nav["交易日"].iloc[0]` 时补一句「沪深300 自 {bench_anchor} 收盘起算（{首个入场日} 缺基准 bar），此前不参与超额」；其余情况保留现句；(3) case (b) 建议把基准起点改为 anchor 日收盘（`bench_nav = aligned / aligned.loc[anchor]`），使 anchor 日两侧都是「收盘起算」，避免把指数当日盘中涨幅直接算成超额；(4) 补断言：`test_bench_missing_entry_bar_uses_later_open_not_previous_close` 增加 `assertIn("自 2026-01-06 起算", text)` 且 anchor 日基准净值为 1.0；`test_bench_ends_before_entry_reports_data_until_not_missing` 增加 `assertNotIn("从首个入场日开盘买入持有", text)`。验收标准：任何「基准缺入场日 bar」的状态行里，起算说明与实际 anchor 一致，同一段文案不会同时出现「尚未覆盖入场日」和「从首个入场日开盘买入持有」。
+在 nav_status_text 里按基准首个有效日归一组合：`first_idx = bench_values.index[0]; port_base = float(nav.loc[first_idx, "组合净值"]); 超额 = (port_at_bench / port_base - 1 - (bench - 1)) * 100`（anchor == start 时 first_idx=0、port_base=1.0，退回现公式，无需再分支）。并补一条 `test_excess_excludes_pre_anchor_drift`：个股在 start→anchor 期间从 10 涨到 11（anchor 之后横盘），基准从 anchor 起横盘，断言超额约 0.00pp 而非 +10pp；再加 `assertIn("此前不参与超额")` 与数值一致性断言，避免文案与数字再次脱钩。仅改 track.py 的这一段与本测试文件，不影响 case (a)/(c)。
 
 ## 历史未闭环问题
 
-- P2 · 基准缺入场日 bar 时 base 兜底口径不一致：会退化成「数据缺失」或凭空多出一日基准涨跌 · `astock/track.py:518-534`（第 2 轮）
+- P2 · 基准起算分支改了，但状态行与口径句没有跟着改：case (b)/(c) 下「沪深300 从首个入场日开盘买入持有」与实际相反 · `astock/track.py:552-555,637-648`（第 3 轮）
 
 ## 变更文件
 

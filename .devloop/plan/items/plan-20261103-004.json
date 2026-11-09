@@ -9,7 +9,7 @@
   "start": "2026-11-11",
   "due": "2026-11-14",
   "estimateH": 8,
-  "progress": 98,
+  "progress": 99,
   "acceptance": [
     "「推荐跟踪」首屏为组合净值曲线（Top5 等权 vs 沪深300）",
     "平均超额表降级到折叠区，仍可查看",
@@ -26,11 +26,11 @@
       "ADR-010"
     ],
     "branch": "feat/track-nav",
-    "commit": "13e5cea",
+    "commit": "538fd9b",
     "module": "track_ui",
-    "test": "1) pytest tests -q → 123 passed\n2) tests/test_track_nav.py -q → 26 passed\n3) mypy astock/track.py astock/track_ui.py → Success\n4) 离线冒烟 41 批/44 日 +4.34% vs 沪深300 -11.13%，超额 +15.47pp，dropped 2\n5) gr.Blocks 15 组件、两 Accordion open=False\n6) case(b) 文案「自 2026-01-06 收盘起算」、case(c) 不含「从首个入场日开盘买入持有」"
+    "test": "1) pytest tests -q → 124 passed\n2) tests/test_track_nav.py -q → 27 passed\n3) mypy astock/track.py astock/track_ui.py → Success\n4) 离线冒烟 41 批/44 日 +4.34% vs 沪深300 -11.13%，超额 +15.47pp，dropped 2\n5) gr.Blocks 15 组件、两 Accordion open=False\n6) test_excess_excludes_pre_anchor_drift → 超额 +0.00pp（case b）\n7) 文案三态断言（自 X 收盘起算 / 本次无可用数据）"
   },
   "createdAt": "2026-11-03T12:10:32.427Z",
-  "updatedAt": "2026-11-09T01:45:17.846Z",
+  "updatedAt": "2026-11-09T02:05:24.880Z",
   "devSessionId": "session-d4244044-2816-4935-bf9d-2fa6f0a87d69"
 }
