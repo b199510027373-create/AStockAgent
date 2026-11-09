@@ -1,0 +1,158 @@
+{
+  "id": "ho-20261109-024",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-002",
+  "threadId": "rev-20261109-003",
+  "sessionId": "",
+  "title": "模型网关与工具调用协议 · 结项 PR 已合并",
+  "summary": "评审线程 rev-20261109-003 第 2 轮已 approve（reviewer handoff ho-20261109-023），4 条 issue 全部 fixed。按用户要求创建并合并结项 PR #3：分支 chore/close-plan-20261107-002 仅含结项元数据（plan status=done/progress=100、评审记录、reviewer handoff、worklog/calendar），实现代码仍为 main 上的 6cf81f4 + 6450a2c。PR #3 已 merge，merge commit bc5c79f；PR CI run 42583254230 success。计划项正式关闭。",
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "依据 ADR-014 新增 astock/agent/gateway.py：ChatModel 协议 + DeepSeekAdapter + OpenAICompatibleAdapter（可指 Ollama/vLLM）+ RuleFallback。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-02",
+      "text": "统一 tool_calls 解析；对不支持 function calling 的模型退化为 JSON 协议。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-03",
+      "text": "配置全部走 .env：AGENT_PROVIDER/AGENT_MODEL/AGENT_BASE_URL/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-04",
+      "text": "业务代码禁止 import 供应商 SDK；llm.py 保留给推荐文案，先不动。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "ACC-01",
+      "text": "切换 AGENT_PROVIDER 不需要改业务代码。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-02",
+      "text": "支持 function calling 的模型走 tool_calls；不支持的走 JSON 协议。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-03",
+      "text": "无 key / 全部失败时规则兜底，流程不崩。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-04",
+      "text": "每次调用记录 provider/model/token 用量。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-05",
+      "text": "启动能力探测失败时标记 degraded 并提示。",
+      "source": "plan-20261107-002 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-002.json",
+      "summary": "状态 done、progress 100；links 增加 pr #3、mergeCommit bc5c79f、PR CI。",
+      "commit": "bc5c79f"
+    },
+    {
+      "path": ".devloop/reviews/rev-20261109-003/",
+      "summary": "评审 thread、两轮记录与 4 条 fixed issue 随结项 PR 归档。",
+      "commit": "89bc1ab"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261109-023.json",
+      "summary": "评审方第 2 轮 approve handoff。",
+      "commit": "89bc1ab"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "记录结项交付工作单元。",
+      "commit": "89bc1ab"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "记录结项状态变更与交付工作。",
+      "commit": "89bc1ab"
+    },
+    {
+      "path": "（无代码变更）",
+      "summary": "实现代码仍为 6cf81f4 + 6450a2c，未在本 PR 中改动。",
+      "commit": "6450a2c"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions CI (PR #3 head 89bc1ab)",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42583254230 / job 129046825039。"
+    },
+    {
+      "command": "pytest tests/test_agent_gateway.py -q",
+      "result": "31 passed, 1 warning",
+      "passed": true,
+      "evidence": "评审修复代码 6450a2c 本地验证。"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "189 passed, 1 warning",
+      "passed": true,
+      "evidence": "评审修复代码 6450a2c 本地验证。"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "评审修复代码 6450a2c 本地验证。"
+    },
+    {
+      "command": "GitHub Actions CI (code 6450a2c)",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42580971887。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push origin main / feature branch",
+      "reason": "结项分支与 main 均已推送 origin。",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub Pull Request 创建与合并",
+      "reason": "PR #3 已创建并 merge（merge commit bc5c79f）。",
+      "status": "granted"
+    },
+    {
+      "name": "真实 DeepSeek/Ollama/vLLM 联调",
+      "reason": "仍为离线 mock；后续集成验证项。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "bc5c79f",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/3",
+    "ci": "success: PR #3 run 42583254230; code run 42580971887",
+    "merge": "PR #3 merged; merge commit bc5c79f; branch chore/close-plan-20261107-002",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261109-022",
+  "next": "本计划项已结项。后续独立工作：app.py/UI 接线网关并在无 key 场景展示 degraded/规则兜底提示（补启动冒烟）；真实 DeepSeek 或本地 Ollama/vLLM 端到端联调；agent_runs 落库与流式输出可另立计划项。",
+  "createdAt": "2026-11-09T08:05:53.432Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-024.md"
+}

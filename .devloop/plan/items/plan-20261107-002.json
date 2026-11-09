@@ -51,9 +51,11 @@
     ],
     "commit": "6450a2c",
     "branch": "main",
-    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/42580971887"
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/3",
+    "mergeCommit": "bc5c79f",
+    "ci": "success: run 42580971887 (code 6450a2c); PR #3 run 42583254230 success"
   },
   "createdAt": "2026-11-07T14:11:58.008Z",
-  "updatedAt": "2026-11-09T08:02:28.932Z",
+  "updatedAt": "2026-11-09T08:05:44.388Z",
   "devSessionId": "session-0602def4-0be7-452c-b8b3-178e0364f1e7"
 }
