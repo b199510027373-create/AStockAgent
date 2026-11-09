@@ -1,0 +1,136 @@
+{
+  "id": "ho-20261109-015",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "交付状态更新：评审修复文档已提交（6b9d359）",
+  "summary": "补充 ho-20261109-014 的交付状态：评审修复相关 devloop 文档已提交为 6b9d359（ADR-013 实现注记、plan-20261107-001 置 in_review/progress 95、rev-20261109-002 评审线程、ho-013 reviewer handoff、ho-014 developer handoff、worklog、calendar）。代码提交仍为 e119504，代码与测试无变化；此前验证结果继续有效（目标 34 passed、全量 158 passed、mypy astock 28 files）。",
+  "requirements": [
+    {
+      "id": "R-001",
+      "text": "依据 ADR-013 在 astock/agent 实现进程内 Agent 骨架并完成验收；评审问题已按 rev-20261109-002 逐条回应。",
+      "source": "plan-20261107-001 / m00001 / m00224"
+    },
+    {
+      "id": "AC-001",
+      "text": "fake 模型可驱动 plan→act→observe 循环跑通。",
+      "source": "plan-20261107-001 验收标准 1"
+    },
+    {
+      "id": "AC-002",
+      "text": "步数上限、token 预算、超时、用户中断均可触发并返回部分结果。",
+      "source": "plan-20261107-001 验收标准 2"
+    },
+    {
+      "id": "AC-003",
+      "text": "同一 (tool,args) 连续两次触发打转保护。",
+      "source": "plan-20261107-001 验收标准 3"
+    },
+    {
+      "id": "AC-004",
+      "text": "工具参数校验失败回传给模型重试一次。",
+      "source": "plan-20261107-001 验收标准 4"
+    },
+    {
+      "id": "AC-005",
+      "text": "单测覆盖循环正常/超预算/打转/工具报错四条路径。",
+      "source": "plan-20261107-001 验收标准 5"
+    },
+    {
+      "id": "RV-ALL",
+      "text": "回应 rev-20261109-002 的 P1×1、P2×3 与两条观察项；详见 ho-20261109-014。",
+      "source": "rev-20261109-002 / ho-20261109-014"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/architecture/adr/ADR-013-agent-runtime.md",
+      "summary": "随文档提交落盘：实现注记（协作式超时/中断、artifact_missing、未知工具打转）。",
+      "commit": "6b9d359"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-001.json",
+      "summary": "随文档提交落盘：status=in_review、progress=95、links.test 34/158/mypy 28、links.commit=e119504、links.review=rev-20261109-002。",
+      "commit": "6b9d359"
+    },
+    {
+      "path": ".devloop/reviews/rev-20261109-002",
+      "summary": "新增并提交第 1 轮评审线程、4 条 issue 与 round 记录。",
+      "commit": "6b9d359"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261109-013",
+      "summary": "提交 reviewer handoff（第 1 轮 request_changes）；开发已读取核对，无新增问题。",
+      "commit": "6b9d359"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261109-014",
+      "summary": "提交本轮 developer update handoff，逐条记录评审回应、11 个新增测试与三条测试证据。",
+      "commit": "6b9d359"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "追加评审修复开发记录（34/158/mypy 28、e119504）。",
+      "commit": "6b9d359"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "追加本轮开发日历记录。",
+      "commit": "6b9d359"
+    }
+  ],
+  "tests": [
+    {
+      "command": "`.venv\\Scripts\\python.exe -m pytest tests/test_agent_runtime.py -q`",
+      "result": "34 passed, 1 warning",
+      "passed": true,
+      "evidence": "代码提交 e119504 后执行；本轮仅新增 devloop 文档，未改代码，结果不变。"
+    },
+    {
+      "command": "`.venv\\Scripts\\python.exe -m pytest tests -q`",
+      "result": "158 passed, 1 warning",
+      "passed": true,
+      "evidence": "全量测试在 danger-full-access 下通过；文档提交未触及代码。"
+    },
+    {
+      "command": "`.venv\\Scripts\\python.exe -m mypy astock`",
+      "result": "Success: no issues found in 28 source files",
+      "passed": true,
+      "evidence": "类型检查覆盖 astock/agent 6 个源文件；文档提交未触及代码。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git commit on main",
+      "reason": "已提交代码 e119504 与文档 6b9d359。",
+      "status": "granted"
+    },
+    {
+      "name": "push origin/main / 创建 PR",
+      "reason": "main 本地领先 origin/main，未 push、无 PR；需用户确认后执行。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "6b9d359",
+    "pr": "",
+    "ci": "无 CI 记录",
+    "merge": "未合并；代码提交 e119504，文档提交 6b9d359；main 本地领先 origin/main 4 个提交（本 handoff 提交后为 5），未 push",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261109-014",
+  "next": "请评审进行第 2 轮 diff 评审并全量复检 P1 iss-mw8o5r8h-9ccd42；通过后可将本项置 done。推送 main 或创建 PR 仍需用户确认，当前未 push。",
+  "createdAt": "2026-11-09T06:46:40.418Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-015.md"
+}
