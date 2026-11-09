@@ -1,57 +1,53 @@
 # PR 评审：评审：推荐跟踪：Top5 等权组合净值 vs 沪深300
 
-> 自动生成于 2026-11-09T01:25:18.913Z；可直接转交开发会话。
+> 自动生成于 2026-11-09T01:38:55.096Z；可直接转交开发会话。
 
 ## 概览
 
 - 线程：`rev-20261109-001`
 - 计划项：`plan-20261103-004`
 - 分支：`feat/track-nav` → `main`
-- 轮次：第 2 轮（diff）
+- 轮次：第 3 轮（diff）
 - 结论：需要修改（request_changes）
 - 开发会话：`session-d4244044-2816-4935-bf9d-2fa6f0a87d69`
 - 本轮问题：1（P0 0 / P1 0 / P2 1）
-- 线程未闭环：P0 0 / P1 1 / P2 5
+- 线程未闭环：P0 0 / P1 0 / P2 2
 
 ## 本轮结论
 
-第 2 轮 diff 评审（scope=diff，范围 7aca362→00c6b05，astock/track.py / astock/track_ui.py / tests/test_track_nav.py）。开发交付 ho-20261109-003 与代码逐条核对结果如下。
+第 3 轮 diff 评审（范围 00c6b05→056c7de，仅 astock/track.py + tests/test_track_nav.py 两个文件，+97/−11）。先读了开发交付 ho-20261109-003…005 与上一份评审交付 ho-20261109-004，逐条核对后结论如下。
 
-【P1 已实质修复，但线程内仍未闭环】iss-mw8jo6dd-b0f30e：交易日判定改为 [track.py:348-355](astock/track.py#L348-L355) 的 `_trading_days()`（来自 `load_trade_cal()` 的 `is_open==1`，不再拿 000300.SH 当日 bar 冒充交易日历），[track.py:466-468](astock/track.py#L466-L468) 只在「入场日不在交易日历」时剔除并给出「不是交易日」；组合日历改为已纳入批次成分股 bar 并集 ∩ 交易日历（:502-511），不再被基准更新进度截断；基准末端缺 bar 保留 NaN（:532-533）；状态行区分「不是交易日 / 入场日缺 bar / 沪深300 数据截至 X，超额只算到该日」，超额改用共同有效日上的 `port_at_bench` 计算。对应三条新用例（test_batch_on_non_trading_day_is_dropped、test_missing_bench_bar_on_entry_keeps_batch、test_nav_extends_when_benchmark_lags_tail）+ 离线冒烟「dropped 2，最新批次保留」足以证明现场问题消失。技术上我认可这条 P1 已解决。
+【本轮重点一：基准起算三分支 —— 成立】[track.py:528-555](astock/track.py#L528-L555) 按「入场日有 bar / 入场日缺 bar 但其后有 bar / 入场日及其后都无 bar」分别取 anchor：有 bar 时 anchor=first_entry 且 base 为开盘；缺失但后续有 bar 时 anchor=其后首根 bar、`aligned.where(calendar >= anchor)` 把之前置 NaN；都无 bar 时 base=最后有效收盘、`calendar <= bench_last` 令整列 NaN。`bench_last` 写入 `nav.attrs` 供状态行用（:604、:637-643）。我手算了新用例：旧实现在 2026-01-05 会是 10/12=0.833、01-06 是 1.0，新实现是 NaN 与 12/10=1.2，断言确实能区分新旧路径，不是复述实现的空断言。「基准止于入场日前」用例同时校验了 dropped 为空、nav 覆盖全 6 日、沪深300 全 NaN、文案含「数据截至 2026-01-02」「尚未覆盖入场日」且不含「数据缺失」，与 :642 的 attrs 分支一一对应。
 
-【4 条 P2 的处置核对】iss-mw8jodh9-e76932 已修（:555-560 值级 `ffill` + `ratio.fillna(1.0)`，test_nan_close_carries_previous_close_without_reweighting 断言 1.0 / 1.04）；iss-mw8jogea-70f60f 已修（[track_ui.py:27-35](astock/track_ui.py#L27-L35) 净值段单独 try/except，test_run_track_survives_nav_failure 断言 6 项输出 + 「失败/boom」+ 分组统计仍在）；iss-mw8jopos-909fec 已修（test_build_track_tab_folds_excess_tables_below_nav 断言净值 Plot 在两个 `open=False` Accordion 之前、折叠区含三张表标签）；上一轮未立单的文案矛盾也已修（`nav_status_text` 仅在 `has_nav` 时追加「原持仓延续到下一批」，并拆成两条用例）。iss-mw8joahc-4fc16e 只算部分修复，见下。
+【本轮重点二：部分行缺排名 —— 已修】[track.py:388-395](astock/track.py#L388-L395) 在 `sort_values("_order").head(top_n)` 之前先 `rows = rows[rows["_order"].notna()]`，无排名行不再按文件行序占位；`len(codes) < top_n` 仍记「成分不足 Top5（仅 N 只）」并整批剔除。`test_partial_rank_does_not_fill_top5_with_unranked_rows`（[tests/test_track_nav.py:252-273](tests/test_track_nav.py#L252-L273)）覆盖了 8 行仅 2 行有排名（只取 P1/P2 + 记「仅 2 只」）与 5 行有排名（取满 P1..P5、无 skip_reason）两种情形，正是上一轮指出的漏洞。采用「过滤而非用综合分补位」的处置我认可：同批排名由同一次推荐产生，部分缺失属数据损坏，整批剔除比混入推测成分更符合「口径可解释」；整列缺排名时仍保留综合分兜底，两种路径语义不同但都写清了原因。
 
-【仍存在的问题】
-1. P2（本轮新立，iss-mw8kwygq-0717cf，[track.py:518-534](astock/track.py#L518-L534)）：基准缺入场日 bar 时的 base 兜底口径不一致——取「入场日之后第一根 bar 的收盘」做基，而入场日取 ffill 前收，导致要么整列退化成「沪深300 数据缺失，仅显示组合」（首批次入场日＝今天、指数未更新时的实际路径），要么凭空多出一日基准涨跌并把误差带进超额。需按「有入场日 bar / 其后有 bar / 其后无 bar」三分支处理，并补两条用例。
-2. iss-mw8joahc-4fc16e 的残留（保持该条 open，不另立新单）：[track.py:378-393](astock/track.py#L378-L393) 只在「整批排名全为 NaN」时切换到综合分兜底、只在「入选后不足 5 只」时剔除；若一批 8 行里只有 2 行有排名，`sort_values("_order", na_position="last").head(5)` 会把 3 行无排名的按文件行序补进 Top5，`len(codes)==5` 通过校验，对外仍宣称「Top5 等权」。修法：`head()` 前先 `rows = rows[rows["_order"].notna()]`（无排名行不得占用 Top5 名额），或改成两键排序（有排名者按排名升序在前，无排名者按综合分降序排在其后且不进入前 top_n），不足则记 dropped。
+【6 条历史 issue 逐条核对（全部有代码+测试证据）】P1 iss-mw8jo6dd（交易日历判定、组合日历取成分股并集、基准末端 NaN、超额只在共同有效日）已修并有三条用例；iss-mw8jodh9（值级 ffill + `ratio.fillna(1.0)`）已修；iss-mw8jogea（run_track 净值段 try/except）已修；iss-mw8jopos（build_track_tab 折叠区结构断言）已修；iss-mw8joahc 本轮补齐残留并有用例；iss-mw8kwygq 的三分支与两条用例本轮补齐。测试文件现为 26 个 `def test_`（我逐行数过，与 links.test 的 26 passed 一致），全量 123 passed、mypy Success、离线冒烟 41 批/44 日且数值与上一轮一致，证据链完整，无「声称已修但代码未改」的情况。
 
-【流程闭环缺口（不记 issue，但阻断 approve）】线程内 5 条 issue 的 `feedback` 全部为空（get 显示 feedback=null、fixed=0），评审侧没有「关闭 issue」的入口，所以工具仍统计 openP1=1 / openP2=4。请开发在 rev-20261109-001 上逐条填真实反馈（已修复并指向 00c6b05 / 换方案 / 延后 / 不采纳）；若当前工具不允许回填上一轮，就在下一次 update handoff 里给出「issue id → 状态 + 证据」对照表，我以该对照表判定闭环。否则即使代码全对，finish 也无法把线程判为完全解决。
+【仍存在的问题：1 条 P2】iss-mw8lei8u-2f0ca8（[track.py:552-555,645-648](astock/track.py#L645-L648)）：起算逻辑改了，文案没跟着改。[track.py:645-648](astock/track.py#L645-L648) 仍无条件拼接「沪深300 从首个入场日开盘买入持有」，而 case (b) 实际从 anchor 开盘起算、case (c) 根本没有基准线——case (c) 正是最常见的「今天入场、指数 bar 未生成」，此时同一段文字里「沪深300 数据截至 X，尚未覆盖入场日」与「从首个入场日开盘买入持有」互相矛盾；case (b) 也没有「基准自 X 起算」的说明（只有 `last_bench_date < end` 才提示末端，:632-635）。另建议 case (b) 的基准从 anchor 日**收盘**起算，避免把指数当日盘中涨幅直接算成一天超额。补 attrs 里的 anchor + 条件化口径句 + 两条断言即可，改法已写在该 issue 的 suggestion 里。
 
-【结论】verdict=request_changes（本轮 openP0=0、openP1=0（新增）、openP2=1）。P0 无；P1 技术层面已验证修复，不要求改代码。完全解决的判定条件：由开发在 feat/track-nav 上处理 iss-mw8kwygq-0717cf 与 iss-mw8joahc-4fc16e 的残留（含两条基准起算点用例、一条「部分行缺排名」用例），并在线程或 handoff 中回填 5 条 issue 的反馈；下一轮 diff 评审确认 openP1=openP2=0 后我给 approve 并标记完全解决。合并前请开 PR 跑远端 CI（本轮仅本地 120 passed，在线真数据冒烟因 Tushare 端点 read timeout 未执行，属环境限制，不作为问题记录）。
+【流程记账】iss-mw8joahc-4fc16e 在线程里的最新反馈是 `deferred`（`effective=false`，覆盖了此前的 `fixed`），但交付表与本轮代码都表明它已修（:390 + 用例 + 5 行有排名取满 5 只）。请开发在下次 update 时把它改回 `fixed`，或写明延后的具体后续项（例如「后续想让部分缺排名的批次用综合分补位」），否则线程会长期挂一个 deferred 计数，plan 关闭时说不清。
+
+【结论】verdict=request_changes（本轮 openP0=0、openP1=0、openP2=1）。P0/P1 均无，6 条历史 issue 已全部有代码与测试证据，剩余只有 1 条文案口径 P2。完全解决的判定条件：开发在 feat/track-nav 上处理 iss-mw8lei8u-2f0ca8（anchor 写入 attrs、口径句条件化、case (b) 改收盘起算、补两条断言），并把 iss-mw8joahc 的状态改回 fixed 或说明延后项；下一轮 diff 评审确认 openP2=0（且 deferred 有明确解释）后我给 approve 并标记完全解决。合并前仍需开 PR 跑远端 CI（当前只有本地 123 passed，delivery.status=branch-ready；在线冒烟因 Tushare read timeout 未执行，属环境限制，不记问题）。
 
 ## 本轮问题
 
-### P2 · 基准缺入场日 bar 时 base 兜底口径不一致：会退化成「数据缺失」或凭空多出一日基准涨跌
+### P2 · 基准起算分支改了，但状态行与口径句没有跟着改：case (b)/(c) 下「沪深300 从首个入场日开盘买入持有」与实际相反
 
-- 位置：`astock/track.py:518-534`
+- 位置：`astock/track.py:552-555,637-648`
 - 状态：未闭环
 - 置信度：0.7
 
 **证据**
 
-P1 的修复主体成立（交易日判定改用 `_trading_days`、组合日历改成分股并集、基准末端留 NaN、状态行区分「不是交易日／缺 bar／数据截至 X」），但 [track.py:518-534](astock/track.py#L518-L534) 新增的 base 兜底口径有问题。`base = _frame_price(bench_bars, first_entry)`（开盘）与 `base = _frame_price(..., "close")` 都取不到时，代码用 `later = bench_close[bench_close.index >= first_entry]` → `base = float(later.iloc[0])`，即拿「入场日之后第一根基准 bar 的收盘」当起点，而 `aligned` 在入场日取的是 `ffill` 出来的前收。两个后果：(1) 最常见场景——首批次入场日就是今天、指数当日 bar 还没生成（就是本轮 P1 要解决的那个现场）：`later` 为空 → `base` 仍为 None → `bench_nav` 整体为 None → 全列 NaN，`nav_status_text` 走到 `parts.append("沪深300 数据缺失，仅显示组合")`（[track.py:620](astock/track.py#L620) 附近），把「指数落后一天」说成「数据缺失」，交付文档里「沪深300 最后有效 2026-11-06 并在状态行注明」在这一路径下不会出现；(2) 若入场日只是中间缺一根 bar、其后又有 bar（缓存空洞），则入场日基准净值 = 前收 / 后收 ≠ 1，凭空造出一段基准涨跌并直接进入 `超额`，而组合侧是以入场日开盘为基，两侧口径不一致。`test_missing_bench_bar_on_entry_keeps_batch` 用的 bench 从入场日+1 开始、入场日之前没有 bar，`aligned` 在入场日必然是 NaN，因此恰好绕过了这两条路径，没有覆盖「基准有更早数据但缺入场日」。
+三分支实现本身成立，我逐条核对了 [track.py:528-555](astock/track.py#L528-L555)：(a) 入场日有 bar → anchor=first_entry、base=开盘；(b) 入场日缺 bar、其后有 bar → anchor=其后首根 bar 的开盘，且 `aligned.where(calendar >= anchor)` 把 anchor 之前的日期置 NaN；(c) 入场日及其后都无 bar → base=最后有效收盘、`calendar <= bench_last` 使整列 NaN，状态行走「数据截至 X，尚未覆盖入场日」。两条新用例确实能区分旧实现（旧代码下 2026-01-05 会是 10/12=0.833、01-06 是 1.0，新实现是 NaN 与 1.2）。问题在文案层没有同步：(1) [track.py:645-648](astock/track.py#L645-L648) 是一句**无条件拼接**的固定口径「沪深300 从首个入场日开盘买入持有」，而 case (b) 实际是从 anchor 日开盘起算、case (c) 干脆没有基准数据；case (c) 恰恰是最常见的现场（首个入场日＝今天、当日指数 bar 未生成），此时上下文同时出现「沪深300 数据截至 2026-11-06，尚未覆盖入场日」与「沪深300 从首个入场日开盘买入持有」，两句互相矛盾。(2) case (b) 下基准线比组合线晚开始，但状态行只在 `last_bench_date < end` 时才提示（[track.py:632-635](astock/track.py#L632-L635)），`last_bench_date == end` 时完全没有任何「基准自 X 起算」的说明，读者会把两条线当成同一天起算，而 ADR-010 把这条曲线定为对外唯一指标，起点口径必须自洽。(3) `nav.attrs["bench_last"]` 只记了末端，没有记 anchor，所以文案层拿不到「起算日晚于首个入场日」这一事实。(4) 两条新用例只断言 `assertNotIn("数据缺失", text)`（[tests/test_track_nav.py:218-250](tests/test_track_nav.py#L218-L250)），没有断言起算说明，因此这个不一致不会被测试拦住。附带一点同源风险：case (b) 的 anchor 日基准净值取的是 open→close 的一日收益（新用例里 1.2），而组合在 anchor 日走的是「入场日收盘 → anchor 日收盘」，两侧当天收益窗口不同，会凭空产生一天的单边超额；当日缺 bar 时应把基准从 anchor 日**收盘**起算更公平。
 
 **建议**
 
-把「基准起算点」单独算清楚，三种情况分别处理：(a) 入场日有基准 bar → 现状不变（open 为基、close 归一，与组合同口径）；(b) 入场日无 bar 但其后第一根 bar 存在 → 以该 bar 的**开盘**为基（或直接把该日净值设为 1.0），入场日到该日之间留 NaN，不要用前收除以基；(c) 入场日及其后都没有 bar → 用最后有效收盘做基，并对 `calendar > 最后有效日` 全部留 NaN（现状的 `.where` 已做到），状态行写「沪深300 数据截至 X，尚未覆盖入场日」，绝对不能落到「沪深300 数据缺失」。配套补两条用例：`bench` 覆盖到入场日前一天、入场日及其后无 bar → nav 的「沪深300净值」有值到该日、其后 NaN，状态行含「数据截至」且不含「数据缺失」；`bench` 在入场日缺一根、次日及以后有 bar → 入场日基准净值为 NaN（或 1.0）而**不是**前收/后收，且该日超额不被计入。验收标准：任何「基准缺入场日 bar」的组合下，状态行只会出现「数据截至／尚未覆盖」，不会出现「数据缺失」或凭空的一日基准涨跌。
+让文案与起算口径同源：(1) 在 `portfolio_nav` 里把 anchor 也写进 attrs（`nav.attrs["bench_anchor"] = anchor`，case (c) 为 None、`bench_last` 已有）；(2) `nav_status_text` 里把固定的口径句改成条件化——`len(bench_values)==0` 时输出「沪深300 本次无可用数据，不展示基准与超额」而不是「从首个入场日开盘买入持有」；`bench_anchor` 非空且 `bench_anchor > nav["交易日"].iloc[0]` 时补一句「沪深300 自 {bench_anchor} 收盘起算（{首个入场日} 缺基准 bar），此前不参与超额」；其余情况保留现句；(3) case (b) 建议把基准起点改为 anchor 日收盘（`bench_nav = aligned / aligned.loc[anchor]`），使 anchor 日两侧都是「收盘起算」，避免把指数当日盘中涨幅直接算成超额；(4) 补断言：`test_bench_missing_entry_bar_uses_later_open_not_previous_close` 增加 `assertIn("自 2026-01-06 起算", text)` 且 anchor 日基准净值为 1.0；`test_bench_ends_before_entry_reports_data_until_not_missing` 增加 `assertNotIn("从首个入场日开盘买入持有", text)`。验收标准：任何「基准缺入场日 bar」的状态行里，起算说明与实际 anchor 一致，同一段文案不会同时出现「尚未覆盖入场日」和「从首个入场日开盘买入持有」。
 
 ## 历史未闭环问题
 
-- P1 · 基准 bar 缺失被当成“非交易日”剔除最新批次，净值又被基准日历截断 · `astock/track.py:423-424,460-461`（第 1 轮）
-- P2 · 批次成分数与排名缺失未校验，仍按“Top5 等权”对外 · `astock/track.py:354-356,441-445`（第 1 轮）
-- P2 · 个股 close 为 NaN 时当日权重被静默重分配，与 docstring 的“收益记 0”不符 · `astock/track.py:494-500`（第 1 轮）
-- P2 · run_track 无异常隔离，净值段失败会连带丢掉已算好的表格 · `astock/track_ui.py:25-44`（第 1 轮）
-- P2 · 验收 #2（超额表降级到折叠区）缺少可复核证据 · `astock/track_ui.py:67-74`（第 1 轮）
+- P2 · 基准缺入场日 bar 时 base 兜底口径不一致：会退化成「数据缺失」或凭空多出一日基准涨跌 · `astock/track.py:518-534`（第 2 轮）
 
 ## 变更文件
 
