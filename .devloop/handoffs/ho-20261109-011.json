@@ -126,7 +126,7 @@
     "commit": "9b5b026",
     "pr": "",
     "ci": "本地全量 pytest 124 passed（合并后 main）；远端 CI 未运行（未开 PR，按用户指示自行合并）",
-    "merge": "已合并到 main（9b5b026）",
+    "merge": "已合并到 main（9b5b026）并推送 origin/main（7aa2ced）",
     "status": "merged"
   },
   "review": {
@@ -262,7 +262,7 @@
     }
   ],
   "previousHandoffId": "ho-20261109-009",
-  "next": "任务已关闭（plan-20261103-004=done）。如需远端同步，推送 main 并在 GitHub 上确认合并提交 9b5b026；远端 CI 尚未配置/运行。后续若用户要求看真实当日数据，收盘后 index_daily 有 2026-11-09 bar 时再跑一次在线冒烟即可。",
+  "next": "任务已关闭（plan-20261103-004=done），main 已推送 origin/main（7aa2ced），合并提交 9b5b026 已上远端；远端 CI 尚未配置/运行。后续若用户要求看真实当日数据，收盘后 index_daily 有 2026-11-09 bar 时再跑一次在线冒烟即可。",
   "createdAt": "2026-11-09T02:23:00.000Z",
   "markdownPath": ".devloop/handoffs/ho-20261109-011.md"
 }
