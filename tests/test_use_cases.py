@@ -258,6 +258,15 @@ class HistoryRecommendationTests(unittest.TestCase):
         self.assertIn("台账里还没有推荐记录", result.message)
         self.assertEqual(result.payload["table"].empty, True)
 
+    def test_ledger_read_error_is_failed(self):
+        with patch.object(
+            use_cases.ledger, "latest_run", side_effect=RuntimeError("db locked")
+        ):
+            result = use_cases.run_recommendation(mode="latest")
+        self.assertEqual(result.status, "failed")
+        self.assertIn("读取台账失败：RuntimeError: db locked", result.message)
+        self.assertIn("❌", result.payload["status_text"])
+
     def test_unknown_run_id_is_failed(self):
         with patch.object(use_cases.ledger, "get_run", return_value=None):
             result = use_cases.run_recommendation(mode="run", run_id="missing")

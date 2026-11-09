@@ -27,16 +27,16 @@
       "ADR-003"
     ],
     "test": [
-      "pytest tests\\test_use_cases.py -q -> 24 passed (2 subtests)",
+      "pytest tests\\test_use_cases.py -q -> 25 passed (2 subtests)",
       "pytest tests\\test_core_paths.py tests\\test_track_nav.py tests\\test_contracts.py tests\\test_hardening.py -q -> 94 passed",
-      "pytest tests -q -> 213 passed (2 warnings: anyio deprecation, .pytest_cache WinError 5)",
+      "pytest tests -q -> 214 passed (2 warnings: anyio deprecation, .pytest_cache WinError 5)",
       "mypy astock -> Success: no issues found in 30 source files"
     ],
     "module": "use_cases",
     "branch": "feat/plan-20261103-002-runresult"
   },
   "createdAt": "2026-11-03T12:10:27.414Z",
-  "updatedAt": "2026-11-09T15:39:03.446Z",
+  "updatedAt": "2026-11-09T16:55:58.322Z",
   "deps": [
     "plan-20261103-001"
   ],

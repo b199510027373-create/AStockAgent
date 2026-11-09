@@ -395,7 +395,12 @@ def run_recommendation(
             )
         return _generate_view(rec, now=now)
 
-    run = ledger.latest_run() if mode == "latest" else ledger.get_run(str(run_id))
+    try:
+        run = ledger.latest_run() if mode == "latest" else ledger.get_run(str(run_id))
+    except Exception as exc:  # noqa: BLE001 - 台账故障也走统一 failed 诊断
+        return _failed_recommendation(
+            f"读取台账失败：{type(exc).__name__}: {exc}", reason="ledger_error"
+        )
     if not run:
         message = (
             "台账里还没有推荐记录。先运行一次生成，或执行 `python -m astock.ledger sync`。"
