@@ -1,0 +1,17 @@
+{
+  "id": "rev-20261109-001",
+  "title": "评审：推荐跟踪：Top5 等权组合净值 vs 沪深300",
+  "planItemId": "plan-20261103-004",
+  "sourceDevSessionId": "session-d4244044-2816-4935-bf9d-2fa6f0a87d69",
+  "branch": "feat/track-nav",
+  "base": "main",
+  "files": [
+    "astock/track.py",
+    "astock/track_ui.py",
+    "tests/test_track_nav.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-09T00:34:48.504Z",
+  "updatedAt": "2026-11-09T02:08:34.350Z",
+  "reviewSessionId": "session-7d8f0635-33ba-4ba0-984b-06eda6b276d1"
+}

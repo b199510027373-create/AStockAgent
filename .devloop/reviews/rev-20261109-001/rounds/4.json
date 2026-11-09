@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261109-001-r4",
+  "threadId": "rev-20261109-001",
+  "roundNo": 4,
+  "scope": "diff",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 4 轮 diff 评审（056c7de→13e5cea，仅 astock/track.py + tests/test_track_nav.py）。\n\n交付覆盖核对：ho-20261109-007 的 requirements/changes/tests/delivery 四项齐全，与 commit 13e5cea 实际改动一致（track.py 三分支收紧 + nav_status_text 三态口径句；tests 两例更新）。links.test 6 条与交付表一致：26 passed / 123 passed / mypy Success / 离线冒烟 41 批 44 日 dropped 2 / gr.Blocks 15 组件两 Accordion open=False / case(b)(c) 文案断言。\n\n已修并逐条验证：\n- iss-mw8lei8u-2f0ca8（第 3 轮唯一 open P2）——已修复。track.py:516-518/608 写 nav.attrs[\"bench_anchor\"]；:531-536 case (a)/(b) 分派，:544-550 case (b) 先 aligned.where(calendar >= anchor) 再以 anchor 收盘为基，anchor 日净值 = 1.0（旧实现 1.2 的口径偏差消失）；:654-662 口径句三态化，case (c) 走「本次无可用数据，不展示基准与超额」，case (b) 走「自 X 收盘起算，此前不参与超额」，case (a) 保留「从首个入场日开盘买入持有」。tests/test_track_nav.py:218-235、:237-251 的断言已能区分三态（1.0 vs 1.2、assertIn 起算句、assertNotIn 旧口径句），不再是只断言「不含数据缺失」的空断言。请在 handoff 或线程 feedback 里把 iss-mw8lei8u-2f0ca8 置为 fixed，评审侧无关闭入口。\n- 其余 6 条（含 iss-mw8joahc-4fc16e）代码与用例仍成立，未回归；iss-mw8joahc 线程内状态仍显示 deferred，请开发在下一份 handoff 里一并改回 fixed（本轮已核对 :390 过滤 + 对应用例，判定已修）。\n\n本轮新增 1 条 P2：iss-mw8m51bp-dd9930——case (b) 下超额两侧起点不同（bench 从 anchor 收盘重置为 1.0，组合仍从首个入场日起算），把 start→anchor 的组合涨跌算进了超额，而新增文案恰恰承诺「此前不参与超额」；现有用例个股价格恒为 10，测不出该偏差。修法：nav_status_text 按 bench_values.index[0] 归一组合净值后再算超额，并补 test_excess_excludes_pre_anchor_drift。\n\n结论：仍有 1 条 P2 未闭环，本轮 request_changes。由开发在 feat/track-nav 按 iss-mw8m51bp-dd9930 修改 astock/track.py:630-636 的超额归一逻辑并补 1 条用例、把 iss-mw8lei8u/iss-mw8joahc 状态回填为 fixed 后，进入第 5 轮 diff 评审；第 5 轮确认 openP2=0（或仅剩已书面延后的项）且 openP0=0/openP1=0 时我再 approve 并标记完全解决。合并前仍需开 PR 跑远端 CI（当前 delivery.status=branch-ready，仅本地 123 passed）。",
+  "startedAt": "2026-11-09T01:58:03.046Z",
+  "finishedAt": "2026-11-09T01:59:30.690Z",
+  "rulesVersion": "v1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 1,
+    "total": 1
+  }
+}

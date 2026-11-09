@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261109-001-r1",
+  "threadId": "rev-20261109-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮全量评审（scope=full）完成，范围 astock/track.py、astock/track_ui.py、tests/test_track_nav.py 三个文件的 diff 与 14 个新增用例、links.test 全部证据。架构侧无违规：ARCH-01/ARCH-02 未被破坏（track_ui 只做装配与渲染，指标与统计全部在 track.py/ stats 内），STAT-01 未新增 p 值路径，DATA-03 的入场口径经核对成立——astock/track.py:255 的 `tradable = pd.Timestamp(tradable_raw) if tradable_raw else next_open_date(as_of_ts)` 保证 detail 的入场日恒为 tradable_from 或 next_open_date，不存在用推荐日开盘入场的前视；批次链式拼接（nav_base 传递、ratio 以入场日开盘为基）数学正确，首行非 1.0 系与沪深300同口径所致，非遗漏。首屏结构符合 ADR-010 决策 3：nav_chart 首屏第一块、平均超额表与显著性、逐条记录进入两个默认收起的 Accordion。\n\n结论：不通过（request_changes）。openP0=0，openP1=1，openP2=4。\n\n必须修复（P1，iss-mw8jo6dd-b0f30e，astock/track.py:423-424、460-461）：基准 bar 缺失被当作「非交易日」处理，直接导致最新批次被剔除、且净值被基准日历截断。开发自己的真数据冒烟（42 批次/443 日、剔除 1 批 2026-11-09）就是这条缺陷的现场证据——2026-11-09 是周一交易日，只是当日基准 bar 尚未生成，文案「不是沪深300交易日」是事实错误；同时首屏最新批次永远不会出现，净值也止于基准最后一天，与验收 #1/#3「净值随批次更新、缺 bar 的批次剔除并提示」的意图冲突。修法：交易日判定改用交易日历（data 层的交易日序列）或成分股 bar 是否存在的组合，而不是「是否在 bench_dates 里」；bench 在区间末端缺 bar 时保留批次、沪深300 列末端留 NaN 并在状态行注明「沪深300 数据截至 X 日」，超额只在共同有效日计算。需补两条测试：基准日历落后于个股日历（末段缺 bar）时批次仍保留且组合线延续到最新交易日；基准缺失区间内仍能算出组合净值。\n\n应修（P2，4 条，下一轮请逐条回应）：\n- iss-mw8joahc-4fc16e（astock/track.py:354-356,441-445）批次成分数与排名缺失未校验却仍按「Top5 等权」对外；\n- iss-mw8jodh9-e76932（astock/track.py:494-500）close 为 NaN 时当日权重被静默重分配，与 docstring「收益记 0」不符；\n- iss-mw8jogea-70f60f（astock/track_ui.py:25-44）run_track 无异常隔离，净值段异常会连带丢掉已算好的 summary/significance/detail；\n- iss-mw8jopos-909fec（astock/track_ui.py:67-74）验收 #2「折叠但可查看」缺少可复核证据（结构断言或手工验证记录二选一）。\n\n另有两点本轮因「同一文件 P2 上限 2 条」未能立单，请在修 P1 时一并处理：(1) nav_status_text 在「全部批次被剔除 / nav 为空」或「首个批次被剔」时仍无条件输出「原持仓延续到下一批」，与 :525-526 的「暂无可拼接的批次」自相矛盾，且括注固定写「入场日缺 bar」与 :424 的「不是沪深300交易日」是两套说法，test_status_text_mentions_dropped_batches 把该文案固定住了；(2) 建议把该用例拆为「nav 为空 + dropped 非空」（断言不出现「原持仓延续」）与「nav 非空 + dropped 非空」两条。\n\n何时判定完全解决：由开发在 feat/track-nav 上修完上述 P1 并回应 4 条 P2（至少给出处置结论：修或说明不修的理由），下一轮 diff 评审中 P1 的修复被两条新测试覆盖、真数据冒烟不再出现「最新批次因基准未生成被剔除」且状态行正确区分缺 bar 与非交易日，openP1 与 openP2 归零后，我才会给出 approve 并标记完全解决。",
+  "startedAt": "2026-11-09T00:34:48.660Z",
+  "finishedAt": "2026-11-09T00:51:08.551Z",
+  "rulesVersion": "v1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 4,
+    "total": 5
+  }
+}

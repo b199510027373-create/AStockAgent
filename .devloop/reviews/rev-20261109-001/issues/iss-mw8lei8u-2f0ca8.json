@@ -1,0 +1,33 @@
+{
+  "id": "iss-mw8lei8u-2f0ca8",
+  "threadId": "rev-20261109-001",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/track.py",
+  "lines": "552-555,637-648",
+  "title": "基准起算分支改了，但状态行与口径句没有跟着改：case (b)/(c) 下「沪深300 从首个入场日开盘买入持有」与实际相反",
+  "evidence": "三分支实现本身成立，我逐条核对了 [track.py:528-555](astock/track.py#L528-L555)：(a) 入场日有 bar → anchor=first_entry、base=开盘；(b) 入场日缺 bar、其后有 bar → anchor=其后首根 bar 的开盘，且 `aligned.where(calendar >= anchor)` 把 anchor 之前的日期置 NaN；(c) 入场日及其后都无 bar → base=最后有效收盘、`calendar <= bench_last` 使整列 NaN，状态行走「数据截至 X，尚未覆盖入场日」。两条新用例确实能区分旧实现（旧代码下 2026-01-05 会是 10/12=0.833、01-06 是 1.0，新实现是 NaN 与 1.2）。问题在文案层没有同步：(1) [track.py:645-648](astock/track.py#L645-L648) 是一句**无条件拼接**的固定口径「沪深300 从首个入场日开盘买入持有」，而 case (b) 实际是从 anchor 日开盘起算、case (c) 干脆没有基准数据；case (c) 恰恰是最常见的现场（首个入场日＝今天、当日指数 bar 未生成），此时上下文同时出现「沪深300 数据截至 2026-11-06，尚未覆盖入场日」与「沪深300 从首个入场日开盘买入持有」，两句互相矛盾。(2) case (b) 下基准线比组合线晚开始，但状态行只在 `last_bench_date < end` 时才提示（[track.py:632-635](astock/track.py#L632-L635)），`last_bench_date == end` 时完全没有任何「基准自 X 起算」的说明，读者会把两条线当成同一天起算，而 ADR-010 把这条曲线定为对外唯一指标，起点口径必须自洽。(3) `nav.attrs[\"bench_last\"]` 只记了末端，没有记 anchor，所以文案层拿不到「起算日晚于首个入场日」这一事实。(4) 两条新用例只断言 `assertNotIn(\"数据缺失\", text)`（[tests/test_track_nav.py:218-250](tests/test_track_nav.py#L218-L250)），没有断言起算说明，因此这个不一致不会被测试拦住。附带一点同源风险：case (b) 的 anchor 日基准净值取的是 open→close 的一日收益（新用例里 1.2），而组合在 anchor 日走的是「入场日收盘 → anchor 日收盘」，两侧当天收益窗口不同，会凭空产生一天的单边超额；当日缺 bar 时应把基准从 anchor 日**收盘**起算更公平。",
+  "suggestion": "让文案与起算口径同源：(1) 在 `portfolio_nav` 里把 anchor 也写进 attrs（`nav.attrs[\"bench_anchor\"] = anchor`，case (c) 为 None、`bench_last` 已有）；(2) `nav_status_text` 里把固定的口径句改成条件化——`len(bench_values)==0` 时输出「沪深300 本次无可用数据，不展示基准与超额」而不是「从首个入场日开盘买入持有」；`bench_anchor` 非空且 `bench_anchor > nav[\"交易日\"].iloc[0]` 时补一句「沪深300 自 {bench_anchor} 收盘起算（{首个入场日} 缺基准 bar），此前不参与超额」；其余情况保留现句；(3) case (b) 建议把基准起点改为 anchor 日收盘（`bench_nav = aligned / aligned.loc[anchor]`），使 anchor 日两侧都是「收盘起算」，避免把指数当日盘中涨幅直接算成超额；(4) 补断言：`test_bench_missing_entry_bar_uses_later_open_not_previous_close` 增加 `assertIn(\"自 2026-01-06 起算\", text)` 且 anchor 日基准净值为 1.0；`test_bench_ends_before_entry_reports_data_until_not_missing` 增加 `assertNotIn(\"从首个入场日开盘买入持有\", text)`。验收标准：任何「基准缺入场日 bar」的状态行里，起算说明与实际 anchor 一致，同一段文案不会同时出现「尚未覆盖入场日」和「从首个入场日开盘买入持有」。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T02:01:05.789Z"
+  },
+  "createdAt": "2026-11-09T01:38:43.038Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T02:01:05.789Z"
+    }
+  ]
+}

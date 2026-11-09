@@ -1,0 +1,41 @@
+{
+  "id": "ho-20261109-006",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261109-001",
+  "sessionId": "",
+  "title": "评审：推荐跟踪：Top5 等权组合净值 vs 沪深300",
+  "summary": "第 3 轮 diff 评审（范围 00c6b05→056c7de，仅 astock/track.py + tests/test_track_nav.py 两个文件，+97/−11）。先读了开发交付 ho-20261109-003…005 与上一份评审交付 ho-20261109-004，逐条核对后结论如下。\n\n【本轮重点一：基准起算三分支 —— 成立】[track.py:528-555](astock/track.py#L528-L555) 按「入场日有 bar / 入场日缺 bar 但其后有 bar / 入场日及其后都无 bar」分别取 anchor：有 bar 时 anchor=first_entry 且 base 为开盘；缺失但后续有 bar 时 anchor=其后首根 bar、`aligned.where(calendar >= anchor)` 把之前置 NaN；都无 bar 时 base=最后有效收盘、`calendar <= bench_last` 令整列 NaN。`bench_last` 写入 `nav.attrs` 供状态行用（:604、:637-643）。我手算了新用例：旧实现在 2026-01-05 会是 10/12=0.833、01-06 是 1.0，新实现是 NaN 与 12/10=1.2，断言确实能区分新旧路径，不是复述实现的空断言。「基准止于入场日前」用例同时校验了 dropped 为空、nav 覆盖全 6 日、沪深300 全 NaN、文案含「数据截至 2026-01-02」「尚未覆盖入场日」且不含「数据缺失」，与 :642 的 attrs 分支一一对应。\n\n【本轮重点二：部分行缺排名 —— 已修】[track.py:388-395](astock/track.py#L388-L395) 在 `sort_values(\"_order\").head(top_n)` 之前先 `rows = rows[rows[\"_order\"].notna()]`，无排名行不再按文件行序占位；`len(codes) < top_n` 仍记「成分不足 Top5（仅 N 只）」并整批剔除。`test_partial_rank_does_not_fill_top5_with_unranked_rows`（[tests/test_track_nav.py:252-273](tests/test_track_nav.py#L252-L273)）覆盖了 8 行仅 2 行有排名（只取 P1/P2 + 记「仅 2 只」）与 5 行有排名（取满 P1..P5、无 skip_reason）两种情形，正是上一轮指出的漏洞。采用「过滤而非用综合分补位」的处置我认可：同批排名由同一次推荐产生，部分缺失属数据损坏，整批剔除比混入推测成分更符合「口径可解释」；整列缺排名时仍保留综合分兜底，两种路径语义不同但都写清了原因。\n\n【6 条历史 issue 逐条核对（全部有代码+测试证据）】P1 iss-mw8jo6dd（交易日历判定、组合日历取成分股并集、基准末端 NaN、超额只在共同有效日）已修并有三条用例；iss-mw8jodh9（值级 ffill + `ratio.fillna(1.0)`）已修；iss-mw8jogea（run_track 净值段 try/except）已修；iss-mw8jopos（build_track_tab 折叠区结构断言）已修；iss-mw8joahc 本轮补齐残留并有用例；iss-mw8kwygq 的三分支与两条用例本轮补齐。测试文件现为 26 个 `def test_`（我逐行数过，与 links.test 的 26 passed 一致），全量 123 passed、mypy Success、离线冒烟 41 批/44 日且数值与上一轮一致，证据链完整，无「声称已修但代码未改」的情况。\n\n【仍存在的问题：1 条 P2】iss-mw8lei8u-2f0ca8（[track.py:552-555,645-648](astock/track.py#L645-L648)）：起算逻辑改了，文案没跟着改。[track.py:645-648](astock/track.py#L645-L648) 仍无条件拼接「沪深300 从首个入场日开盘买入持有」，而 case (b) 实际从 anchor 开盘起算、case (c) 根本没有基准线——case (c) 正是最常见的「今天入场、指数 bar 未生成」，此时同一段文字里「沪深300 数据截至 X，尚未覆盖入场日」与「从首个入场日开盘买入持有」互相矛盾；case (b) 也没有「基准自 X 起算」的说明（只有 `last_bench_date < end` 才提示末端，:632-635）。另建议 case (b) 的基准从 anchor 日**收盘**起算，避免把指数当日盘中涨幅直接算成一天超额。补 attrs 里的 anchor + 条件化口径句 + 两条断言即可，改法已写在该 issue 的 suggestion 里。\n\n【流程记账】iss-mw8joahc-4fc16e 在线程里的最新反馈是 `deferred`（`effective=false`，覆盖了此前的 `fixed`），但交付表与本轮代码都表明它已修（:390 + 用例 + 5 行有排名取满 5 只）。请开发在下次 update 时把它改回 `fixed`，或写明延后的具体后续项（例如「后续想让部分缺排名的批次用综合分补位」），否则线程会长期挂一个 deferred 计数，plan 关闭时说不清。\n\n【结论】verdict=request_changes（本轮 openP0=0、openP1=0、openP2=1）。P0/P1 均无，6 条历史 issue 已全部有代码与测试证据，剩余只有 1 条文案口径 P2。完全解决的判定条件：开发在 feat/track-nav 上处理 iss-mw8lei8u-2f0ca8（anchor 写入 attrs、口径句条件化、case (b) 改收盘起算、补两条断言），并把 iss-mw8joahc 的状态改回 fixed 或说明延后项；下一轮 diff 评审确认 openP2=0（且 deferred 有明确解释）后我给 approve 并标记完全解决。合并前仍需开 PR 跑远端 CI（当前只有本地 123 passed，delivery.status=branch-ready；在线冒烟因 Tushare read timeout 未执行，属环境限制，不记问题）。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 3,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": [
+      {
+        "severity": "P2",
+        "title": "基准起算分支改了，但状态行与口径句没有跟着改：case (b)/(c) 下「沪深300 从首个入场日开盘买入持有」与实际相反",
+        "suggestion": "让文案与起算口径同源：(1) 在 `portfolio_nav` 里把 anchor 也写进 attrs（`nav.attrs[\"bench_anchor\"] = anchor`，case (c) 为 None、`bench_last` 已有）；(2) `nav_status_text` 里把固定的口径句改成条件化——`len(bench_values)==0` 时输出「沪深300 本次无可用数据，不展示基准与超额」而不是「从首个入场日开盘买入持有」；`bench_anchor` 非空且 `bench_anchor > nav[\"交易日\"].iloc[0]` 时补一句「沪深300 自 {bench_anchor} 收盘起算（{首个入场日} 缺基准 bar），此前不参与超额」；其余情况保留现句；(3) case (b) 建议把基准起点改为 anchor 日收盘（`bench_nav = aligned / aligned.loc[anchor]`），使 anchor 日两侧都是「收盘起算」，避免把指数当日盘中涨幅直接算成超额；(4) 补断言：`test_bench_missing_entry_bar_uses_later_open_not_previous_close` 增加 `assertIn(\"自 2026-01-06 起算\", text)` 且 anchor 日基准净值为 1.0；`test_bench_ends_before_entry_reports_data_until_not_missing` 增加 `assertNotIn(\"从首个入场日开盘买入持有\", text)`。验收标准：任何「基准缺入场日 bar」的状态行里，起算说明与实际 anchor 一致，同一段文案不会同时出现「尚未覆盖入场日」和「从首个入场日开盘买入持有」。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": "ho-20261109-005",
+  "next": "",
+  "createdAt": "2026-11-09T01:38:55.130Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-006.md"
+}

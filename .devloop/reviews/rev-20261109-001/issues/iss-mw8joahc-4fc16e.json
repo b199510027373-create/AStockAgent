@@ -1,0 +1,41 @@
+{
+  "id": "iss-mw8joahc-4fc16e",
+  "threadId": "rev-20261109-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "validation",
+  "file": "astock/track.py",
+  "lines": "354-356,441-445",
+  "title": "批次成分数与排名缺失未校验，仍按“Top5 等权”对外",
+  "evidence": "第 354-356 行 `rows = rows.sort_values(\"_rank\", na_position=\"last\").drop_duplicates(\"代码\")` 之后直接 `rows = rows.head(top_n)`，没有任何“是否拿到满 5 只 Top5”的校验：若某批 `排名` 整列为 NaN（旧 JSON 缺字段或回填批次），`na_position=\"last\"` 会退回原始行序，选出的 5 只并不是排名前 5；若该批只有 3 条记录，`codes` 只有 3 只。第 441-445 行的 `if missing and require_full_batch` / `elif not frames` 只校验“已选成分在入场日有没有 bar”，不会因为不足 5 只而拒绝，于是 3 只等权被当成 Top5 等权继续拼接。对外文案在 nav_status_text 第 536 行固定输出“Top5 等权累计”，第 546 行固定写“等权买入 Top5”，用户无从知道某一批其实是 3 只、或者 5 只是按文件行序取的。tests/test_track_nav.py 的 `detail_rows` 永远给 1..5 的完整排名，没有任何“排名缺失”或“批次不足 5 只”的用例。",
+  "suggestion": "在 `_batch_plans` 增加显式守卫：(1) 没有可用 `排名` 时按 `综合分` 降序兜底，两者都不可用的批次直接跳过并计入 dropped；(2) `len(codes) < top_n` 时按“成分不足 Top5（仅 N 只）”记入 dropped 并从净值剔除，或在 nav 中标记 partial 并把文案改成“等权 N 只”，不要继续宣称 Top5；(3) 在 `included` 里记录实际成分数，`nav_status_text` 输出实际范围（如“每批 5 只”或“存在 1 个 3 只批次”）。补两条测试：批次只有 3 只 → 被剔除且 `原因` 含“3 只”；`排名` 全为 NaN 但有 `综合分` → 按综合分取前 5。",
+  "confidence": 0.7,
+  "status": "deferred",
+  "feedback": {
+    "verdict": "good",
+    "option": "deferred",
+    "comment": "",
+    "rating": null,
+    "effective": false,
+    "at": "2026-11-09T01:28:38.150Z"
+  },
+  "createdAt": "2026-11-09T00:50:20.304Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T01:26:57.133Z"
+    },
+    {
+      "verdict": "good",
+      "option": "deferred",
+      "comment": "",
+      "rating": null,
+      "effective": false,
+      "at": "2026-11-09T01:28:38.150Z"
+    }
+  ]
+}
