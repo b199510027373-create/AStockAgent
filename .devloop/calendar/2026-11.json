@@ -94,6 +94,16 @@
       "notes": "第 4 轮 · request_changes"
     },
     {
+      "id": "cal-rev-20261109-001-r5",
+      "type": "review",
+      "title": "评审：评审：推荐跟踪：Top5 等权组合净值 vs 沪深300",
+      "start": "2026-11-09T02:08:05.561Z",
+      "end": "2026-11-09T02:08:34.350Z",
+      "planItemId": "plan-20261103-004",
+      "source": "reviewer-agent",
+      "notes": "第 5 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261107-002-planned",
       "type": "planned",
       "title": "模型网关与工具调用协议",
