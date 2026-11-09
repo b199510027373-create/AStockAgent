@@ -10,7 +10,24 @@
   "evidence": "registry.py:386-395 只有 `self._artifact_writer is not None` 成立时才调 writer 落全量行，否则直接 `trim_table`；而 runtime.py:103 的默认装配是 `ToolRegistry()`，artifact_writer 默认为 None（registry.py:307-318）。types.py:141-153 的 trim_table 只保留 total_rows/dropped_rows 两个计数，被丢掉的 51 行内容不再存在于任何地方——既不在 StepRecord.result（只剩 200 行），也不在 artifact（没有 writer），agent_steps 里只会看到一个 dropped_rows=51。这与 ADR-013 决策 4「超过 200 行截断并落 artifact」以及 types.py:8-10 的 docstring「完整行由 ToolRegistry 的 artifact writer 落盘」不一致，且是静默的：调用方无法区分「表本来就只有 200 行」和「有 51 行被扔掉」。现有测试 test_long_table_is_trimmed_and_archived 显式传了 writer，因此默认 None 的路径没有覆盖；等 tools/ 里接入 Tushare 全量行情（几千行）后，agent_artifacts 会缺内容，用户追问「把全部数据给我」时无法复现。",
   "suggestion": "二选一并写进 docstring：(a) 无 writer 时在截断后的 ToolResult.metadata 里显式记 `{\"artifact_missing\": True, \"dropped_rows\": N}`，让下游（Gradio 渲染层、后续 agent_store）能据此提示「完整数据未归档」；(b) 让 AgentRuntime 构造时注入默认 writer（等 agent_store 落地后指向 agent_artifacts），并在 runtime 的 docstring 注明默认装配必须带 writer。配套补一条 `ToolRegistry(table_row_limit=3)` 无 writer、工具返回 5 行 → 断言 rows 长度 3、metadata 含 artifact_missing 与 dropped_rows=2 的用例。这条不阻断本项合入（当前无 >200 行工具），但 tools/ 接入真实行情前必须落地，否则 ADR-017 的 artifact 记录会出现空档。",
   "confidence": 0.75,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-09T02:56:25.310Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T06:59:21.118Z"
+  },
+  "createdAt": "2026-11-09T02:56:25.310Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T06:59:21.118Z"
+    }
+  ]
 }
