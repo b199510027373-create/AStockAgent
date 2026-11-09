@@ -102,17 +102,23 @@
       "result": "6 项；trace ['Top5 等权组合','沪深300','批次换仓']；15 components；两个 Accordion open=False",
       "passed": true,
       "evidence": "首屏顺序与折叠区装配验证通过。"
+    },
+    {
+      "command": "Jupyter 内联渲染验证：nbconvert --execute 临时 notebook（离线 parquet 替换数据层，再调 run_track()）",
+      "result": "输出 cell 含 application/vnd.plotly.v1+json；状态行 41 批/44 日（2026-08-31 → 2026-11-06），Top5 等权 +4.34% vs 沪深300 -11.13%，超额 +15.47pp，剔除 2 批",
+      "passed": true,
+      "evidence": "净值图在 Jupyter 中可正常渲染，可替代 kaleido PNG 做观感核对；该路径也复现了离线冒烟数值。入口与离线片段已写入交付文档「可视化验证入口（Jupyter）」：conda activate chy → python -m notebook --port 1234（本机无 chy 时用 .venv）。"
     }
   ],
   "permissions": [
     {
       "name": "浏览器人工点开 Gradio 页面核对图形观感",
-      "reason": "无头会话只验证组件构建与数据链路，配色/折叠观感仍需人工确认。",
+      "reason": "无头会话只验证组件构建与数据链路；图形观感可用交付文档中的 Jupyter 入口内联渲染核对（已验证 plotly MIME），Gradio 页面布局仍需人工确认。",
       "status": "needed"
     },
     {
       "name": "kaleido 静态图导出（PNG 留档）",
-      "reason": "环境未安装 kaleido，write_image 报需要 Kaleido package，不影响页面内 gr.Plot。",
+      "reason": "环境未安装 kaleido，write_image 报需要 Kaleido package；已改用 Jupyter 内联渲染替代观感核对，不影响页面内 gr.Plot。",
       "status": "blocked"
     },
     {
