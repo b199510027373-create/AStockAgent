@@ -215,6 +215,64 @@ class PortfolioNavTests(unittest.TestCase):
         self.assertEqual(len(dropped), 1)
         self.assertIn("3 只", dropped["原因"].iloc[0])
 
+    def test_bench_missing_entry_bar_uses_later_open_not_previous_close(self):
+        detail = detail_rows([("2026-01-02", "2026-01-05", [f"A{i}" for i in range(1, 6)])])
+        prices = {f"A{i}": flat() for i in range(1, 6)}
+        # 基准在入场日之前有 bar、入场日缺一根、次日恢复：起算点应取次日开盘，
+        # 入场日留 NaN，而不是拿前收除以次日收盘造出一段基准下跌
+        bench = bars(
+            ["2026-01-02", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09", "2026-01-12"],
+            [10.0] * 6,
+            [10.0, 12.0, 12.0, 12.0, 12.0, 12.0],
+        )
+
+        nav, _ = self._run(detail, prices, bench=bench)
+
+        entry_bench = nav.loc[nav["交易日"] == DATES[0], "沪深300净值"]
+        self.assertTrue(pd.isna(entry_bench.iloc[0]))
+        self.assertAlmostEqual(nav.loc[nav["交易日"] == DATES[1], "沪深300净值"].iloc[0], 1.2)
+        text = track.nav_status_text(nav)
+        self.assertNotIn("数据缺失", text)
+
+    def test_bench_ends_before_entry_reports_data_until_not_missing(self):
+        detail = detail_rows([("2026-01-02", "2026-01-05", [f"A{i}" for i in range(1, 6)])])
+        prices = {f"A{i}": flat() for i in range(1, 6)}
+        bench = bars(["2026-01-02"], [10.0], [10.0])
+
+        nav, dropped = self._run(detail, prices, bench=bench)
+
+        self.assertTrue(dropped.empty)
+        self.assertEqual(len(nav), len(DATES))
+        self.assertTrue(nav["沪深300净值"].isna().all())
+        text = track.nav_status_text(nav)
+        self.assertIn("数据截至 2026-01-02", text)
+        self.assertIn("尚未覆盖入场日", text)
+        self.assertNotIn("数据缺失", text)
+
+    def test_partial_rank_does_not_fill_top5_with_unranked_rows(self):
+        rows = []
+        for i in range(1, 9):
+            rows.append(
+                {
+                    "推荐日": pd.Timestamp("2026-01-02"),
+                    "入场日": pd.Timestamp("2026-01-05"),
+                    "代码": f"P{i}",
+                    "排名": i if i <= 2 else None,
+                    "综合分": 100 - i,
+                }
+            )
+
+        plans = track._batch_plans(pd.DataFrame(rows), 5)
+
+        self.assertEqual(plans[0]["codes"], ["P1", "P2"])
+        self.assertIn("仅 2 只", plans[0]["skip_reason"])
+
+        for i, row in enumerate(rows, start=1):
+            row["排名"] = i if i <= 5 else None
+        plans = track._batch_plans(pd.DataFrame(rows), 5)
+        self.assertEqual(plans[0]["codes"], ["P1", "P2", "P3", "P4", "P5"])
+        self.assertIsNone(plans[0]["skip_reason"])
+
     def test_missing_rank_falls_back_to_score(self):
         rows = []
         for i, score in enumerate([100, 90, 80, 70, 60, 50], start=1):
