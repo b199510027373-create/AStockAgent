@@ -9,7 +9,7 @@
   "start": "2026-11-11",
   "due": "2026-11-14",
   "estimateH": 8,
-  "progress": 90,
+  "progress": 95,
   "acceptance": [
     "「推荐跟踪」首屏为组合净值曲线（Top5 等权 vs 沪深300）",
     "平均超额表降级到折叠区，仍可查看",
@@ -26,11 +26,11 @@
       "ADR-010"
     ],
     "branch": "feat/track-nav",
-    "commit": "0c07814",
+    "commit": "00c6b05",
     "module": "track_ui",
-    "test": "1) pytest tests -q → 111 passed（全权限重跑；此前 23 failed/11 errors 均为沙箱临时目录 PermissionError，已消失）\n2) pytest tests/test_track_nav.py -q → 14 passed\n3) pytest track_nav+core_paths+quant+optimize -q → 30 passed\n4) mypy astock/track.py astock/track_ui.py → Success: 2 files\n5) 真数据冒烟：run_track() 6 项；42 批次/443 日，Top5 -0.54% vs 沪深300 +7.80%，超额 -8.34pp，剔除 1 批（2026-11-09 基准 bar 未生成）；gr.Blocks 构建 track tab 通过。"
+    "test": "1) pytest tests -q → 120 passed\n2) pytest tests/test_track_nav.py -q → 23 passed\n3) mypy astock/track.py astock/track_ui.py → Success\n4) 离线真数据冒烟：nav 41 批/44 日（2026-08-31→11-06），Top5 +4.34% vs 沪深300 -11.13%，超额 +15.47pp；dropped 2（仅1只/入场缺bar）；最新批次保留，沪深300 截至 11-06\n5) gr.Blocks 构建 15 组件、两 Accordion open=False；P1 两条新用例 + 折叠结构断言"
   },
   "createdAt": "2026-11-03T12:10:32.427Z",
-  "updatedAt": "2026-11-08T17:14:42.838Z",
+  "updatedAt": "2026-11-09T01:11:19.493Z",
   "devSessionId": "session-d4244044-2816-4935-bf9d-2fa6f0a87d69"
 }

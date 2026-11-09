@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw8jodh9-e76932",
+  "threadId": "rev-20261109-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/track.py",
+  "lines": "494-500",
+  "title": "个股 close 为 NaN 时当日权重被静默重分配，与 docstring 的“收益记 0”不符",
+  "evidence": "第 494-497 行 `closes = pd.to_numeric(frame[\"close\"].reindex(segment, method=\"ffill\"), errors=\"coerce\")`：`reindex(..., method=\"ffill\")` 只能补“索引里缺这一行”，对“索引在、close 值是 NaN”无效。第 500 行 `pd.concat(ratios, axis=1).mean(axis=1)` 会按行跳过 NaN 列，等于当天把该股权重设为 0、在其余 4 只上重新归一；次日该股 close 恢复，ratio 又从入场开盘价起算，权重回到 1/5。结果是累计净值不是 5 只等权组合的真实市值序列，而是权重逐日漂移的混合体。这与函数 docstring 第 393 行“成分股当日缺 bar（停牌）按上一收盘持有，当日收益记 0”的承诺不一致。tests/test_track_nav.py 的 `test_equal_weight_and_suspension_carry_forward` 只覆盖“整行缺 bar”，没有 close 为 NaN 的用例（`bars()` 构造的值全部非空）。",
+  "suggestion": "改成值级填充再对齐：`closes = pd.to_numeric(frame[\"close\"], errors=\"coerce\").reindex(segment).ffill()`（先按 segment 对齐索引，再对数值做 ffill），这样“索引缺行”和“值为 NaN”都归为“持有上一收盘、当日收益 0”。若确实希望某只股票当天无有效价格时权重为 0，则要显式实现并写进口径文案与 docstring，不能依赖 `mean` 的 NaN 跳过语义。补一条用例：5 只中 A5 在 2026-01-06 的 close 为 NaN（行存在），断言当日组合净值等于前一交易日净值、次日仍按 5 只等权计算。",
+  "confidence": 0.75,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-09T00:50:24.189Z"
+}

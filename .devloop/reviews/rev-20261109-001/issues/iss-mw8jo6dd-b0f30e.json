@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw8jo6dd-b0f30e",
+  "threadId": "rev-20261109-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/track.py",
+  "lines": "423-424,460-461",
+  "title": "基准 bar 缺失被当成“非交易日”剔除最新批次，净值又被基准日历截断",
+  "evidence": "第 423-424 行用沪深300 当日 bar 充当交易日历：`if len(bench_dates) and entry not in bench_dates:` → `reason = f\"入场日 {entry:%Y-%m-%d} 不是沪深300交易日（缺基准 bar）\"`；随后第 460 行 `calendar = bench_dates[bench_dates >= first_entry]` 把所有行都限制在基准有 bar 的日期上。该路径在开发自己的冒烟里已经触发：links.test 第 5 条写着“42 批次/443 日 … 剔除 1 批（2026-11-09 基准 bar 未生成）”，而 2026-11-09 是周一、非节假日，正常情况下就是交易日——也就是说文案给出的“不是沪深300交易日”是事实错误，真实原因是当日指数 bar 尚未生成。后果有两层：(1) 最新一批的 Top5 从未进入首屏净值，用户盘中刷新永远看不到最近一次推荐的跟踪结果；(2) 组合净值被基准日历截断在最后一个有基准 bar 的日期，即使个股 bar 已更新。ADR-010 把这条曲线定为对外唯一指标，验收 #1「首屏为组合净值曲线」和 #3「缺 bar 的批次被剔除并提示」针对的是成分股 bar，不应由基准数据滞后决定。",
+  "suggestion": "把三件事拆开：(a) “是否交易日”用交易日历（existing `next_open_date`/`last_open_date`）或成分股 bar 判断，不要拿 000300.SH 当日 bar 当交易日历；(b) 基准当日 bar 未生成时仍把该批次纳入 nav——`沪深300净值` 在该日留 NaN（或从最后有效日 ffill 并明示），`超额` 只在双方都有值的最后共同交易日计算，并在 `nav_status_text` 单独提示“基准数据截至 X，超额仅算到 X”；(c) 只有成分股在入场日缺 bar 时才按验收 #3 整批剔除，并保留每批具体原因。配套在 tests/test_track_nav.py 补两条用例：入场日为交易日但基准缺该日 bar → 批次仍进入 nav、组合净值覆盖该日、提示文案不含“不是交易日”；基准整体滞后于个股 → nav 最后交易日等于个股最后交易日。验收标准：2026-11-09 那批出现在曲线上，nav 覆盖到个股最后交易日，且不存在把“数据未更新”写成“非交易日”的提示。",
+  "confidence": 0.85,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-09T00:50:14.977Z"
+}
