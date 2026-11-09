@@ -1,0 +1,33 @@
+{
+  "id": "iss-mw8y5wgw-ddc6f6",
+  "threadId": "rev-20261109-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/gateway.py",
+  "lines": "1023-1084, 354-427, 472-487",
+  "title": "JSON 协议模式仍按原生 tool_calls/tool 线格式回放历史，非 function-calling 后端第二次请求可能 400 并静默退化为规则兜底",
+  "evidence": "_complete_json（1023-1084）用 `self._invoke(first_messages, [], temperature, \"json\")` 把 tools 置空，但 OpenAICompatibleAdapter._payload（472-487）仍无条件 `messages=to_openai_messages(messages)`；to_openai_messages（354-427）会把会话历史里的 assistant.tool_call 还原成 `assistant.tool_calls`（伪造 call_N id）以及 `role:\"tool\"` + `tool_call_id` 消息。也就是说 JSON 模式第一次工具调用成功后，第二次请求的线上报文仍含 OpenAI 原生工具字段，只是不再带 tools 定义。对不支持 function calling 的后端（严格校验的 OpenAI 兼容实现、未编译 tools 模板的本地模型），这类消息可能直接 400，_invoke 抛 ChatProtocolError 后走 _fallback（1115-1148）并 degraded=True，表现为「静默降级到规则兜底」，与验收标准 ACC-02「不支持 function calling 时走 JSON 协议」不符。测试侧只覆盖了路由层：tests/test_agent_gateway.py:318-380 的 JSON 协议用例全部使用 StubModel，MockTransport 仅出现在 AdapterTests（165/193/229/282），因此没有任何用例检查 JSON 模式第二轮请求的真实请求体。",
+  "suggestion": "在 JSON 协议分支把工具历史序列化为纯文本再发送：给 to_openai_messages 增加 protocol/wire 参数（或新增 to_json_protocol_messages），把 assistant.tool_call 渲染成普通 assistant 文本（如「调用工具 x，参数 {...}」）、把 tool 消息渲染成 user/system 文本「工具 x 返回：...」，确保请求体不含 `tool_calls`、`role:\"tool\"`、`tool_call_id`、`tools`。补一个 httpx.MockTransport 用例：JSON 模式跑两步（第一步返回工具调用、执行后第二步带工具结果），断言第二次请求 body 的 messages 无上述字段且无 tools，且流程未 degraded。修复并合入该测试后本条关闭。",
+  "confidence": 0.72,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T07:51:37.174Z"
+  },
+  "createdAt": "2026-11-09T07:35:56.576Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T07:51:37.174Z"
+    }
+  ]
+}

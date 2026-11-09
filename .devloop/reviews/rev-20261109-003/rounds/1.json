@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261109-003-r1",
+  "threadId": "rev-20261109-003",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮全量评审（scope=full），范围限定为 plan-20261107-002 的变更文件：astock/agent/gateway.py、tests/test_agent_gateway.py、astock/config.py、astock/agent/__init__.py、requirements.txt、.env.example（代码提交 6cf81f4）。共登记 1 条 P1 + 3 条 P2，无 P0；另有 1 条观察项因同文件 P2 配额未单独登记，见文末。\n\n结论：request_changes。网关主体结构（ChatModel Protocol、DeepSeekAdapter/OpenAICompatibleAdapter、RuleFallback、ChatGateway 路由与探测、UsageLogger、AgentModelAdapter 对接 runtime）与 ADR-014/ADR-013 基本一致，AGENT-06（不直接 import 厂商 SDK）满足；规则兜底、超时、JSON 重试、探测缓存、真实 HTTP 线格式（native 路径）均有离线测试，27 个用例与 links.test 声明一致。阻断点是 JSON 协议路径的线格式。\n\n必须修复（P1，iss-mw8y5wgw-ddc6f6）：JSON 协议模式把 tools 置空后仍用 to_openai_messages 回放历史，第二次请求的报文里带 assistant.tool_calls / role:\"tool\" / tool_call_id。对不支持 function calling 的后端，这可能在工具调用后直接 400，被 _invoke 包装成 ChatProtocolError 后静默走规则兜底，ACC-02 实际未成立。修复方式：JSON 分支把工具历史压成纯文本（assistant 文本「调用工具 x，参数…」+ user/system 文本「工具 x 返回…」），并补 httpx.MockTransport 的两步用例，断言第二次请求 body 无 tool_calls / role:\"tool\" / tool_call_id / tools 且未 degraded。\n\n应修（P2）：\n- iss-mw8y5whm-15342d：并行 tool_calls 被静默截断为第一个，需在 usage/日志留痕并补双调用单测。\n- iss-mw8y5wio-4b8327：用量默认仅内存，AGENT_USAGE_LOG 默认注释、agent_runs/store.py 未实现，ACC-04 只有进程内证据；需接 sink 或给 JSONL 默认路径并在交接中定级。\n- iss-mw8y5wjh-b0137b：config.py:42-49 的 AGENT_* 常量无引用，且与 GatewaySettings.from_env 两套解析/校验不一致；需收敛为单一来源并补一致性测试。\n\n观察项（未计问题）：网关目前无任何消费方（除 gateway.py 与 astock/agent/__init__.py 导出外无调用点，app.py 未接线），ACC-05 的「提示」与 ACC-01 的「不改业务代码」只有库级证据；建议在计划/交接中把 ACC-05 标注为「网关层已交付、UI 提示待接线」，并在后续接线计划项补一条启动冒烟（无 key 配置 → 启动 → 日志/界面出现 degraded 提示）。\n\n完全解决条件：P1 修复且新增的 JSON 两步 HTTP 测试通过；三条 P2 全部关闭，或在交接文档中给出明确的延期归属（由谁、在哪个计划项完成）；上述任一未满足都不算完全解决。修复责任人为 plan-20261107-002 的开发方。真实模型联调（DeepSeek 或 Ollama 至少一个）仍为 handoff 中记录的外部依赖，若无法在本项完成，需在计划项中标注为集成验证项，不计入本轮阻断。",
+  "startedAt": "2026-11-09T07:32:27.565Z",
+  "finishedAt": "2026-11-09T07:36:06.987Z",
+  "rulesVersion": "v1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 3,
+    "total": 4
+  }
+}

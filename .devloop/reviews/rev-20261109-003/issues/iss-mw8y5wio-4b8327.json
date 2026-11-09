@@ -1,0 +1,33 @@
+{
+  "id": "iss-mw8y5wio-4b8327",
+  "threadId": "rev-20261109-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "data-durability",
+  "file": "astock/agent/gateway.py",
+  "lines": "158-209",
+  "title": "用量默认只存在内存，agent_runs 落库未实现，ACC-04 缺少可查询证据",
+  "evidence": "UsageLogger（158-209）把记录保存在 list，仅当构造时传入 path（来自 AGENT_USAGE_LOG，.env.example 中该键默认被注释）才追加 JSONL；sink 回调异常被吞掉。仓库里不存在 astock/agent/store.py（agent 目录只有 fake.py/types.py/registry.py/runtime.py/session.py/__init__.py/gateway.py），也没有 agent_runs/agent_steps 表实现，因此 ADR-014 第 7 项「provider/model/参数/token 用量入 agent_runs」与验收标准 ACC-04「每次调用记录」目前只有进程内证据，进程退出即丢失，事后无法审计。",
+  "suggestion": "两条路径任选其一并在计划/交接中写明：a) 把 sink 接到后续的 agent_store 写入 agent_runs，本项完成时至少提供 sink 适配函数与单测；b) 若 agent_runs 属于后续计划项，则让 AGENT_USAGE_LOG 有默认路径（如 data/agent/usage.jsonl）并在 handoff/README 标注 ACC-04 当前为「JSONL 持久化」级别。选定并落地后关闭。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T07:51:44.985Z"
+  },
+  "createdAt": "2026-11-09T07:35:56.640Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T07:51:44.985Z"
+    }
+  ]
+}
