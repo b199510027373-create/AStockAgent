@@ -663,7 +663,7 @@ class LlmActionContractTests(unittest.TestCase):
             patch.object(recommend, "load_trade_cal", return_value=cal),
             patch.object(recommend, "_llm_rank", return_value=ai),
         ):
-            result = recommend.run_daily_recommendation(
+            result = recommend.generate_recommendation(
                 universe_text="600519.SH", top_n=1, candidate_n=1, use_llm=True
             )
         row = result.table.iloc[0]

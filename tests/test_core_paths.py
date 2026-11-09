@@ -12,6 +12,7 @@ import pandas as pd
 import astock.ledger as ledger
 import astock.recommend as recommend
 import astock.track as track
+import astock.use_cases as use_cases
 from astock.data import enrich
 
 
@@ -79,14 +80,20 @@ class RecommendationCorePathTests(unittest.TestCase):
             patch.object(recommend, "next_open_date", return_value=pd.Timestamp("2025-07-11")),
             patch.object(recommend, "load_trade_cal", return_value=cal),
         ):
-            result = recommend.run_daily_recommendation(
-                universe_text="600519.SH", top_n=1, candidate_n=1, use_llm=False
+            result = use_cases.run_recommendation(
+                mode="generate",
+                universe_text="600519.SH",
+                top_n=1,
+                candidate_n=1,
+                use_llm=False,
             )
-        self.assertEqual(len(result.table), 1)
+        self.assertEqual(result.status, "success")
+        table = result.payload["table"]
+        self.assertEqual(len(table), 1)
         self.assertTrue(result.run_id.startswith("rec_"))
-        self.assertEqual(result.data_as_of, last.strftime("%Y-%m-%d"))
+        self.assertEqual(result.payload["data_as_of"], last.strftime("%Y-%m-%d"))
         payload = json.loads(
-            Path(result.json_path).read_text(encoding="utf-8"),
+            Path(result.payload["json_path"]).read_text(encoding="utf-8"),
             parse_constant=lambda x: (_ for _ in ()).throw(ValueError(x)),
         )
         self.assertEqual(payload["run_id"], result.run_id)
@@ -132,7 +139,7 @@ class TrackerCorePathTests(unittest.TestCase):
             patch.object(track, "load_index_daily", return_value=daily),
             patch.object(track.ledger, "save_tracking") if hasattr(track, "ledger") else patch("astock.ledger.save_tracking"),
         ):
-            detail, summary, status = track.track_recommendations()
+            detail, summary, status = track.compute_tracking()
         self.assertEqual(len(detail), 2)
         self.assertIn("推荐日", detail.columns)
         self.assertIn("T+1", detail.columns)

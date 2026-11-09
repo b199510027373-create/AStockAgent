@@ -588,7 +588,7 @@ def _pick_diverse(rows: list[dict], n: int, max_per_industry: int = 2) -> list[d
     return picked
 
 
-def run_daily_recommendation(
+def generate_recommendation(
     universe_text: str = "",
     top_n: int = 5,
     candidate_n: int = 15,

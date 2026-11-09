@@ -1,17 +1,9 @@
 from __future__ import annotations
 
 import gradio as gr
-import pandas as pd
 
 from .backfill import backfill_technical
-from .track import (
-    nav_figure,
-    nav_status_text,
-    portfolio_nav,
-    significance_table,
-    track_figure,
-    track_recommendations,
-)
+from .use_cases import run_tracking
 
 
 def run_backfill(progress=gr.Progress()):
@@ -23,30 +15,16 @@ def run_backfill(progress=gr.Progress()):
 
 
 def run_track():
-    detail, summary, status = track_recommendations()
-    try:
-        nav, dropped = (
-            portfolio_nav(detail) if not detail.empty else (pd.DataFrame(), pd.DataFrame())
-        )
-        nav_status = nav_status_text(nav, dropped)
-        nav_chart = nav_figure(nav)
-    except Exception as exc:  # noqa: BLE001
-        # 净值段失败不应拖垮已经算好的分组统计与逐条记录
-        nav_status = f"净值计算失败：{exc}（下方表格不受影响）"
-        nav_chart = nav_figure(pd.DataFrame())
-    if not detail.empty:
-        detail = detail.copy()
-        for col in ("推荐日", "入场日"):
-            if col in detail.columns:
-                detail[col] = pd.to_datetime(detail[col]).dt.strftime("%Y-%m-%d")
-    significance = significance_table(detail) if not detail.empty else pd.DataFrame()
+    """页面只消费用例结果：净值、显著性、图表都由 run_tracking 编排。"""
+    result = run_tracking()
+    payload = result.payload
     return (
-        f"{nav_status}\n\n{status}",
-        nav_chart,
-        summary,
-        significance,
-        track_figure(summary),
-        detail,
+        payload.get("status_text") or "",
+        payload.get("nav_figure"),
+        payload.get("summary"),
+        payload.get("significance"),
+        payload.get("excess_figure"),
+        payload.get("detail"),
     )
 
 

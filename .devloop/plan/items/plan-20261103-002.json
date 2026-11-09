@@ -2,14 +2,14 @@
   "id": "plan-20261103-002",
   "title": "用例层 RunResult：统一推荐/跟踪入口",
   "description": "依据 ADR-002 与评审 §4.1，把推荐/跟踪的编排从 UI 与脚本里收敛到用例层：返回 RunResult(run_id, status, payload, diagnostics)，status ∈ {success, stale, failed}。生成与历史读取共用同一函数，Gradio 只消费结果。这是「推荐 UI 读库切换」与「净值曲线」的前置依赖。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-contracts",
   "owner": "human",
   "start": "2026-11-11",
   "due": "2026-11-17",
   "estimateH": 16,
-  "progress": 0,
+  "progress": 95,
   "acceptance": [
     "recommend / track 的主入口返回统一 RunResult",
     "生成路径与历史读取路径共用同一用例函数",
@@ -25,11 +25,20 @@
     "adr": [
       "ADR-002",
       "ADR-003"
-    ]
+    ],
+    "test": [
+      "pytest tests\\test_use_cases.py -q -> 24 passed (2 subtests)",
+      "pytest tests\\test_core_paths.py tests\\test_track_nav.py tests\\test_contracts.py tests\\test_hardening.py -q -> 94 passed",
+      "pytest tests -q -> 213 passed (2 warnings: anyio deprecation, .pytest_cache WinError 5)",
+      "mypy astock -> Success: no issues found in 30 source files"
+    ],
+    "module": "use_cases",
+    "branch": "feat/plan-20261103-002-runresult"
   },
   "createdAt": "2026-11-03T12:10:27.414Z",
-  "updatedAt": "2026-11-03T12:10:27.414Z",
+  "updatedAt": "2026-11-09T15:39:03.446Z",
   "deps": [
     "plan-20261103-001"
-  ]
+  ],
+  "devSessionId": "session-5e97dfd9-c0e2-4889-8c05-15bdc17fa798"
 }
