@@ -1,0 +1,268 @@
+{
+  "id": "ho-20261109-011",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-004",
+  "threadId": "rev-20261109-001",
+  "sessionId": "session-d4244044-2816-4935-bf9d-2fa6f0a87d69",
+  "title": "推荐跟踪 Top5 等权净值 vs 沪深300：评审通过、手工渲染核对与合并",
+  "summary": "第 5 轮 diff 评审已 approve（openP0=0/openP1=0/openP2=0）。按用户要求补做浏览器手工核对：本地 Gradio 首屏显示 41 批/44 日、Top5 +4.34% vs 沪深300 -11.13%、超额 +15.47pp、剔除 2 批，红色组合线与灰色虚线基准正常渲染，两个折叠区默认收起，展开后表格与柱图正常；截图存于 .devloop/evidence/plan-20261103-004/。随后将 feat/track-nav 合并进 main（9b5b026），并在 main 复跑 27 passed / 124 passed / mypy Success。线程内 iss-mw8joahc-4fc16e、iss-mw8m51bp-dd9930 在 issueFeedbackTable 中按评审要求回填为 fixed。plan-20261103-004 置 done、progress=100。",
+  "requirements": [
+    {
+      "id": "req-1",
+      "text": "「推荐跟踪」首屏为组合净值曲线（Top5 等权 vs 沪深300）",
+      "source": "plan-20261103-004 验收 #1；ADR-010 决策 3"
+    },
+    {
+      "id": "req-2",
+      "text": "平均超额表降级到折叠区，仍可查看（默认 open=False，展开后可见表格与柱图）",
+      "source": "plan-20261103-004 验收 #2"
+    },
+    {
+      "id": "req-3",
+      "text": "净值按批次日期对齐，缺 bar 的批次被剔除并提示；基准缺 bar 只影响基准列并注明截止日",
+      "source": "plan-20261103-004 验收 #3"
+    },
+    {
+      "id": "req-4",
+      "text": "口径与 tradable_from 一致，不使用未来数据",
+      "source": "plan-20261103-004 验收 #4；ADR-005 / DATA-03"
+    },
+    {
+      "id": "req-5",
+      "text": "case(b) 超额两侧起点一致：基准从 anchor 收盘起算时，组合也在 anchor 日归一，入场日到 anchor 的漂移不计入超额",
+      "source": "评审第 4 轮 iss-mw8m51bp-dd9930"
+    },
+    {
+      "id": "req-6",
+      "text": "真实页面渲染手工核对：首屏净值图、两个折叠区默认收起、展开后内容可见",
+      "source": "评审第 5 轮遗留事项 3；用户 m00821"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/track.py + astock/track_ui.py + tests/test_track_nav.py",
+      "summary": "评审第 1–4 轮的全部修复已在前序提交落地：交易日历判定（_trading_days）、基准缺 bar 三分支（anchor + attrs）、无排名行过滤、close 值级 ffill、run_track 净值段 try/except、三态口径句、case(b) 超额按 anchor 归一。本轮无代码改动，只做合并与证据收尾。",
+      "commit": "538fd9b"
+    },
+    {
+      "path": ".devloop/evidence/plan-20261103-004/01-first-screen.webp、02-excess-tables.webp、03-excess-chart.webp、README.md",
+      "summary": "新增手工渲染核对证据：首屏（状态行 + 净值曲线 + 两个收起折叠条）、展开后的分组统计/显著性检验表、分组平均超额柱图；README 记录时间、被测提交、操作与核对点。",
+      "commit": "b5635b4"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-004.json",
+      "summary": "status=done、progress=100、links.branch=main、links.commit=9b5b026、links.evidence 指向首屏截图；links.test 更新为合并后 main 的 27/124/mypy/离线冒烟/手工渲染证据。",
+      "commit": "本次提交"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json + .devloop/worklog/2026-11.jsonl",
+      "summary": "记录合并与手工核对 20min；合并前评审第 5 轮记录已随 b5635b4 入库。",
+      "commit": "本次提交"
+    },
+    {
+      "path": "main",
+      "summary": "将 feat/track-nav 以 --no-ff 合并到 main，合并提交 9b5b026；合并后在 main 复跑目标测试、全量测试与 mypy 全部通过。",
+      "commit": "9b5b026"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_track_nav.py -q（合并后 main）",
+      "result": "27 passed, 1 warning in 12.55s",
+      "passed": true,
+      "evidence": "目标测试在 main 合并提交 9b5b026 上通过。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q（合并后 main）",
+      "result": "124 passed, 1 warning in 15.75s",
+      "passed": true,
+      "evidence": "全量测试在 main 上无回归。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock/track.py astock/track_ui.py（合并后 main）",
+      "result": "Success: no issues found in 2 source files",
+      "passed": true,
+      "evidence": "类型检查通过。"
+    },
+    {
+      "command": "离线真数据冒烟（patch load_daily/load_index_daily 读 cache/daily）",
+      "result": "41 批/44 日（2026-08-31 → 2026-11-06），Top5 +4.34% vs 沪深300 -11.13%，超额 +15.47pp，dropped 2；run_track() 6 项、trace ['Top5 等权组合','沪深300','批次换仓']。",
+      "passed": true,
+      "evidence": "与评审第 5 轮核对值一致，无口径漂移。"
+    },
+    {
+      "command": "手工渲染核对：本地 Gradio http://127.0.0.1:7871（离线数据启动器），点击「刷新跟踪」",
+      "result": "首屏状态行 41 批/44 日、+4.34% vs -11.13%、+15.47pp、剔除 2 批；红色组合线与灰色虚线基准正常；两个折叠区默认收起；展开后分组统计/显著性表与柱图、逐条记录（含 2026-11-09 批次）均正常。",
+      "passed": true,
+      "evidence": ".devloop/evidence/plan-20261103-004/01-first-screen.webp、02-excess-tables.webp、03-excess-chart.webp。"
+    },
+    {
+      "command": "在线冒烟（未 patch）",
+      "result": "TushareError: index_daily: 重试 3 次仍失败：HTTPConnectionPool(host='111.170.140.159', port=8020): Read timed out. (read timeout=30)",
+      "passed": false,
+      "evidence": "盘前 2026-11-09 bar 未发布触发联网，属数据发布时点限制；端点人工探测已恢复（HTTP 200, 0.7s），不用作本项阻塞。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "浏览器人工点开 Gradio 页面核对图形观感",
+      "reason": "已由用户提供三张截图（首屏、展开表格、展开柱图与逐条记录），开发侧核对通过并归档。",
+      "status": "granted"
+    },
+    {
+      "name": "kaleido 静态图导出（PNG 留档）",
+      "reason": "环境未安装 kaleido，write_image 需要；已用浏览器截图替代，gr.Plot 渲染本身正常。",
+      "status": "blocked"
+    },
+    {
+      "name": "盘前拉取当日指数/个股 bar",
+      "reason": "Tushare 日线收盘后才发布；盘前联网必然缺当日 bar，已用离线缓存覆盖同一路径。",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "9b5b026",
+    "pr": "",
+    "ci": "本地全量 pytest 124 passed（合并后 main）；远端 CI 未运行（未开 PR，按用户指示自行合并）",
+    "merge": "已合并到 main（9b5b026）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 5,
+    "verdict": "approve",
+    "resolved": true,
+    "openP0": 0,
+    "openP1": 0,
+    "openP2": 0,
+    "issues": [
+      {
+        "id": "iss-mw8jo6dd-b0f30e",
+        "severity": "P1",
+        "title": "基准 bar 缺失被当成「非交易日」剔除最新批次，净值又被基准日历截断",
+        "suggestion": "交易日历判定 + 基准缺口保留批次并注明截止日 + 超额按共同有效日",
+        "status": "fixed",
+        "evidence": "commit 00c6b05；_trading_days + 成分股日历并集 + 基准末端 NaN + 三条测试。"
+      },
+      {
+        "id": "iss-mw8joahc-4fc16e",
+        "severity": "P2",
+        "title": "批次成分数与排名缺失未校验，仍按「Top5 等权」对外（残留：部分行缺排名）",
+        "suggestion": "head() 前过滤无排名行，不足则 dropped",
+        "status": "fixed",
+        "evidence": "commit 056c7de；rows[rows[\"_order\"].notna()]；test_partial_rank_does_not_fill_top5_with_unranked_rows；无后续延后项，按评审第 5 轮要求回填 fixed。"
+      },
+      {
+        "id": "iss-mw8jodh9-e76932",
+        "severity": "P2",
+        "title": "个股 close 为 NaN 时当日权重被静默重分配",
+        "suggestion": "值级 ffill + ratio.fillna(1.0)",
+        "status": "fixed",
+        "evidence": "commit 00c6b05；test_nan_close_carries_previous_close_without_reweighting。"
+      },
+      {
+        "id": "iss-mw8jogea-70f60f",
+        "severity": "P2",
+        "title": "run_track 无异常隔离，净值段失败会连带丢掉表格",
+        "suggestion": "净值段 try/except，失败仍返回 6 项",
+        "status": "fixed",
+        "evidence": "commit 00c6b05；test_run_track_survives_nav_failure。"
+      },
+      {
+        "id": "iss-mw8jopos-909fec",
+        "severity": "P2",
+        "title": "验收 #2（超额表降级到折叠区）缺少可复核证据",
+        "suggestion": "build_track_tab() 结构断言",
+        "status": "fixed",
+        "evidence": "commit 00c6b05；test_build_track_tab_folds_excess_tables_below_nav；另补浏览器截图证据。"
+      },
+      {
+        "id": "iss-mw8kwygq-0717cf",
+        "severity": "P2",
+        "title": "基准缺入场日 bar 时 base 兜底口径不一致",
+        "suggestion": "基准起算点三分支 + 两条用例",
+        "status": "fixed",
+        "evidence": "commit 056c7de + 13e5cea；case(b) 收紧为 anchor 收盘基。"
+      },
+      {
+        "id": "iss-mw8lei8u-2f0ca8",
+        "severity": "P2",
+        "title": "基准起算分支改了，但状态行与口径句没有跟着改",
+        "suggestion": "anchor 写入 attrs、口径句条件化、case (b) 改收盘起算、补两条断言",
+        "status": "fixed",
+        "evidence": "commit 13e5cea；nav.attrs['bench_anchor'] + case(b) 收盘基 + 三态口径句；两条断言。"
+      },
+      {
+        "id": "iss-mw8m51bp-dd9930",
+        "severity": "P2",
+        "title": "case (b) 文案称「此前不参与超额」，但超额仍含入场日→anchor 的组合涨跌（两侧起点不同）",
+        "suggestion": "按 benchmark 首个有效日归一组合后再算超额，并补 test_excess_excludes_pre_anchor_drift",
+        "status": "fixed",
+        "evidence": "commit 538fd9b；case(b) 以 nav 首个 >= anchor 的净值作 port_base；test_excess_excludes_pre_anchor_drift → +0.00pp。按评审第 5 轮要求回填 fixed。"
+      }
+    ]
+  },
+  "issueFeedbackTable": [
+    {
+      "issueId": "iss-mw8jo6dd-b0f30e",
+      "severity": "P1",
+      "status": "fixed",
+      "commit": "00c6b05",
+      "evidence": "_trading_days + 成分股日历并集 + 基准末端 NaN + 三条测试"
+    },
+    {
+      "issueId": "iss-mw8joahc-4fc16e",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "056c7de",
+      "evidence": "无排名行过滤；test_partial_rank_does_not_fill_top5_with_unranked_rows；无后续项"
+    },
+    {
+      "issueId": "iss-mw8jodh9-e76932",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "00c6b05",
+      "evidence": "值级 ffill + ratio.fillna(1.0)"
+    },
+    {
+      "issueId": "iss-mw8jogea-70f60f",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "00c6b05",
+      "evidence": "run_track 净值段 try/except"
+    },
+    {
+      "issueId": "iss-mw8jopos-909fec",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "00c6b05",
+      "evidence": "build_track_tab 结构断言 + 浏览器截图"
+    },
+    {
+      "issueId": "iss-mw8kwygq-0717cf",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "056c7de",
+      "evidence": "基准起算三分支 + 两条用例"
+    },
+    {
+      "issueId": "iss-mw8lei8u-2f0ca8",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "13e5cea",
+      "evidence": "bench_anchor attrs + 三态口径句"
+    },
+    {
+      "issueId": "iss-mw8m51bp-dd9930",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "538fd9b",
+      "evidence": "case(b) 超额按 anchor 归一；test_excess_excludes_pre_anchor_drift → +0.00pp"
+    }
+  ],
+  "previousHandoffId": "ho-20261109-009",
+  "next": "任务已关闭（plan-20261103-004=done）。如需远端同步，推送 main 并在 GitHub 上确认合并提交 9b5b026；远端 CI 尚未配置/运行。后续若用户要求看真实当日数据，收盘后 index_daily 有 2026-11-09 bar 时再跑一次在线冒烟即可。",
+  "createdAt": "2026-11-09T02:23:00.000Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-011.md"
+}
