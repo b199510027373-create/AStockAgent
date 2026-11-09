@@ -9,7 +9,13 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from .config import BASE_DIR
-from .data import last_open_date, load_daily, load_index_daily, next_open_date
+from .data import (
+    last_open_date,
+    load_daily,
+    load_index_daily,
+    load_trade_cal,
+    next_open_date,
+)
 from .stats import (
     benjamini_hochberg,
     effective_n,
@@ -337,28 +343,57 @@ def _bar_frame(df: pd.DataFrame | None) -> pd.DataFrame:
     return out.set_index("trade_date")
 
 
+def _trading_days(start: pd.Timestamp, end: pd.Timestamp) -> pd.DatetimeIndex:
+    """SSE 交易日序列（不拿指数当日 bar 冒充交易日历）。"""
+    try:
+        cal = load_trade_cal()
+    except Exception:
+        return pd.DatetimeIndex([])
+    if cal is None or cal.empty or "cal_date" not in cal.columns or "is_open" not in cal.columns:
+        return pd.DatetimeIndex([])
+    days = pd.to_datetime(cal.loc[cal["is_open"] == 1, "cal_date"]).sort_values()
+    return pd.DatetimeIndex(days[(days >= start) & (days <= end)])
+
+
 def _batch_plans(detail: pd.DataFrame, top_n: int) -> list[dict]:
-    """One plan per 入场日: the top-N rows of the batch, bought at tradable_from open."""
+    """One plan per 入场日: the top-N rows of the batch, bought at tradable_from open.
+
+    ``skip_reason`` is set when the batch cannot be ordered (no 排名/综合分) or has
+    fewer than ``top_n`` components; ``portfolio_nav`` records those as dropped.
+    """
     if detail is None or detail.empty or "代码" not in detail.columns:
         return []
-    has_rank = "排名" in detail.columns
     plans: list[dict] = []
     for as_of, group in detail.groupby("推荐日", sort=True, dropna=True):
         as_of_ts = _as_ts(as_of)
         if as_of_ts is None:
             continue
         rows = group.copy()
-        rows["_rank"] = (
-            pd.to_numeric(rows["排名"], errors="coerce") if has_rank else np.nan
+        order = (
+            pd.to_numeric(rows["排名"], errors="coerce")
+            if "排名" in rows.columns
+            else pd.Series(np.nan, index=rows.index)
         )
-        rows = rows.sort_values("_rank", na_position="last").drop_duplicates("代码")
-        rows = rows.head(top_n)
-        codes = [str(code) for code in rows["代码"].tolist() if str(code)]
-        if not codes:
-            continue
+        skip_reason = None
+        if order.notna().any():
+            rows["_order"] = order
+        elif "综合分" in rows.columns and pd.to_numeric(
+            rows["综合分"], errors="coerce"
+        ).notna().any():
+            # 旧 JSON / 回填批次可能缺排名：按综合分从高到低兜底
+            rows["_order"] = -pd.to_numeric(rows["综合分"], errors="coerce")
+        else:
+            skip_reason = "批次缺少排名与综合分，无法确定 Top5"
+        codes: list[str] = []
+        if skip_reason is None:
+            rows = rows.sort_values("_order", na_position="last").drop_duplicates("代码")
+            rows = rows.head(top_n)
+            codes = [str(code) for code in rows["代码"].tolist() if str(code)]
+            if len(codes) < top_n:
+                skip_reason = f"成分不足 Top5（仅 {len(codes)} 只）"
         entry = None
-        if "入场日" in rows.columns:
-            for value in rows["入场日"].tolist():
+        if "入场日" in group.columns:
+            for value in group["入场日"].tolist():
                 entry = _as_ts(value)
                 if entry is not None:
                     break
@@ -367,7 +402,14 @@ def _batch_plans(detail: pd.DataFrame, top_n: int) -> list[dict]:
             entry = next_open_date(as_of_ts)
         if entry is None:
             continue
-        plans.append({"推荐日": as_of_ts, "入场日": entry.normalize(), "codes": codes})
+        plans.append(
+            {
+                "推荐日": as_of_ts,
+                "入场日": entry.normalize(),
+                "codes": codes,
+                "skip_reason": skip_reason,
+            }
+        )
     # 同一入场日只保留最后一次生成
     by_entry: dict[pd.Timestamp, dict] = {}
     for plan in plans:
@@ -406,22 +448,24 @@ def portfolio_nav(
     end_ts = pd.Timestamp(end) if end is not None else pd.Timestamp.today().normalize()
     start_s, end_s = start_ts.strftime("%Y%m%d"), end_ts.strftime("%Y%m%d")
 
+    trading_days = _trading_days(start_ts, end_ts)
+
     if bench is None:
         try:
             bench = load_index_daily("000300.SH", start=start_s, end=end_s)
         except Exception:
             bench = pd.DataFrame()
     bench_bars = _bar_frame(bench)
-    bench_dates = bench_bars.index if len(bench_bars) else pd.DatetimeIndex([])
 
     daily: dict[str, pd.DataFrame] = {}
     included: list[dict] = []
     dropped: list[dict] = []
     for plan in plans:
         entry = plan["入场日"]
-        reason = None
-        if len(bench_dates) and entry not in bench_dates:
-            reason = f"入场日 {entry:%Y-%m-%d} 不是沪深300交易日（缺基准 bar）"
+        reason = plan.get("skip_reason")
+        if reason is None and len(trading_days) and entry not in trading_days:
+            # 交易日判定用交易日历，而不是“指数当日是否已有 bar”
+            reason = f"入场日 {entry:%Y-%m-%d} 不是交易日"
         frames: dict[str, pd.DataFrame] = {}
         missing: list[str] = []
         if reason is None:
@@ -455,24 +499,39 @@ def portfolio_nav(
         return empty_nav, dropped_df
 
     first_entry = included[0]["plan"]["入场日"]
+    # 组合交易日 = 成分股实际有 bar 的日期（并集），不再被沪深300 的更新进度截断
+    union: set[pd.Timestamp] = set()
+    for item in included:
+        for frame in item["frames"].values():
+            union.update(d for d in frame.index if d >= first_entry)
+    calendar = pd.DatetimeIndex(sorted(union))
+    if len(trading_days):
+        calendar = calendar.intersection(trading_days)
+    if not len(calendar):
+        return empty_nav, dropped_df
+
     bench_nav: pd.Series | None = None
-    if len(bench_dates):
-        calendar = bench_dates[bench_dates >= first_entry]
-        base = _frame_price(bench_bars, first_entry)
-        if base is None:
-            base = _frame_price(bench_bars, first_entry, "close")
-        if base is not None and len(calendar):
-            closes = pd.to_numeric(
-                bench_bars["close"].reindex(calendar, method="ffill"), errors="coerce"
-            )
-            bench_nav = closes / base
-    else:
-        # 基准缺失时仍给出组合曲线（沪深300 列留空），日期用成分股并集
-        union: set[pd.Timestamp] = set()
-        for item in included:
-            for frame in item["frames"].values():
-                union.update(d for d in frame.index if d >= first_entry)
-        calendar = pd.DatetimeIndex(sorted(union))
+    if len(bench_bars) and "close" in bench_bars.columns:
+        bench_close = pd.to_numeric(bench_bars["close"], errors="coerce")
+        bench_close = bench_close[bench_close > 0]
+        if len(bench_close):
+            base = _frame_price(bench_bars, first_entry)
+            if base is None:
+                base = _frame_price(bench_bars, first_entry, "close")
+            if base is None:
+                # 基准当日 bar 尚未生成：从之后第一根可用 bar 起算，避免把“数据未更新”当成“非交易日”
+                later = bench_close[bench_close.index >= first_entry]
+                if len(later):
+                    base = float(later.iloc[0])
+            if base is not None:
+                aligned = (
+                    bench_close.reindex(bench_close.index.union(calendar))
+                    .ffill()
+                    .reindex(calendar)
+                )
+                # 基准末端缺 bar 时保留 NaN，让曲线停在最后有效日，而不是把旧值延伸成新值
+                aligned = aligned.where(calendar <= bench_close.index.max())
+                bench_nav = aligned / base
 
     rows: list[dict] = []
     nav_base = 1.0
@@ -489,12 +548,16 @@ def portfolio_nav(
         ratios: list[pd.Series] = []
         for frame in item["frames"].values():
             base = _frame_price(frame, entry)
-            if base is None:
+            if base is None or "close" not in frame.columns:
                 continue
-            closes = pd.to_numeric(
-                frame["close"].reindex(segment, method="ffill"), errors="coerce"
-            )
-            ratios.append(closes / base)
+            # 值级 ffill：索引缺行与 close 为 NaN 都按“持上一收盘、当日收益 0”处理，
+            # 避免 concat().mean() 静默跳过 NaN、把权重临时重分配给其余成分
+            closes = pd.to_numeric(frame["close"], errors="coerce").ffill()
+            closes = closes.reindex(segment).ffill()
+            ratio = closes / base
+            if ratio.isna().all():
+                continue
+            ratios.append(ratio.fillna(1.0))
         if not ratios:
             continue
         segment_nav = nav_base * pd.concat(ratios, axis=1).mean(axis=1)
@@ -522,23 +585,32 @@ def portfolio_nav(
 
 def nav_status_text(nav: pd.DataFrame, dropped: pd.DataFrame | None = None) -> str:
     """首屏净值区的一句统计口径说明（含剔除批次提示）。"""
-    if nav is None or nav.empty:
+    has_nav = nav is not None and not nav.empty
+    if not has_nav:
         text = "组合净值：暂无可拼接的批次（需要至少一个批次在 tradable_from 有完整 Top5 开盘 bar）。"
     else:
         start = pd.Timestamp(nav["交易日"].iloc[0])
         end = pd.Timestamp(nav["交易日"].iloc[-1])
         n_batches = int(nav["入场日"].nunique())
         port = float(nav["组合净值"].iloc[-1])
-        bench_values = pd.to_numeric(nav["沪深300净值"], errors="coerce").dropna()
+        bench_series = pd.to_numeric(nav["沪深300净值"], errors="coerce")
+        bench_values = bench_series.dropna()
         parts = [
             f"组合净值：{n_batches} 个批次 / {len(nav)} 个交易日"
             f"（{start:%Y-%m-%d} → {end:%Y-%m-%d}）",
             f"Top5 等权累计 {port - 1:+.2%}",
         ]
         if len(bench_values):
+            last_idx = bench_values.index[-1]
             bench = float(bench_values.iloc[-1])
+            port_at_bench = float(nav.loc[last_idx, "组合净值"])
+            last_bench_date = pd.Timestamp(nav.loc[last_idx, "交易日"])
             parts.append(f"沪深300 {bench - 1:+.2%}")
-            parts.append(f"超额 {(port - bench) * 100:+.2f}pp")
+            parts.append(f"超额 {(port_at_bench - bench) * 100:+.2f}pp")
+            if last_bench_date < end:
+                parts.append(
+                    f"沪深300 数据截至 {last_bench_date:%Y-%m-%d}，超额只算到该日"
+                )
         else:
             parts.append("沪深300 数据缺失，仅显示组合")
         text = "，".join(parts) + "。"
@@ -553,11 +625,9 @@ def nav_status_text(nav: pd.DataFrame, dropped: pd.DataFrame | None = None) -> s
         for _, row in dropped.head(3).iterrows():
             items.append(f"{pd.Timestamp(row['入场日']):%Y-%m-%d}（{row['原因']}）")
         more = f" 等 {len(dropped)} 个" if len(dropped) > 3 else ""
-        text += (
-            f" 已剔除 {len(dropped)} 个批次（入场日缺 bar，原持仓延续到下一批）："
-            + "；".join(items)
-            + more
-        )
+        text += f" 已剔除 {len(dropped)} 个批次：" + "；".join(items) + more
+        if has_nav:
+            text += "（被剔除批次不建仓，原持仓延续到下一批）"
     return text
 
 
