@@ -1,0 +1,164 @@
+{
+  "id": "ho-20261109-018",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261107-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "模型网关与工具调用协议 · 首次交付",
+  "summary": "按 ADR-014 新增 astock/agent/gateway.py：ChatModel 协议、ChatGateway 路由、DeepSeekAdapter、OpenAICompatibleAdapter（Ollama/vLLM）、RuleFallback、UsageLogger、启动能力探测与 AgentModelAdapter。原生 function calling 走 tool_calls；不支持时注入 JSON 工具协议并在解析失败后重试一次；无 key 或全部失败时规则兜底且不抛异常；每次调用（含探针/失败/规则兜底）记录 provider/model/token。新增 27 个离线测试，全量 185 passed，mypy 29/30 files 通过，ruff 通过，GitHub Actions CI 成功。流式输出未实现（ADR-014 提及，但本计划验收未列）。",
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "依据 ADR-014 新增 astock/agent/gateway.py：ChatModel 协议 + DeepSeekAdapter + OpenAICompatibleAdapter（可指 Ollama/vLLM）+ RuleFallback。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-02",
+      "text": "统一 tool_calls 解析；对不支持 function calling 的模型退化为 JSON 协议。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-03",
+      "text": "配置全部走 .env：AGENT_PROVIDER/AGENT_MODEL/AGENT_BASE_URL/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-04",
+      "text": "业务代码禁止 import 供应商 SDK；llm.py 保留给推荐文案，先不动。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "ACC-01",
+      "text": "切换 AGENT_PROVIDER 不需要改业务代码。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-02",
+      "text": "支持 function calling 的模型走 tool_calls；不支持的走 JSON 协议。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-03",
+      "text": "无 key / 全部失败时规则兜底，流程不崩。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-04",
+      "text": "每次调用记录 provider/model/token 用量。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-05",
+      "text": "启动能力探测失败时标记 degraded 并提示。",
+      "source": "plan-20261107-002 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/gateway.py",
+      "summary": "新增网关实现：ChatResult/UsageRecord/UsageLogger、ChatGateway 原生与 JSON 协议路由、DeepSeekAdapter、OpenAICompatibleAdapter、RuleFallback、probe/status_note、AgentModelAdapter、GatewaySettings.from_env、build_gateway/create_agent_model；不依赖 openai SDK。",
+      "commit": "6cf81f4"
+    },
+    {
+      "path": "tests/test_agent_gateway.py",
+      "summary": "新增 27 个 unittest 离线用例：适配器解析、URL/header、消息转换、原生/JSON 路由与重试、规则兜底、probe/degraded、usage JSONL、配置与运行时集成。",
+      "commit": "6cf81f4"
+    },
+    {
+      "path": "astock/config.py",
+      "summary": "增加 AGENT_PROVIDER/AGENT_MODEL/AGENT_BASE_URL/AGENT_API_KEY/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET/AGENT_TIMEOUT_SECONDS/AGENT_USAGE_LOG 读取与校验。",
+      "commit": "6cf81f4"
+    },
+    {
+      "path": "astock/agent/__init__.py",
+      "summary": "导出网关公共符号，业务代码可从 astock.agent 统一导入。",
+      "commit": "6cf81f4"
+    },
+    {
+      "path": "requirements.txt",
+      "summary": "显式声明 httpx>=0.27（网关直接用 httpx，不引入供应商 SDK）。",
+      "commit": "6cf81f4"
+    },
+    {
+      "path": ".env.example",
+      "summary": "补充 Agent 网关配置示例与本地 Ollama/vLLM 说明。",
+      "commit": "6cf81f4"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_gateway.py -q",
+      "result": "27 passed, 1 warning",
+      "passed": true,
+      "evidence": "2026-11-09 本地 .venv Python 3.13.5；仅 anyio pytest 插件弃用 warning。"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "185 passed, 1 warning",
+      "passed": true,
+      "evidence": "全量 tests 目录；不使用仓库根 pytest（会重复收集 release/AStockAgent 副本）。"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 29 source files",
+      "passed": true,
+      "evidence": "mypy.ini python_version=3.13。"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "与 CI 的 mypy 目标一致。"
+    },
+    {
+      "command": "ruff check astock/agent/gateway.py astock/agent/__init__.py astock/config.py tests/test_agent_gateway.py",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "ruff format --check 也为 4 files already formatted。"
+    },
+    {
+      "command": "GitHub Actions CI (push 6cf81f4)",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42579213540 / job 129033723534；包含 compileall、ruff select、mypy astock app.py、coverage pytest tests。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push origin main",
+      "reason": "已将代码提交 6cf81f4 推送到 origin/main；GitHub Actions CI 成功。",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub Actions check-runs 只读",
+      "reason": "公开仓库 API 可读取，用于确认 run 42579213540 为 success。",
+      "status": "granted"
+    },
+    {
+      "name": "真实 DeepSeek/OpenAI 兼容服务调用",
+      "reason": "本次全部用 httpx.MockTransport 离线验证；真实模型联调需要用户提供 API Key 或可用 Ollama/vLLM 地址。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "6cf81f4",
+    "pr": "无（按项目惯例直接推送 main）",
+    "ci": "success: GitHub Actions run 42579213540 (job 129033723534)",
+    "merge": "代码提交已推送 origin/main；无独立 PR/合并流程",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "等待评审。评审后如提出修改，按 devloop_review 读取问题并补测试；另建议后续安排真实 DeepSeek/Ollama 联调与流式输出（本计划验收未要求流式）。",
+  "createdAt": "2026-11-09T07:27:06.392Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-018.md"
+}

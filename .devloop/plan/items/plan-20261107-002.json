@@ -2,14 +2,14 @@
   "id": "plan-20261107-002",
   "title": "模型网关与工具调用协议",
   "description": "依据 ADR-014 新增 astock/agent/gateway.py：ChatModel 协议 + DeepSeekAdapter + OpenAICompatibleAdapter（可指 Ollama/vLLM）+ RuleFallback。统一 tool_calls 解析；对不支持 function calling 的模型退化为 JSON 协议；配置全部走 .env（AGENT_PROVIDER/AGENT_MODEL/AGENT_BASE_URL/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET）。业务代码禁止 import 供应商 SDK。注意：llm.py 保留给推荐文案，先不动。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-10",
   "due": "2026-11-15",
   "estimateH": 12,
-  "progress": 0,
+  "progress": 95,
   "acceptance": [
     "切换 AGENT_PROVIDER 不需要改业务代码",
     "支持 function calling 的模型走 tool_calls；不支持的走 JSON 协议",
@@ -26,8 +26,29 @@
   "links": {
     "adr": [
       "ADR-014"
-    ]
+    ],
+    "module": "llm_gateway",
+    "files": [
+      "astock/agent/gateway.py",
+      "tests/test_agent_gateway.py",
+      "astock/config.py",
+      "astock/agent/__init__.py",
+      "requirements.txt",
+      ".env.example"
+    ],
+    "test": [
+      "pytest tests/test_agent_gateway.py -q -> 27 passed",
+      "pytest tests -q -> 185 passed, 1 warning",
+      "mypy astock -> Success: no issues found in 29 source files",
+      "mypy astock app.py -> Success: no issues found in 30 source files",
+      "ruff check ... -> All checks passed",
+      "GitHub Actions CI run 42579213540 -> success"
+    ],
+    "commit": "6cf81f4",
+    "branch": "main",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/42579213540"
   },
   "createdAt": "2026-11-07T14:11:58.008Z",
-  "updatedAt": "2026-11-07T14:13:12.140Z"
+  "updatedAt": "2026-11-09T07:26:45.213Z",
+  "devSessionId": "session-0602def4-0be7-452c-b8b3-178e0364f1e7"
 }
