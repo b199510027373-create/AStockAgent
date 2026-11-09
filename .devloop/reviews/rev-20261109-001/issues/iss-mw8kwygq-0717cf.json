@@ -1,0 +1,16 @@
+{
+  "id": "iss-mw8kwygq-0717cf",
+  "threadId": "rev-20261109-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/track.py",
+  "lines": "518-534",
+  "title": "基准缺入场日 bar 时 base 兜底口径不一致：会退化成「数据缺失」或凭空多出一日基准涨跌",
+  "evidence": "P1 的修复主体成立（交易日判定改用 `_trading_days`、组合日历改成分股并集、基准末端留 NaN、状态行区分「不是交易日／缺 bar／数据截至 X」），但 [track.py:518-534](astock/track.py#L518-L534) 新增的 base 兜底口径有问题。`base = _frame_price(bench_bars, first_entry)`（开盘）与 `base = _frame_price(..., \"close\")` 都取不到时，代码用 `later = bench_close[bench_close.index >= first_entry]` → `base = float(later.iloc[0])`，即拿「入场日之后第一根基准 bar 的收盘」当起点，而 `aligned` 在入场日取的是 `ffill` 出来的前收。两个后果：(1) 最常见场景——首批次入场日就是今天、指数当日 bar 还没生成（就是本轮 P1 要解决的那个现场）：`later` 为空 → `base` 仍为 None → `bench_nav` 整体为 None → 全列 NaN，`nav_status_text` 走到 `parts.append(\"沪深300 数据缺失，仅显示组合\")`（[track.py:620](astock/track.py#L620) 附近），把「指数落后一天」说成「数据缺失」，交付文档里「沪深300 最后有效 2026-11-06 并在状态行注明」在这一路径下不会出现；(2) 若入场日只是中间缺一根 bar、其后又有 bar（缓存空洞），则入场日基准净值 = 前收 / 后收 ≠ 1，凭空造出一段基准涨跌并直接进入 `超额`，而组合侧是以入场日开盘为基，两侧口径不一致。`test_missing_bench_bar_on_entry_keeps_batch` 用的 bench 从入场日+1 开始、入场日之前没有 bar，`aligned` 在入场日必然是 NaN，因此恰好绕过了这两条路径，没有覆盖「基准有更早数据但缺入场日」。",
+  "suggestion": "把「基准起算点」单独算清楚，三种情况分别处理：(a) 入场日有基准 bar → 现状不变（open 为基、close 归一，与组合同口径）；(b) 入场日无 bar 但其后第一根 bar 存在 → 以该 bar 的**开盘**为基（或直接把该日净值设为 1.0），入场日到该日之间留 NaN，不要用前收除以基；(c) 入场日及其后都没有 bar → 用最后有效收盘做基，并对 `calendar > 最后有效日` 全部留 NaN（现状的 `.where` 已做到），状态行写「沪深300 数据截至 X，尚未覆盖入场日」，绝对不能落到「沪深300 数据缺失」。配套补两条用例：`bench` 覆盖到入场日前一天、入场日及其后无 bar → nav 的「沪深300净值」有值到该日、其后 NaN，状态行含「数据截至」且不含「数据缺失」；`bench` 在入场日缺一根、次日及以后有 bar → 入场日基准净值为 NaN（或 1.0）而**不是**前收/后收，且该日超额不被计入。验收标准：任何「基准缺入场日 bar」的组合下，状态行只会出现「数据截至／尚未覆盖」，不会出现「数据缺失」或凭空的一日基准涨跌。",
+  "confidence": 0.7,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-09T01:25:04.250Z"
+}

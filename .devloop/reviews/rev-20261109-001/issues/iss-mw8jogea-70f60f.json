@@ -10,7 +10,24 @@
   "evidence": "astock/track_ui.py:25-44 里 `nav, dropped = (portfolio_nav(detail) if not detail.empty else (…))`、`nav_status_text(nav, dropped)`、`nav_figure(nav)` 都是裸调用，没有任何异常隔离。`portfolio_nav` 内部只在第 409-413 行给 `load_index_daily` 和第 430-435 行给单只 `load_daily` 包了 try/except，仍有多处可抛出：第 465 行 `bench_bars[\"close\"]`、第 494 行 `frame[\"close\"]`（列缺失即 KeyError）、第 414 行 `_bar_frame(bench)` 里 `pd.to_datetime(out[\"trade_date\"])`。一旦抛出，`track_recommendations()` 已经算好的 summary／significance／detail 全部作废，整个「推荐跟踪」Tab 只剩 Gradio 报错；而同文件 run_backfill（第 21-22 行）是包了 try/except 的，行为不一致。对于“首屏加点东西”的改动，不应让新增的净值段把原本可用的表一起拖垮。",
   "suggestion": "在 `run_track` 把净值段单独包起来：nav、dropped 计算失败时置空 DataFrame，`nav_status` 写成“净值计算失败：{exc}（下方表格不受影响）”，其余 5 个输出照常返回；或在 `portfolio_nav` 内部把 `bench_bars[\"close\"]` / `frame[\"close\"]` 的读取也纳入容错。补一条测试：`patch.object(track_ui, \"portfolio_nav\", side_effect=RuntimeError(\"boom\"))` → `run_track()` 仍返回 6 个输出，第 1 个含“失败”字样，第 3 个仍是分组统计表。验收标准：净值段任一异常都不再导致整 Tab 空白。",
   "confidence": 0.7,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-09T00:50:27.970Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T01:27:11.517Z"
+  },
+  "createdAt": "2026-11-09T00:50:27.970Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T01:27:11.517Z"
+    }
+  ]
 }

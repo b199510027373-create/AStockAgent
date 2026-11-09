@@ -1,0 +1,228 @@
+{
+  "id": "ho-20261109-005",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-004",
+  "threadId": "rev-20261109-001",
+  "sessionId": "session-d4244044-2816-4935-bf9d-2fa6f0a87d69",
+  "title": "推荐跟踪 Top5 等权净值 vs 沪深300：评审第 2 轮修复",
+  "summary": "回应 rev-20261109-001 第 2 轮（1 条新 P2 iss-mw8kwygq-0717cf + iss-mw8joahc-4fc16e 残留）。基准起算点改为三分支：入场日有 bar → 开盘为基；入场日缺 bar 但其后有 bar → 其后首根 bar 开盘为基、入场日到该日留 NaN（不再用 ffill 前收除以未来基，不凭空造出一日涨跌）；入场日及其后都无 bar → 用最后有效收盘为基并把 calendar 全部留 NaN，状态行输出「沪深300 数据截至 X，尚未覆盖入场日」而不是「数据缺失」。_batch_plans 在 head() 前过滤 _order 为空的行，部分行缺排名时不再按文件行序补进 Top5，不足则记 dropped「成分不足 Top5（仅 N 只）」。补 3 条用例（基准缺入场日但次日恢复、基准止于入场日前、部分行缺排名），tests/test_track_nav.py 23→26，全量 123 passed，mypy Success；离线真数据冒烟数值不变（41 批/44 日，+4.34% vs -11.13%，+15.47pp）。另按评审要求给出 issue id → 状态 + 证据对照表（工具无回填上一轮 feedback 的入口）。",
+  "requirements": [
+    {
+      "id": "req-1",
+      "text": "「推荐跟踪」首屏为组合净值曲线（Top5 等权 vs 沪深300）",
+      "source": "plan-20261103-004 验收 #1；ADR-010 决策 3"
+    },
+    {
+      "id": "req-2",
+      "text": "平均超额表降级到折叠区，仍可查看（结构断言 + Accordion open=False）",
+      "source": "plan-20261103-004 验收 #2；评审 iss-mw8jopos-909fec"
+    },
+    {
+      "id": "req-3",
+      "text": "净值按批次日期对齐，缺 bar 的批次被剔除并提示；基准缺 bar 只影响基准列并注明截止日",
+      "source": "plan-20261103-004 验收 #3；评审 iss-mw8jo6dd-b0f30e"
+    },
+    {
+      "id": "req-4",
+      "text": "口径与 tradable_from 一致，不使用未来数据",
+      "source": "plan-20261103-004 验收 #4；ADR-005 / DATA-03"
+    },
+    {
+      "id": "req-5",
+      "text": "基准起算点必须区分「入场日有 bar / 其后有 bar / 其后无 bar」，任何缺入场日 bar 的组合不得出现「数据缺失」或凭空的一日基准涨跌",
+      "source": "评审第 2 轮 iss-mw8kwygq-0717cf"
+    },
+    {
+      "id": "req-6",
+      "text": "无排名行不得占用 Top5 名额；部分行缺排名且不足 5 只时整批剔除并提示",
+      "source": "评审第 2 轮 iss-mw8joahc-4fc16e 残留"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/track.py",
+      "summary": "回应 iss-mw8kwygq-0717cf（P2）：portfolio_nav 的基准起算点改为三分支——(a) 入场日有基准 bar：该日开盘为基（与组合同口径）；(b) 入场日缺 bar、其后有 bar：anchor 取其后首根 bar，base 取该 bar 开盘（无开盘用收盘），aligned 在 calendar >= anchor 之外置 NaN，入场日不补前收；(c) 入场日及其后都没有 bar：base 取最后有效收盘，aligned 全部落在 calendar > bench_last 之外为 NaN；bench_last 写入 nav.attrs 供状态行使用。nav_status_text 在基准列全空但存在 bench_last 时输出「沪深300 数据截至 X，尚未覆盖入场日」，只有完全无基准数据才说「数据缺失」。回应 iss-mw8joahc-4fc16e 残留：_batch_plans 在 sort/head 之前执行 rows = rows[rows[\"_order\"].notna()]，部分行缺排名时无排名行不进入 Top5，len(codes)<top_n 记 dropped。",
+      "commit": "056c7de"
+    },
+    {
+      "path": "tests/test_track_nav.py",
+      "summary": "23 → 26 个用例。新增 test_bench_missing_entry_bar_uses_later_open_not_previous_close（基准入场日前有 bar、入场日缺、次日恢复 → 入场日沪深300 为 NaN、次日 = 12/10 = 1.2，不出现前收/后收造成的虚假下跌）；test_bench_ends_before_entry_reports_data_until_not_missing（基准止于入场日前 → 组合仍 6 日、基准列全 NaN、状态行含「数据截至 2026-01-02」「尚未覆盖入场日」且不含「数据缺失」）；test_partial_rank_does_not_fill_top5_with_unranked_rows（8 行仅 2 行有排名 → codes 只有 2 只且 skip_reason 含「仅 2 只」；5 行有排名 + 3 行无排名 → 只取 5 只有排名行）。",
+      "commit": "056c7de"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-004.json + .devloop/worklog/2026-11.jsonl + .devloop/calendar/2026-11.json",
+      "summary": "计划项 status=in_review、progress=97，links.commit=056c7de，links.test 更新为 123 passed/26/离线冒烟；worklog 与日历补本轮 dev/test 记录。",
+      "commit": "本次提交"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_track_nav.py -q",
+      "result": "26 passed, 1 warning in 9.93s",
+      "passed": true,
+      "evidence": "覆盖基准起算点三分支与部分行缺排名两条新场景；既有 23 条全部通过。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "123 passed, 1 warning in 13.91s",
+      "passed": true,
+      "evidence": "全量通过（基线 120 + 新增 3），无回归。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock/track.py astock/track_ui.py",
+      "result": "Success: no issues found in 2 source files",
+      "passed": true,
+      "evidence": "类型检查通过。"
+    },
+    {
+      "command": "离线真数据冒烟：patch track/track_ui 的 load_daily/load_index_daily 读 cache/daily/*.parquet，再调 portfolio_nav()/run_track()",
+      "result": "detail 216 行/44 批；nav 44 行/41 批（2026-08-31 → 2026-11-06）；Top5 +4.34% vs 沪深300 -11.13%，超额 +15.47pp；dropped 2：2025-01-07 成分不足 Top5（仅 1 只）、2026-11-09 入场日缺 bar；沪深300 最后有效 2026-11-06；run_track() 6 项、trace ['Top5 等权组合','沪深300','批次换仓']。",
+      "passed": true,
+      "evidence": "与上一轮数值一致，说明三分支修复只影响缺入场日 bar 的边角路径；最新批次保留、基准截至日提示仍在。"
+    },
+    {
+      "command": "在线真数据冒烟尝试（未 patch）",
+      "result": "TushareError: index_daily: 重试 3 次仍失败：HTTPConnectionPool(host='111.170.140.159', port=8020): Read timed out. (read timeout=30)",
+      "passed": false,
+      "evidence": "09:00 盘前，cache meta.fetched_at=2026-11-09 但 max=2026-11-06，load_index_daily 判定未覆盖 last_open_date 后联网，网络不可达；属环境限制，离线缓存冒烟覆盖同一代码路径。"
+    },
+    {
+      "command": "Jupyter 内联渲染验证：nbconvert --execute 临时 notebook（离线 parquet 替换数据层，再调 run_track()）",
+      "result": "输出 cell 含 application/vnd.plotly.v1+json；状态行 41 批/44 日（2026-08-31 → 2026-11-06），Top5 +4.34% vs 沪深300 -11.13%，超额 +15.47pp",
+      "passed": true,
+      "evidence": "净值图在 Jupyter 可正常渲染；入口 conda activate chy → python -m notebook --port 1234（本机无 chy 时用 .venv）。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "浏览器人工点开 Gradio 页面核对图形观感",
+      "reason": "无头会话只验证组件构建与数据链路；Jupyter 内联渲染可核对曲线本身，Gradio 页面布局仍需人工确认。",
+      "status": "needed"
+    },
+    {
+      "name": "kaleido 静态图导出（PNG 留档）",
+      "reason": "环境未安装 kaleido，write_image 报需要 Kaleido package；已改用 Jupyter 内联渲染替代观感核对，不影响页面内 gr.Plot。",
+      "status": "blocked"
+    },
+    {
+      "name": "联网拉取 2026-11-09 指数/个股 bar",
+      "reason": "盘前 Tushare 端点 read timeout，在线冒烟失败；已改用 cache/daily 离线数据完成同一路径验证。",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/track-nav",
+    "commit": "056c7de",
+    "pr": "",
+    "ci": "本地全量 pytest 123 passed；远端 CI 未运行（未开 PR）",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 2,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "openP2": 1,
+    "issues": [
+      {
+        "id": "iss-mw8kwygq-0717cf",
+        "severity": "P2",
+        "title": "基准缺入场日 bar 时 base 兜底口径不一致：会退化成「数据缺失」或凭空多出一日基准涨跌",
+        "suggestion": "基准起算点三分支：入场日有 bar / 其后有 bar / 其后无 bar，并补两条用例",
+        "status": "fixed",
+        "evidence": "astock/track.py:518-556 三分支实现；tests 新增 test_bench_missing_entry_bar_uses_later_open_not_previous_close、test_bench_ends_before_entry_reports_data_until_not_missing，26 passed；commit 056c7de。"
+      },
+      {
+        "id": "iss-mw8joahc-4fc16e",
+        "severity": "P2",
+        "title": "批次成分数与排名缺失未校验，仍按「Top5 等权」对外（残留：部分行缺排名）",
+        "suggestion": "head() 前过滤无排名行，不足则 dropped",
+        "status": "fixed",
+        "evidence": "astock/track.py:388-393 rows[rows[\"_order\"].notna()]；test_partial_rank_does_not_fill_top5_with_unranked_rows（2/8 有排名 → 仅 2 只并记 skip_reason；5/8 有排名 → 只取前 5）；commit 056c7de。"
+      },
+      {
+        "id": "iss-mw8jo6dd-b0f30e",
+        "severity": "P1",
+        "title": "基准 bar 缺失被当成「非交易日」剔除最新批次，净值又被基准日历截断",
+        "suggestion": "交易日历判定 + 基准缺口保留批次并注明截止日 + 超额按共同有效日",
+        "status": "fixed",
+        "evidence": "commit 00c6b05；_trading_days 用 load_trade_cal，组合日历取成分股并集 ∩ 交易日历；test_batch_on_non_trading_day_is_dropped / test_missing_bench_bar_on_entry_keeps_batch / test_nav_extends_when_benchmark_lags_tail；离线冒烟最新批次保留。"
+      },
+      {
+        "id": "iss-mw8jodh9-e76932",
+        "severity": "P2",
+        "title": "个股 close 为 NaN 时当日权重被静默重分配",
+        "suggestion": "值级 ffill + ratio.fillna(1.0)，当日收益记 0",
+        "status": "fixed",
+        "evidence": "commit 00c6b05；test_nan_close_carries_previous_close_without_reweighting 断言 1.0 / 1.04。"
+      },
+      {
+        "id": "iss-mw8jogea-70f60f",
+        "severity": "P2",
+        "title": "run_track 无异常隔离，净值段失败会连带丢掉表格",
+        "suggestion": "净值段 try/except，失败仍返回 6 项",
+        "status": "fixed",
+        "evidence": "commit 00c6b05；astock/track_ui.py 净值段 try/except；test_run_track_survives_nav_failure 断言 6 项 + 「失败/boom」+ 分组统计仍在。"
+      },
+      {
+        "id": "iss-mw8jopos-909fec",
+        "severity": "P2",
+        "title": "验收 #2（超额表降级到折叠区）缺少可复核证据",
+        "suggestion": "build_track_tab() 结构断言",
+        "status": "fixed",
+        "evidence": "commit 00c6b05；test_build_track_tab_folds_excess_tables_below_nav：Plot 在两个 open=False Accordion 之前、折叠区含「分组统计（平均超额）」「显著性检验」「逐条记录」。"
+      }
+    ]
+  },
+  "issueFeedbackTable": [
+    {
+      "issueId": "iss-mw8jo6dd-b0f30e",
+      "severity": "P1",
+      "status": "fixed",
+      "commit": "00c6b05",
+      "evidence": "_trading_days(load_trade_cal) + 组合日历=成分股并集∩交易日历 + 基准末端 NaN + 三条测试 + 离线冒烟最新批次保留"
+    },
+    {
+      "issueId": "iss-mw8joahc-4fc16e",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "056c7de",
+      "evidence": "head() 前过滤无排名行；test_partial_rank_does_not_fill_top5_with_unranked_rows（2/8 → 仅 2 只 dropped；5/8 → 只取前 5）"
+    },
+    {
+      "issueId": "iss-mw8jodh9-e76932",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "00c6b05",
+      "evidence": "值级 ffill + ratio.fillna(1.0)；test_nan_close_carries_previous_close_without_reweighting"
+    },
+    {
+      "issueId": "iss-mw8jogea-70f60f",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "00c6b05",
+      "evidence": "run_track 净值段 try/except；test_run_track_survives_nav_failure"
+    },
+    {
+      "issueId": "iss-mw8jopos-909fec",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "00c6b05",
+      "evidence": "build_track_tab() 结构断言 test_build_track_tab_folds_excess_tables_below_nav"
+    },
+    {
+      "issueId": "iss-mw8kwygq-0717cf",
+      "severity": "P2",
+      "status": "fixed",
+      "commit": "056c7de",
+      "evidence": "基准起算三分支 + 两条新用例（入场日缺 bar 次日恢复；基准止于入场日前）"
+    }
+  ],
+  "previousHandoffId": "ho-20261109-003",
+  "next": "请评审在 rev-20261109-001 上做第 3 轮 diff 评审：重点看 056c7de 的基准起算三分支（tests/test_track_nav.py 两条新用例）与部分行缺排名过滤（一条新用例），并按本 handoff 的 issueFeedbackTable 判定 6 条 issue 闭环（工具未提供由开发回填 feedback 的入口）。通过后请开 PR 触发远端 CI；合并后由开发补 update handoff 并把 plan-20261103-004 改为 done。",
+  "createdAt": "2026-11-09T01:35:00.000Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-005.md"
+}

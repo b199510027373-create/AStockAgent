@@ -10,7 +10,24 @@
   "evidence": "验收 #2「平均超额表降级到折叠区，仍可查看」在代码里只体现为 astock/track_ui.py:67-72 的 `with gr.Accordion(\"平均超额表 / 显著性检验（重叠窗口，仅供参考）\", open=False)` 与 `with gr.Accordion(\"逐条记录\", open=False)`。links.test 对本 Tab 的证据只有第 5 条“gr.Blocks 构建 track tab 通过”，这是构建冒烟、不含内容断言；TrackUiWiringTests.test_run_track_puts_nav_first_and_keeps_excess_table 只断言 `len(outputs) == 6`、outputs[0] 含“组合净值/状态”、outputs[2] 含“Top2”，没有断言首屏第一个可视块是 nav_chart、也没有断言超额表与显著性表位于默认收起的 Accordion 内。因此验收 #2 目前既无自动化断言，也无明确的手工验证记录，无法复核“折叠但可见”。",
   "suggestion": "二选一即可，由开发在下一轮提交时落地：(a) 在 tests/test_track_nav.py 增加 build_track_tab() 的结构断言——遍历 blocks，断言 `Plot(label=\"Top5 等权组合净值 vs 沪深300\")` 的 index 小于两个 Accordion，且两个 Accordion 内分别包含 summary/significance 与 detail、`open` 为 False；(b) 若认为该断言过脆，则在 links.test 或交付文档里写明手工验证步骤与结果：「打开推荐跟踪 Tab → 首屏只有净值图 + 一行口径文案 → 平均超额表/显著性/逐条记录默认收起 → 展开后三张表可见且有数据」。验收标准：验收 #2 有一条可复核的证据（测试断言或手工验证记录）落在下一轮 links.test 中。",
   "confidence": 0.75,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-09T00:50:40.012Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T01:27:21.482Z"
+  },
+  "createdAt": "2026-11-09T00:50:40.012Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T01:27:21.482Z"
+    }
+  ]
 }
