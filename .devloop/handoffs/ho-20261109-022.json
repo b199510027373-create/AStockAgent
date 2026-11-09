@@ -1,0 +1,183 @@
+{
+  "id": "ho-20261109-022",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-002",
+  "threadId": "rev-20261109-003",
+  "sessionId": "",
+  "title": "模型网关与工具调用协议 · 元数据与 CI 更新（be372ad）",
+  "summary": "相对 ho-20261109-021 无代码变更；补记评审修复的 DevLoop 元数据提交 be372ad（plan links/test、calendar、worklog、ho-20261109-021），并将 main 推送 origin。代码仍为 6450a2c；两次 GitHub Actions CI 均成功：6450a2c run 42580971887、be372ad run 42581250922。计划项保持 in_review/98，等待 rev-20261109-003 复评。",
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "text": "依据 ADR-014 新增 astock/agent/gateway.py：ChatModel 协议 + DeepSeekAdapter + OpenAICompatibleAdapter（可指 Ollama/vLLM）+ RuleFallback。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-02",
+      "text": "统一 tool_calls 解析；对不支持 function calling 的模型退化为 JSON 协议。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-03",
+      "text": "配置全部走 .env：AGENT_PROVIDER/AGENT_MODEL/AGENT_BASE_URL/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "REQ-04",
+      "text": "业务代码禁止 import 供应商 SDK；llm.py 保留给推荐文案，先不动。",
+      "source": "plan-20261107-002 任务描述"
+    },
+    {
+      "id": "ACC-01",
+      "text": "切换 AGENT_PROVIDER 不需要改业务代码。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-02",
+      "text": "支持 function calling 的模型走 tool_calls；不支持的走 JSON 协议。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-03",
+      "text": "无 key / 全部失败时规则兜底，流程不崩。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-04",
+      "text": "每次调用记录 provider/model/token 用量。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "ACC-05",
+      "text": "启动能力探测失败时标记 degraded 并提示。",
+      "source": "plan-20261107-002 验收标准"
+    },
+    {
+      "id": "REV-01",
+      "text": "修复 JSON 协议模式仍按原生 tool_calls/tool 线格式回放历史的问题（P1 iss-mw8y5wgw-ddc6f6）。",
+      "source": "devloop_review rev-20261109-003"
+    },
+    {
+      "id": "REV-02",
+      "text": "并行 tool_calls 截断需在 usage/日志留痕并补双调用单测（P2 iss-mw8y5whm-15342d）。",
+      "source": "devloop_review rev-20261109-003"
+    },
+    {
+      "id": "REV-03",
+      "text": "用量默认持久化或接 sink，明确 ACC-04 证据级别（P2 iss-mw8y5wio-4b8327）。",
+      "source": "devloop_review rev-20261109-003"
+    },
+    {
+      "id": "REV-04",
+      "text": "收敛 config.py 的 AGENT_* 常量与 GatewaySettings.from_env 为单一配置源（P2 iss-mw8y5wjh-b0137b）。",
+      "source": "devloop_review rev-20261109-003"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-002.json",
+      "summary": "状态 in_review/progress 98；links.test 追加评审修复后的 31/189/mypy/ruff 证据，links.commit=6450a2c、links.ci 更新；保留原有 27/185 证据。",
+      "commit": "be372ad"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "记录评审修复工作单元与评审 round 1 事件。",
+      "commit": "be372ad"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "记录评审修复开发工作与测试证据。",
+      "commit": "be372ad"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261109-021.json",
+      "summary": "评审修复 update handoff（4 条 issue 映射、changes、tests、CI）。",
+      "commit": "be372ad"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261109-021.md",
+      "summary": "评审修复 update handoff Markdown。",
+      "commit": "be372ad"
+    },
+    {
+      "path": "（无代码变更）",
+      "summary": "相对 ho-20261109-021 未修改 astock/ 或 tests/；代码仍为 6450a2c。",
+      "commit": "be372ad"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions CI (push 6450a2c)",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42580971887 / job 129039337481；评审修复代码提交。"
+    },
+    {
+      "command": "GitHub Actions CI (push be372ad)",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42581250922 / job 129040246043；元数据提交。"
+    },
+    {
+      "command": "pytest tests/test_agent_gateway.py -q",
+      "result": "31 passed, 1 warning",
+      "passed": true,
+      "evidence": "本地执行；本轮无代码变化。"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "189 passed, 1 warning",
+      "passed": true,
+      "evidence": "本地执行；本轮无代码变化。"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "本地执行；与 CI 目标一致。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push origin main",
+      "reason": "6450a2c 与 be372ad 均已推送 origin/main。",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub Actions check-runs 只读",
+      "reason": "读取两次 CI run 均为 success。",
+      "status": "granted"
+    },
+    {
+      "name": "真实 DeepSeek/Ollama/vLLM 联调",
+      "reason": "仍为离线 mock 验证；真实服务需要 API Key 或本地端点。",
+      "status": "needed"
+    },
+    {
+      "name": "app.py/UI 接线与启动冒烟",
+      "reason": "ACC-05 目前只有网关 status_note() 的库级证据。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "be372ad",
+    "pr": "无（按项目惯例直接推送 main）",
+    "ci": "success: run 42580971887 (code 6450a2c) / run 42581250922 (metadata be372ad)",
+    "merge": "main 与 origin/main 同步；无独立 PR/合并流程",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261109-021",
+  "next": "等待评审方基于 rev-20261109-003 复评并关闭 4 条 issue。真实模型联调与 app.py/UI 接线（含无 key 启动冒烟）仍为后续工作。",
+  "createdAt": "2026-11-09T07:47:30.653Z",
+  "markdownPath": ".devloop/handoffs/ho-20261109-022.md"
+}
