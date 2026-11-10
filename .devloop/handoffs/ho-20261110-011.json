@@ -1,0 +1,174 @@
+{
+  "id": "ho-20261110-011",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-005",
+  "threadId": null,
+  "sessionId": "",
+  "title": "「无显著 alpha」实时横幅（ledger 驱动）",
+  "summary": "针对 rev-20261110-002 的三条评审问题做修复（相对 ho-20261110-009 的交付）：(1) 实时性：build_recommend_tab 现在返回 banner 组件（elem_id=alpha-banner），新增 bind_banner_refresh 在 app.load 时重新聚合，app.py 在 Blocks 上下文内注册；测试断言 load 依赖输出含 alpha-banner（含真实 app 接线测试）。(2) 结算缺口：新增 track.refresh_tracking(horizon=5, limit=30, lookback_days=120) 增量结算未完成的实盘批次，scheduler.run_once 成功后调用（失败只记日志）；ledger 新增 tracking_run_ids/live_run_dates；横幅新增 tracking_date/latest_live_date/pending_days，落后时明示「跟踪数据截至 X，最新推荐日 Y，N 个推荐日尚无 T+5 结果」。(3) DB 故障：alpha_banner_snapshot 不再吞异常，run_alpha_banner 转 failed + banner_state=error + 红底「统计读取失败」文案，明确不代表样本不足。测试：目标 3 文件 73 passed、全量 239 passed、mypy/ruff 通过；真实 ledger 快照显示 live_days=3、pending_days=6。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "横幅数字来自 ledger/stats 实时聚合，而非硬编码",
+      "source": "plan-20261103-005 验收 1"
+    },
+    {
+      "id": "R2",
+      "text": "展示实盘样本数、有效独立窗口、Top2−其余 p（或「样本不足，暂不显示」）",
+      "source": "plan-20261103-005 验收 2"
+    },
+    {
+      "id": "R3",
+      "text": "样本达到门槛后横幅自动消失或转为正向提示",
+      "source": "plan-20261103-005 验收 3"
+    },
+    {
+      "id": "R4",
+      "text": "无可信统计时不得显示任何显著性结论",
+      "source": "plan-20261103-005 验收 4"
+    },
+    {
+      "id": "R5",
+      "text": "横幅必须随页面打开/刷新重新聚合（app.load），否则 16:40 调度结果进不来；需结构断言测试锁定",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylup"
+    },
+    {
+      "id": "R6",
+      "text": "调度成功后自动增量结算 tracking，或在横幅明示跟踪截止日/落后天数，不得把 stale 说成「样本不足」；需测试",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylv9"
+    },
+    {
+      "id": "R7",
+      "text": "DB 读取失败必须与「样本不足」区分（独立 error 状态），补 sqlite3.OperationalError 用例",
+      "source": "评审 rev-20261110-002 P2 iss-mwadylvz"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/ledger.py",
+      "summary": "新增 tracking_run_ids(horizon, complete_only) 与 live_run_dates(limit)，供横幅判断结算进度",
+      "commit": "4d41512"
+    },
+    {
+      "path": "astock/track.py",
+      "summary": "AlphaBanner 增加 tracking_date/latest_live_date/pending_days；alpha_banner_snapshot 不再吞异常；新增 _pending_note/alpha_banner_error_markdown；抽出 _detail_rows/_save_tracking_rows；新增 refresh_tracking 增量结算",
+      "commit": "4d41512"
+    },
+    {
+      "path": "astock/use_cases.py",
+      "summary": "run_alpha_banner 失败分支渲染「统计读取失败」红底横幅（banner_state=error），区分 DB 故障与样本不足",
+      "commit": "4d41512"
+    },
+    {
+      "path": "astock/recommend_ui.py",
+      "summary": "build_recommend_tab 返回 banner 组件（elem_id=alpha-banner）；新增 bind_banner_refresh 注册 page load 刷新",
+      "commit": "4d41512"
+    },
+    {
+      "path": "app.py",
+      "summary": "在 Blocks 上下文内调用 bind_banner_refresh(app, recommend_banner)",
+      "commit": "4d41512"
+    },
+    {
+      "path": "astock/scheduler.py",
+      "summary": "推荐成功后调用 refresh_tracking 结算 T+N；失败只记日志不影响推荐状态",
+      "commit": "4d41512"
+    },
+    {
+      "path": "tests/test_alpha_banner.py",
+      "summary": "新增 load 绑定结构测试、app 接线测试、跟踪落后注释测试、DB 异常上抛测试、refresh_tracking 增量结算测试",
+      "commit": "4d41512"
+    },
+    {
+      "path": "tests/test_hardening.py",
+      "summary": "SchedulerIdempotencyTests 断言成功路径调用 refresh_tracking、stale 路径不调用",
+      "commit": "4d41512"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "失败用例断言 banner_state=error、文案含「统计读取失败」「不代表样本不足」",
+      "commit": "4d41512"
+    },
+    {
+      "path": "README.md",
+      "summary": "横幅口径补充：每次打开/刷新重新聚合、调度后自动结算 T+5、跟踪落后与 DB 故障的文案",
+      "commit": "4d41512"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_alpha_banner.py tests/test_use_cases.py tests/test_hardening.py -q",
+      "result": "73 passed",
+      "passed": true,
+      "evidence": "73 passed, 1 warning, 2 subtests passed；含新增 BannerRefreshBindingTests、AppBannerWiringTests、TrackingSettlementTests、DB 异常上抛用例"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "239 passed",
+      "passed": true,
+      "evidence": "239 passed, 1 warning, 2 subtests passed（上轮 232）"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success",
+      "passed": true,
+      "evidence": "Success: no issues found in 31 source files"
+    },
+    {
+      "command": "ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": "python .tmp-tests/banner_smoke.py（ASTOCK_DB_PATH 指向 .tmp-tests/banner-smoke，空库 + 60 个实盘日）",
+      "result": "SMOKE OK",
+      "passed": true,
+      "evidence": "空库 -> insufficient 且无 p；60 天 -> positive, 独立窗口 12, p<0.0001；SMOKE OK"
+    },
+    {
+      "command": "python -c \"from astock.track import alpha_banner_snapshot; ...\"（真实 data/astock.db）",
+      "result": "与预期一致",
+      "passed": true,
+      "evidence": "insufficient, live_days=3, tracking_date=2026-10-27, latest_live_date=2026-11-06, pending_days=6；横幅含「6 个推荐日尚无 T+5 结果」"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github_push",
+      "reason": "推送 feat/plan-20261103-005-banner-refresh 分支",
+      "status": "granted"
+    },
+    {
+      "name": "github_pr_api",
+      "reason": "用 GitHub API 创建 PR 并读取 CI 结果",
+      "status": "granted"
+    },
+    {
+      "name": "human_merge",
+      "reason": "PR 合并由人工执行",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-005-banner-refresh",
+    "commit": "4d41512",
+    "pr": "pending",
+    "ci": "pending（推送后触发）",
+    "merge": "pending（需人工合并）",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-009",
+  "next": "推送分支并创建 PR #6（修复 rev-20261110-002），等 CI；随后由 reviewer 做第 2 轮全量复核（openP0=0/openP1=0 才 approve）。若复核通过，人工合并并关闭 plan-20261103-005；合并后补一份 update handoff 记录 merge/CI 状态。",
+  "createdAt": "2026-11-10T07:57:19.396Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-011.md"
+}

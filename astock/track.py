@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import math
 from dataclasses import dataclass
@@ -225,6 +226,9 @@ class AlphaBanner:
     p_value: float | None
     top2_mean: float | None
     rest_mean: float | None
+    latest_live_date: str | None = None
+    tracking_date: str | None = None
+    pending_days: int = 0
 
     @property
     def trustworthy(self) -> bool:
@@ -250,6 +254,9 @@ def alpha_banner(
     horizon: int = BANNER_HORIZON,
     min_effective: float = MIN_EFFECTIVE_N,
     alpha: float = ALPHA_LEVEL,
+    latest_live_date: str | None = None,
+    tracking_date: str | None = None,
+    pending_days: int = 0,
 ) -> AlphaBanner:
     """Aggregate realised tracking rows into the banner state.
 
@@ -313,18 +320,41 @@ def alpha_banner(
         p_value=p_value,
         top2_mean=top2_mean,
         rest_mean=rest_mean,
+        latest_live_date=latest_live_date,
+        tracking_date=tracking_date,
+        pending_days=pending_days,
     )
 
 
 def alpha_banner_snapshot(*, horizon: int = BANNER_HORIZON) -> AlphaBanner:
-    """Read the ledger and build the banner; ledger failure means no sample."""
-    try:
-        from .ledger import tracking_rows
+    """Read the ledger and build the banner.
 
-        rows = tracking_rows(horizon)
-    except Exception:  # noqa: BLE001 - 横幅不能拖垮推荐页
-        rows = []
-    return alpha_banner(rows, horizon=horizon)
+    Database errors propagate to :func:`astock.use_cases.run_alpha_banner` so a
+    broken ledger is reported as「统计读取失败」instead of being disguised as
+    「样本不足」. The snapshot also carries the tracking cut-off date and how
+    many live recommendation days still wait for a T+N result.
+    """
+    from .ledger import live_run_dates, tracking_rows
+
+    rows = tracking_rows(horizon)
+    live_dates = live_run_dates(500)
+    settled = [
+        str(row.get("data_as_of"))
+        for row in rows
+        if row.get("data_as_of") and _finite_float(row.get("excess")) is not None
+    ]
+    tracking_date = max(settled) if settled else None
+    latest_live = live_dates[0] if live_dates else None
+    pending = 0
+    if latest_live:
+        pending = sum(1 for day in live_dates if tracking_date is None or day > tracking_date)
+    return alpha_banner(
+        rows,
+        horizon=horizon,
+        latest_live_date=latest_live,
+        tracking_date=tracking_date,
+        pending_days=pending,
+    )
 
 
 def _format_p(value: float | None) -> str:
@@ -340,6 +370,28 @@ def _banner_box(body: str, *, background: str, border: str) -> str:
         f'<div style="background:{background};border-left:4px solid {border};'
         f'padding:10px 14px;border-radius:4px;margin:4px 0">{body}</div>'
     )
+
+
+def _pending_note(banner: AlphaBanner) -> str:
+    """Explain tracking cut-off vs latest live run instead of hiding it."""
+    if not banner.pending_days or not banner.latest_live_date:
+        return ""
+    tracking = banner.tracking_date or "—"
+    return (
+        f"数据：跟踪数据截至 **{tracking}**，最新推荐日 **{banner.latest_live_date}**，"
+        f"{banner.pending_days} 个推荐日尚无 T+{banner.horizon} 结果（未到期或待结算）。"
+    )
+
+
+def alpha_banner_error_markdown(message: str) -> str:
+    """Render a ledger/DB failure: it must never look like「样本不足」."""
+    body = (
+        "⚠️ **统计读取失败**<br>"
+        f"{html.escape(message)}<br>"
+        "<sub>这是 ledger/数据库读取错误，不代表样本不足；"
+        "修复后刷新页面即可，横幅不会给出显著性结论。</sub>"
+    )
+    return _banner_box(body, background="#fff5f5", border="#e03131")
 
 
 def alpha_banner_markdown(banner: AlphaBanner) -> str:
@@ -358,17 +410,19 @@ def alpha_banner_markdown(banner: AlphaBanner) -> str:
         f"T+{banner.horizon} 超额 vs 沪深300，Newey-West lag={banner.horizon - 1}、"
         "Student-t；历史样本内检验，不构成交易建议。"
     )
+    note = _pending_note(banner)
+    note_html = f"<br>{note}" if note else ""
 
     if banner.state == "insufficient":
         head = f"🧪 {title} · 样本不足"
         detail = "**样本不足，不显示显著性**（有效独立样本 < 10）。"
-        body = f"{head}<br>{numbers}<br>{detail}<br><sub>{method}</sub>"
+        body = f"{head}<br>{numbers}<br>{detail}{note_html}<br><sub>{method}</sub>"
         return _banner_box(body, background="#f1f3f5", border="#868e96")
 
     if banner.state == "unavailable":
         head = f"🧪 {title} · p 暂不可计算"
         detail = "p 值暂不可计算（方差为 0 或样本结构异常），**不显示显著性结论**。"
-        body = f"{head}<br>{numbers}<br>{detail}<br><sub>{method}</sub>"
+        body = f"{head}<br>{numbers}<br>{detail}{note_html}<br><sub>{method}</sub>"
         return _banner_box(body, background="#f1f3f5", border="#868e96")
 
     p_text = _format_p(banner.p_value)
@@ -376,18 +430,18 @@ def alpha_banner_markdown(banner: AlphaBanner) -> str:
     if banner.state == "positive":
         head = f"✅ {title} · 样本内正向观察"
         detail = "Top2 在历史样本内暂优于其余（p < 0.05）；样本仍有限，不构成交易建议。"
-        body = f"{head}<br>{stats}<br>{detail}<br><sub>{method}</sub>"
+        body = f"{head}<br>{stats}<br>{detail}{note_html}<br><sub>{method}</sub>"
         return _banner_box(body, background="#ebfbee", border="#2f9e44")
 
     if banner.state == "negative":
         head = f"⚠️ {title} · Top2 弱于其余"
         detail = "Top2 显著弱于其余（p < 0.05），未发现正向 alpha。"
-        body = f"{head}<br>{stats}<br>{detail}<br><sub>{method}</sub>"
+        body = f"{head}<br>{stats}<br>{detail}{note_html}<br><sub>{method}</sub>"
         return _banner_box(body, background="#fff5f5", border="#e03131")
 
     head = f"🧪 {title} · 未发现显著 alpha"
     detail = "Top2 与其余的差异不显著（p ≥ 0.05），暂无可宣称的 alpha。"
-    body = f"{head}<br>{stats}<br>{detail}<br><sub>{method}</sub>"
+    body = f"{head}<br>{stats}<br>{detail}{note_html}<br><sub>{method}</sub>"
     return _banner_box(body, background="#f1f3f5", border="#868e96")
 
 
@@ -941,15 +995,8 @@ def nav_figure(nav: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def compute_tracking() -> tuple[pd.DataFrame, pd.DataFrame, str]:
-    batches = _load_batches()
-    if not batches:
-        return (
-            pd.DataFrame(),
-            pd.DataFrame(),
-            "暂无历史推荐。先运行一次「每日推荐」，或等收盘后的自动任务生成。",
-        )
-
+def _detail_rows(batches: list[dict]) -> pd.DataFrame:
+    """Compute T+1/5/20 returns for the given batches (no side effects)."""
     earliest = min(b["as_of"] for b in batches)
     start = (earliest - pd.Timedelta(days=10)).strftime("%Y%m%d")
     end = pd.Timestamp.today().strftime("%Y%m%d")
@@ -991,7 +1038,85 @@ def compute_tracking() -> tuple[pd.DataFrame, pd.DataFrame, str]:
                 rec[f"超额T+{n}"] = (r - b) * 100 if r is not None and b is not None else None
             records.append(rec)
 
-    detail = pd.DataFrame(records)
+    return pd.DataFrame(records)
+
+
+def _save_tracking_rows(detail: pd.DataFrame) -> int:
+    """Persist per-run tracking rows; returns the number of runs written."""
+    try:
+        from .ledger import save_tracking
+    except Exception:
+        return 0
+    saved = 0
+    for run_id, group in detail.groupby("run_id"):
+        if not run_id:
+            continue
+        rows = []
+        for _, r in group.iterrows():
+            for n in HORIZONS:
+                ret = pd.to_numeric(pd.Series([r.get(f"T+{n}")]), errors="coerce").iloc[0]
+                exc = pd.to_numeric(pd.Series([r.get(f"超额T+{n}")]), errors="coerce").iloc[0]
+                rows.append(
+                    {
+                        "code": r.get("代码"),
+                        "horizon": n,
+                        "entry_date": str(r.get("入场日")),
+                        "exit_date": None,
+                        "ret": None if pd.isna(ret) else float(ret) / 100.0,
+                        "excess": None if pd.isna(exc) else float(exc) / 100.0,
+                    }
+                )
+        save_tracking(str(run_id), rows)
+        saved += 1
+    return saved
+
+
+def refresh_tracking(
+    *, horizon: int = BANNER_HORIZON, limit: int = 30, lookback_days: int = 120
+) -> tuple[int, str]:
+    """Settle forward returns for runs the banner still lacks data for.
+
+    The daily scheduler calls this after a successful recommendation so the
+    banner grows without anyone opening the tracking tab. Only runs inside the
+    ``lookback_days`` window whose T+``horizon`` excess is still null are
+    recomputed; completed runs are never reloaded.
+    """
+    batches = _load_batches()
+    if not batches:
+        return 0, "暂无推荐批次，跳过跟踪结算"
+    try:
+        from .ledger import tracking_run_ids
+    except Exception:
+        return 0, "ledger 不可用，跳过跟踪结算"
+    done = tracking_run_ids(horizon, complete_only=True)
+    cutoff = (pd.Timestamp.today() - pd.Timedelta(days=lookback_days)).normalize()
+    pending = [
+        b
+        for b in batches
+        if str(b.get("run_id") or "")
+        and str(b["run_id"]) not in done
+        and b["as_of"] >= cutoff
+    ]
+    if not pending:
+        return 0, "无待结算批次"
+    pending = sorted(pending, key=lambda b: b["as_of"])[-max(1, int(limit)) :]
+    detail = _detail_rows(pending)
+    if detail.empty:
+        return 0, "待结算批次暂无前向数据"
+    saved = _save_tracking_rows(detail)
+    return saved, f"已结算 {saved} 个批次（T+1/5/20 前向收益写入 tracking）"
+
+
+def compute_tracking() -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    batches = _load_batches()
+    if not batches:
+        return (
+            pd.DataFrame(),
+            pd.DataFrame(),
+            "暂无历史推荐。先运行一次「每日推荐」，或等收盘后的自动任务生成。",
+        )
+
+    detail = _detail_rows(batches)
     if detail.empty:
         return pd.DataFrame(), pd.DataFrame(), "历史推荐文件里没有可跟踪的记录。"
 
@@ -1046,30 +1171,7 @@ def compute_tracking() -> tuple[pd.DataFrame, pd.DataFrame, str]:
     status += " 跟踪口径：T+1 起从 tradable_from（下一交易日）开盘买入，持有到第 N 个交易日收盘；超额=个股收益-沪深300。"
     status += " 数据源：SQLite ledger（缺失时回退 JSON）。"
     detail = detail.sort_values(["推荐日", "排名"], ascending=[False, True]).reset_index(drop=True)
-    try:
-        from .ledger import save_tracking
-
-        for run_id, group in detail.groupby("run_id"):
-            if not run_id:
-                continue
-            rows = []
-            for _, r in group.iterrows():
-                for n in HORIZONS:
-                    ret = pd.to_numeric(pd.Series([r.get(f"T+{n}")]), errors="coerce").iloc[0]
-                    exc = pd.to_numeric(pd.Series([r.get(f"超额T+{n}")]), errors="coerce").iloc[0]
-                    rows.append(
-                        {
-                            "code": r.get("代码"),
-                            "horizon": n,
-                            "entry_date": str(r.get("入场日")),
-                            "exit_date": None,
-                            "ret": None if pd.isna(ret) else float(ret) / 100.0,
-                            "excess": None if pd.isna(exc) else float(exc) / 100.0,
-                        }
-                    )
-            save_tracking(str(run_id), rows)
-    except Exception:
-        pass
+    _save_tracking_rows(detail)
     return detail, summary, status
 
 

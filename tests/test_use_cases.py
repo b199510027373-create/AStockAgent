@@ -611,7 +611,13 @@ class AlphaBannerUseCaseTests(unittest.TestCase):
 
         self.assertEqual(result.status, "failed")
         self.assertIn("db locked", result.message)
-        self.assertIn("⚠️", result.payload["banner_md"])
+        self.assertEqual(result.payload["banner_state"], "error")
+        md = result.payload["banner_md"]
+        self.assertIn("统计读取失败", md)
+        self.assertIn("db locked", md)
+        # 数据库故障不得被描述成「样本不足」
+        self.assertIn("不代表样本不足", md)
+        self.assertNotIn("样本不足，不显示显著性", md)
 
     def test_recommend_ui_banner_markdown_maps_payload(self):
         result = RunResult("", "success", {"banner_md": "LIVE BANNER"}, {})

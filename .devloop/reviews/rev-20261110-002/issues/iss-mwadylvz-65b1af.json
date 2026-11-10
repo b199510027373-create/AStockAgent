@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwadylvz-65b1af",
+  "threadId": "rev-20261110-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "error-handling",
+  "file": "astock/track.py",
+  "lines": "319-327",
+  "title": "DB 异常被吞成「样本不足」，use_case 的 error 分支实际不可达",
+  "evidence": "alpha_banner_snapshot 用 `except Exception: rows = []` 吞掉所有 ledger 异常（docstring 写「ledger failure means no sample」），于是 DB 被锁/文件损坏/schema 缺失时横幅显示「实盘样本 0 个交易日 · 样本不足」，把基础设施故障伪装成统计结论；同时 astock/use_cases.py:578-587 的 failed 分支（banner_state=\"error\"、⚠️ 提示）在真实 DB 故障下不可达（tests/test_use_cases.py 只能靠 patch snapshot 抛异常来覆盖）。",
+  "suggestion": "让 snapshot 把异常转换为独立状态（如 state=\"error\"，携带简短原因），或直接向上抛由 run_alpha_banner 走 failed 分支渲染 ⚠️ 横幅；横幅文案需区分「样本不足（数据正常但没有足够样本）」与「统计读取失败」。补测试：patch tracking_rows 抛 sqlite3.OperationalError 时断言 banner_state==\"error\"/文案含失败提示而非「样本不足」。修复人：本分支开发者。完全解决判据：DB 故障与样本不足在 UI 上可区分，且测试覆盖该分支。",
+  "confidence": 0.75,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-10T07:45:56.303Z"
+}

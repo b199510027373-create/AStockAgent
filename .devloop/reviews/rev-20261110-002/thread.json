@@ -1,0 +1,27 @@
+{
+  "id": "rev-20261110-002",
+  "title": "评审：「无显著 alpha」实时横幅（ledger 驱动）",
+  "planItemId": "plan-20261103-005",
+  "sourceDevSessionId": "session-ae4db07f-a50d-4fc0-a44f-fabaf196353b",
+  "branch": "",
+  "base": "main",
+  "files": [
+    "README.md",
+    "astock/ledger.py",
+    "astock/recommend_ui.py",
+    "astock/track.py",
+    "astock/use_cases.py",
+    "tests/test_alpha_banner.py",
+    "tests/test_core_paths.py",
+    "tests/test_use_cases.py",
+    "warning: in the working copy of '.devloop/reviews/rev-20261108-001/issues/iss-mw81x690-cbec5c.json', LF will be replaced by CRLF the next time Git touches it",
+    "warning: in the working copy of '.devloop/reviews/rev-20261108-001/thread.json', LF will be replaced by CRLF the next time Git touches it",
+    "warning: in the working copy of '.devloop/reviews/rev-20261109-001/issues/iss-mw8joahc-4fc16e.json', LF will be replaced by CRLF the next time Git touches it",
+    "warning: in the working copy of '.devloop/reviews/rev-20261109-001/issues/iss-mw8m51bp-dd9930.json', LF will be replaced by CRLF the next time Git touches it",
+    "warning: in the working copy of '.devloop/reviews/rev-20261109-001/thread.json', LF will be replaced by CRLF the next time Git touches it"
+  ],
+  "status": "changes_requested",
+  "createdAt": "2026-11-10T07:42:36.313Z",
+  "updatedAt": "2026-11-10T07:46:09.469Z",
+  "reviewSessionId": "session-ddd7ed78-bf34-4207-bb1b-403d59c66fe0"
+}

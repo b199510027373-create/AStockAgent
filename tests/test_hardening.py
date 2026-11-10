@@ -6,7 +6,7 @@ import threading
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -86,10 +86,12 @@ class SchedulerIdempotencyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
+        self.refresh_mock = MagicMock(return_value=(0, "skip"))
         self.patches = [
             patch.object(scheduler, "STATE_PATH", root / "state.json"),
             patch.object(scheduler, "LOG_PATH", root / "scheduler.log"),
             patch.object(scheduler, "LOCK_PATH", root / "scheduler.lock"),
+            patch.object(scheduler, "refresh_tracking", new=self.refresh_mock),
         ]
         for p in self.patches:
             p.start()
@@ -117,6 +119,27 @@ class SchedulerIdempotencyTests(unittest.TestCase):
         self.assertIn("2026-11-02:close", state["jobs"])
         self.assertEqual(state["jobs"]["2026-11-02:close"]["status"], "success")
         self.assertEqual(state["last_run_date"], "2026-11-02")
+
+    def test_success_settles_tracking_for_the_banner(self):
+        fake = make_result("2026-11-02", run_id="close")
+        with patch.object(
+            scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")
+        ):
+            with patch.object(scheduler, "run_recommendation", return_value=fake):
+                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+        # 调度成功后必须顺手结算 tracking，否则横幅只能等用户打开跟踪页
+        self.refresh_mock.assert_called_once_with()
+
+    def test_stale_result_does_not_settle_tracking(self):
+        stale = make_result(
+            "2026-10-30", status="stale", message="数据未更新"
+        )
+        with patch.object(
+            scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")
+        ):
+            with patch.object(scheduler, "run_recommendation", return_value=stale):
+                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+        self.refresh_mock.assert_not_called()
 
     def test_stale_as_of_does_not_mark_success(self):
         fake = make_result(

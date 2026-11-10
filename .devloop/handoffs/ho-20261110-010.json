@@ -1,0 +1,53 @@
+{
+  "id": "ho-20261110-010",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261110-002",
+  "sessionId": "",
+  "title": "评审：「无显著 alpha」实时横幅（ledger 驱动）",
+  "summary": "第 1 轮全量评审（rev-20261110-002 / plan-20261103-005「无显著 alpha 横幅」）。\n\n结论：request_changes。openP0=0，openP1=2，openP2=1。实现本身在统计口径上是对的（p 全部来自 astock/stats.py 的 newey_west/effective_n，NW lag=horizon−1、Student-t、有效独立样本 <10 不显示 p；每日 Top2−其余配对差与 astock/track.py:122-198 significance_table 的「Top2 - 其余」行同口径；recommend_ui 只做组装，符合 ARCH-01/STAT-01/ADR-006；live-only 过滤有 astock/ledger.py:315-339 与 tests/test_core_paths.py:120-186 覆盖；10 条横幅单测覆盖 insufficient/positive/no_alpha/negative/unavailable/ledger 失败/无 rank 等状态）。因此 P0 不成立。\n\n未通过的原因集中在「实时性」这一验收要点：\n1) P1（iss-mwadylup，astock/recommend_ui.py:52-54,88-101）：banner 的值在 gr.Blocks 构建期算一次就固定，仓库内 astock/ 下 grep `\\.load(`/`gr.Timer` 零命中，app.py:374/487/502 也没有 load 绑定，只有三个手工点击事件会刷新 → 进程内 16:40 调度（astock/scheduler.py:38 默认 16:40，app.py:502 启动）写入的 ledger 数据不会反映到已打开或新打开的页面，横幅长期停在启动时的状态，与 README.md:108「实时显示」及验收 1/3 不符。\n2) P1（iss-mwadylv9，astock/track.py:319-327,944-1073）：横幅唯一数据源 tracking 表只由 compute_tracking 写（astock/track.py:1070），调用链 astock/use_cases.py:467-470 ← astock/track_ui.py:17-19 ← track_ui.py:59 按钮；调度路径不刷新。用户不手工点开「推荐跟踪」页时横幅永远「实盘样本 0 · 样本不足」，验收 2/3 在常规路径不可达，README 的「直接聚合 tracking 表」也隐瞒了这个前置手动步骤。\n3) P2（iss-mwadylvz，astock/track.py:319-327）：ledger 异常被 `except Exception: rows = []` 吞成「样本不足」，DB 锁/损坏与「样本真的不足」不可区分，astock/use_cases.py:578-587 的 error 分支在真实故障下不可达。\n\n修复责任与完成判据（开发者在本分支 feat/plan-20261103-005-alpha-banner 上修复，修复后进入第 2 轮全量复核）：\n- 谁：本分支开发者（不改变对外契约，无需新 ADR）。\n- 修什么：① 页面加载即刷新横幅（app.load / Tab.select / Timer，让 build_recommend_tab 暴露 banner 组件），并加结构断言测试锁定该绑定；② 让 daily 调度成功后增量刷新 tracking（或横幅明确显示「跟踪数据截至 X、落后 N 个交易日」并提供补算入口），消除「样本恒为 0」；③ snapshot 区分 error 与 insufficient，补 sqlite3.OperationalError 用例。\n- 何时算完全解决：上述 3 条全部落地且有对应测试/手工验证记录（重启应用后刷新页面能看到最新数字；不点「推荐跟踪」也能在隔日看到样本增长或明确的 stale 提示），且 openP0=0、openP1=0；仅 openP2 残留时仍可 approve，但要保留 P2 的跟进记录。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 2,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "横幅只在页面构建时计算一次，缺少 load 刷新，定时任务产出不会反映到页面",
+        "suggestion": "在 app.py 构建 Blocks 后注册页面加载刷新：让 build_recommend_tab 返回 banner 组件，然后 `app.load(banner_markdown, outputs=banner)`（或在 tab 内用 `banner.load(...)`/`gr.Timer`）；同时补一条结构断言测试（例如断言 Blocks 的 dependencies 中存在 trigger=load 且 outputs 含 banner 的依赖），并在 README 说明「每次打开页面/刷新时重新聚合」。修复人：本分支开发者。完全解决判据：打开页面即拿到最新 ledger 数字，且有测试锁定该 load 绑定。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "横幅数据源 tracking 表只由「推荐跟踪」页手工写入，调度任务从不刷新，样本永远为 0",
+        "suggestion": "让每日自动推荐任务结束后同步刷新 T+5 结算（在调度器成功回调里调用 compute_tracking 等价逻辑，或对 tracking 缺失/落后于最新 live run 的天数做增量补算）；若出于网络成本不在调度中补算，则横幅必须显式展示数据截止日（如「跟踪数据截至 2026-10-30，落后 N 个交易日」）并给出触发补算的入口，而不是声称「样本不足」。补测试：存在 live run 但 tracking 落后时，横幅不得断言「样本不足」/或必须显示 stale 文案；以及调度路径确实刷新了 tracking。修复人：本分支开发者。完全解决判据：不手工打开跟踪页，隔日打开推荐页即可看到随样本增长而变化的数字。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "DB 异常被吞成「样本不足」，use_case 的 error 分支实际不可达",
+        "suggestion": "让 snapshot 把异常转换为独立状态（如 state=\"error\"，携带简短原因），或直接向上抛由 run_alpha_banner 走 failed 分支渲染 ⚠️ 横幅；横幅文案需区分「样本不足（数据正常但没有足够样本）」与「统计读取失败」。补测试：patch tracking_rows 抛 sqlite3.OperationalError 时断言 banner_state==\"error\"/文案含失败提示而非「样本不足」。修复人：本分支开发者。完全解决判据：DB 故障与样本不足在 UI 上可区分，且测试覆盖该分支。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-10T07:46:09.507Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-010.md"
+}
