@@ -36,13 +36,13 @@
       "CI run 42778980617 (PR #6, commit 5810511) -> success",
       "CI run 42779178938 (PR #6, commit b71b97f) -> success",
       "CI run 42779412198 (PR #6, commit 443d7e8) -> success",
-      "python .tmp-tests/banner_smoke.py (seeded 60 live days) -> SMOKE OK, positive p<0.0001; 空库 -> insufficient 无 p",
-      "真实 data/astock.db 快照 -> insufficient, live_days=3, tracking_date=2026-10-27, pending_days=6（横幅写明跟踪落后，不再只说样本不足）",
-      "merge: e5b98e88a9bcb3e3c7d035765809549c62bc867e (PR #6 merged into main)"
+      "CI run 42780225020 (main, merge commit e5b98e8) -> success",
+      "CI run 42780324424 (main, docs commit a6c7cb6) -> success",
+      "python .tmp-tests/banner_smoke.py (seeded 60 live days) -> SMOKE OK, positive p<0.0001; 空库 -> insufficient 无 p"
     ],
-    "handoff": "ho-20261110-014"
+    "handoff": "ho-20261110-015"
   },
   "createdAt": "2026-11-03T12:10:35.581Z",
-  "updatedAt": "2026-11-10T08:08:16.301Z",
+  "updatedAt": "2026-11-10T08:10:18.978Z",
   "devSessionId": "session-ae4db07f-a50d-4fc0-a44f-fabaf196353b"
 }
