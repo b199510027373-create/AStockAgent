@@ -34,10 +34,12 @@
     ],
     "module": "use_cases",
     "branch": "feat/plan-20261103-002-runresult",
-    "review": "rev-20261110-001"
+    "review": "rev-20261110-001",
+    "commit": "8f196ac",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/4"
   },
   "createdAt": "2026-11-03T12:10:27.414Z",
-  "updatedAt": "2026-11-10T06:29:39.458Z",
+  "updatedAt": "2026-11-10T06:52:16.490Z",
   "deps": [
     "plan-20261103-001"
   ],
