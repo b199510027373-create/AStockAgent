@@ -216,7 +216,6 @@ def run_once(
             candidate_n=15,
             news_days=7,
             use_llm=True,
-            now=now,
         )
         payload = result.payload or {}
         data_as_of = str(

@@ -155,6 +155,16 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-rev-20261110-001-r1",
+      "type": "review",
+      "title": "评审：评审：用例层 RunResult：统一推荐/跟踪入口",
+      "start": "2026-11-10T06:16:46.476Z",
+      "end": "2026-11-10T06:20:51.296Z",
+      "planItemId": "plan-20261103-002",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
       "id": "cal-plan-20261103-004-planned",
       "type": "planned",
       "title": "推荐跟踪：Top5 等权组合净值 vs 沪深300",

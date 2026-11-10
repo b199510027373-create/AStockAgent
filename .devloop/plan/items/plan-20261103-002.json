@@ -9,7 +9,7 @@
   "start": "2026-11-11",
   "due": "2026-11-17",
   "estimateH": 16,
-  "progress": 95,
+  "progress": 98,
   "acceptance": [
     "recommend / track 的主入口返回统一 RunResult",
     "生成路径与历史读取路径共用同一用例函数",
@@ -27,16 +27,17 @@
       "ADR-003"
     ],
     "test": [
-      "pytest tests\\test_use_cases.py -q -> 25 passed (2 subtests)",
+      "pytest tests\\test_use_cases.py -q -> 29 passed (2 subtests)",
       "pytest tests\\test_core_paths.py tests\\test_track_nav.py tests\\test_contracts.py tests\\test_hardening.py -q -> 94 passed",
-      "pytest tests -q -> 214 passed (2 warnings: anyio deprecation, .pytest_cache WinError 5)",
+      "pytest tests -q -> 218 passed (1 warning: anyio deprecation)",
       "mypy astock -> Success: no issues found in 30 source files"
     ],
     "module": "use_cases",
-    "branch": "feat/plan-20261103-002-runresult"
+    "branch": "feat/plan-20261103-002-runresult",
+    "review": "rev-20261110-001"
   },
   "createdAt": "2026-11-03T12:10:27.414Z",
-  "updatedAt": "2026-11-09T16:55:58.322Z",
+  "updatedAt": "2026-11-10T06:29:39.458Z",
   "deps": [
     "plan-20261103-001"
   ],

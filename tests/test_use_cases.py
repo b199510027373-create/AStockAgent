@@ -199,6 +199,8 @@ class HistoryRecommendationTests(unittest.TestCase):
         self.assertIn("http://example.com/a", result.payload["evidence_md"])
         self.assertEqual(result.payload["files"], ["/tmp/x.csv", "/tmp/x.json"])
         self.assertIn("已从 SQLite 读取 rec_hist", result.payload["status_text"])
+        self.assertTrue(result.payload["status_text"].startswith("✅"))
+        self.assertNotIn("✅", result.payload["status_line"])
 
     def test_run_mode_uses_requested_run_id(self):
         with (
@@ -235,6 +237,63 @@ class HistoryRecommendationTests(unittest.TestCase):
         self.assertIn("早于最近交易日", result.message)
         self.assertTrue(result.payload["status_text"].startswith("⚠️"))
         self.assertIn("已从 SQLite 读取", result.payload["status_text"])
+        self.assertNotIn("✅", result.payload["status_line"])
+
+    def test_history_older_than_expected_before_close_is_stale(self):
+        with (
+            patch.object(
+                use_cases.ledger,
+                "latest_run",
+                return_value=_history_run(data_as_of="2026-11-05"),
+            ),
+            patch.object(
+                use_cases,
+                "last_completed_trade_date",
+                return_value=pd.Timestamp("2026-11-06"),
+            ),
+        ):
+            result = use_cases.run_recommendation(
+                mode="latest", now=datetime(2026, 11, 6, 10, 0)
+            )
+        self.assertEqual(result.status, "stale")
+        self.assertIn("早于最近交易日", result.message)
+
+    def test_history_unparseable_data_as_of_is_stale(self):
+        with (
+            patch.object(
+                use_cases.ledger,
+                "latest_run",
+                return_value=_history_run(data_as_of="unknown"),
+            ),
+            patch.object(
+                use_cases,
+                "last_completed_trade_date",
+                return_value=pd.Timestamp("2026-11-06"),
+            ),
+        ):
+            result = use_cases.run_recommendation(
+                mode="latest", now=datetime(2026, 11, 6, 10, 0)
+            )
+        self.assertEqual(result.status, "stale")
+        self.assertIn("无法解析", result.message)
+        self.assertIn("无法确认数据新鲜度", result.message)
+
+    def test_history_calendar_error_is_surfaced(self):
+        with (
+            patch.object(use_cases.ledger, "latest_run", return_value=_history_run()),
+            patch.object(
+                use_cases,
+                "last_completed_trade_date",
+                side_effect=RuntimeError("no calendar"),
+            ),
+        ):
+            result = use_cases.run_recommendation(
+                mode="latest", now=datetime(2026, 11, 6, 10, 0)
+            )
+        self.assertEqual(result.status, "success")
+        self.assertIn("calendar_error", result.diagnostics)
+        self.assertIn("交易日历不可用", result.payload["status_text"])
+        self.assertIn("未校验数据新鲜度", result.payload["status_text"])
 
     def test_history_missing_data_as_of_is_stale(self):
         with (
@@ -302,7 +361,7 @@ class HistoryRecommendationTests(unittest.TestCase):
 
 
 class TrackingTests(unittest.TestCase):
-    def _detail(self, excess=0.5):
+    def _detail(self, excess=0.5, t1=1.2):
         return pd.DataFrame(
             [
                 {
@@ -311,7 +370,7 @@ class TrackingTests(unittest.TestCase):
                     "名称": "贵州茅台",
                     "综合分": 82.0,
                     "建议": "技术面强",
-                    "T+1": 1.2,
+                    "T+1": t1,
                     "超额T+1": excess,
                     "推荐日": pd.Timestamp("2026-11-05"),
                     "入场日": pd.Timestamp("2026-11-06"),
@@ -361,7 +420,7 @@ class TrackingTests(unittest.TestCase):
         self.assertIn("跟踪状态", result.payload["status_text"])
         self.assertEqual(result.diagnostics["usable_t1"], 1)
 
-    def test_no_forward_return_is_stale(self):
+    def test_missing_benchmark_is_stale_with_bench_diagnostic(self):
         with (
             patch.object(
                 use_cases,
@@ -378,7 +437,34 @@ class TrackingTests(unittest.TestCase):
         ):
             result = use_cases.run_tracking()
         self.assertEqual(result.status, "stale")
+        self.assertIn("缺沪深300 基准数据", result.message)
+        self.assertTrue(result.diagnostics["bench_missing"])
+        self.assertEqual(result.diagnostics["reason"], "awaiting_benchmark")
+        self.assertIn("⚠️", result.payload["status_text"])
+
+    def test_no_forward_return_is_stale(self):
+        with (
+            patch.object(
+                use_cases,
+                "compute_tracking",
+                return_value=(
+                    self._detail(excess=float("nan"), t1=float("nan")),
+                    self._summary(),
+                    "状态",
+                ),
+            ),
+            patch.object(
+                use_cases, "portfolio_nav", return_value=(self._nav(), pd.DataFrame())
+            ),
+            patch.object(use_cases, "nav_status_text", return_value="净值状态"),
+            patch.object(use_cases, "nav_figure", return_value="NAV"),
+            patch.object(use_cases, "significance_table", return_value=pd.DataFrame()),
+            patch.object(use_cases, "track_figure", return_value=None),
+        ):
+            result = use_cases.run_tracking()
+        self.assertEqual(result.status, "stale")
         self.assertIn("T+1 收盘数据", result.message)
+        self.assertNotIn("bench_missing", result.diagnostics)
         self.assertIn("⚠️", result.payload["status_text"])
 
     def test_compute_error_is_failed(self):

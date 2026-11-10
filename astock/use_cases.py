@@ -200,7 +200,12 @@ def _render_recommendation(
         if base:
             status_text += f"\n\n{base}"
     else:
-        status_text = base or f"✅ 已加载 {len(table)} 条推荐"
+        status_text = base or f"已加载 {len(table)} 条推荐"
+        # 对勾/警告由渲染器按 status 统一添加，status_line 只保留事实描述。
+        if not status_text.lstrip().startswith(("✅", "⚠️", "❌")):
+            status_text = f"✅ {status_text}"
+        if diagnostics.get("calendar_error"):
+            status_text += "\n\n⚠️ 交易日历不可用，未校验数据新鲜度。"
 
     return {
         "table": table,
@@ -227,9 +232,7 @@ def _failed_recommendation(message: str, *, reason: str) -> RunResult:
     return RunResult("", "failed", payload, diagnostics)
 
 
-def _generate_view(
-    rec: Recommendation, *, now: datetime | None = None
-) -> RunResult:
+def _generate_view(rec: Recommendation) -> RunResult:
     diagnostics = dict(rec.diagnostics or {})
     stale = bool(diagnostics.get("stale_data"))
     status = "stale" if stale else "success"
@@ -296,7 +299,7 @@ def _ledger_view(
         "run_id": run_id,
     }
     payload["status_line"] = (
-        f"✅ 已从 SQLite 读取 {run_id}；data_as_of={data_as_of}，"
+        f"已从 SQLite 读取 {run_id}；data_as_of={data_as_of}，"
         f"tradable_from={tradable_from}；{len(rows)} 条推荐。"
     )
 
@@ -322,19 +325,26 @@ def _ledger_view(
         diagnostics["message"] = (
             "该推荐记录缺少 data_as_of，无法确认数据新鲜度；请重新生成后再使用。"
         )
-    elif expected is not None:
+    elif expected is None:
+        # 日历不可用时无法确认新鲜度：保持 success，由渲染器附加“未校验”提示。
+        diagnostics["freshness_checked"] = False
+    else:
         try:
-            stale = (
-                pd.Timestamp(data_as_of) < pd.Timestamp(expected)
-                and now.hour >= 15
-            )
+            as_of_ts = pd.Timestamp(data_as_of)
         except Exception:
-            stale = False
-        if stale:
+            stale = True
             diagnostics["message"] = (
-                f"最近一次推荐 data_as_of={data_as_of} 早于最近交易日 "
-                f"{pd.Timestamp(expected):%Y-%m-%d}；历史结果仅供参考，请重新生成。"
+                f"该推荐记录 data_as_of={data_as_of} 无法解析，无法确认数据新鲜度；"
+                "请重新生成后再使用。"
             )
+        else:
+            # 与生成侧 recommend.py 同口径：落后于最近交易日即 stale，不加收盘时间门限。
+            stale = as_of_ts < pd.Timestamp(expected)
+            if stale:
+                diagnostics["message"] = (
+                    f"最近一次推荐 data_as_of={data_as_of} 早于最近交易日 "
+                    f"{pd.Timestamp(expected):%Y-%m-%d}；历史结果仅供参考，请重新生成。"
+                )
     diagnostics["stale_data"] = stale
     status = "stale" if stale else "success"
     view = _render_recommendation(payload, status=status, diagnostics=diagnostics)
@@ -394,7 +404,7 @@ def run_recommendation(
             return _failed_recommendation(
                 f"生成失败：{type(exc).__name__}: {exc}", reason="generate_error"
             )
-        return _generate_view(rec, now=now)
+        return _generate_view(rec)
 
     try:
         run = ledger.latest_run() if mode == "latest" else ledger.get_run(str(run_id))
@@ -467,6 +477,9 @@ def run_tracking() -> RunResult:
         return RunResult("", "failed", payload, failed_diagnostics)
 
     usable = _usable_t1(detail)
+    t1_rows = 0
+    if "T+1" in detail.columns:
+        t1_rows = int(pd.to_numeric(detail["T+1"], errors="coerce").notna().sum())
     latest_as_of = ""
     if "推荐日" in detail.columns:
         try:
@@ -502,10 +515,18 @@ def run_tracking() -> RunResult:
     message = ""
     if usable == 0:
         status = "stale"
-        message = (
-            f"已有 {len(detail)} 条推荐记录，但还没有 T+1 收盘数据；"
-            "等下一个交易日收盘后再刷新。"
-        )
+        if t1_rows:
+            message = (
+                "已有 T+1 个股收益，但缺沪深300 基准数据，超额统计暂不可用；"
+                "等基准数据补齐后再刷新。"
+            )
+            diagnostics["reason"] = "awaiting_benchmark"
+            diagnostics["bench_missing"] = True
+        else:
+            message = (
+                f"已有 {len(detail)} 条推荐记录，但还没有 T+1 收盘数据；"
+                "等下一个交易日收盘后再刷新。"
+            )
         diagnostics["message"] = message
 
     significant = pd.DataFrame()
