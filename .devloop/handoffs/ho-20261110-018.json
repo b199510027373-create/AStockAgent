@@ -1,0 +1,123 @@
+{
+  "id": "ho-20261110-018",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-005",
+  "threadId": null,
+  "sessionId": "",
+  "title": "「无显著 alpha」实时横幅 — 收尾台账已推送、main CI 绿",
+  "summary": "收尾状态补齐：评审通过后的台账提交 f2eccb3（plan-20261103-005 → done/100、review rev-20261110-002 第 2 轮记录、两条 P2 backlog 项、handoffs 016/017、calendar/worklog）已推送到 origin/main；该提交 CI run 42782318926 completed/success。相对 ho-20261110-017 的修改痕迹：无代码/测试改动，仅推送既有台账提交并核对 CI；main 上交付物即 PR #6（merge e5b98e8）+ 该 docs 提交。本任务开发侧闭环：openP0=0、openP1=0，评审 approve；两条新增 P2（plan-20261110-001 compute_tracking 写库失败降级、plan-20261110-002 AppBannerWiringTests 只对 ModuleNotFoundError skip）仍在 backlog，等下次触碰 astock/track.py 或 tests/test_alpha_banner.py 的迭代关闭。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "横幅数字来自 ledger/stats 实时聚合（page load 重算）",
+      "source": "plan-20261103-005 验收 1"
+    },
+    {
+      "id": "R2",
+      "text": "展示实盘样本数、有效独立窗口、Top2−其余 p 或「样本不足」",
+      "source": "plan-20261103-005 验收 2"
+    },
+    {
+      "id": "R3",
+      "text": "达标后「样本不足」消失，转灰底 no_alpha 或绿底正向提示",
+      "source": "plan-20261103-005 验收 3"
+    },
+    {
+      "id": "R4",
+      "text": "无可信统计时不显示任何显著性结论",
+      "source": "plan-20261103-005 验收 4"
+    },
+    {
+      "id": "R5",
+      "text": "app.load 刷新 + 结构断言测试",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylup（第 2 轮 fixed）"
+    },
+    {
+      "id": "R6",
+      "text": "调度后 refresh_tracking 增量结算 + 落后明示",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylv9（第 2 轮 fixed）"
+    },
+    {
+      "id": "R7",
+      "text": "DB 故障与样本不足区分（error 状态）",
+      "source": "评审 rev-20261110-002 P2 iss-mwadylvz（第 2 轮 fixed）"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/handoffs/ho-20261110-018.md",
+      "summary": "本份收尾状态 handoff",
+      "commit": "pending docs commit"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-005.json",
+      "summary": "links 记录 main 上 docs 提交 f2eccb3 的 CI run",
+      "commit": "pending docs commit"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions CI（main，f2eccb3 台账提交）",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42782318926: completed/success（08:24 创建）"
+    },
+    {
+      "command": "评审 rev-20261110-002 第 2 轮全量复核（reviewer）",
+      "result": "approve",
+      "passed": true,
+      "evidence": "openP0=0/openP1=0/openP2=2；第 1 轮三条问题均 fixed"
+    },
+    {
+      "command": "pytest tests -q（合并前修复分支）",
+      "result": "239 passed",
+      "passed": true,
+      "evidence": "239 passed, 1 warning, 2 subtests passed"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success",
+      "passed": true,
+      "evidence": "Success: no issues found in 31 source files"
+    },
+    {
+      "command": "ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "All checks passed!"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github_push",
+      "reason": "推送台账提交到 main",
+      "status": "granted"
+    },
+    {
+      "name": "github_merge",
+      "reason": "按用户指示合并 PR #6（已执行）",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "f2eccb3",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/6",
+    "ci": "success（run 42782318926 @f2eccb3；e5b98e8/a6c7cb6/d0d99d0 前序 run 均 success）",
+    "merge": "merged（PR #6 merge e5b98e8）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-017",
+  "next": "开发侧无待办。下一位接触 astock/track.py 或 tests/test_alpha_banner.py 的开发者请顺带关闭 plan-20261110-001（compute_tracking 写库失败降级，补 sqlite3.OperationalError 用例）与 plan-20261110-002（AppBannerWiringTests 只对 ModuleNotFoundError skip）。上线观察：每日 16:40 日志出现「跟踪结算：…」；横幅 pending_days 随推荐日推进下降，有效样本 ≥10 后出现 p 值并切灰底/绿底/红底；DB 故障时显示「统计读取失败」而非「样本不足」。",
+  "createdAt": "2026-11-10T08:25:37.421Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-018.md"
+}
