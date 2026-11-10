@@ -49,9 +49,9 @@ def load_latest_ledger():
     return _outputs(run_recommendation(mode="latest"))
 
 
-def build_recommend_tab() -> None:
+def build_recommend_tab() -> gr.Markdown:
     with gr.Tab("📰 每日推荐"):
-        banner = gr.Markdown(value=banner_markdown())
+        banner = gr.Markdown(value=banner_markdown(), elem_id="alpha-banner")
         gr.Markdown(
             "### 每日股票推荐\n"
             "> ⚠️ **研究候选，不是交易指令。** 上方横幅实时展示实盘样本与显著性；"
@@ -99,3 +99,14 @@ def build_recommend_tab() -> None:
             inputs=[universe, top_n, candidate_n, news_range, use_llm],
             outputs=[status, table, report, evidence, files],
         ).then(banner_markdown, outputs=banner)
+
+    return banner
+
+
+def bind_banner_refresh(demo: gr.Blocks, banner: gr.Markdown) -> None:
+    """Re-aggregate the banner on every page open/refresh.
+
+    Building the Blocks runs once per process, so without this binding a
+    scheduler run at 16:40 would never reach an already-open page.
+    """
+    demo.load(banner_markdown, outputs=banner)

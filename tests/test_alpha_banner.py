@@ -1,11 +1,18 @@
-"""「无显著 alpha」横幅：ledger 聚合 + stats 门控。"""
+"""「无显著 alpha」横幅：ledger 聚合 + stats 门控 + 刷新/结算路径。"""
 
 from __future__ import annotations
 
+import sqlite3
+import tempfile
 import unittest
 from datetime import date, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
+
+import astock.ledger as ledger
+import astock.track as track
 from astock.track import (
     AlphaBanner,
     alpha_banner,
@@ -26,6 +33,18 @@ def _rows(diffs, *, start: date = date(2026, 1, 1)) -> list[dict]:
             {"run_id": f"r{i}", "data_as_of": day, "rank": 3, "excess": 0.0}
         )
     return rows
+
+
+def _load_output_element_ids(demo) -> set[str]:
+    """elem_ids written by every event whose trigger is ``load`` (Gradio 6)."""
+    out: set[str] = set()
+    for fn in demo.fns.values():
+        triggers = {name for _id, name in getattr(fn, "targets", []) or []}
+        if "load" in triggers:
+            out.update(
+                str(getattr(block, "elem_id", "") or "") for block in fn.outputs or []
+            )
+    return out
 
 
 class AlphaBannerStatsTests(unittest.TestCase):
@@ -115,28 +134,62 @@ class AlphaBannerStatsTests(unittest.TestCase):
         self.assertEqual(banner.independent_windows, 0)
         self.assertIsNone(banner.p_value)
 
+    def test_pending_runs_are_disclosed_not_hidden_as_empty_sample(self):
+        banner = alpha_banner(
+            _rows([2.0] * 4),
+            latest_live_date="2026-01-10",
+            tracking_date="2026-01-04",
+            pending_days=6,
+        )
+
+        self.assertEqual(banner.pending_days, 6)
+        self.assertEqual(banner.tracking_date, "2026-01-04")
+        md = alpha_banner_markdown(banner)
+        self.assertIn("跟踪数据截至 **2026-01-04**", md)
+        self.assertIn("最新推荐日 **2026-01-10**", md)
+        self.assertIn("6 个推荐日尚无 T+5 结果", md)
+        self.assertIn("样本不足", md)
+        self.assertNotIn("p=", md)
+
     def test_banner_reads_live_ledger_rows_each_time(self):
-        with patch(
-            "astock.ledger.tracking_rows", return_value=_rows([2.0] * 4)
-        ) as fn:
+        with (
+            patch("astock.ledger.tracking_rows", return_value=_rows([2.0] * 4)) as fn,
+            patch("astock.ledger.live_run_dates", return_value=[]),
+        ):
             first = alpha_banner_snapshot()
         self.assertEqual(first.live_days, 4)
         fn.assert_called_once_with(5)
 
-        with patch(
-            "astock.ledger.tracking_rows", return_value=_rows([2.0] * 60)
+        with (
+            patch("astock.ledger.tracking_rows", return_value=_rows([2.0] * 60)),
+            patch("astock.ledger.live_run_dates", return_value=[]),
         ):
             second = alpha_banner_snapshot()
         self.assertEqual(second.live_days, 60)
         self.assertNotEqual(first.live_days, second.live_days)
 
-    def test_ledger_failure_falls_back_to_insufficient(self):
-        with patch("astock.ledger.tracking_rows", side_effect=RuntimeError("db locked")):
+    def test_snapshot_reports_tracking_lag(self):
+        rows = _rows([2.0] * 4, start=date(2026, 1, 1))  # data_as_of 2026-01-01..04
+        with (
+            patch("astock.ledger.tracking_rows", return_value=rows),
+            patch(
+                "astock.ledger.live_run_dates",
+                return_value=["2026-01-10", "2026-01-09", "2026-01-04"],
+            ),
+        ):
             banner = alpha_banner_snapshot()
 
-        self.assertEqual(banner.state, "insufficient")
-        self.assertEqual(banner.live_days, 0)
-        self.assertIsNone(banner.p_value)
+        self.assertEqual(banner.tracking_date, "2026-01-04")
+        self.assertEqual(banner.latest_live_date, "2026-01-10")
+        self.assertEqual(banner.pending_days, 2)
+
+    def test_database_error_propagates_instead_of_looking_like_no_sample(self):
+        with patch(
+            "astock.ledger.tracking_rows",
+            side_effect=sqlite3.OperationalError("database is locked"),
+        ):
+            with self.assertRaises(sqlite3.OperationalError):
+                alpha_banner_snapshot()
 
 
 class RecommendTabBannerTests(unittest.TestCase):
@@ -163,6 +216,102 @@ class RecommendTabBannerTests(unittest.TestCase):
             if isinstance(block, gr.Markdown) and "研究候选" in str(block.value)
         )
         self.assertLess(banner_idx, warning_idx)
+
+    def test_builder_returns_banner_that_is_refreshed_on_load(self):
+        import gradio as gr
+
+        from astock import recommend_ui
+
+        demo = gr.Blocks()
+        with demo, patch.object(
+            recommend_ui, "banner_markdown", return_value="LIVE BANNER"
+        ):
+            banner = recommend_ui.build_recommend_tab()
+            recommend_ui.bind_banner_refresh(demo, banner)
+
+        self.assertIsInstance(banner, gr.Markdown)
+        self.assertEqual(banner.elem_id, "alpha-banner")
+        self.assertIn("alpha-banner", _load_output_element_ids(demo))
+
+
+class AppBannerWiringTests(unittest.TestCase):
+    """The real app must refresh the banner when the page is (re)opened."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import app as app_module
+        except Exception as exc:  # pragma: no cover - optional heavy import
+            raise unittest.SkipTest(f"app import failed: {exc}") from exc
+        cls.app_module = app_module
+
+    def test_app_registers_load_refresh_for_banner(self):
+        self.assertIn("alpha-banner", _load_output_element_ids(self.app_module.app))
+
+
+class TrackingSettlementTests(unittest.TestCase):
+    """Scheduler-side settlement: the banner grows without opening the tab."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.rec_dir = self.root / "recommendations"
+        self.rec_dir.mkdir()
+        # a weekday inside refresh_tracking's lookback window
+        self.as_of = pd.bdate_range(
+            end=pd.Timestamp.today().normalize() - pd.Timedelta(days=7),
+            periods=1,
+        )[0]
+        self.daily = pd.DataFrame(
+            {
+                "trade_date": pd.bdate_range(self.as_of, periods=40),
+                "open": 10.0,
+                "close": [10.0 + 0.1 * i for i in range(40)],
+            }
+        )
+        self.batch = {
+            "path": None,
+            "as_of": self.as_of,
+            "tradable_from": self.as_of,
+            "generated_at": "",
+            "source": "live",
+            "run_id": "run-1",
+            "rows": [{"代码": "600519.SH", "排名": 1}],
+        }
+        self.patches = [
+            patch.object(ledger, "DB_PATH", self.root / "ledger.db"),
+            patch.object(track, "REC_DIR", self.rec_dir),
+            patch.object(track, "_load_batches", return_value=[self.batch]),
+            patch.object(track, "load_daily", return_value=self.daily),
+            patch.object(track, "load_index_daily", return_value=self.daily),
+        ]
+        for p in self.patches:
+            p.start()
+        ledger.save_run(
+            {
+                "run_id": "run-1",
+                "data_as_of": self.as_of.strftime("%Y-%m-%d"),
+                "tradable_from": self.as_of.strftime("%Y-%m-%d"),
+                "generated_at": f"{self.as_of.strftime('%Y-%m-%d')}T16:40:00",
+                "source": "live",
+                "table": [{"排名": 1, "代码": "600519.SH"}],
+            }
+        )
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.tmp.cleanup()
+
+    def test_refresh_tracking_settles_pending_runs_once(self):
+        saved, message = track.refresh_tracking()
+        self.assertEqual(saved, 1)
+        self.assertIn("已结算 1 个批次", message)
+        self.assertEqual(ledger.tracking_run_ids(5, complete_only=True), {"run-1"})
+
+        again, message = track.refresh_tracking()
+        self.assertEqual(again, 0)
+        self.assertEqual(message, "无待结算批次")
 
 
 class AlphaBannerDataclassTests(unittest.TestCase):

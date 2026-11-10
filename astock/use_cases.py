@@ -30,6 +30,7 @@ from .recommend import (
     generate_recommendation,
 )
 from .track import (
+    alpha_banner_error_markdown,
     alpha_banner_markdown,
     alpha_banner_snapshot,
     compute_tracking,
@@ -576,14 +577,17 @@ def run_alpha_banner() -> RunResult:
         banner = alpha_banner_snapshot()
         banner_md = alpha_banner_markdown(banner)
     except Exception as exc:  # noqa: BLE001 - 用例边界统一转 failed
-        message = f"横幅统计失败：{type(exc).__name__}: {exc}"
+        message = f"{type(exc).__name__}: {exc}"
         failed_payload = {
-            "banner_md": f"⚠️ {message}",
+            "banner_md": alpha_banner_error_markdown(message),
             "banner_state": "error",
             "banner": None,
         }
         return RunResult(
-            "", "failed", failed_payload, {"reason": "banner_error", "message": message}
+            "",
+            "failed",
+            failed_payload,
+            {"reason": "banner_error", "message": f"横幅统计失败：{message}"},
         )
 
     payload: dict[str, Any] = {

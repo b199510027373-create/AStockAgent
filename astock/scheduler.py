@@ -12,6 +12,7 @@ import pandas as pd
 from .config import BASE_DIR
 from .data import last_completed_trade_date, load_trade_cal
 from .ledger import save_job
+from .track import refresh_tracking
 from .use_cases import run_recommendation
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
@@ -274,6 +275,12 @@ def run_once(
         state["last_error_at"] = None
         _atomic_write_state(state)
         _sync_job(state, key)
+        # 推荐成功后顺手结算 T+N 前向收益：横幅不必等用户打开跟踪页
+        try:
+            _settled, message = refresh_tracking()
+            _log(f"跟踪结算：{message}")
+        except Exception:  # noqa: BLE001 - 结算失败不影响本次推荐状态
+            _log("跟踪结算失败：" + traceback.format_exc())
         _log("完成：" + result.status)
         return result
     except Exception as exc:  # noqa: BLE001

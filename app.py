@@ -15,7 +15,7 @@ from astock.data import load_daily as _load_daily
 from astock.indicators import add_all as _add_indicators
 from astock.ui import build_multiperiod_tab
 from astock.backtest_ui import build_backtest_tab
-from astock.recommend_ui import build_recommend_tab
+from astock.recommend_ui import bind_banner_refresh, build_recommend_tab
 from astock.track_ui import build_track_tab
 from astock.optimize_ui import build_optimize_tab
 from astock.factor_ui import build_factor_tab
@@ -484,7 +484,7 @@ with gr.Blocks(title="AStockAgent") as app:
         # — 多周期（新）
         build_multiperiod_tab()
         # — 每日推荐（新）
-        build_recommend_tab()
+        recommend_banner = build_recommend_tab()
         # — 推荐跟踪（新）
         build_track_tab()
         # — 参数优化（新）
@@ -495,6 +495,9 @@ with gr.Blocks(title="AStockAgent") as app:
         build_strategy_lab_tab()
         # — 回测（新）
         build_backtest_tab()
+
+    # 页面加载/刷新时重新聚合横幅（构建期只算一次，16:40 调度结果进不来）
+    bind_banner_refresh(app, recommend_banner)
 
 # ====== 12. 启动 ======
 if __name__ == "__main__":

@@ -339,6 +339,32 @@ def tracking_rows(horizon: int = 5) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def tracking_run_ids(horizon: int = 5, *, complete_only: bool = False) -> set[str]:
+    """Run ids that already have tracking rows for one horizon.
+
+    ``complete_only`` keeps only runs whose realised excess is non-null, so the
+    incremental settlement can re-try runs whose T+5 window has not matured yet.
+    """
+    sql = "SELECT DISTINCT run_id FROM tracking WHERE horizon = ?"
+    if complete_only:
+        sql += " AND excess IS NOT NULL"
+    with _read() as conn:
+        rows = conn.execute(sql, (int(horizon),)).fetchall()
+    return {str(row["run_id"]) for row in rows}
+
+
+def live_run_dates(limit: int = 500) -> list[str]:
+    """Distinct data_as_of dates of live recommendation runs, newest first."""
+    with _read() as conn:
+        rows = conn.execute(
+            "SELECT data_as_of FROM runs "
+            "WHERE COALESCE(source, 'live') = 'live' AND data_as_of IS NOT NULL "
+            "GROUP BY data_as_of ORDER BY data_as_of DESC LIMIT ?",
+            (max(1, int(limit)),),
+        ).fetchall()
+    return [str(row["data_as_of"]) for row in rows]
+
+
 def save_tracking(run_id: str, rows: list[dict]) -> None:
     """rows: code, horizon, entry_date, exit_date, ret, excess."""
     now = datetime.now().isoformat(timespec="seconds")
