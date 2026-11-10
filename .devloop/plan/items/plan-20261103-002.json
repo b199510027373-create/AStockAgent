@@ -2,14 +2,14 @@
   "id": "plan-20261103-002",
   "title": "用例层 RunResult：统一推荐/跟踪入口",
   "description": "依据 ADR-002 与评审 §4.1，把推荐/跟踪的编排从 UI 与脚本里收敛到用例层：返回 RunResult(run_id, status, payload, diagnostics)，status ∈ {success, stale, failed}。生成与历史读取共用同一函数，Gradio 只消费结果。这是「推荐 UI 读库切换」与「净值曲线」的前置依赖。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-contracts",
   "owner": "human",
   "start": "2026-11-11",
   "due": "2026-11-17",
   "estimateH": 16,
-  "progress": 98,
+  "progress": 100,
   "acceptance": [
     "recommend / track 的主入口返回统一 RunResult",
     "生成路径与历史读取路径共用同一用例函数",
@@ -36,10 +36,11 @@
     "branch": "feat/plan-20261103-002-runresult",
     "review": "rev-20261110-001",
     "commit": "8f196ac",
-    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/4"
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/4",
+    "merge": "937aa3c"
   },
   "createdAt": "2026-11-03T12:10:27.414Z",
-  "updatedAt": "2026-11-10T06:52:16.490Z",
+  "updatedAt": "2026-11-10T07:14:10.774Z",
   "deps": [
     "plan-20261103-001"
   ],

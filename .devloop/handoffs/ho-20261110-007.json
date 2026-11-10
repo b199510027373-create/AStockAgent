@@ -1,0 +1,123 @@
+{
+  "id": "ho-20261110-007",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "交付完成：PR #4 已合并，计划项结项",
+  "summary": "PR #4 已由人工合并到 main，merge commit 937aa3c；合并前 CI（run 42771576663）success、review rev-20261110-001 approved（openP0=0、openP1=0）。plan-20261103-002 已标记 done、进度 100。代码提交仍为 8f196ac（P2 图标归属修复），最终分支提交 d8e41f2。",
+  "requirements": [
+    {
+      "id": "R0",
+      "text": "依据 ADR-002 与评审 §4.1，把推荐/跟踪的编排从 UI 与脚本里收敛到用例层，返回 RunResult(run_id, status, payload, diagnostics)，status ∈ {success, stale, failed}；生成与历史读取共用同一函数，Gradio 只消费结果。",
+      "source": "plan-20261103-002 任务描述"
+    },
+    {
+      "id": "R1",
+      "text": "recommend / track 的主入口返回统一 RunResult。",
+      "source": "plan-20261103-002 验收标准 1"
+    },
+    {
+      "id": "R2",
+      "text": "生成路径与历史读取路径共用同一用例函数。",
+      "source": "plan-20261103-002 验收标准 2"
+    },
+    {
+      "id": "R3",
+      "text": "Gradio 页面不再直接拼装 payload 或自行计算统计。",
+      "source": "plan-20261103-002 验收标准 3"
+    },
+    {
+      "id": "R4",
+      "text": "RunResult 的 status 在 stale/failed 时有明确可读诊断。",
+      "source": "plan-20261103-002 验收标准 4"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/recommend.py",
+      "summary": "生成侧 status 改为纯事实描述，图标由 use_cases 渲染器统一添加（代码提交 8f196ac，已随 PR #4 合并）。",
+      "commit": "8f196ac"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "补充 stale 页面无 ✅、恰好一个 ⚠️ 的断言（代码提交 8f196ac，已随 PR #4 合并）。",
+      "commit": "8f196ac"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-002.json",
+      "summary": "计划项状态改为 done、进度 100，links 增加 merge=937aa3c。",
+      "commit": "pending"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests\\test_use_cases.py -q",
+      "result": "29 passed, 2 subtests passed",
+      "passed": true,
+      "evidence": "本地 .venv Python 3.13.5"
+    },
+    {
+      "command": "pytest tests\\test_core_paths.py tests\\test_track_nav.py tests\\test_contracts.py tests\\test_hardening.py -q",
+      "result": "94 passed",
+      "passed": true,
+      "evidence": "相关回归 4 文件"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "218 passed, 1 warning (anyio deprecation)",
+      "passed": true,
+      "evidence": "全量测试"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "类型检查"
+    },
+    {
+      "command": "GitHub Actions CI (run 42771576663)",
+      "result": "success",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/42771576663"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github_push",
+      "reason": "推送特性分支及后续文档到 origin",
+      "status": "granted"
+    },
+    {
+      "name": "github_pr_api",
+      "reason": "创建 PR #4 并核验合并状态",
+      "status": "granted"
+    },
+    {
+      "name": "human_merge",
+      "reason": "PR #4 已由人工合并",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-002-runresult",
+    "commit": "8f196ac",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/4",
+    "ci": "success (run 42771576663)",
+    "merge": "merged (937aa3c)",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-006",
+  "next": "本计划项已结项。app.py 剩余迁移按评审建议另立任务。",
+  "createdAt": "2026-11-10T07:14:17.638Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-007.md"
+}
