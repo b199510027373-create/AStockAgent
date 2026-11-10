@@ -1,0 +1,190 @@
+{
+  "id": "ho-20261110-014",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-005",
+  "threadId": null,
+  "sessionId": "",
+  "title": "「无显著 alpha」实时横幅（ledger 驱动）— PR #6 已合并",
+  "summary": "按用户指示（m00748「鱼鱼请按交付文档做」）执行交付文档最后一步：PR #6 已通过 GitHub API 合并进 main，merge commit e5b98e8（此前 head 443d7e8，CI run 42779412198 success）。合并内容即针对 rev-20261110-002 三条问题的修复：R5 页面 load 时重新聚合（bind_banner_refresh/app.load，elem_id=alpha-banner，含结构断言与 app 接线测试）；R6 每日调度成功后 refresh_tracking 增量结算 T+5，横幅明示 tracking_date/latest_live_date/pending_days，落后时写「N 个推荐日尚无 T+5 结果」而不是「样本不足」；R7 DB 读取失败独立为 banner_state=error + 红底「统计读取失败」文案，不再伪装成样本不足。相对 ho-20261110-013 的修改痕迹：仅新增本份合并状态 handoff、plan links 的 merge 记录、worklog/calendar 一条工作单元；代码与测试未变。注意：评审线程 rev-20261110-002 仍为 changes_requested（openP1=2/openP2=1 记录的是修复前问题），第 2 轮复核仍需由 reviewer 执行，协议不允许开发 Agent 代写评审反馈；因此 plan-20261103-005 保持 in_review（progress=95），待复核 approve 后再置 done。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "横幅数字来自 ledger/stats 实时聚合，而非硬编码（每次页面 load 时从 tracking 表重算）",
+      "source": "plan-20261103-005 验收 1"
+    },
+    {
+      "id": "R2",
+      "text": "展示实盘样本数、有效独立窗口、Top2−其余 p（或「样本不足，暂不显示」）",
+      "source": "plan-20261103-005 验收 2"
+    },
+    {
+      "id": "R3",
+      "text": "样本达到门槛后「样本不足」消失，转为灰底 no_alpha 或绿底正向提示",
+      "source": "plan-20261103-005 验收 3"
+    },
+    {
+      "id": "R4",
+      "text": "无可信统计时不得显示任何显著性结论",
+      "source": "plan-20261103-005 验收 4"
+    },
+    {
+      "id": "R5",
+      "text": "横幅随页面打开/刷新重新聚合（app.load + 结构断言测试），16:40 调度结果可进入页面",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylup"
+    },
+    {
+      "id": "R6",
+      "text": "调度成功后自动增量结算 tracking；跟踪落后时明示截止日/待结算天数，不得说成样本不足",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylv9"
+    },
+    {
+      "id": "R7",
+      "text": "DB 读取失败与样本不足区分（error 状态 + 红底文案 + OperationalError 用例）",
+      "source": "评审 rev-20261110-002 P2 iss-mwadylvz"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/ledger.py",
+      "summary": "tracking_run_ids / live_run_dates（供结算进度与横幅落后判断）",
+      "commit": "4d41512"
+    },
+    {
+      "path": "astock/track.py",
+      "summary": "AlphaBanner 增 tracking_date/latest_live_date/pending_days；snapshot 不吞异常；_pending_note/alpha_banner_error_markdown；refresh_tracking 增量结算",
+      "commit": "4d41512"
+    },
+    {
+      "path": "astock/use_cases.py",
+      "summary": "run_alpha_banner 失败 -> banner_state=error，红底「统计读取失败」",
+      "commit": "4d41512"
+    },
+    {
+      "path": "astock/recommend_ui.py",
+      "summary": "build_recommend_tab 返回 banner（elem_id=alpha-banner）；bind_banner_refresh 注册 page load",
+      "commit": "4d41512"
+    },
+    {
+      "path": "app.py",
+      "summary": "Blocks 上下文内调用 bind_banner_refresh",
+      "commit": "4d41512"
+    },
+    {
+      "path": "astock/scheduler.py",
+      "summary": "推荐成功后 refresh_tracking 增量结算",
+      "commit": "4d41512"
+    },
+    {
+      "path": "tests/test_alpha_banner.py",
+      "summary": "load 绑定/app 接线/跟踪落后/DB 异常/增量结算测试",
+      "commit": "4d41512"
+    },
+    {
+      "path": "tests/test_hardening.py",
+      "summary": "调度成功路径调用 refresh_tracking、stale 不调用",
+      "commit": "4d41512"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "error 状态与「统计读取失败」文案断言",
+      "commit": "4d41512"
+    },
+    {
+      "path": "README.md",
+      "summary": "横幅刷新/结算/落后/故障口径说明",
+      "commit": "4d41512"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261110-014.md",
+      "summary": "本份合并状态 handoff 与 plan/worklog/calendar 记录",
+      "commit": "pending docs commit"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_alpha_banner.py tests/test_use_cases.py tests/test_hardening.py -q",
+      "result": "73 passed",
+      "passed": true,
+      "evidence": "73 passed, 1 warning, 2 subtests passed"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "239 passed",
+      "passed": true,
+      "evidence": "239 passed, 1 warning, 2 subtests passed（上轮 232）"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success",
+      "passed": true,
+      "evidence": "Success: no issues found in 31 source files"
+    },
+    {
+      "command": "ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": "GitHub Actions CI（PR #6，head 443d7e8）",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42779412198 (443d7e8) success；同分支前序 run 42778980617 @5810511、42779178938 @b71b97f 均 success"
+    },
+    {
+      "command": "python .tmp-tests/banner_smoke.py（空库 + 60 实盘日）",
+      "result": "SMOKE OK",
+      "passed": true,
+      "evidence": "空库 -> insufficient 且无 p；60 天 -> positive, 独立窗口 12, p<0.0001"
+    },
+    {
+      "command": "真实 data/astock.db 快照",
+      "result": "与预期一致",
+      "passed": true,
+      "evidence": "insufficient, live_days=3, tracking_date=2026-10-27, latest_live_date=2026-11-06, pending_days=6；横幅含「6 个推荐日尚无 T+5 结果」"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github_push",
+      "reason": "推送修复分支与合并后文档提交",
+      "status": "granted"
+    },
+    {
+      "name": "github_pr_api",
+      "reason": "创建 PR #6、读取 CI",
+      "status": "granted"
+    },
+    {
+      "name": "github_merge",
+      "reason": "按用户指示合并 PR #6（m00748），GitHub API PUT /pulls/6/merge 返回 200 merged=true",
+      "status": "granted"
+    },
+    {
+      "name": "reviewer_round2",
+      "reason": "rev-20261110-002 第 2 轮复核需 reviewer 执行；开发 Agent 不得代写评审反馈",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-005-banner-refresh",
+    "commit": "443d7e8",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/6",
+    "ci": "success（run 42779412198 @443d7e8；42779178938 @b71b97f；42778980617 @5810511）",
+    "merge": "merged（merge commit e5b98e8；PR #6 已并入 main）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-013",
+  "next": "请 reviewer 基于 main e5b98e8 对 rev-20261110-002 做第 2 轮全量复核（三条问题已修复并有测试/证据，预期 openP1→0）；approve 后把 plan-20261103-005 置 done 并关闭评审线程。合并后首次 16:40 调度需人工观察日志「跟踪结算：…」与推荐页横幅 pending_days 是否随推荐日推进而下降；若 refresh_tracking 抛异常，scheduler 只记日志不阻断推荐，需按 traceback 排查（lookback_days=120、limit=30）。若产品希望 no_alpha 状态整体隐藏，只需让 alpha_banner_markdown 对 no_alpha 返回空串。",
+  "createdAt": "2026-11-10T08:08:12.740Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-014.md"
+}

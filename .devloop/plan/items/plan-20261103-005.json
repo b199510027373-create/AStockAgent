@@ -27,18 +27,22 @@
       "ADR-006"
     ],
     "module": "recommend_ui",
-    "pr": "PR #6 (feat/plan-20261103-005-banner-refresh)",
+    "pr": "PR #6 (feat/plan-20261103-005-banner-refresh) merged e5b98e8",
     "test": [
       "pytest tests/test_alpha_banner.py tests/test_use_cases.py tests/test_hardening.py -q -> 73 passed, 1 warning, 2 subtests passed",
       "pytest tests -q -> 239 passed, 1 warning, 2 subtests passed",
       "mypy astock app.py -> Success: no issues found in 31 source files",
       "ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed",
       "CI run 42778980617 (PR #6, commit 5810511) -> success",
+      "CI run 42779178938 (PR #6, commit b71b97f) -> success",
+      "CI run 42779412198 (PR #6, commit 443d7e8) -> success",
       "python .tmp-tests/banner_smoke.py (seeded 60 live days) -> SMOKE OK, positive p<0.0001; 空库 -> insufficient 无 p",
-      "真实 data/astock.db 快照 -> insufficient, live_days=3, tracking_date=2026-10-27, pending_days=6（横幅写明跟踪落后，不再只说样本不足）"
-    ]
+      "真实 data/astock.db 快照 -> insufficient, live_days=3, tracking_date=2026-10-27, pending_days=6（横幅写明跟踪落后，不再只说样本不足）",
+      "merge: e5b98e88a9bcb3e3c7d035765809549c62bc867e (PR #6 merged into main)"
+    ],
+    "handoff": "ho-20261110-014"
   },
   "createdAt": "2026-11-03T12:10:35.581Z",
-  "updatedAt": "2026-11-10T07:59:16.815Z",
+  "updatedAt": "2026-11-10T08:08:16.301Z",
   "devSessionId": "session-ae4db07f-a50d-4fc0-a44f-fabaf196353b"
 }
