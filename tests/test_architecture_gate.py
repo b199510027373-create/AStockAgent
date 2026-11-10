@@ -182,6 +182,15 @@ def test_rule_map_lists_every_rule_and_review_checklist() -> None:
 # ---------------------------------------------------------------- 冻结接口与代码一致性
 
 
+def test_module_graph_descriptions_are_not_stale() -> None:
+    """模块图不写状态，但描述里也不能残留「计划新增」这类过期标记（contracts 已实现并追认）。"""
+    graph = json.loads(_read(ARCH / "modules.json"))
+    for module in graph["modules"]:
+        assert "计划新增" not in module["description"], (
+            f"模块 {module['id']} 描述仍是「计划新增」，需按 ADR 裁决更新"
+        )
+
+
 def test_freeze_doc_covers_six_interfaces() -> None:
     text = _read(FREEZE_DOC)
     for heading in ("## 1.", "## 2.", "## 3.", "## 4.", "## 5.", "## 6."):
