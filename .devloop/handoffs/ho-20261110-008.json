@@ -1,0 +1,171 @@
+{
+  "id": "ho-20261110-008",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261103-005",
+  "threadId": null,
+  "sessionId": "",
+  "title": "「无显著 alpha」实时横幅（ledger 驱动）— 初始交付",
+  "summary": "推荐页顶部现在是 ledger 驱动的实时显著性横幅：每次渲染从 SQLite tracking 表读实盘（source=live）T+5 超额，按推荐日聚合 Top2 与其余的超额均值差，经 stats.newey_west（lag=4、Student-t）得到 p；有效独立样本 <10 时 p 强制为 None 并显示「样本不足，不显示显著性」。UI 只消费 use_cases.run_alpha_banner() 返回的 Markdown，不实现统计。当前真实 data/astock.db 只有 3 个实盘交易日 → insufficient 灰底、无 p；种子 60 天冒烟 → positive 绿底、独立窗口 12、p<0.0001。PR #5 已开，CI run 42775574149 success，等待人工评审/合并。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "顶部灰底横幅实时显示「实盘样本 N 个交易日、独立窗口≈K、Top2−其余 p=…」，数字从 ledger 聚合、经 stats.py 计算",
+      "source": "plan-20261103-005 描述 / m00001"
+    },
+    {
+      "id": "R2",
+      "text": "横幅数字来自 ledger/stats 实时聚合，而非硬编码",
+      "source": "验收标准 1"
+    },
+    {
+      "id": "R3",
+      "text": "展示实盘样本数、有效独立窗口、Top2−其余 p（或「样本不足，暂不显示」）",
+      "source": "验收标准 2"
+    },
+    {
+      "id": "R4",
+      "text": "样本达到门槛后横幅自动消失或转为正向提示",
+      "source": "验收标准 3"
+    },
+    {
+      "id": "R5",
+      "text": "无可信统计时不得显示任何显著性结论",
+      "source": "验收标准 4"
+    },
+    {
+      "id": "R6",
+      "text": "p 值只允许来自 astock/stats.py；*_ui.py 只装配，不实现统计；领域层不依赖 UI",
+      "source": "契约 STAT-01 / ARCH-01 / ARCH-02，ADR-006"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/ledger.py",
+      "summary": "新增 tracking_rows(horizon)：读 tracking 表 join runs/items，仅保留 COALESCE(source,'live')='live'，返回 data_as_of/rank/excess，避免横幅重算行情",
+      "commit": "2196926"
+    },
+    {
+      "path": "astock/track.py",
+      "summary": "新增 AlphaBanner + alpha_banner/alpha_banner_snapshot/alpha_banner_markdown；逐日 Top2−其余差值经 stats.newey_west(horizon=5)，有效独立样本 <10 时 p=None；五种 state（insufficient/unavailable/no_alpha/positive/negative）与灰/绿/红内联 HTML 横幅",
+      "commit": "2196926"
+    },
+    {
+      "path": "astock/use_cases.py",
+      "summary": "新增 run_alpha_banner()：成功 payload 含 banner_md/banner_state/live_days/independent_windows/effective_n/p_value；异常转 failed 并返回可读消息",
+      "commit": "2196926"
+    },
+    {
+      "path": "astock/recommend_ui.py",
+      "summary": "推荐 Tab 顶部 banner=gr.Markdown(value=banner_markdown())；生成/加载/回车三处 .then(banner_markdown, outputs=banner) 刷新；静态提示改为解释横幅",
+      "commit": "2196926"
+    },
+    {
+      "path": "README.md",
+      "summary": "记录横幅口径、数据来源与有效样本门槛",
+      "commit": "2196926"
+    },
+    {
+      "path": "tests/test_alpha_banner.py",
+      "summary": "新增 10 个用例：insufficient/positive/no_alpha/negative/unavailable、无 rank、snapshot 每次读 ledger、ledger 异常降级、横幅位于静态提示之前",
+      "commit": "2196926"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "新增 3 个用例：payload 映射、失败路径、recommend_ui.banner_markdown 映射",
+      "commit": "2196926"
+    },
+    {
+      "path": "tests/test_core_paths.py",
+      "summary": "新增真实 sqlite 用例：tracking_rows 按 horizon 过滤、排除 source=backtest、join rank",
+      "commit": "2196926"
+    }
+  ],
+  "tests": [
+    {
+      "command": "$env:PYTHONPATH=\"<repo>\\.tmp-tests\\pytestshim;<repo>\"; $env:TEMP=\"<repo>\\.tmp-tests\\pytest-temp\"; $env:TMP=$env:TEMP; .\\.venv\\Scripts\\python.exe -m pytest tests\\test_alpha_banner.py -q",
+      "result": "10 passed, 2 warnings in 7.72s",
+      "passed": true,
+      "evidence": "新增横幅统计/UI 用例全绿；warnings 为 anyio 弃用与 .pytest_cache 权限（沙箱噪音）"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests\\test_use_cases.py tests\\test_core_paths.py tests\\test_track_nav.py tests\\test_contracts.py tests\\test_hardening.py tests\\test_alpha_banner.py -q",
+      "result": "137 passed, 2 warnings, 2 subtests passed in 10.80s",
+      "passed": true,
+      "evidence": "相关全量：use_cases/ledger 真实 sqlite/tracking/contracts/hardening 均通过"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "232 passed, 2 warnings, 2 subtests passed in 13.16s",
+      "passed": true,
+      "evidence": "全量测试在 mypy 修复后重跑通过"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 31 source files",
+      "passed": true,
+      "evidence": "与 CI 同口径；修掉 payload/diagnostics 推断为 dict[str, str|None] 的 dict-item 与 no-redef"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 的 ruff 子集通过；项目其他 ruff 规则未在 CI 启用，改动未新增 E9/F63/F7/F82"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m compileall -q astock app.py",
+      "result": "exit 0",
+      "passed": true,
+      "evidence": "CI 的编译步骤同口径"
+    },
+    {
+      "command": "ASTOCK_DB_PATH=.tmp-tests/banner-smoke/astock.db python .tmp-tests/banner_smoke.py",
+      "result": "empty ledger -> insufficient（0 天、无 p）；种子 60 天 -> positive，独立窗口 12、p<0.0001；SMOKE OK",
+      "passed": true,
+      "evidence": "端到端 ledger→stats→Markdown 手工冒烟，非测试套件"
+    },
+    {
+      "command": "真实 data/astock.db: alpha_banner_snapshot()",
+      "result": "state=insufficient, live_days=3, independent_windows=1, effective_n=1.0, p_value=None",
+      "passed": true,
+      "evidence": "线上库当前样本不足，横幅只显示样本不足、不显示 p（验收 4）"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github_push",
+      "reason": "推送 feat/plan-20261103-005-alpha-banner；本机 schannel SEC_E_NO_CREDENTIALS，需 git -c http.sslBackend=openssl + 一次性 extraheader 才能推送",
+      "status": "granted"
+    },
+    {
+      "name": "github_pr_api",
+      "reason": "经 Python requests 调用 GitHub API 创建 PR #5（PowerShell/.NET 的 schannel 同样不可用）",
+      "status": "granted"
+    },
+    {
+      "name": "human_merge",
+      "reason": "PR #5 CI 已通过，合并由人工执行",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-005-alpha-banner",
+    "commit": "2196926",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/5",
+    "ci": "CI run 42775574149: success",
+    "merge": "pending human merge",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "人工评审 PR #5 后合并；合并后把 plan-20261103-005 置 done，并按 ADR-010 在实盘样本积累到有效独立样本 ≥10 时观察横幅从 insufficient 自动转为带 p 的 no_alpha/positive（无需改代码）。验收 3 的实现解释：门槛后「样本不足」文案消失并转为数字横幅，显著为正转绿底提示；未整体隐藏 no_alpha，如产品要求彻底隐藏，仅需 alpha_banner_markdown 对 no_alpha 返回空串。后续可考虑把『有效独立样本』显示口径与 track 页统一文案。",
+  "createdAt": "2026-11-10T07:37:07.095Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-008.md"
+}
