@@ -69,7 +69,7 @@ def _recommendation(**overrides) -> Recommendation:
         ),
         "report": "### 报告",
         "evidence_md": "### 证据链",
-        "status": "✅ 生成完成；data_as_of=2026-11-06；run_id=rec_gen",
+        "status": "生成完成；data_as_of=2026-11-06；run_id=rec_gen",
         "csv_path": "/tmp/gen.csv",
         "json_path": "/tmp/gen.json",
         "run_id": "rec_gen",
@@ -140,6 +140,8 @@ class GenerateRecommendationTests(unittest.TestCase):
         self.assertIn("数据未更新", result.message)
         self.assertIn("2026-11-05", result.message)
         self.assertTrue(result.payload["status_text"].startswith("⚠️"))
+        self.assertNotIn("✅", result.payload["status_text"])
+        self.assertEqual(result.payload["status_text"].count("⚠️"), 1)
 
     def test_stale_exception_returns_stale_without_payload(self):
         with patch.object(

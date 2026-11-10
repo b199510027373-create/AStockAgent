@@ -811,13 +811,12 @@ def generate_recommendation(
     industry_note = ""
     if len(final_rows) < top_n:
         industry_note = f" · 行业上限导致输出少于 {top_n} 只"
-    stale_note = " · ⚠️ 数据未更新" if stale_data else ""
     status = (
-        f"✅ 股票池 {len(codes)} 只 · 有效日线 {len(rows)} 只 · 技术预筛 {len(candidates)} · "
+        f"股票池 {len(codes)} 只 · 有效日线 {len(rows)} 只 · 技术预筛 {len(candidates)} · "
         f"输出 {len(final_rows)} 只（同行业最多 2 只）{industry_note} · "
         f"新闻 {min(3, news_days)} 天 / 公告 30 天 / 研报 7 天 / 政策 {news_days} 天 · "
         f"AI归因 {'已生成' if ai_ok else '未生成（使用规则理由）'} · 用时 {elapsed:.1f}s · "
-        f"data_as_of {data_as_of} · tradable_from {tradable_from}{stale_note} · run_id {run_id}"
+        f"data_as_of {data_as_of} · tradable_from {tradable_from} · run_id {run_id}"
     )
     if failed:
         status += f" · 失败/剔除 {len(failed)} 只（详见 JSON diagnostics）"
