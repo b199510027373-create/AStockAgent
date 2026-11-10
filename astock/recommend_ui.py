@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import gradio as gr
 
-from .use_cases import RunResult, run_recommendation
+from .use_cases import RunResult, run_alpha_banner, run_recommendation
 
 NEWS_CHOICES = {"3日": 3, "7日": 7, "30日": 30}
 
@@ -17,6 +17,11 @@ def _outputs(result: RunResult):
         payload.get("evidence_md") or "",
         payload.get("files"),
     )
+
+
+def banner_markdown() -> str:
+    """横幅数字由用例层从 ledger/stats 实时聚合，UI 只取 Markdown。"""
+    return str(run_alpha_banner().payload.get("banner_md") or "")
 
 
 def run_recommend(
@@ -46,10 +51,11 @@ def load_latest_ledger():
 
 def build_recommend_tab() -> None:
     with gr.Tab("📰 每日推荐"):
+        banner = gr.Markdown(value=banner_markdown())
         gr.Markdown(
             "### 每日股票推荐\n"
-            "> ⚠️ **研究候选，不是交易指令。** 综合分尚未通过足够的实盘样本外验证；"
-            "Top2 与其余的历史差异在统计上并不稳定。请结合仓位、流动性和自身风险承受能力复核。\n\n"
+            "> ⚠️ **研究候选，不是交易指令。** 上方横幅实时展示实盘样本与显著性；"
+            "若显示「样本不足」，说明还不能下结论。请结合仓位、流动性和自身风险承受能力复核。\n\n"
             "技术面（日线趋势/动量/量能/波动）+ 事件面（公告/研报/新闻/政策库）综合打分，"
             "再用 DeepSeek 做归因表述。**AI 不改变量化排序，不构成投资建议。**\n\n"
             "> 应用运行时，每个交易日 16:40 自动生成一次（`ASTOCK_AUTO_RECOMMEND=0` 可关闭；"
@@ -83,13 +89,13 @@ def build_recommend_tab() -> None:
             run_recommend,
             inputs=[universe, top_n, candidate_n, news_range, use_llm],
             outputs=[status, table, report, evidence, files],
-        )
+        ).then(banner_markdown, outputs=banner)
         ledger_btn.click(
             load_latest_ledger,
             outputs=[status, table, report, evidence, files],
-        )
+        ).then(banner_markdown, outputs=banner)
         universe.submit(
             run_recommend,
             inputs=[universe, top_n, candidate_n, news_range, use_llm],
             outputs=[status, table, report, evidence, files],
-        )
+        ).then(banner_markdown, outputs=banner)

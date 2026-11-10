@@ -10,6 +10,7 @@ import astock.recommend_ui as recommend_ui
 import astock.use_cases as use_cases
 from astock.contracts import ContractError
 from astock.recommend import Recommendation, StaleDataError
+from astock.track import AlphaBanner
 from astock.use_cases import RunResult
 
 
@@ -571,6 +572,52 @@ class UIConsumptionTests(unittest.TestCase):
             outputs = recommend_ui.load_latest_ledger()
         self.assertEqual(outputs[0], "⚠️ 旧数据")
         self.assertEqual(fn.call_args.kwargs["mode"], "latest")
+
+
+class AlphaBannerUseCaseTests(unittest.TestCase):
+    def test_banner_payload_comes_from_track_snapshot(self):
+        banner = AlphaBanner(
+            state="insufficient",
+            horizon=5,
+            live_days=3,
+            independent_windows=1,
+            effective_n=0.6,
+            p_value=None,
+            top2_mean=None,
+            rest_mean=None,
+        )
+        with (
+            patch.object(use_cases, "alpha_banner_snapshot", return_value=banner) as snap,
+            patch.object(
+                use_cases, "alpha_banner_markdown", return_value="BANNER"
+            ) as render,
+        ):
+            result = use_cases.run_alpha_banner()
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.payload["banner_md"], "BANNER")
+        self.assertEqual(result.payload["banner_state"], "insufficient")
+        self.assertEqual(result.payload["live_days"], 3)
+        self.assertIsNone(result.payload["p_value"])
+        self.assertFalse(result.diagnostics["trustworthy"])
+        snap.assert_called_once_with()
+        render.assert_called_once_with(banner)
+
+    def test_banner_failure_is_failed_with_readable_message(self):
+        with patch.object(
+            use_cases, "alpha_banner_snapshot", side_effect=RuntimeError("db locked")
+        ):
+            result = use_cases.run_alpha_banner()
+
+        self.assertEqual(result.status, "failed")
+        self.assertIn("db locked", result.message)
+        self.assertIn("⚠️", result.payload["banner_md"])
+
+    def test_recommend_ui_banner_markdown_maps_payload(self):
+        result = RunResult("", "success", {"banner_md": "LIVE BANNER"}, {})
+        with patch.object(recommend_ui, "run_alpha_banner", return_value=result) as fn:
+            self.assertEqual(recommend_ui.banner_markdown(), "LIVE BANNER")
+        fn.assert_called_once_with()
 
 
 if __name__ == "__main__":

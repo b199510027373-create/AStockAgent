@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +18,7 @@ from .data import (
     next_open_date,
 )
 from .stats import (
+    MIN_EFFECTIVE_N,
     benjamini_hochberg,
     effective_n,
     newey_west,
@@ -28,6 +30,9 @@ REC_DIR = BASE_DIR / "data" / "recommendations"
 HORIZONS = (1, 5, 20)
 TOP_N = 5
 NAV_COLUMNS = ("交易日", "组合净值", "沪深300净值", "推荐日", "入场日", "换仓")
+BANNER_HORIZON = 5
+ALPHA_LEVEL = 0.05
+ALPHA_BANNER_STATES = ("insufficient", "unavailable", "no_alpha", "positive", "negative")
 
 
 def _normal_p(t: float) -> float:
@@ -192,6 +197,198 @@ def significance_table(detail: pd.DataFrame) -> pd.DataFrame:
         ]
     return result
 
+
+# ---------------------------------------------------------------------------
+# 「无显著 alpha」横幅：ledger 实盘 tracking → stats 聚合
+# 数字必须实时算，UI 只渲染；样本不足时绝不展示 p 值。
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AlphaBanner:
+    """推荐页顶部的实时显著性状态。
+
+    ``state`` 取值见 :data:`ALPHA_BANNER_STATES`：
+
+    - ``insufficient``：有效独立样本 < 10，展示样本量但隐藏 p；
+    - ``unavailable``：样本达标但 Newey-West 无法给出 p（如方差为 0）；
+    - ``no_alpha``：样本达标、p >= 0.05，未发现显著差异；
+    - ``positive``：样本达标、p < 0.05 且 Top2 优于其余；
+    - ``negative``：样本达标、p < 0.05 但 Top2 弱于其余。
+    """
+
+    state: str
+    horizon: int
+    live_days: int
+    independent_windows: int
+    effective_n: float
+    p_value: float | None
+    top2_mean: float | None
+    rest_mean: float | None
+
+    @property
+    def trustworthy(self) -> bool:
+        """是否有可信统计（p 可展示）。"""
+        return self.p_value is not None and self.state in (
+            "no_alpha",
+            "positive",
+            "negative",
+        )
+
+
+def _finite_float(value) -> float | None:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def alpha_banner(
+    rows,
+    *,
+    horizon: int = BANNER_HORIZON,
+    min_effective: float = MIN_EFFECTIVE_N,
+    alpha: float = ALPHA_LEVEL,
+) -> AlphaBanner:
+    """Aggregate realised tracking rows into the banner state.
+
+    ``rows`` are ``ledger.tracking_rows`` dicts (``data_as_of``/``rank``/
+    ``excess``)。每个推荐日先算 Top2 与其余的平均超额，再对逐日差值做
+    Newey-West（lag=horizon-1）+ Student-t；有效独立样本不足时 p 置空。
+    """
+    horizon = max(1, int(horizon))
+    by_date: dict[str, dict[str, list[float]]] = {}
+    for row in rows or []:
+        excess = _finite_float(row.get("excess"))
+        if excess is None:
+            continue
+        date = str(row.get("data_as_of") or row.get("entry_date") or "").strip()
+        if not date:
+            continue
+        bucket = by_date.setdefault(date, {"top2": [], "rest": []})
+        rank = _finite_float(row.get("rank"))
+        if rank is None:
+            continue
+        bucket["top2" if rank <= 2 else "rest"].append(excess)
+
+    live_days = len(by_date)
+    top2_daily: list[float] = []
+    rest_daily: list[float] = []
+    diffs: list[float] = []
+    for bucket in by_date.values():
+        if not bucket["top2"] or not bucket["rest"]:
+            continue
+        top = float(np.mean(bucket["top2"]))
+        rest = float(np.mean(bucket["rest"]))
+        top2_daily.append(top)
+        rest_daily.append(rest)
+        diffs.append(top - rest)
+
+    n_diffs = len(diffs)
+    independent = int(math.ceil(n_diffs / horizon)) if n_diffs else 0
+    effective = effective_n(n_diffs, horizon) if n_diffs else 0.0
+    nw = newey_west(diffs, horizon=horizon) if n_diffs else None
+    p_value = nw.p if nw is not None and effective >= min_effective else None
+    top2_mean = float(np.mean(top2_daily)) if top2_daily else None
+    rest_mean = float(np.mean(rest_daily)) if rest_daily else None
+
+    if effective < min_effective:
+        state = "insufficient"
+    elif p_value is None:
+        state = "unavailable"
+    elif p_value < alpha and (top2_mean or 0.0) > (rest_mean or 0.0):
+        state = "positive"
+    elif p_value < alpha:
+        state = "negative"
+    else:
+        state = "no_alpha"
+
+    return AlphaBanner(
+        state=state,
+        horizon=horizon,
+        live_days=live_days,
+        independent_windows=independent,
+        effective_n=effective,
+        p_value=p_value,
+        top2_mean=top2_mean,
+        rest_mean=rest_mean,
+    )
+
+
+def alpha_banner_snapshot(*, horizon: int = BANNER_HORIZON) -> AlphaBanner:
+    """Read the ledger and build the banner; ledger failure means no sample."""
+    try:
+        from .ledger import tracking_rows
+
+        rows = tracking_rows(horizon)
+    except Exception:  # noqa: BLE001 - 横幅不能拖垮推荐页
+        rows = []
+    return alpha_banner(rows, horizon=horizon)
+
+
+def _format_p(value: float | None) -> str:
+    if value is None:
+        return "—"
+    if value < 0.0001:
+        return "<0.0001"
+    return f"{value:.4f}"
+
+
+def _banner_box(body: str, *, background: str, border: str) -> str:
+    return (
+        f'<div style="background:{background};border-left:4px solid {border};'
+        f'padding:10px 14px;border-radius:4px;margin:4px 0">{body}</div>'
+    )
+
+
+def alpha_banner_markdown(banner: AlphaBanner) -> str:
+    """Render the banner as Markdown with inline HTML background.
+
+    口径固定写进横幅：数字来自 ledger 实盘 tracking 记录，p 只由 stats 产出。
+    """
+    title = f"**T+{banner.horizon} 实盘样本**"
+    numbers = (
+        f"实盘样本 **{banner.live_days}** 个交易日 · "
+        f"独立窗口≈**{banner.independent_windows}** · "
+        f"有效独立样本 {banner.effective_n:.1f}"
+    )
+    method = (
+        "口径：ledger tracking 实盘记录（仅 source=live），"
+        f"T+{banner.horizon} 超额 vs 沪深300，Newey-West lag={banner.horizon - 1}、"
+        "Student-t；历史样本内检验，不构成交易建议。"
+    )
+
+    if banner.state == "insufficient":
+        head = f"🧪 {title} · 样本不足"
+        detail = "**样本不足，不显示显著性**（有效独立样本 < 10）。"
+        body = f"{head}<br>{numbers}<br>{detail}<br><sub>{method}</sub>"
+        return _banner_box(body, background="#f1f3f5", border="#868e96")
+
+    if banner.state == "unavailable":
+        head = f"🧪 {title} · p 暂不可计算"
+        detail = "p 值暂不可计算（方差为 0 或样本结构异常），**不显示显著性结论**。"
+        body = f"{head}<br>{numbers}<br>{detail}<br><sub>{method}</sub>"
+        return _banner_box(body, background="#f1f3f5", border="#868e96")
+
+    p_text = _format_p(banner.p_value)
+    stats = f"{numbers} · Top2−其余 p=**{p_text}**"
+    if banner.state == "positive":
+        head = f"✅ {title} · 样本内正向观察"
+        detail = "Top2 在历史样本内暂优于其余（p < 0.05）；样本仍有限，不构成交易建议。"
+        body = f"{head}<br>{stats}<br>{detail}<br><sub>{method}</sub>"
+        return _banner_box(body, background="#ebfbee", border="#2f9e44")
+
+    if banner.state == "negative":
+        head = f"⚠️ {title} · Top2 弱于其余"
+        detail = "Top2 显著弱于其余（p < 0.05），未发现正向 alpha。"
+        body = f"{head}<br>{stats}<br>{detail}<br><sub>{method}</sub>"
+        return _banner_box(body, background="#fff5f5", border="#e03131")
+
+    head = f"🧪 {title} · 未发现显著 alpha"
+    detail = "Top2 与其余的差异不显著（p ≥ 0.05），暂无可宣称的 alpha。"
+    body = f"{head}<br>{stats}<br>{detail}<br><sub>{method}</sub>"
+    return _banner_box(body, background="#f1f3f5", border="#868e96")
 
 
 def _from_ledger() -> list[dict]:

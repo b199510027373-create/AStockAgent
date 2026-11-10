@@ -117,6 +117,72 @@ class RecommendationCorePathTests(unittest.TestCase):
         self.assertEqual(batches[0]["run_id"], "r1")
         self.assertEqual(batches[0]["rows"][0]["代码"], "600519.SH")
 
+    def test_tracking_rows_joins_rank_and_keeps_live_only(self):
+        payload = {
+            "run_id": "r1",
+            "data_as_of": "2026-10-30",
+            "tradable_from": "2026-11-02",
+            "generated_at": "2026-10-30T18:00:00",
+            "source": "live",
+            "table": [
+                {"排名": 1, "代码": "600519.SH", "名称": "贵州茅台", "综合分": 80},
+                {"排名": 2, "代码": "000001.SZ", "名称": "平安银行", "综合分": 70},
+            ],
+            "evidence": {},
+        }
+        ledger.save_run(payload)
+        ledger.save_tracking(
+            "r1",
+            [
+                {
+                    "code": "600519.SH",
+                    "horizon": 5,
+                    "entry_date": "2026-11-02",
+                    "exit_date": "2026-11-06",
+                    "ret": 0.03,
+                    "excess": 0.01,
+                },
+                {
+                    "code": "000001.SZ",
+                    "horizon": 5,
+                    "entry_date": "2026-11-02",
+                    "exit_date": "2026-11-06",
+                    "ret": -0.01,
+                    "excess": -0.03,
+                },
+                {
+                    "code": "600519.SH",
+                    "horizon": 20,
+                    "entry_date": "2026-11-02",
+                    "exit_date": "2026-11-27",
+                    "ret": 0.05,
+                    "excess": 0.02,
+                },
+            ],
+        )
+        backtest = dict(payload, run_id="r2", source="backtest", generated_at="2026-10-31T18:00:00")
+        ledger.save_run(backtest)
+        ledger.save_tracking(
+            "r2",
+            [
+                {
+                    "code": "600519.SH",
+                    "horizon": 5,
+                    "entry_date": "2026-11-02",
+                    "exit_date": "2026-11-06",
+                    "ret": 0.9,
+                    "excess": 0.8,
+                }
+            ],
+        )
+
+        rows = ledger.tracking_rows(5)
+
+        self.assertEqual([row["run_id"] for row in rows], ["r1", "r1"])
+        self.assertEqual({row["rank"] for row in rows}, {1, 2})
+        self.assertTrue(all(row["data_as_of"] == "2026-10-30" for row in rows))
+        self.assertNotIn(0.8, [row["excess"] for row in rows])
+
 
 class TrackerCorePathTests(unittest.TestCase):
     def test_tracker_end_to_end(self):
