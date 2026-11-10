@@ -315,6 +315,30 @@ def recommendation_batches(limit: int = 500) -> list[dict]:
         return out
 
 
+def tracking_rows(horizon: int = 5) -> list[dict]:
+    """Read realised forward returns of one horizon for live runs only.
+
+    The alpha banner aggregates these rows with :mod:`astock.stats`; it never
+    reloads prices, so the banner stays cheap and matches the tracking tab.
+    ``rank`` comes from the run items so Top2 vs rest can be split without
+    re-reading the recommendation payload.
+    """
+    with _read() as conn:
+        rows = conn.execute(
+            """
+            SELECT t.run_id, r.data_as_of, t.code, t.entry_date, t.exit_date,
+                   t.ret, t.excess, i.rank
+            FROM tracking t
+            JOIN runs r ON r.run_id = t.run_id
+            LEFT JOIN items i ON i.run_id = t.run_id AND i.code = t.code
+            WHERE t.horizon = ? AND COALESCE(r.source, 'live') = 'live'
+            ORDER BY r.data_as_of, t.run_id, i.rank
+            """,
+            (int(horizon),),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def save_tracking(run_id: str, rows: list[dict]) -> None:
     """rows: code, horizon, entry_date, exit_date, ret, excess."""
     now = datetime.now().isoformat(timespec="seconds")

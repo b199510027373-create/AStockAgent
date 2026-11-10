@@ -30,6 +30,8 @@ from .recommend import (
     generate_recommendation,
 )
 from .track import (
+    alpha_banner_markdown,
+    alpha_banner_snapshot,
     compute_tracking,
     nav_figure,
     nav_status_text,
@@ -38,7 +40,13 @@ from .track import (
     track_figure,
 )
 
-__all__ = ["RUN_STATUSES", "RunResult", "run_recommendation", "run_tracking"]
+__all__ = [
+    "RUN_STATUSES",
+    "RunResult",
+    "run_alpha_banner",
+    "run_recommendation",
+    "run_tracking",
+]
 
 RUN_STATUSES = ("success", "stale", "failed")
 RECOMMEND_COLUMNS = (
@@ -555,3 +563,43 @@ def run_tracking() -> RunResult:
         "status_text": status_text,
     }
     return RunResult("", status, payload, diagnostics)
+
+
+# ---------------------------------------------------------------------------
+# 「无显著 alpha」横幅：实时聚合 ledger，UI 只消费
+# ---------------------------------------------------------------------------
+
+
+def run_alpha_banner() -> RunResult:
+    """推荐页顶部横幅：数字全部来自 ledger + stats，不允许 UI 侧硬编码。"""
+    try:
+        banner = alpha_banner_snapshot()
+        banner_md = alpha_banner_markdown(banner)
+    except Exception as exc:  # noqa: BLE001 - 用例边界统一转 failed
+        message = f"横幅统计失败：{type(exc).__name__}: {exc}"
+        failed_payload = {
+            "banner_md": f"⚠️ {message}",
+            "banner_state": "error",
+            "banner": None,
+        }
+        return RunResult(
+            "", "failed", failed_payload, {"reason": "banner_error", "message": message}
+        )
+
+    payload: dict[str, Any] = {
+        "banner_md": banner_md,
+        "banner_state": banner.state,
+        "banner": banner,
+        "horizon": banner.horizon,
+        "live_days": banner.live_days,
+        "independent_windows": banner.independent_windows,
+        "effective_n": banner.effective_n,
+        "p_value": banner.p_value,
+    }
+    diagnostics: dict[str, Any] = {
+        "reason": "banner",
+        "state": banner.state,
+        "live_days": banner.live_days,
+        "trustworthy": banner.trustworthy,
+    }
+    return RunResult("", "success", payload, diagnostics)
