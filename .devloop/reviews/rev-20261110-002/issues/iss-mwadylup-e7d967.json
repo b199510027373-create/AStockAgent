@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwadylup-e7d967",
+  "threadId": "rev-20261110-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness/ui-refresh",
+  "file": "astock/recommend_ui.py",
+  "lines": "52-54,88-101",
+  "title": "横幅只在页面构建时计算一次，缺少 load 刷新，定时任务产出不会反映到页面",
+  "evidence": "astock/recommend_ui.py:54 `banner = gr.Markdown(value=banner_markdown())` 在 `with gr.Blocks()` 构建期调用一次即固定；随后仅 :92/:96/:101 三个手工事件 `.then(banner_markdown, outputs=banner)` 会刷新。app.py:374 `with gr.Blocks(...) as app:`、:487 build_recommend_tab()、:502 start_recommend_scheduler()：全仓 grep `\\.load` 无任何 load/Tab.select 绑定。进程内调度器（16:40 自动生成推荐）写 ledger 后不会触发上述任一事件，用户刷新浏览器仍看到服务启动那一刻的数字，与 README.md:108「实时显示」及验收标准 1「实时聚合」/3「样本达到门槛后横幅自动…转为正向提示」不符（横幅会一直停在 insufficient）。",
+  "suggestion": "在 app.py 构建 Blocks 后注册页面加载刷新：让 build_recommend_tab 返回 banner 组件，然后 `app.load(banner_markdown, outputs=banner)`（或在 tab 内用 `banner.load(...)`/`gr.Timer`）；同时补一条结构断言测试（例如断言 Blocks 的 dependencies 中存在 trigger=load 且 outputs 含 banner 的依赖），并在 README 说明「每次打开页面/刷新时重新聚合」。修复人：本分支开发者。完全解决判据：打开页面即拿到最新 ledger 数字，且有测试锁定该 load 绑定。",
+  "confidence": 0.85,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-10T07:45:56.257Z"
+}

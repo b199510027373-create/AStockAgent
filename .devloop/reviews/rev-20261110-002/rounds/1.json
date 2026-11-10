@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261110-002-r1",
+  "threadId": "rev-20261110-002",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮全量评审（rev-20261110-002 / plan-20261103-005「无显著 alpha 横幅」）。\n\n结论：request_changes。openP0=0，openP1=2，openP2=1。实现本身在统计口径上是对的（p 全部来自 astock/stats.py 的 newey_west/effective_n，NW lag=horizon−1、Student-t、有效独立样本 <10 不显示 p；每日 Top2−其余配对差与 astock/track.py:122-198 significance_table 的「Top2 - 其余」行同口径；recommend_ui 只做组装，符合 ARCH-01/STAT-01/ADR-006；live-only 过滤有 astock/ledger.py:315-339 与 tests/test_core_paths.py:120-186 覆盖；10 条横幅单测覆盖 insufficient/positive/no_alpha/negative/unavailable/ledger 失败/无 rank 等状态）。因此 P0 不成立。\n\n未通过的原因集中在「实时性」这一验收要点：\n1) P1（iss-mwadylup，astock/recommend_ui.py:52-54,88-101）：banner 的值在 gr.Blocks 构建期算一次就固定，仓库内 astock/ 下 grep `\\.load(`/`gr.Timer` 零命中，app.py:374/487/502 也没有 load 绑定，只有三个手工点击事件会刷新 → 进程内 16:40 调度（astock/scheduler.py:38 默认 16:40，app.py:502 启动）写入的 ledger 数据不会反映到已打开或新打开的页面，横幅长期停在启动时的状态，与 README.md:108「实时显示」及验收 1/3 不符。\n2) P1（iss-mwadylv9，astock/track.py:319-327,944-1073）：横幅唯一数据源 tracking 表只由 compute_tracking 写（astock/track.py:1070），调用链 astock/use_cases.py:467-470 ← astock/track_ui.py:17-19 ← track_ui.py:59 按钮；调度路径不刷新。用户不手工点开「推荐跟踪」页时横幅永远「实盘样本 0 · 样本不足」，验收 2/3 在常规路径不可达，README 的「直接聚合 tracking 表」也隐瞒了这个前置手动步骤。\n3) P2（iss-mwadylvz，astock/track.py:319-327）：ledger 异常被 `except Exception: rows = []` 吞成「样本不足」，DB 锁/损坏与「样本真的不足」不可区分，astock/use_cases.py:578-587 的 error 分支在真实故障下不可达。\n\n修复责任与完成判据（开发者在本分支 feat/plan-20261103-005-alpha-banner 上修复，修复后进入第 2 轮全量复核）：\n- 谁：本分支开发者（不改变对外契约，无需新 ADR）。\n- 修什么：① 页面加载即刷新横幅（app.load / Tab.select / Timer，让 build_recommend_tab 暴露 banner 组件），并加结构断言测试锁定该绑定；② 让 daily 调度成功后增量刷新 tracking（或横幅明确显示「跟踪数据截至 X、落后 N 个交易日」并提供补算入口），消除「样本恒为 0」；③ snapshot 区分 error 与 insufficient，补 sqlite3.OperationalError 用例。\n- 何时算完全解决：上述 3 条全部落地且有对应测试/手工验证记录（重启应用后刷新页面能看到最新数字；不点「推荐跟踪」也能在隔日看到样本增长或明确的 stale 提示），且 openP0=0、openP1=0；仅 openP2 残留时仍可 approve，但要保留 P2 的跟进记录。",
+  "startedAt": "2026-11-10T07:42:36.548Z",
+  "finishedAt": "2026-11-10T07:46:09.469Z",
+  "rulesVersion": "v1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 1,
+    "total": 3
+  }
+}
