@@ -1,6 +1,7 @@
 # ADR-010 研究语义与「无 alpha」一等公民
 
-- 状态：proposed
+- 状态：accepted
+- 裁决：**accepted-with-conditions**（2026-11-10 架构契约评审门禁 plan-20261110-003）
 - 日期：2026-11-03
 - 来源：评审 §6；2026-11-02 评审会话（会话 74b9abee）
 
@@ -21,14 +22,43 @@
 3. 「推荐跟踪」首屏改为**按批次等权买入 Top5 的组合净值 vs 沪深300**；平均超额表降级到折叠区。
 4. 所有对外文案禁止出现"建议买入/卖出"类表述，只描述技术面强弱与研究结论。
 
+## 实现回写（2026-11-10）
+
+ADR 原文的「后果/现状」已过期，实际实现已超出原描述（**不重写代码，只记录**）：
+
+1. 动作词已改为研究语义：`recommend.py:259-264`（`_action_research`）与 `backfill.py:92-94` 一致。
+2. 横幅已接 ledger 实时聚合，不再是静态提示：`recommend_ui.py:22-24 banner_markdown()` 调
+   `use_cases.run_alpha_banner()`（`use_cases.py:574`），后者读 ledger 聚合；
+   统计与状态机在 `track.py:251-445`：`alpha_banner` / `alpha_banner_snapshot` / `alpha_banner_markdown`，
+   T+h 实盘样本、有效独立窗口、NW lag=h-1、p 值，状态取 `insufficient`/`unavailable`/`positive`/`negative`。
+3. 组合净值已实现：「推荐跟踪」首屏为按批次等权 Top5 组合净值 vs 沪深300
+   （`track.py:683+` 净值拼接、`track.py:945-994` Top5 vs 沪深300 图），平均超额表折叠在其下。
+4. 验收证据：`tests/test_alpha_banner.py`（15 项，含"横幅每次读库"、"pending 未被隐藏为样本不足"）、
+   `tests/test_track_nav.py`（29 项，含净值、入场、停牌结转、状态文案）。
+5. 对应已交付计划项：plan-20261103-004（commit `9b5b026`）、plan-20261103-005（PR #6 已合并 `e5b98e8`，
+   评审 rev-20261110-002 approved）。
+
+## 条件
+
+以下两条不阻塞实现，但必须在后续项内完成，否则本 ADR 的「产品自洽」目标未达成：
+
+- **C1 全站动作词与分位一致**：动作词的新语义只覆盖了推荐生成路径，简报、AI 对话、导出 CSV 等出口
+  仍需逐处核查是否残留「关注/回避」，并确认综合分在展示处同时给池内分位。
+  承接：plan-20261103-006（2026-11-19）。验收：全站检索无面向用户的建议类表述，且分位与综合分同屏。
+- **C2 横幅四状态文案去重**：`insufficient/unavailable/positive/negative` 四状态已在统计层实现，
+  但 UI 上与原有静态风险提示存在重复表述，且四状态缺少用户可读说明。
+  承接：plan-20261103-006 的 UI 验收项。验收：同一屏幕只出现一处"未验证"提示，四状态各有说明文案。
+
 ## 后果
 
 - 正面：降低分数误用；产品叙事与统计事实一致；用户看到的是"跟随会怎样"而不是"平均超额的均值"。
-- 负面：短期看"信息量变少/不够刺激"；需要 ledger 实时聚合与净值计算，前端工作量增加。
-- 现状：动作词已改为研究语义（`recommend.py` `_action_research`）；横幅目前是静态提示，未接 ledger 实时数字；组合净值曲线尚未实现。
+- 负面：短期看"信息量变少/不够刺激"；横幅与净值依赖 ledger 聚合，读库失败时必须显式失败（`test_alpha_banner.py::test_database_error_propagates_instead_of_looking_like_no_sample`）。
+- 现状：见「实现回写」；残留问题见「条件」。
 
 ## 证据
 
-- `astock/recommend.py:253-258`（`_action_research`）
-- `astock/recommend_ui.py:98`（静态风险提示）
+- `astock/recommend.py:259-264`（`_action_research`）、`astock/backfill.py:92-94`
+- `astock/track.py:251-445`（横幅统计）、`track.py:683+`（净值）、`track.py:945-994`（对比图）
+- `astock/use_cases.py:574`（`run_alpha_banner`）、`astock/recommend_ui.py:22-24`
+- `tests/test_alpha_banner.py`、`tests/test_track_nav.py`
 - 评审 §6 三条产品建议

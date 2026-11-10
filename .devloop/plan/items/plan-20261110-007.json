@@ -1,0 +1,41 @@
+{
+  "id": "plan-20261110-007",
+  "title": "ADR-018 实时口径：data_as_of/data_time 生产者与降级标注",
+  "description": "依据 ADR-018（2026-11-11 预评审裁决 accepted-with-conditions）与《接口冻结清单》§6「data_as_of/data_time」。条件 C1：当前 data.py 没有任何函数产出 data_time，必须新增唯一生产者并写回 ADR，否则 ToolResult 的两个时点字段无法被行情工具填充。C2：交易时段判定、delayed 降级与停牌标注要在行情工具层统一实现。tick 与 Level-2 为 v1 非目标。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-19",
+  "due": "2026-11-25",
+  "estimateH": 10,
+  "progress": 0,
+  "acceptance": [
+    "data.py 提供唯一的 bar 时点生产者（latest_bar_time(df, freq) 或 load_minute 返回元数据，二选一并写回 ADR-018）",
+    "行情工具结果必带 data_as_of（YYYY-MM-DD）与 data_time（YYYY-MM-DD HH:MM），缺一即视为不合规",
+    "非交易时段返回「最近交易日收盘」标注，不显示「实时」",
+    "rt_min 失败或超 2 分钟未更新 → 标注 delayed 并回退 stk_mins/日线",
+    "停牌返回最后一根并标注「停牌/无成交」",
+    "分钟指标在分钟序列上计算；日线 MA 叠加分钟图用 ffill，不引入未来值",
+    "tick/Level-2 为 v1 非目标（单列 ADR 后才可能接入）"
+  ],
+  "tags": [
+    "agent",
+    "realtime",
+    "time"
+  ],
+  "deps": [
+    "plan-20261110-003",
+    "plan-20261110-005"
+  ],
+  "links": {
+    "adr": [
+      "ADR-018",
+      "ADR-005",
+      "ADR-016"
+    ],
+    "module": "data"
+  },
+  "createdAt": "2026-11-10T08:39:16.723Z",
+  "updatedAt": "2026-11-10T08:39:16.723Z"
+}

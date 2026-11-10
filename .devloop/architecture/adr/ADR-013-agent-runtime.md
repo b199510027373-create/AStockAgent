@@ -1,6 +1,7 @@
 # ADR-013 自研 Agent 运行时：工具调用循环
 
-- 状态：proposed
+- 状态：accepted
+- 裁决：**accepted**（2026-11-10 架构契约评审门禁 plan-20261110-003，对照 runtime.py 追认，无附加条件）
 - 日期：2026-11-07
 - 来源：用户 2026-11-07 架构调整；现状 `astock/llm.py` 单次问答
 - 关联：ADR-009（LLM 只解释）、ADR-014（模型网关）、ADR-017（审计）
@@ -38,6 +39,33 @@
 7. v1 **不执行任意代码**（图表用声明式 spec，见 ADR-016）；沙箱 Python 留作二期。
 8. Agent 对推荐/台账**只读**：可以查推荐、跟踪、因子结果，但不得改排序或写推荐（ADR-009 不放宽）。
 
+## 实现回写（2026-11-10）
+
+对照 `astock/agent/runtime.py`、`astock/agent/types.py`、`astock/agent/session.py` 的实际实现。**只记录，不重写已通过评审的代码**：
+
+1. 默认常量集中在 `runtime.py:48-52`，冻结：`DEFAULT_MAX_STEPS = 12`、`DEFAULT_TOKEN_BUDGET = 64_000`、
+   `DEFAULT_TIMEOUT_SECONDS = 120.0`、`DEFAULT_VALIDATION_RETRIES = 1`、`DEFAULT_SPIN_LIMIT = 2`。
+2. **偏差 1（模块清单）**：实现里另有 ADR 未列的两个模块——`astock/agent/types.py`（共享数据类型）
+   与 `astock/agent/fake.py`（测试/离线用假模型）。`tools/` 目录尚未实现（见 ADR-015/016/017/018 条件）。
+3. **偏差 2（模型接口）**：循环侧协议是 `runtime.py:65-71` 的
+   `class AgentModel(Protocol): def complete(self, *, messages: list[dict], tools: list[dict]) -> ModelReply`，
+   与 ADR-014 的 `ChatModel.complete(messages, tools, *, temperature=0.2)` 签名不同（全关键字、返回 `ModelReply`
+   而非 `ChatResult`）。两者之间的唯一桥是 `gateway.py:1291 AgentModelAdapter`；运行时不得直接依赖 `ChatModel`。
+4. `ToolResult`（`types.py:77-186`）9 个字段冻结：`text`、`table`、`figure`、`error`、`data_as_of`、`data_time`、
+   `source`、`truncated`、`metadata`；`MAX_TABLE_ROWS = 200`、`MAX_TEXT_CHARS = 4000`；
+   `to_dict()` 省略空字段但总带 `ok`；`trim_table()` 记录 `total_rows`/`dropped_rows`；`coerce()` 是裸返回值的唯一规范化入口。
+5. `StopReason` 8 值冻结：`completed`/`max_steps`/`token_budget`/`timeout`/`interrupted`/`spinning`/`invalid_arguments`/`model_error`；
+   `ModelReply(content="", tool_call=None, tokens=0)`；`StepRecord`/`AgentRunResult` 均有 `to_dict()`。
+6. 「数字与图形只来自工具」由 `ToolRegistry` 的 schema 校验 + 未知工具报错落地
+   （`test_agent_runtime.py::test_unknown_tool_is_reported_without_crashing`）；
+   同一未知工具连续两次同样触发打转保护（`test_identical_unknown_tool_twice_triggers_spin_guard`）。
+7. 会话记忆：最近 20 轮 `test_recent_twenty_turns_are_kept`；工作记忆 JSON roundtrip
+   `test_working_memory_and_json_roundtrip`；损坏工作记忆容错 `test_corrupt_or_missing_working_memory_is_tolerated`。
+8. 超时/中断为协作式（原文「实现注记」已述），此处确认仍成立，并由
+   `test_timeout_keeps_executed_steps`、`test_user_interrupt_returns_partial_result` 覆盖。
+9. 偏差小结：无阻塞偏差。两处偏差（新增 `types.py`/`fake.py`；`AgentModel` 与 `ChatModel` 分属两层）已记录并冻结，
+   由 `docs/AStockAgent_interface_freeze_v1.md` §2 与 `tests/test_architecture_gate.py` 守住。
+
 ## 后果
 
 - 正面：从"文本问答"升级为"能查、能算、能画、能读文件"的研究助手；每步可审计、可回放。
@@ -54,6 +82,9 @@
 
 ## 证据
 
-- `astock/llm.py`（当前只有 `chat()` 单次调用）
-- `astock/recommend.py`（LLM 只写文案，`_llm_rank`）
+- `astock/agent/runtime.py:48-52`（默认常量）、`runtime.py:65-71`（`AgentModel`）
+- `astock/agent/types.py:33-37`（上限）、`types.py:40-50`（`StopReason`）、`types.py:77-186`（`ToolResult`）
+- `astock/agent/gateway.py:1291`（`AgentModelAdapter`）
+- `tests/test_agent_runtime.py`（40 项）
+- `astock/llm.py`（当前只有 `chat()` 单次调用）、`astock/recommend.py`（LLM 只写文案，`_llm_rank`）
 - 用户 2026-11-07 消息：自研 Agent + 文件导入 + 实时绘图

@@ -1,6 +1,6 @@
 {
-  "version": "v1",
-  "updatedAt": "2026-11-07",
+  "version": "v1.1",
+  "updatedAt": "2026-11-10",
   "rules": [
     {
       "id": "ARCH-01",
@@ -9,7 +9,8 @@
       "scope": [
         "app.py",
         "astock/*_ui.py"
-      ]
+      ],
+      "rationale": "落点：评审清单 RC-01（docs/AStockAgent_contract_rule_map_v1.md §3）——检查 app.py 与 *_ui.py 的 diff 是否出现 pct_change/ttest/bootstrap/rolling/权重计算，出现即打回，证据写进评审意见。"
     },
     {
       "id": "ARCH-02",
@@ -17,7 +18,8 @@
       "enforcement": "review",
       "scope": [
         "astock/"
-      ]
+      ],
+      "rationale": "落点：评审清单 RC-02——检查新增 import 是否让领域层依赖 *_ui/gradio、适配层依赖 recommend/use_cases，反向 import 一律打回。"
     },
     {
       "id": "STAT-01",
@@ -27,7 +29,8 @@
         "astock/track.py",
         "astock/factors.py",
         "astock/stats.py"
-      ]
+      ],
+      "rationale": "落点：tests/test_hardening.py::test_newey_west_uses_horizon_lag、tests/test_hardening.py::test_t_distribution_p、tests/test_hardening.py::test_bh_and_effective_n、tests/test_optimize.py::test_significance_table_shapes。"
     },
     {
       "id": "DATA-01",
@@ -35,7 +38,8 @@
       "enforcement": "test",
       "scope": [
         "astock/recommend.py"
-      ]
+      ],
+      "rationale": "落点：tests/test_contracts.py::test_schema_version_must_be_2、tests/test_contracts.py::test_nan_rejected、tests/test_contracts.py::test_save_writes_schema_version_2、tests/test_contracts.py::test_validate_does_not_mutate_caller_payload。"
     },
     {
       "id": "DATA-02",
@@ -44,7 +48,8 @@
       "scope": [
         "astock/recommend.py",
         "astock/events.py"
-      ]
+      ],
+      "rationale": "落点：tests/test_contracts.py::test_evidence_after_generated_at_rejected、tests/test_contracts.py::test_tz_aware_future_pub_time_raises_contract_error。"
     },
     {
       "id": "DATA-03",
@@ -52,7 +57,8 @@
       "enforcement": "test",
       "scope": [
         "astock/track.py"
-      ]
+      ],
+      "rationale": "落点：tests/test_hardening.py::test_forward_return_requires_exact_entry_bar、tests/test_track_nav.py::test_entry_uses_open_and_ignores_pre_entry_history、tests/test_track_nav.py::test_batch_missing_entry_bar_is_dropped_with_reason、tests/test_track_nav.py::test_batch_on_non_trading_day_is_dropped。"
     },
     {
       "id": "OPS-01",
@@ -61,7 +67,8 @@
       "scope": [
         "astock/scheduler.py",
         "astock/jobs.py"
-      ]
+      ],
+      "rationale": "落点：tests/test_hardening.py::test_premarket_and_close_have_distinct_keys、tests/test_hardening.py::test_success_is_skipped_on_second_call、tests/test_hardening.py::test_start_background_skips_when_lock_held、tests/test_hardening.py::test_stale_result_does_not_settle_tracking、tests/test_hardening.py::test_force_reruns_success。"
     },
     {
       "id": "DATA-04",
@@ -70,7 +77,8 @@
       "scope": [
         "astock/backtest.py",
         "astock/data.py"
-      ]
+      ],
+      "rationale": "落点：tests/test_data_pit_events.py::test_fetch_daily_qfq_keeps_raw_prices、tests/test_hardening.py::test_st_limit_is_five_percent、tests/test_hardening.py::test_ipo_first_day_has_no_limit、tests/test_quant.py::test_one_price_limit_up_blocks_buy。"
     },
     {
       "id": "AI-01",
@@ -79,7 +87,8 @@
       "scope": [
         "astock/recommend.py",
         "astock/llm.py"
-      ]
+      ],
+      "rationale": "落点：评审清单 RC-03——确认 action/confidence/排序在调 LLM 之前定稿、LLM 输出只写文案字段、无 key 时退回规则理由；已部分自动化：tests/test_contracts.py::test_llm_action_cannot_override_rule_action。"
     },
     {
       "id": "LEDGER-01",
@@ -88,7 +97,8 @@
       "scope": [
         "astock/ledger.py",
         ".gitignore"
-      ]
+      ],
+      "rationale": "落点：评审清单 RC-04——检查新增运行事实是否先写 ledger 再读、是否出现只写 JSON 的新路径，并确认 data/astock.db 与 data/agent/ 仍在 .gitignore 中。"
     },
     {
       "id": "PIT-01",
@@ -96,7 +106,8 @@
       "enforcement": "test",
       "scope": [
         "astock/pit.py"
-      ]
+      ],
+      "rationale": "落点：tests/test_data_pit_events.py::test_snapshot_inserts_switch_date、tests/test_hardening.py::test_sw_industry_asof。"
     },
     {
       "id": "CACHE-01",
@@ -104,7 +115,8 @@
       "enforcement": "test",
       "scope": [
         "astock/data.py"
-      ]
+      ],
+      "rationale": "落点：tests/test_data_pit_events.py::test_load_daily_disk_cache_avoids_second_fetch、tests/test_data_pit_events.py::test_load_adj_factors_cache_and_empty_error、tests/test_quant.py::test_minute_qfq_uses_latest_factor_as_base。"
     },
     {
       "id": "AGENT-01",
@@ -112,7 +124,8 @@
       "enforcement": "review",
       "scope": [
         "astock/agent/"
-      ]
+      ],
+      "rationale": "落点：评审清单 RC-05——检索 astock/agent/ 下 subprocess/os.system/shell=True/requests/httpx/urllib/os.remove/shutil.rmtree 及对 runs/items/tracking 的写入，任一命中即 P0；已部分自动化：tests/test_agent_runtime.py::test_allowed_permissions_enforced。"
     },
     {
       "id": "AGENT-02",
@@ -121,7 +134,8 @@
       "scope": [
         "astock/agent/",
         "astock/ledger.py"
-      ]
+      ],
+      "rationale": "落点：现阶段 tests/test_agent_runtime.py::test_long_table_is_trimmed_and_archived、tests/test_agent_runtime.py::test_artifact_writer_failure_still_returns_trimmed_table；三表落库与去重测试待 plan-20261110-006（tests/test_agent_store.py::test_tool_call_writes_step_row、tests/test_agent_store.py::test_artifact_digest_dedupes）。"
     },
     {
       "id": "AGENT-03",
@@ -130,7 +144,8 @@
       "scope": [
         "astock/agent/",
         "astock/recommend.py"
-      ]
+      ],
+      "rationale": "落点：评审清单 RC-06——确认工具清单无写台账 handler、store 写能力只对 run/step/artifact 开放、ToolSpec.permissions 只用七标签（无 write）；部分自动化：tests/test_agent_runtime.py::test_permissions_and_schema_exposed。"
     },
     {
       "id": "AGENT-04",
@@ -138,7 +153,8 @@
       "enforcement": "test",
       "scope": [
         "astock/agent/tools/"
-      ]
+      ],
+      "rationale": "落点：现阶段 tests/test_agent_runtime.py::test_tool_result_trim_and_signature（字段透传）；工具级必填校验待 plan-20261110-005/-007（tests/test_agent_tools.py::test_market_result_requires_both_timestamps、tests/test_agent_tools.py::test_file_result_requires_source）。"
     },
     {
       "id": "AGENT-05",
@@ -147,7 +163,8 @@
       "scope": [
         "astock/agent/files.py",
         "astock/agent/runtime.py"
-      ]
+      ],
+      "rationale": "落点：评审清单 RC-07——检查文件/网页文本是否包在不可信数据块内、路径是否限制在 data/agent/files/ 且拒绝 .. 与符号链接；已部分自动化：tests/test_agent_runtime.py::test_system_prompt_marks_tool_content_untrusted。"
     },
     {
       "id": "AGENT-06",
@@ -156,7 +173,9 @@
       "scope": [
         "astock/agent/gateway.py",
         "astock/agent/"
-      ]
+      ],
+      "rationale": "落点：评审清单 RC-08；已自动化：tests/test_architecture_gate.py::test_no_vendor_sdk_import_outside_gateway（AST 级检查 astock/ 下除 gateway.py 与 llm.py 外不得 import openai/anthropic/zhipuai）。"
     }
-  ]
+  ],
+  "updatedByAdr": "ADR-002"
 }

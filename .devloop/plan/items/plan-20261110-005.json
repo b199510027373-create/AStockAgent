@@ -1,0 +1,39 @@
+{
+  "id": "plan-20261110-005",
+  "title": "ADR-016 图表：ChartSpec v1 校验与渲染（不执行任意 Python）",
+  "description": "依据 ADR-016（2026-11-11 预评审裁决 accepted）与《接口冻结清单》§3「ChartSpec v1」。实现 astock/agent/chart_spec.py（手写 schema 校验，字段/枚举/长度白名单）与 chart_render.py（spec → Plotly Figure → 自包含 HTML artifact；PNG 走可选 kaleido）。transforms 只支持 filter/groupby/agg/sort/limit 白名单；越界返回结构化错误给 Agent 重试。任意 Python 执行与代码沙箱为二期非目标。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-17",
+  "due": "2026-11-22",
+  "estimateH": 16,
+  "progress": 0,
+  "acceptance": [
+    "ChartSpec 字段/枚举/长度上限与冻结清单 §3 逐字一致，非法 spec 返回字段级错误",
+    "transforms 仅接受 filter/groupby/agg/sort/limit，未知 op 被拒",
+    "行情图默认 qfq，涨跌停/成交判断用 raw（ADR-008）",
+    "渲染产物落 agent_artifacts 并记录 {data_as_of, source, params, spec, code_version}",
+    "图题/角标同时展示 data_as_of 与 data_time",
+    "无 kaleido 时只出 HTML 不报错"
+  ],
+  "tags": [
+    "agent",
+    "chart",
+    "chartspec"
+  ],
+  "deps": [
+    "plan-20261110-003"
+  ],
+  "links": {
+    "adr": [
+      "ADR-016",
+      "ADR-008",
+      "ADR-018"
+    ],
+    "module": "chart_spec"
+  },
+  "createdAt": "2026-11-10T08:39:09.597Z",
+  "updatedAt": "2026-11-10T08:39:09.597Z"
+}
