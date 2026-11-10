@@ -1,0 +1,85 @@
+{
+  "id": "ho-20261110-013",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-005",
+  "threadId": null,
+  "sessionId": "",
+  "title": "「无显著 alpha」实时横幅（ledger 驱动）",
+  "summary": "交付状态收尾：代码修复 4d41512、文档 5810511、PR 记录 b71b97f 均已推送；GitHub Actions 两次 success（代码提交 42778980617，文档提交 42779178938），PR #6 等待第 2 轮评审与人工合并。相对 ho-20261110-012 的修改痕迹：仅新增本份交付状态 handoff（文档），代码与测试未变。",
+  "requirements": [
+    {
+      "id": "R5",
+      "text": "横幅随页面打开/刷新重新聚合（app.load）+ 结构断言测试",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylup"
+    },
+    {
+      "id": "R6",
+      "text": "调度成功后 refresh_tracking 增量结算 + 横幅明示跟踪截止日/待结算天数",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylv9"
+    },
+    {
+      "id": "R7",
+      "text": "DB 故障与样本不足区分（error 状态 + OperationalError 用例）",
+      "source": "评审 rev-20261110-002 P2 iss-mwadylvz"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/handoffs/ho-20261110-012.md",
+      "summary": "记录 PR #6 与 CI（42778980617）的 update handoff",
+      "commit": "b71b97f"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-005.json",
+      "summary": "links 增加 pr=PR #6 与 CI 证据",
+      "commit": "b71b97f"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions CI（PR #6, commit b71b97f, job test）",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42779178938 job 129704813046: completed/success"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "239 passed",
+      "passed": true,
+      "evidence": "239 passed, 1 warning, 2 subtests passed"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github_push",
+      "reason": "推送文档提交",
+      "status": "granted"
+    },
+    {
+      "name": "human_merge",
+      "reason": "PR 合并由人工执行",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-005-banner-refresh",
+    "commit": "b71b97f",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/6",
+    "ci": "success（run 42778980617 @5810511；run 42779178938 @b71b97f）",
+    "merge": "pending（需人工合并）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-012",
+  "next": "等待 reviewer 第 2 轮复核 PR #6；通过后人工合并（merge 后补一份 handoff 记录 merge SHA 并关闭 plan-20261103-005）。本份 handoff 本身是纯文档提交，其 CI 只跑同一 workflow，若意外失败按 CI 日志修文档即可，不影响代码交付。",
+  "createdAt": "2026-11-10T08:01:05.889Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-013.md"
+}
