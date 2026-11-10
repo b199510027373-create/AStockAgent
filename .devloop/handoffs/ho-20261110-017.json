@@ -1,0 +1,138 @@
+{
+  "id": "ho-20261110-017",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-005",
+  "threadId": null,
+  "sessionId": "",
+  "title": "「无显著 alpha」实时横幅 — 评审 approve、计划项完成",
+  "summary": "收尾交付：评审 rev-20261110-002 第 2 轮已由 reviewer 完成并 approve（2026-11-10T08:17:09Z，基于 main e5b98e8/PR #6 修复提交 4d41512）：openP0=0、openP1=0、openP2=2；第 1 轮三条问题（load 刷新 iss-mwadylup、调度后 tracking 结算 iss-mwadylv9、DB 故障伪装样本不足 iss-mwadylvz）全部标记 fixed 且有效。按评审结论「计划项可以现在置 done」，plan-20261103-005 已置 done、progress=100，links 增加 review/followup/handoff。两条新增 P2（iss-mwaf2gq4 compute_tracking 写库失败会让跟踪页整体失败；iss-mwaf2gr0 AppBannerWiringTests 把导入异常降级为 skip）按评审建议延后到下次触碰该模块的迭代，已分别落为 backlog 计划项 plan-20261110-001、plan-20261110-002，责任人 human（接手模块的开发者），理由：均为局部健壮性/测试严谨性问题，不阻断验收且当前 PR 已合并。相对 ho-20261110-015 的修改痕迹：仅台账文档（plan 状态与两条跟进项、review 记录、calendar/worklog、本份 handoff），代码与测试未再改动。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "横幅数字来自 ledger/stats 实时聚合（page load 重算）",
+      "source": "plan-20261103-005 验收 1"
+    },
+    {
+      "id": "R2",
+      "text": "展示实盘样本数、有效独立窗口、Top2−其余 p 或「样本不足」",
+      "source": "plan-20261103-005 验收 2"
+    },
+    {
+      "id": "R3",
+      "text": "达标后「样本不足」消失，转灰底 no_alpha 或绿底正向提示",
+      "source": "plan-20261103-005 验收 3"
+    },
+    {
+      "id": "R4",
+      "text": "无可信统计时不显示任何显著性结论",
+      "source": "plan-20261103-005 验收 4"
+    },
+    {
+      "id": "R5",
+      "text": "app.load 刷新 + 结构断言测试",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylup（第 2 轮 fixed）"
+    },
+    {
+      "id": "R6",
+      "text": "调度后 refresh_tracking 增量结算 + 落后明示",
+      "source": "评审 rev-20261110-002 P1 iss-mwadylv9（第 2 轮 fixed）"
+    },
+    {
+      "id": "R7",
+      "text": "DB 故障与样本不足区分（error 状态）",
+      "source": "评审 rev-20261110-002 P2 iss-mwadylvz（第 2 轮 fixed）"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261103-005.json",
+      "summary": "状态 in_review→done、progress 100、links 增加 review/followup/handoff",
+      "commit": "pending docs commit"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-001.json",
+      "summary": "P2 跟进项：compute_tracking 写库失败降级（iss-mwaf2gq4）",
+      "commit": "pending docs commit"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-002.json",
+      "summary": "P2 跟进项：AppBannerWiringTests 导入异常不得 skip（iss-mwaf2gr0）",
+      "commit": "pending docs commit"
+    },
+    {
+      "path": ".devloop/reviews/rev-20261110-002/",
+      "summary": "第 2 轮 review 记录（approve、三条 fixed、两条新增 P2）",
+      "commit": "pending docs commit"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261110-016.md",
+      "summary": "本份收尾 handoff",
+      "commit": "pending docs commit"
+    }
+  ],
+  "tests": [
+    {
+      "command": "评审 rev-20261110-002 第 2 轮全量复核（reviewer，基于 e5b98e8）",
+      "result": "approve",
+      "passed": true,
+      "evidence": "verdict=approve；openP0=0/openP1=0/openP2=2；三条第 1 轮问题 status=fixed；验收 1-4 逐条对照通过"
+    },
+    {
+      "command": "GitHub Actions CI（main，merge e5b98e8 / a6c7cb6 / d0d99d0）",
+      "result": "success",
+      "passed": true,
+      "evidence": "run 42780225020 success；42780324424 success；42780569154 success"
+    },
+    {
+      "command": "pytest tests -q（合并前修复分支）",
+      "result": "239 passed",
+      "passed": true,
+      "evidence": "239 passed, 1 warning, 2 subtests passed"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success",
+      "passed": true,
+      "evidence": "Success: no issues found in 31 source files"
+    },
+    {
+      "command": "ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "All checks passed!"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github_push",
+      "reason": "推送台账文档提交到 main",
+      "status": "granted"
+    },
+    {
+      "name": "github_merge",
+      "reason": "按用户指示合并 PR #6（已执行）",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "d0d99d0",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/6",
+    "ci": "success（42780225020 @e5b98e8；42780324424 @a6c7cb6；42780569154 @d0d99d0）",
+    "merge": "merged（PR #6 merge e5b98e8）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-015",
+  "next": "本任务开发与评审已闭环，无开发侧待办。下一位接触到 astock/track.py 或 tests/test_alpha_banner.py 的开发者请顺带关闭 backlog 里的两条 P2（plan-20261110-001 写库失败降级、plan-20261110-002 跳过策略），修完补测试并跑 pytest tests -q + mypy astock app.py。上线观察点：每日 16:40 日志出现「跟踪结算：…」；推荐页横幅 pending_days 随推荐日推进下降，样本 ≥10 后自动出现 p 值并转灰底/绿底/红底。",
+  "createdAt": "2026-11-10T08:21:01.840Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-017.md"
+}

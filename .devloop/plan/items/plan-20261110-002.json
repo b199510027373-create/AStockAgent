@@ -1,0 +1,25 @@
+{
+  "id": "plan-20261110-002",
+  "title": "修复 P2：AppBannerWiringTests 导入异常不得降级为 skip",
+  "description": "来源：评审 rev-20261110-002 第 2 轮 P2 iss-mwaf2gr0（tests/test_alpha_banner.py:237-245）。AppBannerWiringTests.setUpClass 用 except Exception 把所有 app 导入/构建异常降级为 SkipTest，若 app.py:500 的 bind_banner_refresh 接线被删或 import 链断裂，唯一验证真实 app load→banner 绑定的用例会静默 skip、CI 仍绿。建议：只对 ModuleNotFoundError 跳过（或 skipUnless 显式声明可选依赖），其余异常直接抛出；验证：临时删除 app.py 接线时该测试 fail。",
+  "status": "backlog",
+  "priority": "P2",
+  "milestone": "",
+  "owner": "human",
+  "start": null,
+  "due": null,
+  "estimateH": 0,
+  "progress": 0,
+  "acceptance": [],
+  "tags": [
+    "test",
+    "review-followup"
+  ],
+  "deps": [],
+  "links": {
+    "review": "rev-20261110-002",
+    "issue": "iss-mwaf2gr0"
+  },
+  "createdAt": "2026-11-10T08:20:45.845Z",
+  "updatedAt": "2026-11-10T08:20:45.845Z"
+}

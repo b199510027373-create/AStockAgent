@@ -2,14 +2,14 @@
   "id": "plan-20261103-005",
   "title": "「无显著 alpha」实时横幅（ledger 驱动）",
   "description": "依据 ADR-010 与评审 §6.1。当前推荐页只有静态风险提示（recommend_ui.py:98），没有数字。目标：顶部灰底横幅实时显示「实盘样本 N 个交易日、独立窗口≈K、Top2−其余 p=…」，数字从 ledger 聚合、经 stats.py 计算；有效样本 <10 时显示\"样本不足，不显示显著性\"。样本够了自动隐藏。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-product",
   "owner": "human",
   "start": "2026-11-15",
   "due": "2026-11-17",
   "estimateH": 4,
-  "progress": 95,
+  "progress": 100,
   "acceptance": [
     "横幅数字来自 ledger/stats 实时聚合，而非硬编码",
     "展示实盘样本数、有效独立窗口、Top2−其余 p（或「样本不足，暂不显示」）",
@@ -26,23 +26,28 @@
       "ADR-010",
       "ADR-006"
     ],
+    "followup": [
+      "plan-20261110-001",
+      "plan-20261110-002"
+    ],
+    "handoff": "ho-20261110-017",
     "module": "recommend_ui",
     "pr": "PR #6 (feat/plan-20261103-005-banner-refresh) merged e5b98e8",
+    "review": "rev-20261110-002 approved (round 2, openP2=2)",
     "test": [
       "pytest tests/test_alpha_banner.py tests/test_use_cases.py tests/test_hardening.py -q -> 73 passed, 1 warning, 2 subtests passed",
       "pytest tests -q -> 239 passed, 1 warning, 2 subtests passed",
       "mypy astock app.py -> Success: no issues found in 31 source files",
       "ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed",
-      "CI run 42778980617 (PR #6, commit 5810511) -> success",
-      "CI run 42779178938 (PR #6, commit b71b97f) -> success",
-      "CI run 42779412198 (PR #6, commit 443d7e8) -> success",
-      "CI run 42780225020 (main, merge commit e5b98e8) -> success",
-      "CI run 42780324424 (main, docs commit a6c7cb6) -> success",
-      "python .tmp-tests/banner_smoke.py (seeded 60 live days) -> SMOKE OK, positive p<0.0001; 空库 -> insufficient 无 p"
-    ],
-    "handoff": "ho-20261110-015"
+      "CI run 42778980617 (PR #6, 5810511) -> success",
+      "CI run 42779178938 (PR #6, b71b97f) -> success",
+      "CI run 42779412198 (PR #6, 443d7e8) -> success",
+      "CI run 42780225020 (main, e5b98e8) -> success",
+      "CI run 42780324424 (main, a6c7cb6) -> success",
+      "CI run 42780569154 (main, d0d99d0) -> success"
+    ]
   },
   "createdAt": "2026-11-03T12:10:35.581Z",
-  "updatedAt": "2026-11-10T08:10:18.978Z",
+  "updatedAt": "2026-11-10T08:21:08.360Z",
   "devSessionId": "session-ae4db07f-a50d-4fc0-a44f-fabaf196353b"
 }

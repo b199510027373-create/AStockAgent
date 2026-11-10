@@ -185,6 +185,16 @@
       "notes": "第 1 轮 · request_changes"
     },
     {
+      "id": "cal-rev-20261110-002-r2",
+      "type": "review",
+      "title": "评审：评审：「无显著 alpha」实时横幅（ledger 驱动）",
+      "start": "2026-11-10T08:16:44.237Z",
+      "end": "2026-11-10T08:17:09.657Z",
+      "planItemId": "plan-20261103-005",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-004-planned",
       "type": "planned",
       "title": "推荐跟踪：Top5 等权组合净值 vs 沪深300",

@@ -1,0 +1,26 @@
+{
+  "id": "plan-20261110-001",
+  "title": "修复 P2：compute_tracking 写库失败不应让「推荐跟踪」页整体失败",
+  "description": "来源：评审 rev-20261110-002 第 2 轮 P2 iss-mwaf2gq4（astock/track.py:1172-1174）。4d41512 把 compute_tracking 的 save_tracking 写入块抽成 _save_tracking_rows 后不再有外层 try/except，SQLite 写失败（如调度线程写 ledger 时 database is locked）会让跟踪页整体 failed、表格清空；改动前只丢持久化。建议：compute_tracking 包 try/except 并在 status 追加「⚠️ 跟踪结果未写入 ledger（TypeName），本次仅页面展示」；补测试 patch ledger.save_tracking 抛 sqlite3.OperationalError 时 detail 非空且 status 含提示。",
+  "status": "backlog",
+  "priority": "P2",
+  "milestone": "",
+  "owner": "human",
+  "start": null,
+  "due": null,
+  "estimateH": 0,
+  "progress": 0,
+  "acceptance": [],
+  "tags": [
+    "track",
+    "regression",
+    "review-followup"
+  ],
+  "deps": [],
+  "links": {
+    "review": "rev-20261110-002",
+    "issue": "iss-mwaf2gq4"
+  },
+  "createdAt": "2026-11-10T08:20:45.818Z",
+  "updatedAt": "2026-11-10T08:20:45.818Z"
+}

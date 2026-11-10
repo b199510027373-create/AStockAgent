@@ -6,22 +6,13 @@
   "branch": "",
   "base": "main",
   "files": [
-    "README.md",
-    "astock/ledger.py",
-    "astock/recommend_ui.py",
-    "astock/track.py",
-    "astock/use_cases.py",
-    "tests/test_alpha_banner.py",
-    "tests/test_core_paths.py",
-    "tests/test_use_cases.py",
-    "warning: in the working copy of '.devloop/reviews/rev-20261108-001/issues/iss-mw81x690-cbec5c.json', LF will be replaced by CRLF the next time Git touches it",
-    "warning: in the working copy of '.devloop/reviews/rev-20261108-001/thread.json', LF will be replaced by CRLF the next time Git touches it",
-    "warning: in the working copy of '.devloop/reviews/rev-20261109-001/issues/iss-mw8joahc-4fc16e.json', LF will be replaced by CRLF the next time Git touches it",
-    "warning: in the working copy of '.devloop/reviews/rev-20261109-001/issues/iss-mw8m51bp-dd9930.json', LF will be replaced by CRLF the next time Git touches it",
-    "warning: in the working copy of '.devloop/reviews/rev-20261109-001/thread.json', LF will be replaced by CRLF the next time Git touches it"
+    "warning: in the working copy of '.devloop/reviews/rev-20261110-002/issues/iss-mwadylup-e7d967.json', LF will be replaced by CRLF the next time Git touches it",
+    "warning: in the working copy of '.devloop/reviews/rev-20261110-002/issues/iss-mwadylv9-1f2a3a.json', LF will be replaced by CRLF the next time Git touches it",
+    "warning: in the working copy of '.devloop/reviews/rev-20261110-002/issues/iss-mwadylvz-65b1af.json', LF will be replaced by CRLF the next time Git touches it",
+    "warning: in the working copy of '.devloop/reviews/rev-20261110-002/thread.json', LF will be replaced by CRLF the next time Git touches it"
   ],
-  "status": "changes_requested",
+  "status": "approved",
   "createdAt": "2026-11-10T07:42:36.313Z",
-  "updatedAt": "2026-11-10T07:46:09.469Z",
+  "updatedAt": "2026-11-10T08:17:09.657Z",
   "reviewSessionId": "session-ddd7ed78-bf34-4207-bb1b-403d59c66fe0"
 }

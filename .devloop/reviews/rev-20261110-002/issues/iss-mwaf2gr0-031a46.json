@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwaf2gr0-031a46",
+  "threadId": "rev-20261110-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_alpha_banner.py",
+  "lines": "237-245",
+  "title": "app 导入失败被降级成 SkipTest，真实 app 的 load 绑定失效时 CI 仍会绿",
+  "evidence": "AppBannerWiringTests.setUpClass 用 `except Exception as exc: raise unittest.SkipTest(...)`（tests/test_alpha_banner.py:241-245）把 app 模块的任意导入/构建异常都降级成 skip。它是唯一验证「真实 app 注册了 load→banner」的用例；一旦 app.py 的 `bind_banner_refresh(app, recommend_banner)`（app.py:500）被误删或 import 链断掉，该测试会静默 skip，CI 仍是绿的，正好放过第 1 轮 P1 要防的回归。",
+  "suggestion": "只对确实可选的依赖缺失做跳过（如 `except ModuleNotFoundError`），其余异常直接抛出使测试失败；或者在 setUpClass 里只做 `import app`（不吞异常），把重依赖缺失用 `unittest.skipUnless` 显式声明。修复人：本分支开发者。完全解决判据：破坏 app.py 的 load 绑定时该测试为 fail 而非 skip。",
+  "confidence": 0.8,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-10T08:16:55.884Z"
+}
