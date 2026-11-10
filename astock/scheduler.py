@@ -12,7 +12,7 @@ import pandas as pd
 from .config import BASE_DIR
 from .data import last_completed_trade_date, load_trade_cal
 from .ledger import save_job
-from .recommend import StaleDataError, run_daily_recommendation
+from .use_cases import run_recommendation
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
 REC_DIR.mkdir(parents=True, exist_ok=True)
@@ -209,16 +209,39 @@ def run_once(
     _atomic_write_state(state)
     _sync_job(state, key)
     try:
-        result = run_daily_recommendation(
+        result = run_recommendation(
+            mode="generate",
             universe_text="",
             top_n=5,
             candidate_n=15,
             news_days=7,
             use_llm=True,
         )
-        data_as_of = getattr(result, "data_as_of", "") or getattr(result, "as_of", "")
+        payload = result.payload or {}
+        data_as_of = str(
+            payload.get("data_as_of") or result.diagnostics.get("data_as_of") or ""
+        )
+        run_id = result.run_id
+        if result.status == "stale":
+            _set_job(
+                state,
+                key,
+                status="stale",
+                as_of=data_as_of,
+                run_id=run_id,
+                finished_at=datetime.now().isoformat(timespec="seconds"),
+                error=result.message,
+            )
+            state["last_error"] = result.message
+            state["last_error_at"] = datetime.now().isoformat(timespec="seconds")
+            _atomic_write_state(state)
+            _sync_job(state, key)
+            _log(f"数据未更新，本次不记成功：{result.message}")
+            return None
+        if result.status == "failed":
+            raise RuntimeError(result.message)
+
         as_of_ts = pd.Timestamp(data_as_of) if data_as_of else None
-        run_id = getattr(result, "run_id", "")
         if as_of_ts is None or as_of_ts.normalize() < pd.Timestamp(trade_date):
             _set_job(
                 state,
@@ -245,29 +268,14 @@ def run_once(
         )
         state["last_run_date"] = now.strftime("%Y-%m-%d")
         state["last_status"] = result.status
-        state["last_csv"] = result.csv_path
-        state["last_json"] = result.json_path
+        state["last_csv"] = payload.get("csv_path")
+        state["last_json"] = payload.get("json_path")
         state["last_error"] = None
         state["last_error_at"] = None
         _atomic_write_state(state)
         _sync_job(state, key)
         _log("完成：" + result.status)
         return result
-    except StaleDataError as exc:
-        _set_job(
-            state,
-            key,
-            status="stale",
-            as_of=None,
-            finished_at=datetime.now().isoformat(timespec="seconds"),
-            error=str(exc),
-        )
-        state["last_error"] = f"StaleDataError: {exc}"
-        state["last_error_at"] = datetime.now().isoformat(timespec="seconds")
-        _atomic_write_state(state)
-        _sync_job(state, key)
-        _log(f"数据未更新，本次不发布：{exc}")
-        return None
     except Exception as exc:  # noqa: BLE001
         attempts = int(((state.get("jobs") or {}).get(key) or {}).get("attempts", 0)) + 1
         _set_job(

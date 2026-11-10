@@ -1,0 +1,117 @@
+{
+  "id": "ho-20261110-001",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-002",
+  "threadId": null,
+  "sessionId": "session-5e97dfd9-c0e2-4889-8c05-15bdc17fa798",
+  "title": "plan-20261103-002 补充台账读取失败诊断（update）",
+  "summary": "相对 initial 交付（ho-20261109-026 / c2f33a0）新增一处失败路径闭环：run_recommendation 的 latest/run 历史读取现在捕获 ledger.latest_run()/get_run() 异常，统一返回 status=failed、diagnostics.reason=ledger_error、message=\"读取台账失败：<Type>: <msg>\"，避免 Gradio 在台账损坏/锁定时直接抛异常。新增对应测试 test_ledger_read_error_is_failed。目标测试 25 passed、相关模块 94 passed、全量 214 passed，mypy 0 error。代码提交 feee3a6；handoff 文档提交为 6a46266（initial）。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "依据 ADR-002 与评审 §4.1，把推荐/跟踪的编排从 UI 与脚本收敛到用例层，返回 RunResult(run_id, status, payload, diagnostics)，status ∈ {success, stale, failed}；生成与历史读取共用同一函数，Gradio 只消费结果。",
+      "source": "任务描述"
+    },
+    {
+      "id": "R2",
+      "text": "recommend / track 的主入口返回统一 RunResult",
+      "source": "验收标准 1"
+    },
+    {
+      "id": "R3",
+      "text": "生成路径与历史读取路径共用同一用例函数",
+      "source": "验收标准 2"
+    },
+    {
+      "id": "R4",
+      "text": "Gradio 页面不再直接拼装 payload 或自行计算统计",
+      "source": "验收标准 3"
+    },
+    {
+      "id": "R5",
+      "text": "RunResult 的 status 在 stale/failed 时有明确可读诊断",
+      "source": "验收标准 4"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/use_cases.py",
+      "summary": "相对 initial：latest/run 读取 ledger.latest_run()/get_run() 增加 try/except，异常统一转为 failed RunResult（reason=ledger_error，message=读取台账失败：<Type>: <msg>），不再向 UI 抛异常。",
+      "commit": "feee3a6"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "相对 initial：新增 test_ledger_read_error_is_failed，patch latest_run 抛 RuntimeError(\"db locked\")，断言 failed、message 含读取台账失败与异常文本、status_text 含 ❌。",
+      "commit": "feee3a6"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-002.json",
+      "summary": "links.test 更新为 25/94/214/mypy，保留 adr/module/branch。",
+      "commit": "feee3a6"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261109-026.json",
+      "summary": "initial handoff（c2f33a0 主体实现）文档提交。",
+      "commit": "6a46266"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests\\test_use_cases.py -q",
+      "result": "25 passed, 2 subtests passed",
+      "passed": true,
+      "evidence": "目标用例层测试全通过；新增台账读取异常分支覆盖。"
+    },
+    {
+      "command": "pytest tests\\test_core_paths.py tests\\test_track_nav.py tests\\test_contracts.py tests\\test_hardening.py -q（按文件复跑）",
+      "result": "3 + 27 + 40 + 24 = 94 passed",
+      "passed": true,
+      "evidence": "相关集成/契约/调度/跟踪 UI 测试全部通过。合并单次运行曾在 27 个测试后无输出被中断，按文件复跑均快速通过；全量 214 亦通过，判断为沙箱进程偶发，未复现。"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "214 passed, 2 warnings",
+      "passed": true,
+      "evidence": "全量通过；警告为 anyio 弃用与 .pytest_cache 在 DSH 沙箱不可写（WinError 5），不影响结果。"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "类型检查通过；mypy.ini 排除 *ui.py。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "本地测试临时目录写入",
+      "reason": "DSH Windows 沙箱下 tempfile.mkdtemp 使用 0o700 会被拒绝写入；测试时通过未提交的 .tmp-tests/pytestshim/sitecustomize.py 将临时目录权限改为 0o777，并设置 PYTHONPATH/TEMP/TMP 指向 .tmp-tests。仅影响本地验证，不进入仓库。",
+      "status": "granted"
+    },
+    {
+      "name": "git push / 创建 PR",
+      "reason": "当前仅完成本地分支提交；推送与 PR/CI 需在评审通过后执行（本会话未获远端写权限确认）。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-002-runresult",
+    "commit": "feee3a6",
+    "pr": "",
+    "ci": "未运行（尚未 push/创建 PR）",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261109-026",
+  "next": "1) 请求评审：重点检查 RunResult 状态语义（生成 stale_data→stale；跟踪无 T+1→stale；历史读取 15:00 后落后判定；台账读取异常→failed）及 scheduler failed→RuntimeError 兼容性。2) 评审通过后 push 分支、创建 PR、跑 CI，并补 update handoff。3) 后续可把 app.py 中剩余直接消费 recommend/track 的位置迁移到 use_cases（本次未改 app.py）。",
+  "createdAt": "2026-11-09T20:41:35.668Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-001.md"
+}

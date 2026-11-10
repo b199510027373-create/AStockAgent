@@ -1,0 +1,123 @@
+{
+  "id": "ho-20261110-006",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "更新交付：复审 P2 修复、PR #4 与 CI 通过",
+  "summary": "评审 rev-20261110-001 已 approve（openP0=0、openP1=0）。本轮处理复审新增 P2 iss-mwabsgfv：生成侧 status 不再自带 ✅/⚠️，stale 图标统一由用例层渲染器按 status 添加；补充 stale 断言（无 ✅、恰好一个 ⚠️）。目标测试 29 passed、相关 94 passed、全量 218 passed，mypy 0 error。提交 8f196ac 已推送分支，PR #4 已创建，GitHub Actions CI 通过。",
+  "requirements": [
+    {
+      "id": "R0",
+      "text": "依据 ADR-002 与评审 §4.1，把推荐/跟踪的编排从 UI 与脚本里收敛到用例层，返回 RunResult(run_id, status, payload, diagnostics)，status ∈ {success, stale, failed}；生成与历史读取共用同一函数，Gradio 只消费结果。",
+      "source": "plan-20261103-002 任务描述"
+    },
+    {
+      "id": "R1",
+      "text": "recommend / track 的主入口返回统一 RunResult。",
+      "source": "plan-20261103-002 验收标准 1"
+    },
+    {
+      "id": "R2",
+      "text": "生成路径与历史读取路径共用同一用例函数。",
+      "source": "plan-20261103-002 验收标准 2"
+    },
+    {
+      "id": "R3",
+      "text": "Gradio 页面不再直接拼装 payload 或自行计算统计。",
+      "source": "plan-20261103-002 验收标准 3"
+    },
+    {
+      "id": "R4",
+      "text": "RunResult 的 status 在 stale/failed 时有明确可读诊断。",
+      "source": "plan-20261103-002 验收标准 4"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/recommend.py",
+      "summary": "生成侧 status 改为纯事实描述：删除 stale_note 与固定 ✅ 前缀；stale/success 图标统一由 use_cases._render_recommendation 按 status 添加。",
+      "commit": "8f196ac"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "fixture status 去除硬编码 ✅；stale 用例新增 assertNotIn(\"✅\", status_text) 与 count(\"⚠️\")==1，锁定图标归属。",
+      "commit": "8f196ac"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests\\test_use_cases.py -q",
+      "result": "29 passed, 2 subtests passed",
+      "passed": true,
+      "evidence": "本地 .venv Python 3.13.5；带 .tmp-tests pytestshim"
+    },
+    {
+      "command": "pytest tests\\test_core_paths.py tests\\test_track_nav.py tests\\test_contracts.py tests\\test_hardening.py -q",
+      "result": "94 passed",
+      "passed": true,
+      "evidence": "相关回归 4 文件"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "218 passed, 1 warning (anyio deprecation)",
+      "passed": true,
+      "evidence": "全量测试"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "类型检查"
+    },
+    {
+      "command": "GitHub Actions CI (run 42771362103)",
+      "result": "success",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/42771362103"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github_push",
+      "reason": "推送 feat/plan-20261103-002-runresult 到 origin",
+      "status": "granted"
+    },
+    {
+      "name": "github_pr_api",
+      "reason": "通过已存储的 git credential 调用 GitHub API 创建 PR #4",
+      "status": "granted"
+    },
+    {
+      "name": "temp_shim",
+      "reason": "DSH 沙箱下临时目录 0o700 不可写；仅用 .tmp-tests/pytestshim 跑测试，不提交",
+      "status": "granted"
+    },
+    {
+      "name": "human_merge",
+      "reason": "PR #4 需要人工合并",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-002-runresult",
+    "commit": "8f196ac",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/4",
+    "ci": "success (run 42771362103)",
+    "merge": "pending",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-004",
+  "next": "等待人工合并 PR #4；合并后补一份 update handoff 并把 plan-20261103-002 标记 done。app.py 剩余迁移另立任务。",
+  "createdAt": "2026-11-10T06:53:25.040Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-006.md"
+}

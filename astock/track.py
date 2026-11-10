@@ -400,7 +400,7 @@ def _batch_plans(detail: pd.DataFrame, top_n: int) -> list[dict]:
                 if entry is not None:
                     break
         if entry is None:
-            # 没有 tradable_from 记录时，与 track_recommendations 同口径回退到下一交易日
+            # 没有 tradable_from 记录时，与 compute_tracking 同口径回退到下一交易日
             entry = next_open_date(as_of_ts)
         if entry is None:
             continue
@@ -744,7 +744,7 @@ def nav_figure(nav: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def track_recommendations() -> tuple[pd.DataFrame, pd.DataFrame, str]:
+def compute_tracking() -> tuple[pd.DataFrame, pd.DataFrame, str]:
     batches = _load_batches()
     if not batches:
         return (

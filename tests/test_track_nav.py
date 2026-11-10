@@ -489,15 +489,23 @@ class TrackUiWiringTests(unittest.TestCase):
 
     def test_run_track_puts_nav_first_and_keeps_excess_table(self):
         from astock import track_ui
+        from astock.use_cases import RunResult
 
         detail, summary, nav = self._fixtures()
-        with (
-            patch.object(
-                track_ui, "track_recommendations", return_value=(detail, summary, "状态")
-            ),
-            patch.object(track_ui, "portfolio_nav", return_value=(nav, pd.DataFrame())),
-            patch.object(track_ui, "significance_table", return_value=pd.DataFrame()),
-        ):
+        result = RunResult(
+            "",
+            "success",
+            {
+                "status_text": "组合净值：1.01\n\n状态",
+                "nav_figure": nav,
+                "summary": summary,
+                "significance": pd.DataFrame(),
+                "excess_figure": None,
+                "detail": detail,
+            },
+            {"message": ""},
+        )
+        with patch.object(track_ui, "run_tracking", return_value=result):
             outputs = track_ui.run_track()
 
         self.assertEqual(len(outputs), 6)
@@ -507,15 +515,23 @@ class TrackUiWiringTests(unittest.TestCase):
 
     def test_run_track_survives_nav_failure(self):
         from astock import track_ui
+        from astock.use_cases import RunResult
 
         detail, summary, _ = self._fixtures()
-        with (
-            patch.object(
-                track_ui, "track_recommendations", return_value=(detail, summary, "状态")
-            ),
-            patch.object(track_ui, "portfolio_nav", side_effect=RuntimeError("boom")),
-            patch.object(track_ui, "significance_table", return_value=pd.DataFrame()),
-        ):
+        result = RunResult(
+            "",
+            "success",
+            {
+                "status_text": "净值计算失败：RuntimeError: boom（下方表格不受影响）\n\n状态",
+                "nav_figure": None,
+                "summary": summary,
+                "significance": pd.DataFrame(),
+                "excess_figure": None,
+                "detail": detail,
+            },
+            {"message": "", "nav_error": "净值计算失败：RuntimeError: boom"},
+        )
+        with patch.object(track_ui, "run_tracking", return_value=result):
             outputs = track_ui.run_track()
 
         self.assertEqual(len(outputs), 6)

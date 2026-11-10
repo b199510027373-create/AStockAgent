@@ -1,0 +1,127 @@
+{
+  "id": "ho-20261110-004",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261103-002 修复首轮评审 4 条问题（update）",
+  "summary": "针对 rev-20261110-001 首轮评审的 1 条 P1 + 3 条 P2 完成修复：历史读取去掉 now.hour>=15 门限，与生成侧同口径（落后最近交易日即 stale）；data_as_of 不可解析改为 stale 并给出可读诊断，交易日历不可用时在 success 的 status_text 追加“未校验数据新鲜度”提示；跟踪 stale 按原因区分“缺 T+1”与“缺沪深300 基准”，后者写 bench_missing 诊断；scheduler 不再向生成分支传无效 now，_generate_view 删除未使用形参。另按评审提示把 status_line 改为纯事实描述，✅/⚠️/❌ 统一由渲染器按 status 添加。目标 29 passed、相关 94 passed、全量 218 passed、mypy 0 error；代码提交 ef32515。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "依据 ADR-002 与评审 §4.1，把推荐/跟踪的编排从 UI 与脚本收敛到用例层，返回 RunResult(run_id, status, payload, diagnostics)，status ∈ {success, stale, failed}；生成与历史读取共用同一函数，Gradio 只消费结果。",
+      "source": "任务描述"
+    },
+    {
+      "id": "R2",
+      "text": "recommend / track 的主入口返回统一 RunResult",
+      "source": "验收标准 1"
+    },
+    {
+      "id": "R3",
+      "text": "生成路径与历史读取路径共用同一用例函数",
+      "source": "验收标准 2"
+    },
+    {
+      "id": "R4",
+      "text": "Gradio 页面不再直接拼装 payload 或自行计算统计",
+      "source": "验收标准 3"
+    },
+    {
+      "id": "R5",
+      "text": "RunResult 的 status 在 stale/failed 时有明确可读诊断",
+      "source": "验收标准 4"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/use_cases.py",
+      "summary": "修复 iss-mwaawcwh（P1）：_ledger_view 去掉 now.hour>=15，data_as_of < last_completed_trade_date 即 stale。修复 iss-mwaawfsb（P2）：data_as_of 解析失败→stale 且 message 说明“无法解析/无法确认新鲜度”；日历异常→success 但 status_text 追加“⚠️ 交易日历不可用，未校验数据新鲜度”。修复 iss-mwaawn5a（P2）：usable==0 时若 T+1 有值而超额为空，message 改为“缺沪深300 基准数据”，diagnostics 写 reason=awaiting_benchmark、bench_missing=True。status_line 去掉固定 ✅，渲染器按 status 统一加状态符。",
+      "commit": "ef32515"
+    },
+    {
+      "path": "astock/scheduler.py",
+      "summary": "修复 iss-mwaawyq9（P2）：run_recommendation(mode=generate) 不再传 now；生成侧时钟不可注入成为显式事实。",
+      "commit": "ef32515"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "新增/更新 4 组用例：晨间落后历史（now=2026-11-06 10:00）仍 stale；data_as_of=unknown → stale 且含“无法解析”；last_completed_trade_date 抛异常 → status_text 含“交易日历不可用/未校验”；跟踪缺基准与缺 T+1 的措辞及 diagnostics 分开断言；补 status_line 不含 ✅、status_text 由渲染器加 ✅ 的断言。",
+      "commit": "ef32515"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-002.json",
+      "summary": "links.test 更新为 29/94/218/mypy，追加 review=rev-20261110-001；状态 in_review、progress=98。",
+      "commit": "ef32515"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "记录本轮评审修复工作单元与评审事件。",
+      "commit": "ef32515"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "记录本轮修复总结与测试结果。",
+      "commit": "ef32515"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests\\test_use_cases.py -q",
+      "result": "29 passed, 1 warning, 2 subtests passed",
+      "passed": true,
+      "evidence": "新增的晨间 stale、data_as_of 不可解析、日历不可用提示、缺基准/缺 T+1 诊断用例全部通过；status_line 纯事实断言通过。"
+    },
+    {
+      "command": "pytest tests\\test_core_paths.py tests\\test_track_nav.py tests\\test_contracts.py tests\\test_hardening.py -q",
+      "result": "94 passed, 1 warning",
+      "passed": true,
+      "evidence": "生成真实路径、跟踪 UI、契约、调度 stale/failed/success/skip/force 路径均通过。"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "218 passed, 1 warning, 2 subtests passed",
+      "passed": true,
+      "evidence": "全量通过；唯一警告为 anyio 的 PytestRemovedIn10Warning，与本改动无关。"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "use_cases/scheduler/recommend/track 均在检查范围内，0 error。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "本地测试临时目录写入",
+      "reason": "DSH Windows 沙箱下 tempfile.mkdtemp 使用 0o700 会被拒绝写入；测试时通过未提交的 .tmp-tests/pytestshim/sitecustomize.py 将临时目录权限改为 0o777，并设置 PYTHONPATH/TEMP/TMP 指向 .tmp-tests。仅影响本地验证，不进入仓库。",
+      "status": "granted"
+    },
+    {
+      "name": "git push / 创建 PR",
+      "reason": "本轮仅完成本地分支提交 ef32515；推送与 PR/CI 仍需在复审通过后执行，当前未获远端写权限确认。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-002-runresult",
+    "commit": "ef32515",
+    "pr": "",
+    "ci": "未运行（尚未 push/创建 PR）",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-002",
+  "next": "1) 请求复审 rev-20261110-001 第 2 轮（scope=diff），重点核对 4 处修复：历史 stale 去掉 15:00 门限且晨间用例覆盖；data_as_of 解析失败→stale、日历不可用→status_text 提示；跟踪缺基准与缺 T+1 的措辞/诊断分离；scheduler 不再传 now。2) 复审通过（openP0=0、openP1=0、P2 fixed）后 push 分支、创建 PR、跑 CI，并补 update handoff。3) app.py 中剩余直接消费 recommend/track 的位置可作为后续独立任务迁移。",
+  "createdAt": "2026-11-10T06:30:04.375Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-004.md"
+}
