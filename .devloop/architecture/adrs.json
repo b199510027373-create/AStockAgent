@@ -14,9 +14,9 @@
   {
     "id": "ADR-002",
     "title": "六层分层与契约层（contracts.py）",
-    "status": "proposed",
+    "status": "accepted",
     "date": "2026-11-03",
-    "summary": "交互/用例/领域/适配/契约/平台六层；新增 contracts.py 校验 BarFrame/EventFrame/Evidence/RecommendationRun，用例统一返回 RunResult。",
+    "summary": "[accepted] 六层分层；contracts.py 已实现并追认（BarFrame/EventFrame/Evidence/RecommendationRun + ContractError、RunResult），实现偏差已回写。",
     "tags": [
       "架构",
       "契约",
@@ -114,9 +114,9 @@
   {
     "id": "ADR-010",
     "title": "研究语义与「无 alpha」一等公民",
-    "status": "proposed",
+    "status": "accepted",
     "date": "2026-11-03",
-    "summary": "动作词改技术面强弱 + 池内分位；推荐页实时展示未验证状态；对外唯一指标改为 Top5 组合净值 vs 沪深300。",
+    "summary": "[accepted-with-conditions] 研究语义与「无 alpha」一等公民：动作词/实时横幅/组合净值均已实现并追认；条件 C1/C2 挂 plan-20261103-006。",
     "tags": [
       "产品",
       "统计诚实",
@@ -142,7 +142,7 @@
     "title": "产品边界与研究闭环（需求基线）",
     "status": "accepted",
     "date": "2026-11-03",
-    "summary": "定位为本地研究台而非荐股产品；13 Tab 功能边界；数据→评分→推荐→台账→跟踪→统计→结论必须端到端可复现，并写明非目标。",
+    "summary": "[accepted] 产品边界与研究闭环（13 Tab、非目标写死）；2026-11-07 追加自研 Agent 升级；2026-11-10 增治理附录（proposed 不得作为实现依据、先行实现 7 天内追认）。",
     "tags": [
       "需求",
       "产品边界",
@@ -153,9 +153,9 @@
   {
     "id": "ADR-013",
     "title": "自研 Agent 运行时：工具调用循环",
-    "status": "proposed",
+    "status": "accepted",
     "date": "2026-11-07",
-    "summary": "进程内 Agent：plan→act→observe→reflect，最多 12 步；数字与图形只来自工具；会话/工作记忆持久化；对推荐只读。",
+    "summary": "[accepted] 进程内 Agent 运行时 plan→act→observe→reflect，12 步/64k/120s；ToolResult 9 字段与 StopReason 8 值冻结；实现偏差已回写。",
     "tags": [
       "Agent",
       "工具调用",
@@ -166,9 +166,9 @@
   {
     "id": "ADR-014",
     "title": "模型网关：供应商可替换，Agent 不绑定 DeepSeek",
-    "status": "proposed",
+    "status": "accepted",
     "date": "2026-11-07",
-    "summary": "ChatModel 抽象 + DeepSeek/OpenAI-compatible/规则兜底三个适配器；配置化 provider/model/base_url；DeepSeek 只是默认值。",
+    "summary": "[accepted] ChatModel 网关 + 三适配器，complete(messages, tools, *, temperature) 冻结（无 stream 形参）；补 AGENT_TIMEOUT_SECONDS/AGENT_USAGE_LOG；流式转二期。",
     "tags": [
       "Agent",
       "模型网关",
@@ -179,9 +179,9 @@
   {
     "id": "ADR-015",
     "title": "文件导入与检索：PDF / Excel / CSV / DOCX",
-    "status": "proposed",
+    "status": "accepted",
     "date": "2026-11-07",
-    "summary": "上传→解析→内容寻址存储→FTS5 文本索引 + DuckDB 只读表格查询；回答强制带文件名+页码/工作表引用。",
+    "summary": "[accepted-with-conditions] 文件导入：内容寻址布局、meta.json 13 字段、FTS5、file_id=f_<sha16> 五个字段；条件 C1–C4 分挂 plan-20261107-003（C1 布局/索引、C2 依赖与限额、C3 抽取自检）与 plan-20261107-004（C4 检索与表格查询契约）。",
     "tags": [
       "文件导入",
       "PDF",
@@ -193,9 +193,9 @@
   {
     "id": "ADR-016",
     "title": "图表即工具产物：声明式 chart spec",
-    "status": "proposed",
+    "status": "accepted",
     "date": "2026-11-07",
-    "summary": "ChartSpec 声明式规格（K线/折线/柱/散点/热力/直方）+ 白名单 transforms，spec→Plotly→artifact；v1 不执行任意 Python。",
+    "summary": "[accepted] ChartSpec v1 字段级冻结（version=1、additionalProperties=false、白名单算子与图层）；任意 Python 转二期；承接 plan-20261107-005。",
     "tags": [
       "Agent",
       "图表",
@@ -206,9 +206,9 @@
   {
     "id": "ADR-017",
     "title": "Agent 运行审计与安全边界",
-    "status": "proposed",
+    "status": "accepted",
     "date": "2026-11-07",
-    "summary": "agent_runs/agent_steps/agent_artifacts 三表全量记录；工具权限分级、路径白名单、提示注入防护、步数/token/时长限额。",
+    "summary": "[accepted-with-conditions] 审计三表 DDL 冻结（含 temperature/seed/code_version/digest、status 枚举）、权限按实现七标签（无 write）；条件 C1–C3 挂 plan-20261107-008。",
     "tags": [
       "Agent",
       "审计",
@@ -219,9 +219,9 @@
   {
     "id": "ADR-018",
     "title": "「实时」行情口径与 Agent 数据时点",
-    "status": "proposed",
+    "status": "accepted",
     "date": "2026-11-07",
-    "summary": "实时=rt_min 最新一根+30s 缓存；每个行情结果带 data_as_of 与 data_time；非交易时段/延迟/停牌显式标注。",
+    "summary": "[accepted-with-conditions] 实时=rt_min+30s 缓存；data_as_of 已实现、data_time 无生产者（冻结 latest_bar_time 唯一入口）；条件 C1/C2 挂 plan-20261107-006。",
     "tags": [
       "实时行情",
       "数据时点",

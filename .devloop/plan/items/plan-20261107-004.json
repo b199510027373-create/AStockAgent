@@ -8,14 +8,15 @@
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-28",
-  "estimateH": 12,
+  "estimateH": 14,
   "progress": 0,
   "acceptance": [
     "file_search 返回 chunk + 页码，可被回答引用",
     "table_query 仅允许 SELECT 且强制 LIMIT/超时",
     "基于文件的回答必须带文件名 + 页码/工作表引用",
     "无命中的问题明确回答「未在文件中找到」",
-    "查询 10 万行 Excel 的响应时间 < 3s"
+    "查询 10 万行 Excel 的响应时间 < 3s",
+    "（ADR-015 C4，并入自 plan-20261110-004）file_chunks 用 FTS5 建立全文索引并与抽取同批写入；file_search 命中必须能回查 file_id + 页码/行号，不得只返回拼好的文本片段"
   ],
   "tags": [
     "agent",
@@ -29,6 +30,9 @@
   "links": {
     "adr": [
       "ADR-015"
+    ],
+    "mergedFrom": [
+      "plan-20261110-004"
     ]
   },
   "createdAt": "2026-11-07T14:12:03.517Z",

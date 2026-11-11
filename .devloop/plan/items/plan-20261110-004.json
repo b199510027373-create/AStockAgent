@@ -1,0 +1,38 @@
+{
+  "id": "plan-20261110-004",
+  "title": "ADR-015 文件导入：按冻结布局实现 files.py（内容寻址 + FTS5 + DuckDB 只读）",
+  "description": "依据 ADR-015（2026-11-11 预评审裁决 accepted-with-conditions）与《接口冻结清单》§4「文件存储布局 v1」。实现 astock/agent/files.py：data/agent/files/&lt;sha256&gt;/{original.&lt;ext&gt;,extracted.jsonl,tables/&lt;sheet_slug&gt;.parquet,meta.json}；PDF/Excel/CSV/DOCX 抽取；file_chunks FTS5 索引；DuckDB 只读只允许 SELECT + 强制 LIMIT。条件 C1：file_id↔FTS 行映射与 90 天留存/GC 必须同时落地；C2：pdfplumber/python-docx/duckdb 版本锁定。OCR/加密 PDF/宏/扫描件为 v1 非目标。\n\n【2026-11-11 合并】本项不单独执行：验收条目已并入 plan-20261107-003（布局/抽取）+ plan-20261107-004（FTS5 检索）（同一模块，避免两条计划线）。原始验收条目保留在本项历史中可追溯。",
+  "status": "cancelled",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-16",
+  "due": "2026-11-21",
+  "estimateH": 16,
+  "progress": 0,
+  "acceptance": [
+    "存储布局与 meta.json/extracted.jsonl 字段与冻结清单 §4 逐字一致",
+    "同一文件二次上传命中同一 sha256 目录，不重复解析（dedupe 命中）",
+    "file_chunks FTS5 可按 file_id + 页码回溯，file_search 返回带页码引用",
+    "table_query 只允许 SELECT 且强制 LIMIT、5s 超时；写入/DDL 被拒",
+    "超限（>20MB / >200 页 / 单轮 >5 文件）拒绝并给出可读原因",
+    "扫描件/加密 PDF 识别为「可能无文本层」而非空结果"
+  ],
+  "tags": [
+    "agent",
+    "files",
+    "ingestion"
+  ],
+  "deps": [
+    "plan-20261110-003"
+  ],
+  "links": {
+    "adr": [
+      "ADR-015",
+      "ADR-017"
+    ],
+    "module": "file_ingest"
+  },
+  "createdAt": "2026-11-10T08:39:09.565Z",
+  "updatedAt": "2026-11-10T08:39:09.565Z"
+}

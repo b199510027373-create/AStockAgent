@@ -1,0 +1,64 @@
+{
+  "id": "plan-20261110-003",
+  "title": "架构契约评审门禁：ADR-002/010/013–018 与接口冻结",
+  "description": "背景：18 条 ADR 中 8 条仍是 proposed（002/010/013–018），其中 4 条已被实现并通过代码评审（002 contracts.py、010 净值/横幅、013 runtime、014 gateway），4 条即将开工（015 文件、016 图表、017 审计、018 实时）。契约页与实际状态脱节；继续开发会让 003/005/006/008 建立在未裁决的接口上。做法：11-11~11-12 限时 6h 做「接口级」评审，不做全面架构复审，不重写已通过评审的代码；结论直接更新 ADR 状态。议程：D1 上午追认 002/010/013/014（对照实现，记录偏差）；D1 下午 pre-review 015/016/018 的存储布局、ChartSpec、时点语义；D2 上午 017 安全边界 + 18 条规则 enforcement 映射 + 冻结清单 + ADR-012 治理附录。判定规则：无阻塞问题→accepted；有非阻塞条件→accepted-with-conditions（写入 ADR「条件」段并挂后续项）；有阻塞接口问题→deferred，先改 003/005 设计再开工。输出：《接口冻结清单》+ ADR 状态更新 + 规则落点表。",
+  "status": "in_review",
+  "priority": "P0",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-11",
+  "due": "2026-11-12",
+  "estimateH": 6,
+  "progress": 100,
+  "acceptance": [
+    "8 条 proposed ADR（002/010/013–018）全部给出结论：accepted / accepted-with-conditions / deferred，工作台不再出现「已实现但仍是 proposed」",
+    "001/002 实现与 ADR-013/014 的偏差写回 ADR「实现回写」章节，不重写已通过评审的代码",
+    "冻结 6 个接口：ToolResult/ToolSpec、ChatModel.complete、ChartSpec v1、文件存储布局、agent_* 三表、data_as_of/data_time",
+    "18 条 contract 规则逐条标注 enforcement 落点（测试文件或评审清单），无主规则",
+    "未决问题（默认模型 / tick / OCR / 任意 Python）转为 ADR 非目标或二期项",
+    "在 ADR-012 增加治理附录：proposed 状态不得作为实现依据；先行实现须 7 天内追认",
+    "评审在 11-12 前结束，不阻塞 11-15 的 003/005 开工"
+  ],
+  "tags": [
+    "review",
+    "contract",
+    "adr",
+    "gate"
+  ],
+  "deps": [
+    "plan-20261107-001",
+    "plan-20261107-002"
+  ],
+  "links": {
+    "adr": [
+      "ADR-002",
+      "ADR-010",
+      "ADR-012",
+      "ADR-013",
+      "ADR-014",
+      "ADR-015",
+      "ADR-016",
+      "ADR-017",
+      "ADR-018"
+    ],
+    "branch": "feat/adr-gate-freeze",
+    "ci": "GitHub Actions CI run 42950484195 on PR #7 head 06af067 -> success (1m3s, job test); 评审修复提交待重新触发",
+    "doc": [
+      "docs/AStockAgent_interface_freeze_v1.md",
+      "docs/AStockAgent_contract_rule_map_v1.md"
+    ],
+    "module": "architecture",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/7",
+    "test": [
+      "目标（评审修复后）：.venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q → 29 passed, 1 skipped (跳过项为 astock/agent/tools 未实现，plan-20261107-005/006)",
+      "全量（评审修复后）：.venv\\Scripts\\python.exe -m pytest tests -q → 268 passed, 1 skipped, 2 subtests passed in 13.93s",
+      "类型：.venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py → Success: no issues found in 32 source files",
+      "静态：.venv\\Scripts\\python.exe -m ruff check astock tests/test_architecture_gate.py --select E9,F63,F7,F82 → All checks passed!",
+      "变异测试（复验 4 种情形均被拦下）：删 ChatResult.raw / 改 protocol 默认值 tools→json / ADR 摘要引用已取消的 plan-20261110-005 / 新增无追认截止日的 proposed ADR → 各自 1 failed",
+      "远端：PR #7 CI run 42950484195 → success（旧 head 06af067）"
+    ]
+  },
+  "createdAt": "2026-11-10T08:34:43.436Z",
+  "updatedAt": "2026-11-11T03:24:29.690Z",
+  "devSessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7"
+}

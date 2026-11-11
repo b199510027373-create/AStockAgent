@@ -55,6 +55,77 @@
 - 对应 ADR：ADR-013（运行时）、ADR-014（模型网关）、ADR-015（文件）、ADR-016（图表）、ADR-017（审计与安全）、ADR-018（实时口径）。
 - 计划落点：新里程碑 `ms-agent`；为腾出产能，事件分校准、parquet 分区、板块规则等研究增强项转入 backlog。
 
+## 治理附录（2026-11-10）：ADR 状态纪律
+
+本附录由 plan-20261110-003（架构契约评审门禁）新增，约束的是**文档与实现的先后关系**，不改产品边界。
+
+### 1. 状态语义
+
+| 状态 | 含义 | 能否作为实现依据 |
+| --- | --- | --- |
+| `proposed` | 已写入、未裁决 | **否**。不得据此开工，不得在评审中当作已定接口引用 |
+| `accepted` | 已裁决，接口冻结 | 是 |
+| `accepted-with-conditions` | 已裁决，但带条件 | 是；条件必须写在本 ADR 的「条件」段并挂具体计划项 |
+| `superseded` / `deprecated` / `rejected` | 失效 | 否 |
+
+工作台（`devloop_architecture list`）里不允许长期存在「代码已实现但 ADR 仍是 proposed」的条目。
+
+### 2. 先行实现与 7 天追认
+
+允许为了验证可行性先行写代码，但必须满足：
+
+1. 从**首个合并到 main 的实现提交**起算，**7 个自然日内**完成 ADR 追认（状态改为 accepted 或 accepted-with-conditions）；
+2. 超期未追认：该实现冻结功能扩展，只允许缺陷修复；新功能必须等 ADR 裁决；
+3. 追认时必须写「实现回写」段（见第 3 条），并把偏差升级为本 ADR 的正式口径，而不是留在代码注释里。
+
+### 3. 实现回写义务
+
+- 已 accepted 的 ADR，若实现与文本不一致，**以补写「实现回写」段为准**，不得为了对齐文档去重写已通过评审的代码；
+- 「实现回写」必须写清：偏差是什么、为什么这样收敛、冻结成什么行为、哪个测试守住它；
+- 例：ADR-002 的 `adj_factor` 条件必填、ADR-014 的 `complete` 无 `stream` 形参、ADR-017 的权限七标签。
+
+### 4. 接口冻结
+
+- `docs/AStockAgent_interface_freeze_v1.md` 冻结 6 个接口：`ToolResult`/`ToolSpec`、`ChatModel.complete`、
+  `ChartSpec` v1、文件存储布局、`agent_*` 三表、`data_as_of`/`data_time`；
+- 改冻结接口的顺序固定为：**先写 ADR → 状态 accepted → 再升冻结清单版本（v1 → v2）→ 同期改门禁测试**；
+- 禁止"先改代码，回头补文档"。
+
+### 5. 门禁
+
+`tests/test_architecture_gate.py` 自动检查：`adrs.json` 与 ADR 文件的「状态」一致、带条件的 ADR 有「条件」段且承接项存在、
+18 条 contract 规则均有落点、冻结接口与代码签名一致、文档里引用的测试真实存在。任一不满足即 CI 失败。
+
+**proposed 的口径（2026-11-11 评审修订）**——门禁不禁止 proposed，只禁止「无主的 proposed」：
+
+1. 本次门禁裁决的 8 条（002/010/013–018）**不允许**再回到 `proposed`；
+2. 其他 ADR 若处于 `proposed`，必须在文件头带 `- 追认截止：YYYY-MM-DD`，且该日期未过期，否则 CI 失败；
+3. 追认截止日 = 首个实现提交合并到 main 之日 + 7 个自然日（第 2 条），超期即由门禁拦下；
+4. 反例由 `test_proposed_discipline_gate_rejects_missing_deadline` 守住（合成一条缺截止日的 proposed，断言给出可读错误）。
+
+### 6. 状态变更记录（2026-11-10）
+
+| ADR | 主题 | 原状态 | 结论 | 条件 | 承接项 |
+| --- | --- | --- | --- | --- | --- |
+| ADR-002 | 六层分层与 contracts.py | proposed | accepted | — | — |
+| ADR-010 | 研究语义与「无 alpha」 | proposed | accepted-with-conditions | C1/C2 | plan-20261103-006 |
+| ADR-013 | Agent 运行时 | proposed | accepted | — | — |
+| ADR-014 | 模型网关 | proposed | accepted | — | — |
+| ADR-015 | 文件导入与检索 | proposed | accepted-with-conditions | C1–C4 | plan-20261107-003（C1–C3）+ plan-20261107-004（C4） |
+| ADR-016 | 图表 ChartSpec | proposed | accepted | — | plan-20261107-005 |
+| ADR-017 | 审计与安全边界 | proposed | accepted-with-conditions | C1/C2/C3 | plan-20261107-008 |
+| ADR-018 | 实时口径 | proposed | accepted-with-conditions | C1/C2 | plan-20261107-006 |
+
+无 `deferred` 条目；没有阻塞性接口问题，003（ledger）与 005（时间语义）可按原计划于 11-15 开工。
+
+### 7. 排期合并记录（2026-11-11）
+
+条件承接项原为 2026-11-10 新建的 `plan-20261110-004~007`，与既有 `plan-20261107-003/004/005/006/008`
+指向同一模块（文件导入、图表、审计表、行情工具）。2026-11-11 决定取消前者，验收条目并入后者：
+`004 → 003（布局/抽取）+ 004（FTS5 检索）`、`005 → 005（ChartSpec v1）`、
+`006 → 008（审计三表，起始日 11-29 提前到 11-18）`、`007 → 006（行情/指标工具时点口径）`。
+上表「承接项」列已按合并后的计划项更新，**ADR 条件编号与内容不变**，只换承接载体。
+
 ## 证据
 
 - 构建会话用户消息：seq 18 / 1090 / 1334 / 2084 / 2518 / 3336 / 5188 / 6040 / 6443 / 6652 / 7852

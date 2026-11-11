@@ -1,6 +1,6 @@
 {
-  "version": "v1",
-  "updatedAt": "2026-11-07",
+  "version": "v1.1",
+  "updatedAt": "2026-11-10",
   "modules": [
     {
       "id": "app",
@@ -155,7 +155,7 @@
     {
       "id": "contracts",
       "title": "contracts.py",
-      "description": "计划新增：BarFrame/EventFrame/Evidence/RecommendationRun 校验",
+      "description": "已实现（ADR-002）：BarFrame/EventFrame/Evidence/RecommendationRun 校验",
       "layer": 4
     },
     {

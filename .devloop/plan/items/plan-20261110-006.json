@@ -1,0 +1,41 @@
+{
+  "id": "plan-20261110-006",
+  "title": "ADR-017 审计：agent_* 三表与 artifact 内容寻址、留存/GC",
+  "description": "依据 ADR-017（2026-11-11 预评审裁决 accepted-with-conditions）与《接口冻结清单》§5「agent_* 三表」。实现 astock/agent/store.py：三表建表与写入、artifact 内容寻址（data/agent/artifacts/<digest>/）、留存/GC。实现回写要点：工具权限已由 registry.Permission 定为七个资源级标签（无 read/compute/write 三级），ADR-017 §4 按实现改写；ADR 原 DDL 缺 hash 列与索引，冻结 DDL 补齐 digest 与索引。\n\n【2026-11-11 合并】本项不单独执行：验收条目已并入 plan-20261107-008（审计三表与安全限额）（同一模块，避免两条计划线）。原始验收条目保留在本项历史中可追溯。",
+  "status": "cancelled",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-18",
+  "due": "2026-11-24",
+  "estimateH": 12,
+  "progress": 0,
+  "acceptance": [
+    "agent_runs/agent_steps/agent_artifacts 三表 DDL 与冻结清单 §5 逐字一致，建表在既有五表同库幂等迁移",
+    "每次工具调用落 agent_steps（tool/args_json/result_digest/latency_ms），完整结果落 agent_artifacts",
+    "artifact 记录 digest，按 digest 去重；文件路径 data/agent/artifacts/<digest>/",
+    "删除 artifact 文件后 run/step 仍可查（审计不断链）",
+    "工具权限只用已实现的七标签（market:read/indicator:compute/chart:render/file:read/research:read/ledger:read/user:ask），不存在 write 标签",
+    "留存 90 天清理任务只删文件与索引，不删 run 记录",
+    "无 shell / 任意 HTTP / 文件删除 / 推荐写入路径（负向测试）"
+  ],
+  "tags": [
+    "agent",
+    "audit",
+    "ledger"
+  ],
+  "deps": [
+    "plan-20261110-003",
+    "plan-20261110-004"
+  ],
+  "links": {
+    "adr": [
+      "ADR-017",
+      "ADR-003",
+      "ADR-013"
+    ],
+    "module": "agent_store"
+  },
+  "createdAt": "2026-11-10T08:39:16.696Z",
+  "updatedAt": "2026-11-10T08:39:16.696Z"
+}
