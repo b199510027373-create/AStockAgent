@@ -428,6 +428,8 @@ class RecommendEntryContractTests(unittest.TestCase):
         }
         with (
             patch.object(recommend, "REC_DIR", self.root),
+            # _save 会同步写 ledger；隔离到临时库，避免污染开发机 data/astock.db。
+            patch.object(ledger, "DB_PATH", self.root / "ledger.db"),
             patch.object(recommend, "_atomic_write_text", wraps=recommend._atomic_write_text),
         ):
             csv_path, json_path = recommend._save(

@@ -171,7 +171,11 @@ class PersistedPoolSnapshotTests(unittest.TestCase):
             ],
         }
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(recommend, "REC_DIR", Path(tmp)):
+            with (
+                patch.object(recommend, "REC_DIR", Path(tmp)),
+                # _save 经 ledger.save_run 落库；隔离，避免假批次写进真实 data/astock.db。
+                patch.object(ledger, "DB_PATH", Path(tmp) / "ledger.db"),
+            ):
                 _, json_path = recommend._save(
                     pool[:5],
                     "震荡",
