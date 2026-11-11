@@ -2,14 +2,14 @@
   "id": "plan-20261103-003",
   "title": "推荐 UI 生成/历史读取统一到 ledger",
   "description": "依据 ADR-003 与修复记录 §5.1。目前推荐页已有「加载最近一次（SQLite）」按钮，但生成路径仍走实时流水线，二者未统一。目标：历史批次列表、单批详情、证据链全部从 ledger 读；生成成功后立即写入并回到同一读取路径。避免\"同一按钮两种口径\"。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-contracts",
   "owner": "human",
   "start": "2026-11-18",
   "due": "2026-11-21",
   "estimateH": 8,
-  "progress": 0,
+  "progress": 90,
   "acceptance": [
     "推荐页的「生成」与「历史读取」都走 ledger",
     "页面能看到 run_id / data_as_of / tradable_from / diagnostics",
@@ -24,11 +24,20 @@
   "links": {
     "adr": [
       "ADR-003"
+    ],
+    "branch": "feat/plan-20261103-003-ledger-ui",
+    "commit": "5d17184",
+    "test": [
+      "pytest tests/test_use_cases.py tests/test_core_paths.py -q -p no:cacheprovider -> 45 passed, 2 subtests passed",
+      "pytest tests/test_core_paths.py tests/test_alpha_banner.py tests/test_research_semantics.py tests/test_hardening.py -q -p no:cacheprovider -> 68 passed",
+      "pytest tests -q -p no:cacheprovider -> 305 passed, 1 skipped, 2 subtests passed",
+      "mypy astock -> Success: no issues found in 30 source files"
     ]
   },
   "createdAt": "2026-11-03T12:10:29.795Z",
-  "updatedAt": "2026-11-03T12:10:29.795Z",
+  "updatedAt": "2026-11-11T05:28:25.354Z",
   "deps": [
     "plan-20261103-002"
-  ]
+  ],
+  "devSessionId": "session-41846cf7-ac59-44c9-93a5-4205a4cdf51f"
 }
