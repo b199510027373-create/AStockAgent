@@ -9,7 +9,7 @@
   "start": "2026-11-18",
   "due": "2026-11-21",
   "estimateH": 8,
-  "progress": 90,
+  "progress": 95,
   "acceptance": [
     "推荐页的「生成」与「历史读取」都走 ledger",
     "页面能看到 run_id / data_as_of / tradable_from / diagnostics",
@@ -26,16 +26,19 @@
       "ADR-003"
     ],
     "branch": "feat/plan-20261103-003-ledger-ui",
-    "commit": "5d17184",
+    "commit": "ade4e43",
     "test": [
       "pytest tests/test_use_cases.py tests/test_core_paths.py -q -p no:cacheprovider -> 45 passed, 2 subtests passed",
       "pytest tests/test_core_paths.py tests/test_alpha_banner.py tests/test_research_semantics.py tests/test_hardening.py -q -p no:cacheprovider -> 68 passed",
       "pytest tests -q -p no:cacheprovider -> 305 passed, 1 skipped, 2 subtests passed",
-      "mypy astock -> Success: no issues found in 30 source files"
+      "mypy astock -> Success: no issues found in 30 source files",
+      "pytest tests/test_use_cases.py tests/test_core_paths.py tests/test_contracts.py tests/test_research_semantics.py -q -p no:cacheprovider -> 108 passed, 2 subtests passed (review fix ade4e43)",
+      "pytest tests -q -p no:cacheprovider -> 305 passed, 1 skipped, 2 subtests passed (review fix ade4e43)",
+      "mypy astock -> Success: no issues found in 30 source files (review fix ade4e43)"
     ]
   },
   "createdAt": "2026-11-03T12:10:29.795Z",
-  "updatedAt": "2026-11-11T05:28:25.354Z",
+  "updatedAt": "2026-11-11T05:54:18.153Z",
   "deps": [
     "plan-20261103-002"
   ],
