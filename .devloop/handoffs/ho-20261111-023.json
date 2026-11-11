@@ -1,0 +1,113 @@
+{
+  "id": "ho-20261111-023",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "PR #8 已合并入 main，计划项完成",
+  "summary": "按用户授权合并 PR #8：评审 rev-20261111-002 第 3 轮 approve、CI 全绿（head a748d8a），以 merge commit 2a265ec 合入 main（2026-11-11T05:09:14Z），未删除分支。计划项 plan-20261103-006 置 done、progress 100。本份 handoff 与 plan/calendar/worklog 随后以 docs-only 提交补到 main。任务交付完成，剩余仅为合并后真实数据 smoke 建议。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "（ADR-010 C1）全站不再出现「关注/观察/回避」等投资动作词",
+      "source": "plan-20261103-006 acceptance 1"
+    },
+    {
+      "id": "R2",
+      "text": "（ADR-010 C1）推荐表同时展示技术面强弱与候选池分位（N=candidate_n，live 与 backfill 同基准）",
+      "source": "plan-20261103-006 acceptance 2"
+    },
+    {
+      "id": "R3",
+      "text": "（ADR-010 C1）AI 对话与简报的提示词同步为研究语义",
+      "source": "plan-20261103-006 acceptance 3"
+    },
+    {
+      "id": "R4",
+      "text": "（ADR-010 C1）回归：旧批次渲染时做字段兼容映射",
+      "source": "plan-20261103-006 acceptance 4"
+    },
+    {
+      "id": "R5",
+      "text": "（ADR-010 C2）横幅五状态文案去重：insufficient/unavailable/positive/negative/no_alpha 各保留一句说明，同屏不重复「样本不足/未验证」提示",
+      "source": "plan-20261103-006 acceptance 5 / ADR-010 C2"
+    },
+    {
+      "id": "R6",
+      "text": "任务描述：推荐表、AI 对话、简报、导出 CSV 是否仍有「关注/回避」；是否同时给出池内分位；旧批次是否做兼容映射",
+      "source": "plan-20261103-006 description"
+    }
+  ],
+  "changes": [
+    {
+      "path": "main",
+      "summary": "PR #8 合并入 main（merge commit），包含 ec4354c/8884a60/3cad679/65874f3 全部代码与测试",
+      "commit": "2a265ec"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-006.json",
+      "summary": "计划项置 done、progress 100",
+      "commit": "2a265ec"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 8",
+      "result": "CI passed",
+      "passed": true,
+      "evidence": "head a748d8a：test pass 1m9s（run 42963181069）"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests -q",
+      "result": "pass",
+      "passed": true,
+      "evidence": "296 passed, 1 skipped（沙箱需临时 tempfix 插件）"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_research_semantics.py tests/test_contracts.py -q",
+      "result": "pass",
+      "passed": true,
+      "evidence": "63 passed"
+    },
+    {
+      "command": "ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "pass",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "pass",
+      "passed": true,
+      "evidence": "Success: no issues found in 31 source files"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "合并 PR / 推送 main",
+      "reason": "用户明确授权「你来合并」；合并后需把 .devloop 交付记录补到 main",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze",
+    "commit": "2a265ec",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/8",
+    "ci": "passed（最新 run 42963181069）",
+    "merge": "已合并入 main（merge commit 2a265ec，2026-11-11T05:09:14Z）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261111-021",
+  "next": "任务完成。建议在 main 上做一次真实数据 smoke：推荐 Tab 看表头与「候选池分位(N=…)」、简报/对话确认无动作词、加载旧批次验证字段映射；若产品快照文档仍写「关注/回避」，另开文案同步项。feat/adr-gate-freeze 分支仍保留（未删除）。",
+  "createdAt": "2026-11-11T05:09:27.606Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-023.md"
+}

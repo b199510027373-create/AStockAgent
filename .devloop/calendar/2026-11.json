@@ -288,6 +288,16 @@
       "notes": "第 3 轮 · approve"
     },
     {
+      "id": "cal-rev-20261111-002-r4",
+      "type": "review",
+      "title": "评审：评审：动作词与分位口径全站一致性核查",
+      "start": "2026-11-11T05:05:48.818Z",
+      "end": "2026-11-11T05:06:23.984Z",
+      "planItemId": "plan-20261103-006",
+      "source": "reviewer-agent",
+      "notes": "第 4 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-005-planned",
       "type": "planned",
       "title": "「无显著 alpha」实时横幅（ledger 驱动）",

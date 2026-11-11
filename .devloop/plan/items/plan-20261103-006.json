@@ -2,14 +2,14 @@
   "id": "plan-20261103-006",
   "title": "动作词与分位口径全站一致性核查",
   "description": "ADR-010 的第一条已在 scoring 落地（技术面强/中性/弱），但需要全站一致性核查：推荐表、AI 对话、简报、导出 CSV 是否仍有「关注/回避」；是否同时给出池内分位；旧批次是否做兼容映射。工作量小，但直接决定产品叙事是否自洽。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P2",
   "milestone": "ms-product",
   "owner": "human",
   "start": "2026-11-18",
   "due": "2026-11-19",
   "estimateH": 3,
-  "progress": 95,
+  "progress": 100,
   "acceptance": [
     "（ADR-010 C1）全站不再出现「关注/观察/回避」等投资动作词",
     "（ADR-010 C1）推荐表同时展示技术面强弱与候选池分位（N=candidate_n，live 与 backfill 同基准）",
@@ -42,7 +42,7 @@
     ]
   },
   "createdAt": "2026-11-03T12:10:38.187Z",
-  "updatedAt": "2026-11-11T05:01:02.782Z",
+  "updatedAt": "2026-11-11T05:09:21.927Z",
   "deps": [
     "plan-20261110-003"
   ],
