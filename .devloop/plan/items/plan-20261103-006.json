@@ -15,7 +15,7 @@
     "（ADR-010 C1）推荐表同时展示技术面强弱与候选池分位（N=candidate_n，live 与 backfill 同基准）",
     "（ADR-010 C1）AI 对话与简报的提示词同步为研究语义",
     "（ADR-010 C1）回归：旧批次渲染时做字段兼容映射",
-    "（ADR-010 C2）横幅四状态文案去重：insufficient/unavailable/positive/negative/no_alpha 各保留一句说明，同屏不重复「样本不足/未验证」提示"
+    "（ADR-010 C2）横幅五状态文案去重：insufficient/unavailable/positive/negative/no_alpha 各保留一句说明，同屏不重复「样本不足/未验证」提示"
   ],
   "tags": [
     "product",
@@ -29,18 +29,19 @@
     "branch": "feat/adr-gate-freeze",
     "commit": [
       "ec4354c",
-      "8884a60"
+      "8884a60",
+      "3cad679"
     ],
     "test": [
-      "全量：.venv/Scripts/python.exe -m pytest tests -q → 294 passed, 1 skipped（沙箱 tempdir 需临时 tempfix 插件，见 worklog）",
-      "目标：pytest tests/test_research_semantics.py tests/test_alpha_banner.py tests/test_architecture_gate.py → 68 passed, 1 skipped",
-      "用例数：test_research_semantics 19、test_alpha_banner 17、test_architecture_gate 33",
+      "全量：.venv/Scripts/python.exe -m pytest tests -q → 296 passed, 1 skipped, 2 subtests（沙箱 tempdir 需临时 tempfix 插件，未提交；CI 不受影响）",
+      "目标：pytest tests/test_research_semantics.py → 21 passed（新增落盘池快照复算、候选池不足时的 N 标签）",
+      "复算证据：读回落盘 JSON 的 diagnostics.candidate_pool，跑 pool_percentile 后逐行等于 table 的「技术分位」",
       "静态：ruff check astock app.py tests --select E9,F63,F7,F82 → All checks passed!",
       "类型：mypy astock app.py → Success: no issues found in 31 source files"
     ]
   },
   "createdAt": "2026-11-03T12:10:38.187Z",
-  "updatedAt": "2026-11-11T04:26:26.391Z",
+  "updatedAt": "2026-11-11T04:48:15.943Z",
   "deps": [
     "plan-20261110-003"
   ],
