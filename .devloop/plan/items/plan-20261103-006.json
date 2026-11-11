@@ -9,7 +9,7 @@
   "start": "2026-11-18",
   "due": "2026-11-19",
   "estimateH": 3,
-  "progress": 90,
+  "progress": 95,
   "acceptance": [
     "（ADR-010 C1）全站不再出现「关注/观察/回避」等投资动作词",
     "（ADR-010 C1）推荐表同时展示技术面强弱与候选池分位（N=candidate_n，live 与 backfill 同基准）",
@@ -30,18 +30,19 @@
     "commit": [
       "ec4354c",
       "8884a60",
-      "3cad679"
+      "3cad679",
+      "65874f3"
     ],
     "test": [
       "全量：.venv/Scripts/python.exe -m pytest tests -q → 296 passed, 1 skipped, 2 subtests（沙箱 tempdir 需临时 tempfix 插件，未提交；CI 不受影响）",
-      "目标：pytest tests/test_research_semantics.py → 21 passed（新增落盘池快照复算、候选池不足时的 N 标签）",
+      "目标：pytest tests/test_research_semantics.py tests/test_contracts.py → 63 passed",
       "复算证据：读回落盘 JSON 的 diagnostics.candidate_pool，跑 pool_percentile 后逐行等于 table 的「技术分位」",
-      "静态：ruff check astock app.py tests --select E9,F63,F7,F82 → All checks passed!",
-      "类型：mypy astock app.py → Success: no issues found in 31 source files"
+      "隔离：test_contracts/test_research_semantics 的 _save 用例 patch ledger.DB_PATH，不再写真实 data/astock.db",
+      "静态：ruff check astock app.py tests --select E9,F63,F7,F82 → All checks passed!；mypy astock app.py → Success 31 files"
     ]
   },
   "createdAt": "2026-11-03T12:10:38.187Z",
-  "updatedAt": "2026-11-11T04:48:15.943Z",
+  "updatedAt": "2026-11-11T05:01:02.782Z",
   "deps": [
     "plan-20261110-003"
   ],
