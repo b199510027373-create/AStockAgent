@@ -31,6 +31,8 @@ ADR 原文的「后果/现状」已过期，实际实现已超出原描述（**�
    分位口径统一为**候选池分位**：`recommend.py:278-287`（`assign_percentiles`）按综合分截断到
    `candidate_n`（默认 15，上限 30）后在池内 `rank(pct)*100`，live 与 `backfill.py` 共用；展示带 N，
    见 `docs/AStockAgent_interface_freeze_v1.md` §6.4。分位不参与 `_action` 判定。
+   批次 JSON 同时落盘池快照 `diagnostics.candidate_pool`（`[{code, composite}]`）与
+   `diagnostics.candidate_n`，可从落盘文件复算分位（`table` 只含入选行，不能复算）。
 2. 横幅已接 ledger 实时聚合，不再是静态提示：`recommend_ui.py:32-34 banner_markdown()` 调
    `use_cases.run_alpha_banner()`（`use_cases.py:574`），后者读 ledger 聚合；
    统计与状态机在 `track.py:251-445`：`alpha_banner` / `alpha_banner_snapshot` / `alpha_banner_markdown`，
@@ -40,7 +42,8 @@ ADR 原文的「后果/现状」已过期，实际实现已超出原描述（**�
 3. 组合净值已实现：「推荐跟踪」首屏为按批次等权 Top5 组合净值 vs 沪深300
    （`track.py:683+` 净值拼接、`track.py:945-994` Top5 vs 沪深300 图），平均超额表折叠在其下。
 4. 验收证据：`tests/test_alpha_banner.py`（17 项，含"横幅每次读库"、"pending 未被隐藏为样本不足"、
-   五状态各一句说明且静态提示不复述「样本不足/未验证」）、`tests/test_track_nav.py`（29 项，含净值、入场、停牌结转、状态文案）。
+   五状态各一句说明且静态提示不复述「样本不足/未验证」）、`tests/test_track_nav.py`（29 项，含净值、入场、停牌结转、状态文案）、
+   `tests/test_research_semantics.py`（池快照复算与展示带 N）。
 5. 对应已交付计划项：plan-20261103-004（commit `9b5b026`）、plan-20261103-005（PR #6 已合并 `e5b98e8`，
    评审 rev-20261110-002 approved）。
 

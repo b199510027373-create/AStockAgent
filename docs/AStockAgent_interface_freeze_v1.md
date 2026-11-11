@@ -374,11 +374,12 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
 | 生产者 | `astock/recommend.py` 的 `assign_percentiles(rows, candidate_n)`；live 与 `astock/backfill.py` 共用同一函数 |
 | 落库 | `ledger.items.percentile`（REAL，可空）；旧库由 `ALTER TABLE` 补齐 |
 | 展示 | 一律写「候选池分位（N=候选池大小）：92%」，缺失写「—」，不得只写「池内分位」而不给 N |
-| 复算 | 任意批次都可用该批次 JSON `table` 的前 `candidate_n` 行、按 `pool_percentile(综合分)` 复算 |
+| 快照 | 批次 JSON `diagnostics.candidate_pool` = `[{code, composite}]`（长度 N）；`diagnostics.candidate_n` = 池大小，与 `params.candidate_n`（上限）区分 |
+| 复算 | 任意批次可用快照跑 `pool_percentile(composite)`，逐行应等于 `table` 的「技术分位」；`table` 只含最终入选行（≤ top_n），**不能**用 table 复算 |
 
 > 注意：分位是综合分的横截面展示，**不参与**技术面强/中/弱的判定；判定只有 `_action(综合分)`（≥68 强 / ≥52 中性 / 其余弱）。
 
-
+## 7. 未决问题的去向
 
 | 未决问题 | 结论 | 落点 |
 | --- | --- | --- |

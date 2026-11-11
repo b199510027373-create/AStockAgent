@@ -862,6 +862,13 @@ def generate_recommendation(
         "tradable_from": tradable_from,
         "stale_data": bool(stale_data),
         "industry_relaxed": len(final_rows) < top_n,
+        # 审计链：分位在候选池内计算，落盘只保留 final_rows，因此把池快照一并写入，
+        # 供「读回 JSON → 对 candidate_pool 复算 pool_percentile → 与 table 逐行相等」复现。
+        "candidate_n": len(candidates),
+        "candidate_pool": [
+            {"code": r["code"], "composite": float(r["composite"])} for r in candidates
+        ],
+        "percentile_basis": "candidate_pool",
     }
     step(0.92, "保存结果")
     params = {

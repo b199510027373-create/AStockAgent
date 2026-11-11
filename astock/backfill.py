@@ -103,6 +103,7 @@ def backfill_technical(
             )
         # 与 live 同一基准：先截断到候选池（N=candidate_n），再在池内算分位。
         pool = assign_percentiles(rows, candidate_n)
+        pool_n = len(pool)
         selected = _pick_diverse(pool, top_n, max_per_industry=2)
         table = []
         for i, r in enumerate(selected, 1):
@@ -129,8 +130,16 @@ def backfill_technical(
             "source": "backfill_technical",
             "market": (
                 "技术分回填（事件分固定 50），不是完整实盘推荐，仅用于检验技术分排序；"
-                f"分位基准=候选池（N={candidate_n}）。"
+                f"分位基准=候选池（N={pool_n}）。"
             ),
+            "params": {"candidate_n": int(candidate_n), "pool_size": pool_n},
+            "diagnostics": {
+                "candidate_n": pool_n,
+                "percentile_basis": "candidate_pool",
+                "candidate_pool": [
+                    {"code": r["code"], "composite": float(r["composite"])} for r in pool
+                ],
+            },
             "ai": {},
             "table": table,
             "evidence": {},

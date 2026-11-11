@@ -113,6 +113,7 @@ def _row(**overrides) -> dict:
     row = {
         "code": "600519.SH",
         "name": "贵州茅台",
+        "industry": "白酒",
         "composite": 82.0,
         "percentile": 92.0,
         "technical_score": 80.0,
@@ -153,6 +154,59 @@ class ReportMarkdownTests(unittest.TestCase):
         self.assertEqual(recommend.percentile_basis(15), "候选池分位（N=15）")
 
 
+class PersistedPoolSnapshotTests(unittest.TestCase):
+    """落盘 JSON 必须能自证分位：table 只有入选行，复算依赖 diagnostics.candidate_pool。"""
+
+    def test_saved_json_pool_snapshot_reproduces_table_percentiles(self):
+        rows = [
+            _row(code=f"{i:06d}", name=f"股票{i}", composite=float(i), percentile=None)
+            for i in range(20)
+        ]
+        pool = recommend.assign_percentiles(rows, 15)
+        diagnostics = {
+            "candidate_n": len(pool),
+            "percentile_basis": "candidate_pool",
+            "candidate_pool": [
+                {"code": r["code"], "composite": float(r["composite"])} for r in pool
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(recommend, "REC_DIR", Path(tmp)):
+                _, json_path = recommend._save(
+                    pool[:5],
+                    "震荡",
+                    {},
+                    {},
+                    "2026-11-06",
+                    "2026-11-09",
+                    "rec_pool",
+                    "2026-11-06T18:00:00",
+                    params={"candidate_n": 15},
+                    diagnostics=diagnostics,
+                )
+            payload = json.loads(Path(json_path).read_text(encoding="utf-8"))
+
+        snapshot = payload["diagnostics"]["candidate_pool"]
+        self.assertEqual(len(snapshot), 15)
+        recomputed = recommend.pool_percentile([p["composite"] for p in snapshot])
+        by_code = {p["code"]: pct for p, pct in zip(snapshot, recomputed)}
+        self.assertEqual(len(payload["table"]), 5)
+        for row in payload["table"]:
+            # 用落盘的池快照复算，逐行与 table 的技术分位一致（可审计）。
+            self.assertEqual(row["技术分位"], by_code[row["代码"]])
+
+    def test_pool_label_uses_actual_pool_size_when_fewer_rows_than_candidate_n(self):
+        rows = [{"composite": float(i), "code": f"{i:06d}"} for i in range(8)]
+        pool = recommend.assign_percentiles(rows, 15)
+        self.assertEqual(len(pool), 8)
+        # backfill 的 market/params 用 len(pool) 生成 N，不能写死 candidate_n=15。
+        self.assertEqual(recommend.percentile_basis(len(pool)), "候选池分位（N=8）")
+        self.assertEqual(
+            [r["percentile"] for r in pool],
+            recommend.pool_percentile([r["composite"] for r in pool]),
+        )
+
+
 class LatestContextTests(unittest.TestCase):
     """app 的「最新批次摘要」不能拼出「技术面技术面强」，旧批次也要归一化。"""
 
@@ -163,6 +217,8 @@ class LatestContextTests(unittest.TestCase):
             raise unittest.SkipTest(f"app import failed: {exc}") from exc
 
         payload = {
+            "diagnostics": {"candidate_n": 12},
+            "params": {"candidate_n": 15},
             "table": [
                 {
                     "代码": "600519.SH",
@@ -193,7 +249,8 @@ class LatestContextTests(unittest.TestCase):
         self.assertNotIn("技术面技术面", text)
         self.assertIn("技术面：强｜趋势向上", text)
         self.assertIn("技术面：强｜旧批次", text)
-        self.assertIn("技术分位92.0%", text)
+        # N 以实际池大小（diagnostics.candidate_n）为准，而不是 UI 上限 15。
+        self.assertIn("候选池分位(N=12)92.0%", text)
 
 
 class LedgerCompatTests(unittest.TestCase):

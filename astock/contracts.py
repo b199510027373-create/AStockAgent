@@ -502,7 +502,7 @@ RECOMMENDATION_TABLE_COLUMNS: tuple[str, ...] = (
     "事件分",
     "技术面",
 )
-# ADR-010 C2：旧批次（动作词时代）用「建议」存动作标签且没有候选池分位；
+# ADR-010 C1（兼容映射）：旧批次（动作词时代）用「建议」存动作标签且没有候选池分位；
 # 校验时把「建议」当作「技术面」的别名，并放行缺失的「技术分位」。
 RECOMMENDATION_LEGACY_ACTION_COLUMN = "建议"
 RECOMMENDATION_LEGACY_OPTIONAL_COLUMNS: tuple[str, ...] = ("技术分位",)
@@ -515,7 +515,7 @@ class RecommendationRun:
     ``data_as_of``、``tradable_from``、``source``、``market``、``table``、
     ``evidence``、``params``、``diagnostics``。``table`` 每行必须含
     :data:`RECOMMENDATION_TABLE_COLUMNS`；旧批次的「建议」列等价于
-    「技术面」，且允许缺少「技术分位」（ADR-010 C2 兼容映射）。
+    「技术面」，且允许缺少「技术分位」（ADR-010 C1 兼容映射）。
     ``evidence`` 的每条记录再过 :class:`Evidence`；整个 payload 必须可
     ``json.dumps(..., allow_nan=False)``。
     """

@@ -336,10 +336,13 @@ def _latest_recommendation_context():
         rows = data.get("table", [])[:3]
         if not rows:
             return ""
+        diagnostics = data.get("diagnostics") or {}
+        params = data.get("params") or {}
+        pool_n = diagnostics.get("candidate_n") or params.get("candidate_n") or len(data.get("table", []))
         lines = ["【最新研究批次摘要】"]
         for row in rows:
             pct = row.get("技术分位")
-            pct_text = "" if pct in (None, "") else f" 技术分位{pct}%"
+            pct_text = "" if pct in (None, "") else f" 候选池分位(N={pool_n}){pct}%"
             lines.append(
                 f"{row.get('代码')} {row.get('名称')} 综合{row.get('综合分')}{pct_text} "
                 f"技术面：{action_short(row.get('技术面') or row.get('建议'))}｜{str(row.get('理由', ''))[:80]}"

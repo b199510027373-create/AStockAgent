@@ -240,7 +240,7 @@ class RecommendationRunContractTests(unittest.TestCase):
         self.assertIn("技术面", str(ctx.exception))
 
     def test_legacy_table_row_with_action_word_is_accepted(self):
-        """ADR-010 C2：旧批次只有「建议」列且没有「技术分位」，必须仍能校验通过。"""
+        """ADR-010 C1：旧批次只有「建议」列且没有「技术分位」，必须仍能校验通过。"""
         payload = _recommend_payload()
         row = payload["table"][0]
         row["建议"] = "关注"
