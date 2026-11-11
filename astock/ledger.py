@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import BASE_DIR
+from .contracts import normalize_action
 
 DB_PATH = Path(os.getenv("ASTOCK_DB_PATH") or (BASE_DIR / "data" / "astock.db"))
 REC_DIR = BASE_DIR / "data" / "recommendations"
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS items (
     composite REAL,
     technical REAL,
     event REAL,
+    percentile REAL,
     action TEXT,
     reason TEXT,
     PRIMARY KEY (run_id, rank)
@@ -88,10 +90,18 @@ def _db_path() -> Path:
     return DB_PATH
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """旧库就地补列（ADR-010 C1 池内分位），CREATE TABLE IF NOT EXISTS 不会改旧表。"""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)")}
+    if "percentile" not in columns:
+        conn.execute("ALTER TABLE items ADD COLUMN percentile REAL")
+
+
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(_db_path(), timeout=10)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
 
 
@@ -110,6 +120,16 @@ def transaction():
 
 def _json(value: Any) -> str:
     return json.dumps(value or {}, ensure_ascii=False, default=str)
+
+
+def _opt_float(value: Any) -> float | None:
+    """台账 REAL 列：缺省/占位符（如「—」）一律存 NULL。"""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 @contextmanager
@@ -155,8 +175,9 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
         for row in table:
             conn.execute(
                 """INSERT OR REPLACE INTO items
-                   (run_id, rank, code, name, industry, composite, technical, event, action, reason)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                   (run_id, rank, code, name, industry, composite, technical, event,
+                    percentile, action, reason)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     run_id,
                     row.get("排名"),
@@ -166,7 +187,8 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
                     row.get("综合分"),
                     row.get("技术分"),
                     row.get("事件分"),
-                    row.get("建议"),
+                    _opt_float(row.get("技术分位")),
+                    normalize_action(row.get("技术面") or row.get("建议")),
                     row.get("理由"),
                 ),
             )
@@ -282,7 +304,7 @@ def recommendation_batches(limit: int = 500) -> list[dict]:
         out = []
         for run in runs:
             items = conn.execute(
-                "SELECT rank, code, name, industry, composite, technical, event, action, reason "
+                "SELECT rank, code, name, industry, composite, technical, event, percentile, action, reason "
                 "FROM items WHERE run_id=? ORDER BY rank",
                 (run["run_id"],),
             ).fetchall()
@@ -303,9 +325,10 @@ def recommendation_batches(limit: int = 500) -> list[dict]:
                             "名称": r["name"],
                             "行业": r["industry"],
                             "综合分": r["composite"],
+                            "技术分位": r["percentile"],
                             "技术分": r["technical"],
                             "事件分": r["event"],
-                            "建议": r["action"],
+                            "技术面": r["action"],
                             "理由": r["reason"],
                         }
                         for r in items

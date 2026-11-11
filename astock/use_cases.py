@@ -28,6 +28,7 @@ from .recommend import (
     Recommendation,
     StaleDataError,
     generate_recommendation,
+    normalize_table,
 )
 from .track import (
     alpha_banner_error_markdown,
@@ -56,9 +57,10 @@ RECOMMEND_COLUMNS = (
     "名称",
     "行业",
     "综合分",
+    "技术分位",
     "技术分",
     "事件分",
-    "建议",
+    "技术面",
     "理由",
 )
 
@@ -187,6 +189,8 @@ def _render_recommendation(
         table = pd.DataFrame(table or [])
     if table.empty and not len(table.columns):
         table = pd.DataFrame(columns=list(RECOMMEND_COLUMNS))
+    # ADR-010 C2：旧批次的「建议」/旧动作词在此统一映射为研究语义并列。
+    table = normalize_table(table)
 
     report = str(payload.get("report") or "")
     if not report and payload.get("run_id"):
@@ -289,9 +293,10 @@ def _ledger_view(
             "名称": item.get("name"),
             "行业": item.get("industry"),
             "综合分": item.get("composite"),
+            "技术分位": item.get("percentile"),
             "技术分": item.get("technical"),
             "事件分": item.get("event"),
-            "建议": item.get("action"),
+            "技术面": item.get("action"),
             "理由": item.get("reason"),
         }
         for item in (run.get("items") or [])

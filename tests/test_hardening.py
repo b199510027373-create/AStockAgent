@@ -61,7 +61,8 @@ class LedgerTests(unittest.TestCase):
             "source": "live",
             "table": [
                 {"排名": 1, "代码": "600519.SH", "名称": "贵州茅台", "行业": "白酒",
-                 "综合分": 82.4, "技术分": 80, "事件分": 86, "建议": "关注", "理由": "test"}
+                 "综合分": 82.4, "技术分位": 91.0, "技术分": 80, "事件分": 86,
+                 "技术面": "技术面强", "理由": "test"}
             ],
             "evidence": {"600519.SH": [{"kind": "新闻", "date": "2026-10-30", "title": "t", "url": ""}]},
             "params": {"top_n": 5},
@@ -72,6 +73,8 @@ class LedgerTests(unittest.TestCase):
         self.assertIsNotNone(got)
         self.assertEqual(got["data_as_of"], "2026-10-30")
         self.assertEqual(len(got["items"]), 1)
+        self.assertEqual(got["items"][0]["action"], "技术面强")
+        self.assertEqual(got["items"][0]["percentile"], 91.0)
         self.assertEqual(len(got["evidence"]), 1)
         self.assertEqual(ledger.stats()["runs"], 1)
 

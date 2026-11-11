@@ -11,6 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from .config import BASE_DIR
+from .contracts import normalize_action
 from .data import (
     last_open_date,
     load_daily,
@@ -428,7 +429,7 @@ def alpha_banner_markdown(banner: AlphaBanner) -> str:
     p_text = _format_p(banner.p_value)
     stats = f"{numbers} · Top2−其余 p=**{p_text}**"
     if banner.state == "positive":
-        head = f"✅ {title} · 样本内正向观察"
+        head = f"✅ {title} · 样本内正向（历史）"
         detail = "Top2 在历史样本内暂优于其余（p < 0.05）；样本仍有限，不构成交易建议。"
         body = f"{head}<br>{stats}<br>{detail}{note_html}<br><sub>{method}</sub>"
         return _banner_box(body, background="#ebfbee", border="#2f9e44")
@@ -1029,7 +1030,7 @@ def _detail_rows(batches: list[dict]) -> pd.DataFrame:
                 "名称": row.get("名称", ""),
                 "排名": row.get("排名"),
                 "综合分": row.get("综合分"),
-                "建议": row.get("建议", ""),
+                "技术面": normalize_action(row.get("技术面") or row.get("建议")),
             }
             for n in HORIZONS:
                 r = _forward_return(df, entry_date, n, entry="open")

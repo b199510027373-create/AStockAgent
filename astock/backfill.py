@@ -8,7 +8,14 @@ import pandas as pd
 
 from .config import BASE_DIR
 from .events import stock_basic
-from .recommend import _pick_diverse, load_many, parse_universe, technical_score
+from .recommend import (
+    _action,
+    _pick_diverse,
+    load_many,
+    parse_universe,
+    pool_percentile,
+    technical_score,
+)
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
 REC_DIR.mkdir(parents=True, exist_ok=True)
@@ -88,16 +95,14 @@ def backfill_technical(
             row["technical_score"] = round(0.45 * row["technical_score"] + 0.55 * rank, 1)
             row["event_score"] = 50.0
             row["composite"] = 0.65 * row["technical_score"] + 0.35 * 50.0
-            row["action"] = (
-                "技术面强"
-                if row["composite"] >= 68
-                else ("技术面中性" if row["composite"] >= 52 else "技术面弱")
-            )
+            row["action"] = _action(row["composite"])
             row["reason"] = (
                 f"技术分回填：{row.get('trend', '震荡')}；"
                 f"20日 {row['ret20']*100:+.1f}%；RSI {row['rsi']:.1f}；事件分固定 50。"
             )
         rows.sort(key=lambda x: x["composite"], reverse=True)
+        for row, pct in zip(rows, pool_percentile([r["composite"] for r in rows])):
+            row["percentile"] = pct
         selected = _pick_diverse(rows, top_n, max_per_industry=2)
         table = []
         for i, r in enumerate(selected, 1):
@@ -108,12 +113,13 @@ def backfill_technical(
                     "名称": r["name"],
                     "行业": r["industry"],
                     "综合分": round(r["composite"], 1),
+                    "技术分位": r["percentile"],
                     "技术分": round(r["technical_score"], 1),
                     "事件分": 50.0,
                     "收盘": r["close"],
                     "20日%": round(r["ret20"] * 100, 2),
                     "RSI": round(r["rsi"], 1),
-                    "建议": r["action"],
+                    "技术面": r["action"],
                     "理由": r["reason"],
                 }
             )

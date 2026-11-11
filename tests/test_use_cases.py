@@ -30,6 +30,7 @@ def _history_run(**overrides):
                 "composite": 82.0,
                 "technical": 80,
                 "event": 86,
+                "percentile": 92.0,
                 "action": "技术面强",
                 "reason": "测试",
             }
@@ -61,9 +62,10 @@ def _recommendation(**overrides) -> Recommendation:
                     "名称": "贵州茅台",
                     "行业": "白酒",
                     "综合分": 82.0,
+                    "技术分位": 92.0,
                     "技术分": 80,
                     "事件分": 86,
-                    "建议": "技术面强",
+                    "技术面": "技术面强",
                     "理由": "测试",
                 }
             ]
@@ -196,7 +198,8 @@ class HistoryRecommendationTests(unittest.TestCase):
         self.assertEqual(result.run_id, "rec_hist")
         table = result.payload["table"]
         self.assertEqual(table.iloc[0]["代码"], "600519.SH")
-        self.assertEqual(table.iloc[0]["建议"], "技术面强")
+        self.assertEqual(table.iloc[0]["技术面"], "技术面强")
+        self.assertEqual(table.iloc[0]["技术分位"], 92.0)
         self.assertIn("rec_hist", result.payload["report"])
         self.assertIn("测试标题", result.payload["evidence_md"])
         self.assertIn("http://example.com/a", result.payload["evidence_md"])
@@ -372,7 +375,7 @@ class TrackingTests(unittest.TestCase):
                     "代码": "600519.SH",
                     "名称": "贵州茅台",
                     "综合分": 82.0,
-                    "建议": "技术面强",
+                    "技术面": "技术面强",
                     "T+1": t1,
                     "超额T+1": excess,
                     "推荐日": pd.Timestamp("2026-11-05"),

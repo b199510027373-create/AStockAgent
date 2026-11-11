@@ -27,16 +27,36 @@ __all__ = [
     "EVENT_SCHEMA",
     "EVIDENCE_REQUIRED_KEYS",
     "RECOMMENDATION_REQUIRED_KEYS",
+    "LEGACY_ACTION_WORDS",
+    "RESEARCH_ACTIONS",
     "BarFrame",
     "EventFrame",
     "Evidence",
     "RecommendationRun",
+    "normalize_action",
     "validate_bars",
     "validate_events",
     "validate_evidence",
     "validate_evidence_list",
     "validate_recommendation_run",
 ]
+
+# ADR-010：对外只描述技术面强弱，不出现投资动作词；旧批次在渲染时经
+# :func:`normalize_action` 兼容映射，历史 JSON/台账无需回写。
+LEGACY_ACTION_WORDS: dict[str, str] = {
+    "关注": "技术面强",
+    "观察": "技术面中性",
+    "回避": "技术面弱",
+}
+RESEARCH_ACTIONS: tuple[str, ...] = ("技术面强", "技术面中性", "技术面弱")
+
+
+def normalize_action(value: Any) -> str:
+    """把历史动作词映射为研究语义；未知值原样返回，空值返回空串。"""
+    text = "" if value is None else str(value).strip()
+    if not text or text.lower() in {"nan", "none"}:
+        return ""
+    return LEGACY_ACTION_WORDS.get(text, text)
 
 
 class ContractError(ValueError):
@@ -471,10 +491,15 @@ RECOMMENDATION_TABLE_COLUMNS: tuple[str, ...] = (
     "代码",
     "名称",
     "综合分",
+    "技术分位",
     "技术分",
     "事件分",
-    "建议",
+    "技术面",
 )
+# ADR-010 C2：旧批次（动作词时代）用「建议」存动作标签且没有池内分位；
+# 校验时把「建议」当作「技术面」的别名，并放行缺失的「技术分位」。
+RECOMMENDATION_LEGACY_ACTION_COLUMN = "建议"
+RECOMMENDATION_LEGACY_OPTIONAL_COLUMNS: tuple[str, ...] = ("技术分位",)
 
 
 class RecommendationRun:
@@ -483,13 +508,17 @@ class RecommendationRun:
     必需字段：``schema_version``（必须为 2）、``run_id``、``generated_at``、
     ``data_as_of``、``tradable_from``、``source``、``market``、``table``、
     ``evidence``、``params``、``diagnostics``。``table`` 每行必须含
-    :data:`RECOMMENDATION_TABLE_COLUMNS`；``evidence`` 的每条记录再过
-    :class:`Evidence`；整个 payload 必须可 ``json.dumps(..., allow_nan=False)``。
+    :data:`RECOMMENDATION_TABLE_COLUMNS`；旧批次的「建议」列等价于
+    「技术面」，且允许缺少「技术分位」（ADR-010 C2 兼容映射）。
+    ``evidence`` 的每条记录再过 :class:`Evidence`；整个 payload 必须可
+    ``json.dumps(..., allow_nan=False)``。
     """
 
     name = "RecommendationRun"
     required_keys = RECOMMENDATION_REQUIRED_KEYS
     table_columns = RECOMMENDATION_TABLE_COLUMNS
+    legacy_action_column = RECOMMENDATION_LEGACY_ACTION_COLUMN
+    legacy_optional_columns = RECOMMENDATION_LEGACY_OPTIONAL_COLUMNS
     schema_version = 2
 
     @classmethod
@@ -556,7 +585,16 @@ class RecommendationRun:
                     f"table 第 {i} 行应为 dict，实际 {type(row).__name__}",
                     invalid=["table"],
                 )
-            row_missing = [c for c in cls.table_columns if c not in row]
+            legacy = cls.legacy_action_column in row
+            row_missing = []
+            for column in cls.table_columns:
+                if column in row:
+                    continue
+                if legacy and column == "技术面":
+                    continue  # 旧批次「建议」兼容为「技术面」
+                if legacy and column in cls.legacy_optional_columns:
+                    continue  # 旧批次没有池内分位
+                row_missing.append(column)
             if row_missing:
                 raise ContractError(
                     cls.name,
