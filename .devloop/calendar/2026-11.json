@@ -217,6 +217,58 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-plan-20261110-003-planned",
+      "type": "planned",
+      "title": "架构契约评审门禁：ADR-002/010/013–018 与接口冻结",
+      "start": "2026-11-11T00:00:00+08:00",
+      "end": "2026-11-12T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261110-003",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-rev-20261111-001-r1",
+      "type": "review",
+      "title": "评审：评审：架构契约评审门禁：ADR-002/010/013–018 与接口冻结",
+      "start": "2026-11-11T03:13:33.773Z",
+      "end": "2026-11-11T03:16:09.805Z",
+      "planItemId": "plan-20261110-003",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261111-001-r2",
+      "type": "review",
+      "title": "评审：评审：架构契约评审门禁：ADR-002/010/013–018 与接口冻结",
+      "start": "2026-11-11T03:34:07.164Z",
+      "end": "2026-11-11T03:36:23.239Z",
+      "planItemId": "plan-20261110-003",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261111-001-r3",
+      "type": "review",
+      "title": "评审：评审：架构契约评审门禁：ADR-002/010/013–018 与接口冻结",
+      "start": "2026-11-11T03:44:30.553Z",
+      "end": "2026-11-11T03:45:21.846Z",
+      "planItemId": "plan-20261110-003",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
+      "id": "cal-plan-20261103-005-planned",
+      "type": "planned",
+      "title": "「无显著 alpha」实时横幅（ledger 驱动）",
+      "start": "2026-11-15T00:00:00+08:00",
+      "end": "2026-11-17T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-005",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261107-003-planned",
       "type": "planned",
       "title": "文件导入解析：PDF / Excel / CSV / DOCX",
@@ -239,13 +291,24 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261103-005-planned",
+      "id": "cal-plan-20261110-004-planned",
       "type": "planned",
-      "title": "「无显著 alpha」实时横幅（ledger 驱动）",
-      "start": "2026-11-15T00:00:00+08:00",
-      "end": "2026-11-17T23:59:00+08:00",
+      "title": "ADR-015 文件导入：按冻结布局实现 files.py（内容寻址 + FTS5 + DuckDB 只读）",
+      "start": "2026-11-16T00:00:00+08:00",
+      "end": "2026-11-21T23:59:00+08:00",
       "allDay": true,
-      "planItemId": "plan-20261103-005",
+      "planItemId": "plan-20261110-004",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261110-005-planned",
+      "type": "planned",
+      "title": "ADR-016 图表：ChartSpec v1 校验与渲染（不执行任意 Python）",
+      "start": "2026-11-17T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261110-005",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
@@ -261,6 +324,28 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-plan-20261103-007-planned",
+      "type": "planned",
+      "title": "调度状态机迁移 jobs 表 + 心跳告警",
+      "start": "2026-11-18T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-007",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261110-006-planned",
+      "type": "planned",
+      "title": "ADR-017 审计：agent_* 三表与 artifact 内容寻址、留存/GC",
+      "start": "2026-11-18T00:00:00+08:00",
+      "end": "2026-11-24T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261110-006",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261103-006-planned",
       "type": "planned",
       "title": "动作词与分位口径全站一致性核查",
@@ -272,13 +357,13 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261103-007-planned",
+      "id": "cal-plan-20261110-007-planned",
       "type": "planned",
-      "title": "调度状态机迁移 jobs 表 + 心跳告警",
-      "start": "2026-11-18T00:00:00+08:00",
-      "end": "2026-11-22T23:59:00+08:00",
+      "title": "ADR-018 实时口径：data_as_of/data_time 生产者与降级标注",
+      "start": "2026-11-19T00:00:00+08:00",
+      "end": "2026-11-25T23:59:00+08:00",
       "allDay": true,
-      "planItemId": "plan-20261103-007",
+      "planItemId": "plan-20261110-007",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },

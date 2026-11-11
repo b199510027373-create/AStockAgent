@@ -1,0 +1,163 @@
+{
+  "id": "ho-20261111-010",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261103-006",
+  "threadId": null,
+  "sessionId": "session-220c8f42-b3a7-4832-9fd9-c539d019a00c",
+  "title": "ADR-010 C1/C2：动作词与分位口径全站一致",
+  "summary": "推荐/导出/简报/对话全链路统一为研究语义：列名「建议」→「技术面」，新增「技术分位」（composite 在候选池内 rank(pct)），旧批次的「建议」列与 关注/观察/回避 在契约校验、渲染、台账读取、app 上下文处兼容映射并显示「—」占位。ledger items 新增 percentile 列并就地迁移。新增 tests/test_research_semantics.py（15 例，含 AST 级全站文案回归）。全量 287 passed，ruff/mypy 通过。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "（ADR-010 C1）全站不再出现「关注/观察/回避」等投资动作词",
+      "source": "plan-20261103-006 acceptance #1"
+    },
+    {
+      "id": "R2",
+      "text": "（ADR-010 C1）推荐表同时展示技术面强弱与池内分位",
+      "source": "plan-20261103-006 acceptance #2"
+    },
+    {
+      "id": "R3",
+      "text": "（ADR-010 C1）AI 对话与简报的提示词同步为研究语义",
+      "source": "plan-20261103-006 acceptance #3"
+    },
+    {
+      "id": "R4",
+      "text": "（ADR-010 C2）回归：旧批次渲染时做字段兼容映射",
+      "source": "plan-20261103-006 acceptance #4"
+    },
+    {
+      "id": "R5",
+      "text": "核查推荐表、AI 对话、简报、导出 CSV 是否仍有「关注/回避」，并确认同时给出池内分位",
+      "source": "plan-20261103-006 description"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/contracts.py",
+      "summary": "LEGACY_ACTION_WORDS/RESEARCH_ACTIONS/normalize_action；表列改为 技术分位+技术面；校验放行旧批次「建议」列与缺失分位",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "astock/recommend.py",
+      "summary": "pool_percentile/_display_percentile/normalize_table；_save 与 generate 表列换成 技术分位/技术面；报告与 LLM 提示词改研究语义",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "astock/use_cases.py",
+      "summary": "_render_recommendation 统一过 normalize_table；RECOMMEND_COLUMNS 与 ledger 视图改用 技术分位/技术面",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "astock/ledger.py",
+      "summary": "items 增加 percentile 列并 _migrate 就地 ALTER；save_run 归一化动作词；recommendation_batches 输出新列",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "astock/backfill.py",
+      "summary": "复用 _action/pool_percentile，回填批次输出 技术分位/技术面",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "astock/track.py",
+      "summary": "跟踪明细读取时归一化动作词；banner 文案去「观察」",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "astock/agent/fake.py",
+      "summary": "「已观察」→「已读取」，清除动作词残留",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "app.py",
+      "summary": "单股/简报/AI 对话提示词改研究语义；最新批次摘要展示技术分位与技术面并兼容旧键",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "tests/test_research_semantics.py",
+      "summary": "新增 15 例：动作词映射、分位单调/边界、旧表列映射、报告与 CSV 口径、台账迁移与归一化、AST 级全站文案回归",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "tests/test_contracts.py",
+      "summary": "夹具改用新列；补旧批次兼容/缺列拒绝用例；AI-01 断言 技术面+分位",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "夹具与断言改用 技术面/技术分位",
+      "commit": "ec4354c"
+    },
+    {
+      "path": "tests/test_hardening.py",
+      "summary": "台账夹具改用新列并断言 percentile 落库",
+      "commit": "ec4354c"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests -q",
+      "result": "287 passed, 1 skipped, 2 subtests passed",
+      "passed": true,
+      "evidence": "2026-11-11T04:00Z 全量；沙箱下 tempfile.mkdtemp 0700 目录不可读，用临时插件 .tmp-tests/tempfix.py（未提交）将 mkdtemp 改为默认权限后运行"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_research_semantics.py -q",
+      "result": "15 passed",
+      "passed": true,
+      "evidence": "动作词映射/分位单调/旧表映射/报告/台账迁移/AST 全站文案回归"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "与 .github/workflows/ci.yml:48 同口径"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 31 source files",
+      "passed": true,
+      "evidence": "与 ci.yml:49 同口径"
+    },
+    {
+      "command": "手工 smoke：normalize_table(旧 latest.json.table)",
+      "result": "列含 技术分位/技术面，旧动作词映射为 技术面强，缺失分位显示 —",
+      "passed": true,
+      "evidence": "data/recommendations/latest.json 只读渲染检查"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write",
+      "reason": "修改仓库代码与测试",
+      "status": "granted"
+    },
+    {
+      "name": "git push / PR 创建",
+      "reason": "当前仅本地提交，未推送",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze",
+    "commit": "ec4354c",
+    "pr": "未创建",
+    "ci": "未触发（PR 创建后由 .github/workflows/ci.yml 运行）",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "等待评审。合并后建议做一次真实数据 smoke：打开 📰 简报与推荐 Tab 确认渲染；若产品快照文档仍写「关注/回避」，另开文案同步项（不在本项范围）。",
+  "createdAt": "2026-11-11T04:01:58.225Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-010.md"
+}

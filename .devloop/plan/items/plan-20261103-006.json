@@ -2,14 +2,14 @@
   "id": "plan-20261103-006",
   "title": "动作词与分位口径全站一致性核查",
   "description": "ADR-010 的第一条已在 scoring 落地（技术面强/中性/弱），但需要全站一致性核查：推荐表、AI 对话、简报、导出 CSV 是否仍有「关注/回避」；是否同时给出池内分位；旧批次是否做兼容映射。工作量小，但直接决定产品叙事是否自洽。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P2",
   "milestone": "ms-product",
   "owner": "human",
   "start": "2026-11-18",
   "due": "2026-11-19",
   "estimateH": 3,
-  "progress": 0,
+  "progress": 90,
   "acceptance": [
     "（ADR-010 C1）全站不再出现「关注/观察/回避」等投资动作词",
     "（ADR-010 C1）推荐表同时展示技术面强弱与池内分位",
@@ -24,11 +24,20 @@
   "links": {
     "adr": [
       "ADR-010"
+    ],
+    "commit": "ec4354c",
+    "branch": "feat/adr-gate-freeze",
+    "test": [
+      "全量：.venv/Scripts/python.exe -m pytest tests -q → 287 passed, 1 skipped（沙箱下 tempdir 需临时 tempfix 插件，见 worklog）",
+      "目标：pytest tests/test_research_semantics.py → 15 passed",
+      "静态：ruff check astock app.py tests --select E9,F63,F7,F82 → All checks passed!",
+      "类型：mypy astock app.py → Success: no issues found in 31 source files"
     ]
   },
   "createdAt": "2026-11-03T12:10:38.187Z",
-  "updatedAt": "2026-11-10T08:34:48.558Z",
+  "updatedAt": "2026-11-11T04:01:46.283Z",
   "deps": [
     "plan-20261110-003"
-  ]
+  ],
+  "devSessionId": "session-220c8f42-b3a7-4832-9fd9-c539d019a00c"
 }
