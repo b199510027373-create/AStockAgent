@@ -447,6 +447,21 @@ def test_frozen_layout_and_ddl_recorded_for_unbuilt_modules() -> None:
     assert "running/success/partial/failed" in text
 
 
+def test_frozen_layout_artifact_count_is_consistent() -> None:
+    """iss-mwbkgxoi 修复：§4 目录树、文字产物数、承接项验收三处必须是同一份四件清单。"""
+    text = _read(FREEZE_DOC)
+    section = text.split("## 4.", 1)[1].split("\n## ", 1)[0]
+    tree_lines = [line for line in section.splitlines() if re.search(r"^\s{2,}\S+\s+#", line)]
+    assert len(tree_lines) == 4, f"§4 目录树应列出四件产物，实际 {len(tree_lines)} 件：{tree_lines}"
+    assert "四件产物" in text, "冻结清单正文必须写明「四件产物」"
+    assert "三件产物" not in text, "冻结清单不得再出现「三件产物」的旧口径"
+    assert "preview.png" not in text, "v1 冻结布局不含 preview.png；如要纳入需先升冻结清单版本"
+    plan_c1 = [item for item in _plan_item("plan-20261107-003")["acceptance"] if "ADR-015 C1" in item]
+    assert plan_c1, "plan-20261107-003 缺少 ADR-015 C1 验收条目"
+    assert "preview.png" not in plan_c1[0], "C1 验收不得要求 preview.png（v1 布局只有四件）"
+    assert "四件" in plan_c1[0] or "extracted.jsonl" in plan_c1[0]
+
+
 def test_chart_spec_caps_are_frozen_in_doc() -> None:
     text = _read(FREEZE_DOC)
     for token in ("`version`", "additionalProperties", "5000", "candlestick"):
@@ -490,47 +505,81 @@ def test_no_vendor_sdk_import_outside_gateway() -> None:
 
 
 FORBIDDEN_IMPORTS = ("subprocess", "socket", "requests", "httpx", "urllib.request")
-FORBIDDEN_CALLS = (
-    "os.system",
-    "os.popen",
-    "os.remove",
-    "os.unlink",
-    "os.rename",
-    "os.rmdir",
-    "shutil.rmtree",
-    "shutil.move",
+FORBIDDEN_SYMBOLS = frozenset(
+    {
+        "os.system",
+        "os.popen",
+        "os.remove",
+        "os.unlink",
+        "os.rename",
+        "os.rmdir",
+        "os.replace",
+        "shutil.rmtree",
+        "shutil.move",
+        "subprocess.run",
+        "subprocess.call",
+        "subprocess.Popen",
+        "subprocess.check_output",
+        "subprocess.check_call",
+        "pathlib.Path.unlink",
+        "pathlib.Path.rmdir",
+    }
 )
+# 接收者可能是任意表达式（`Path('x').unlink()`、`tmp / 'a'.unlink()`）时，退回按方法名判定。
+DELETION_METHODS = frozenset({"unlink", "rmdir"})
 
 
-def _dotted_name(node: ast.expr) -> str | None:
+def _import_bindings(tree: ast.AST) -> dict[str, str]:
+    """本地名字 → 完全限定名。`import os as o` → o=os；`from os import system as s` → s=os.system。"""
+    bindings: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split(".")[0]
+                bindings[local] = alias.name if alias.asname else alias.name.split(".")[0]
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                bindings[alias.asname or alias.name] = f"{module}.{alias.name}" if module else alias.name
+    return bindings
+
+
+def _qualify(node: ast.expr, bindings: dict[str, str]) -> str | None:
     parts: list[str] = []
     while isinstance(node, ast.Attribute):
         parts.append(node.attr)
         node = node.value
     if isinstance(node, ast.Name):
-        parts.append(node.id)
+        parts.append(bindings.get(node.id, node.id))
         return ".".join(reversed(parts))
     return None
 
 
 def _dangerous_capabilities(source: str, filename: str = "<memory>") -> list[str]:
-    """按「危险符号」而非「模块名」判定，避免 os.path.join / os.environ 这类合法用法被误报。"""
+    """按「危险符号」判定：解析 import 别名与 from-import，识别点号链与删除类方法调用。
+
+    只拒绝真正越权的能力，`os.path.join` / `os.environ` / `urllib.parse.quote` 等合法用法不报。
+    """
     tree = ast.parse(source, filename=filename)
+    bindings = _import_bindings(tree)
     found: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            modules = [alias.name for alias in node.names]
+            for alias in node.names:
+                if any(alias.name == bad or alias.name.startswith(bad + ".") for bad in FORBIDDEN_IMPORTS):
+                    found.append(f"import {alias.name}")
         elif isinstance(node, ast.ImportFrom):
-            modules = [node.module or ""]
-        else:
-            modules = []
-        for module in modules:
+            module = node.module or ""
             if any(module == bad or module.startswith(bad + ".") for bad in FORBIDDEN_IMPORTS):
                 found.append(f"import {module}")
-        if isinstance(node, ast.Call):
-            target = _dotted_name(node.func)
-            if target and any(target == bad or target.startswith(bad + ".") for bad in FORBIDDEN_CALLS):
+        elif isinstance(node, ast.Call):
+            target = _qualify(node.func, bindings)
+            if target and any(target == bad or target.startswith(bad + ".") for bad in FORBIDDEN_SYMBOLS):
                 found.append(f"{target}()")
+            elif isinstance(node.func, ast.Attribute) and node.func.attr in DELETION_METHODS:
+                found.append(f".{node.func.attr}()")
     return found
 
 
@@ -538,9 +587,10 @@ def test_agent_tools_scan_ignores_harmless_os_usage() -> None:
     """反例守卫：路径拼接、环境变量、只读文件不算越权，否则门禁会逼着实现绕路写代码。"""
     harmless = (
         "import os, pathlib\n"
+        "import urllib.parse\n"
         "def read(p):\n"
         "    base = os.environ.get('AGENT_HOME', '')\n"
-        "    return pathlib.Path(os.path.join(base, p)).read_text()\n"
+        "    return pathlib.Path(os.path.join(base, p)).read_text(), urllib.parse.quote(p)\n"
     )
     assert _dangerous_capabilities(harmless) == []
 
@@ -550,6 +600,19 @@ def test_agent_tools_scan_flags_shell_http_and_delete() -> None:
     assert _dangerous_capabilities("import shutil\nshutil.rmtree('data')\n") == ["shutil.rmtree()"]
     assert _dangerous_capabilities("import requests\nrequests.get('http://x')\n") == ["import requests"]
     assert _dangerous_capabilities("from urllib.request import urlopen\n") == ["import urllib.request"]
+
+
+def test_agent_tools_scan_resolves_aliases_and_from_imports() -> None:
+    """iss-mwbkgxnj 修复：别名 import / from-import / Path 删除方法都不能绕过扫描。"""
+    assert _dangerous_capabilities("from os import system\nsystem('ls')\n") == ["os.system()"]
+    assert _dangerous_capabilities("from shutil import rmtree as rm\nrm('data')\n") == ["shutil.rmtree()"]
+    assert _dangerous_capabilities("import os as o\no.remove('x')\n") == ["os.remove()"]
+    assert _dangerous_capabilities("import subprocess as sp\nsp.run(['ls'])\n") == [
+        "import subprocess",
+        "subprocess.run()",
+    ]
+    assert _dangerous_capabilities("from pathlib import Path\nPath('x').unlink()\n") == [".unlink()"]
+    assert _dangerous_capabilities("import pathlib\npathlib.Path('x').rmdir()\n") == [".rmdir()"]
 
 
 def test_agent_tools_dir_has_no_shell_or_http_capability() -> None:

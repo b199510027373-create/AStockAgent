@@ -16,7 +16,7 @@
     "PDF 保留页码，Excel 保留 sheet/行列坐标",
     "20MB / 5 文件 / 200 页限制生效并给出提示",
     "扫描件/加密 PDF 明确提示不支持，而不是返回空文本",
-    "（ADR-015 C1，并入自 plan-20261110-004）存储布局与《接口冻结清单》§4 逐字一致：`data/agent/files/<sha256>/meta.json`、`extracted.jsonl`、原文件、`preview.png`；meta.json 字段名与枚举不得增删，抽取结果只写 extracted.jsonl（每行一个 chunk，带 page/sheet/row 定位）",
+    "（ADR-015 C1，并入自 plan-20261110-004）存储布局与《接口冻结清单》§4 逐字一致：`data/agent/files/<sha256>/` 下四件产物：`original.<ext>`、`extracted.jsonl`、`tables/<sheet_slug>.parquet`、`meta.json`；meta.json 字段名与枚举不得增删，抽取结果只写 extracted.jsonl（每行一个 chunk，带 page/sheet/row 定位）",
     "（ADR-015 C3，并入自 plan-20261110-004）抽取自检：每页/每 sheet 抽样回读比对，抽空或乱码时在 meta.json 标 `extraction_warning` 并回给用户，不静默成功",
     "（ADR-015 C2）依赖与限额集中管理：pdfplumber / python-docx / duckdb 写进 requirements.txt 并给版本下限；20 MiB / 5 个文件 / 200 页三个常量定义在 files.py 顶部并由工具层复用，不在各处硬编码"
   ],
