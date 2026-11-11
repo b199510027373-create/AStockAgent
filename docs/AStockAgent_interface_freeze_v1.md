@@ -30,7 +30,7 @@
 | ADR-010 | 研究语义与「无 alpha」 | proposed | **accepted-with-conditions** | 2 | plan-20261103-006 |
 | ADR-013 | Agent 运行时 | proposed | **accepted** | 0 | — |
 | ADR-014 | 模型网关 | proposed | **accepted** | 0（流式转二期） | — |
-| ADR-015 | 文件导入与检索 | proposed | **accepted-with-conditions** | 3 | plan-20261107-003 |
+| ADR-015 | 文件导入与检索 | proposed | **accepted-with-conditions** | 4 | plan-20261107-003（C1–C3）+ plan-20261107-004（C4） |
 | ADR-016 | 图表 ChartSpec | proposed | **accepted** | 0（任意 Python 转二期） | plan-20261107-005 |
 | ADR-017 | 审计与安全边界 | proposed | **accepted-with-conditions** | 3 | plan-20261107-008 |
 | ADR-018 | 实时口径 | proposed | **accepted-with-conditions** | 2 | plan-20261107-006 |
@@ -44,7 +44,7 @@
 
 | 原承接项 | 并入目标 | 理由 |
 | --- | --- | --- |
-| plan-20261110-004（files.py 布局 + FTS5） | plan-20261107-003（解析）+ plan-20261107-004（检索） | 布局与抽取同批落地，FTS5 属检索 |
+| plan-20261110-004（files.py 布局 + FTS5） | plan-20261107-003（解析，C1–C3）+ plan-20261107-004（检索与表格查询，C4） | 布局与抽取同批落地；FTS5 在 `files.py` 抽取时写入，检索契约（单条 SELECT + LIMIT + 超时）属 07-004 |
 | plan-20261110-005（ChartSpec v1） | plan-20261107-005（图表 spec 与渲染管线） | 同一交付物的规格与实现 |
 | plan-20261110-006（agent_* 三表） | plan-20261107-008（审计表与安全限额） | 三表即审计表，且起始日提前到 11-18 |
 | plan-20261110-007（data_time 生产者） | plan-20261107-006（行情/指标工具） | data_time 由行情工具产出 |
@@ -173,8 +173,11 @@ class ChatModel(Protocol):
 | `ref` | `str` | `source=market` 必填：个股 `^[0-9]{6}\.(SH\|SZ\|BJ)$`，指数 `^000[0-9]{3}\.SH$\|^399[0-9]{3}\.SZ$`；`source=artifact` 必填：`^art_[0-9a-f]{16}$` |
 | `rows` | `list[dict]` | `source=inline` 必填，≤ 5000 行 |
 | `fields` | `list[str]` | `source=inline` 必填，1–20 项，`^[a-z_][a-z0-9_]{0,31}$` |
-| `period` | `str` | `day`（默认）/`week`/`month`/`1m`/`5m`/`15m`/`30m`/`60m`；分钟周期仅允许 `source=market` |
-| `range` | `str` | `1m`/`3m`/`6m`/`1y`（默认）/`3y`/`5y`/`ytd`/`max`，或 `YYYY-MM-DD:YYYY-MM-DD`（跨度 ≤ 10 年） |
+| `period` | `str` | `day`（默认）/`week`/`month`/`1min`/`5min`/`15min`/`30min`/`60min`；分钟周期仅允许 `source=market` |
+| `range` | `str` | `1mo`/`3mo`/`6mo`/`1y`（默认）/`3y`/`5y`/`ytd`/`max`，或 `YYYY-MM-DD:YYYY-MM-DD`（跨度 ≤ 10 年） |
+
+**消歧（2026-11-11 评审）**：`period` 的分钟档一律带 `min` 后缀（`1min`…`60min`），`range` 的月档一律带 `mo` 后缀（`1mo`/`3mo`/`6mo`）。
+两者**不共用 `1m`**：前者是「每根 bar 的粒度」，后者是「窗口长度」。schema 用例见 plan-20261107-005（`period=1min` 取 1 分钟 bar、`range=1mo` 取 1 个月窗口）。
 | `adj` | `str` | `qfq`（默认）/`hfq`/`none`；涨跌停与成交判断固定 `none`（ADR-008） |
 
 ### 3.3 算子与图层参数（白名单，越界拒绝并返回字段级错误）
@@ -349,7 +352,7 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
 ```
 
 - 工具与渲染器**不得**自行 `strftime` 拼时点；所有 `ToolResult.data_as_of/data_time` 必须由它产出；
-- `freq` ∈ `D`/`W`/`M`/`1m`/`5m`/`15m`/`30m`/`60m`，与 `ChartSpec.data.period` 同构；
+- `freq` ∈ `D`/`W`/`M`/`1min`/`5min`/`15min`/`30min`/`60min`，与 `ChartSpec.data.period` 同构（分钟档带 `min`，月档带 `mo`，不共用 `1m`）；
 - 空 DataFrame 抛 `ValueError`（不允许返回空字符串骗过必填校验）。
 
 ### 6.3 降级标注（元数据键冻结）

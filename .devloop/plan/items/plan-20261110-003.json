@@ -42,7 +42,7 @@
       "ADR-018"
     ],
     "branch": "feat/adr-gate-freeze",
-    "ci": "GitHub Actions CI run 42950484195 on PR #7 head 06af067 -> success (1m3s, job test)",
+    "ci": "GitHub Actions CI run 42950484195 on PR #7 head 06af067 -> success (1m3s, job test); 评审修复提交待重新触发",
     "doc": [
       "docs/AStockAgent_interface_freeze_v1.md",
       "docs/AStockAgent_contract_rule_map_v1.md"
@@ -50,14 +50,15 @@
     "module": "architecture",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/7",
     "test": [
-      "目标：.venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q → 21 passed, 1 skipped (跳过项为 astock/agent/tools 未实现，plan-20261110-004/005)",
-      "全量：.venv\\Scripts\\python.exe -m pytest tests -q → 260 passed, 1 skipped, 2 subtests passed in 13.79s",
+      "目标（评审修复后）：.venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q → 29 passed, 1 skipped (跳过项为 astock/agent/tools 未实现，plan-20261107-005/006)",
+      "全量（评审修复后）：.venv\\Scripts\\python.exe -m pytest tests -q → 268 passed, 1 skipped, 2 subtests passed in 13.93s",
       "类型：.venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py → Success: no issues found in 32 source files",
       "静态：.venv\\Scripts\\python.exe -m ruff check astock tests/test_architecture_gate.py --select E9,F63,F7,F82 → All checks passed!",
-      "远端：PR #7 CI run 42950484195 → success"
+      "变异测试（复验 4 种情形均被拦下）：删 ChatResult.raw / 改 protocol 默认值 tools→json / ADR 摘要引用已取消的 plan-20261110-005 / 新增无追认截止日的 proposed ADR → 各自 1 failed",
+      "远端：PR #7 CI run 42950484195 → success（旧 head 06af067）"
     ]
   },
   "createdAt": "2026-11-10T08:34:43.436Z",
-  "updatedAt": "2026-11-11T03:08:07.535Z",
+  "updatedAt": "2026-11-11T03:24:29.690Z",
   "devSessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7"
 }

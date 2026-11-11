@@ -181,7 +181,7 @@
     "title": "文件导入与检索：PDF / Excel / CSV / DOCX",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted-with-conditions] 文件导入：内容寻址布局、meta.json 13 字段、FTS5、file_id=f_<sha16> 已逐字冻结；条件 C1–C3 挂 plan-20261110-004。",
+    "summary": "[accepted-with-conditions] 文件导入：内容寻址布局、meta.json 13 字段、FTS5、file_id=f_<sha16> 五个字段；条件 C1–C4 分挂 plan-20261107-003（C1 布局/索引、C2 依赖与限额、C3 抽取自检）与 plan-20261107-004（C4 检索与表格查询契约）。",
     "tags": [
       "文件导入",
       "PDF",
@@ -195,7 +195,7 @@
     "title": "图表即工具产物：声明式 chart spec",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted] ChartSpec v1 逐字冻结（version=1、additionalProperties=false、白名单算子与图层参数区间）；任意 Python 转二期；承接 plan-20261110-005。",
+    "summary": "[accepted] ChartSpec v1 字段级冻结（version=1、additionalProperties=false、白名单算子与图层）；任意 Python 转二期；承接 plan-20261107-005。",
     "tags": [
       "Agent",
       "图表",
@@ -208,7 +208,7 @@
     "title": "Agent 运行审计与安全边界",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted-with-conditions] 审计三表 DDL 冻结（补 temperature/seed/code_version/digest、status 四值）；权限按实现改七标签且无 write；条件 C1–C3 挂 plan-20261110-006。",
+    "summary": "[accepted-with-conditions] 审计三表 DDL 冻结（含 temperature/seed/code_version/digest、status 枚举）、权限按实现七标签（无 write）；条件 C1–C3 挂 plan-20261107-008。",
     "tags": [
       "Agent",
       "审计",
@@ -221,7 +221,7 @@
     "title": "「实时」行情口径与 Agent 数据时点",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted-with-conditions] 实时=rt_min+30s 缓存；data_as_of 已实现、data_time 无生产者，冻结 latest_bar_time 唯一入口；条件 C1/C2 挂 plan-20261110-007。",
+    "summary": "[accepted-with-conditions] 实时=rt_min+30s 缓存；data_as_of 已实现、data_time 无生产者（冻结 latest_bar_time 唯一入口）；条件 C1/C2 挂 plan-20261107-006。",
     "tags": [
       "实时行情",
       "数据时点",

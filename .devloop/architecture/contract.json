@@ -135,7 +135,7 @@
         "astock/agent/",
         "astock/ledger.py"
       ],
-      "rationale": "落点：现阶段 tests/test_agent_runtime.py::test_long_table_is_trimmed_and_archived、tests/test_agent_runtime.py::test_artifact_writer_failure_still_returns_trimmed_table；三表落库与去重测试待 plan-20261110-006（tests/test_agent_store.py::test_tool_call_writes_step_row、tests/test_agent_store.py::test_artifact_digest_dedupes）。"
+      "rationale": "落点：现阶段 tests/test_agent_runtime.py::test_long_table_is_trimmed_and_archived、tests/test_agent_runtime.py::test_artifact_writer_failure_still_returns_trimmed_table；三表落库与去重测试待 plan-20261107-008（tests/test_agent_store.py::test_tool_call_writes_step_row、tests/test_agent_store.py::test_artifact_digest_dedupes）。"
     },
     {
       "id": "AGENT-03",
@@ -154,7 +154,7 @@
       "scope": [
         "astock/agent/tools/"
       ],
-      "rationale": "落点：现阶段 tests/test_agent_runtime.py::test_tool_result_trim_and_signature（字段透传）；工具级必填校验待 plan-20261110-005/-007（tests/test_agent_tools.py::test_market_result_requires_both_timestamps、tests/test_agent_tools.py::test_file_result_requires_source）。"
+      "rationale": "落点：现阶段 tests/test_agent_runtime.py::test_tool_result_trim_and_signature（字段透传）；工具级必填校验待 plan-20261107-005 / plan-20261107-006（tests/test_agent_tools.py::test_market_result_requires_both_timestamps、tests/test_agent_tools.py::test_file_result_requires_source）。"
     },
     {
       "id": "AGENT-05",

@@ -59,17 +59,20 @@
 
 ## 条件
 
-以下条件不阻塞 003/005（SQLite ledger / 时间语义）开工，但必须在 plan-20261107-003 内完成：
+以下条件不阻塞 003/005（SQLite ledger / 时间语义）开工。按「建」（落盘与解析，plan-20261107-003）与「用」（检索与表格查询，plan-20261107-004）拆成两组，避免同一条件被两个计划项同时认领：
 
-- **C1 布局与索引逐字一致**：`files.py` 必须按冻结布局落盘（四件产物齐全），`meta.json` 13 个必填字段
-  一个不缺，FTS5 建表语句与 `docs/AStockAgent_interface_freeze_v1.md` §4 字符级一致，检索结果能回溯到
-  `file_id + page + block`。验收：`tests/test_agent_files.py::test_layout_matches_frozen_spec`。
-- **C2 依赖与限额集中管理**：`pdfplumber` / `python-docx` / `duckdb` 写进 `requirements.txt` 并给版本下限；
+- **C1 布局与索引逐字一致（承接 plan-20261107-003）**：`files.py` 必须按冻结布局落盘（四件产物齐全），`meta.json` 13 个必填字段
+  一个不缺，FTS5 建表语句与 `docs/AStockAgent_interface_freeze_v1.md` §4 字符级一致；FTS5 索引由 `files.py` 在抽取同批写入，
+  不另起批处理；检索结果能回溯到 `file_id + page + block`。验收：`tests/test_agent_files.py::test_layout_matches_frozen_spec`。
+- **C2 依赖与限额集中管理（承接 plan-20261107-003）**：`pdfplumber` / `python-docx` / `duckdb` 写进 `requirements.txt` 并给版本下限；
   20 MiB / 5 文件 / 200 页三个常量定义在 `files.py` 顶部，由工具层复用而不是各自硬编码；
-  OCR/加密/宏/超限一律返回 `status` + `warnings`，不得抛未捕获异常。承接 plan-20261107-003。
-- **C3 抽取质量自检与降级可见**：解析后必须自检（页数 vs 文本块数、`text_chars`、表行列是否为空、
+  OCR/加密/宏/超限一律返回 `status` + `warnings`，不得抛未捕获异常。
+- **C3 抽取质量自检与降级可见（承接 plan-20261107-003）**：解析后必须自检（页数 vs 文本块数、`text_chars`、表行列是否为空、
   空文本比例），异常时写 `meta.status = suspected_scan|empty_text|encrypted|unsupported` 并在 `warnings`
   给出可读提示；**禁止静默返回空文档**。验收：`tests/test_agent_files.py::test_scan_like_pdf_is_flagged`。
+- **C4 检索与表格查询契约（承接 plan-20261107-004）**：`file_search` 命中必须能回查 `file_id + page + block`；
+  `table_query` 只允许单条 `SELECT` + 强制 `LIMIT` + 5 秒超时，写语句/DDL 一律拒绝；DuckDB 只读连接不得落临时文件；
+  文件内容进 prompt 必须包在不可信数据块内（ADR-017 §5）。验收：`tests/test_agent_files.py::test_table_query_rejects_write`。
 
 ## 后果
 

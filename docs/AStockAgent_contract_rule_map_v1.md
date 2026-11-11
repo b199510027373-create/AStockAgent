@@ -35,7 +35,7 @@
 | LEDGER-01 ledger 为事实源 | review | RC-04 | 已覆盖 |
 | PIT-01 SW2014/SW2021 切换 | test | `tests/test_data_pit_events.py::test_snapshot_inserts_switch_date`、`tests/test_hardening.py::test_sw_industry_asof` | 已覆盖 |
 | CACHE-01 base_factor 失效 + 原子写 | test | `tests/test_data_pit_events.py::test_load_daily_disk_cache_avoids_second_fetch`、`tests/test_data_pit_events.py::test_load_adj_factors_cache_and_empty_error`、`tests/test_quant.py::test_minute_qfq_uses_latest_factor_as_base` | 已覆盖 |
-| AGENT-01 白名单工具、禁 shell/HTTP/删文件/写推荐 | review | RC-05；已部分自动化：`tests/test_agent_runtime.py::test_allowed_permissions_enforced` | 已覆盖 |
+| AGENT-01 白名单工具、禁 shell/HTTP/删文件/写推荐 | review | RC-05；已部分自动化：`tests/test_agent_runtime.py::test_allowed_permissions_enforced`；`astock/agent/tools/` 的危险符号静态扫描（`os.system`/`shutil.rmtree`/`subprocess.*`/`requests.*` 等）待 plan-20261107-005/006 落地 tools 后才生效，在此之前靠 RC-05 人工核查 | 已覆盖 |
 | AGENT-02 工具调用落 agent_steps | test | 现阶段：`tests/test_agent_runtime.py::test_long_table_is_trimmed_and_archived`、`tests/test_agent_runtime.py::test_artifact_writer_failure_still_returns_trimmed_table`；缺三表落库测试，挂 plan-20261107-008 | 部分覆盖 |
 | AGENT-03 Agent 对推荐/跟踪只读 | review | RC-06；已部分自动化：`tests/test_agent_runtime.py::test_permissions_and_schema_exposed` | 已覆盖 |
 | AGENT-04 引用与时点强制 | test | 现阶段：`tests/test_agent_runtime.py::test_tool_result_trim_and_signature`（字段透传）；工具级必填校验待 plan-20261107-005 / -006 补测试 | 部分覆盖 |
@@ -101,11 +101,11 @@
 | --- | --- | --- | --- |
 | AGENT-02 | 三表落库、artifact digest 去重 | plan-20261107-008 | `tests/test_agent_store.py::test_tool_call_writes_step_row`、`tests/test_agent_store.py::test_artifact_digest_dedupes` |
 | AGENT-04 | 行情工具的 `data_as_of`/`data_time` 必填校验、文件结论 `source` 必填校验 | plan-20261107-005、plan-20261107-006 | `tests/test_agent_tools.py::test_market_result_requires_both_timestamps`、`tests/test_agent_tools.py::test_file_result_requires_source` |
-| 全量 | 规则与落点漂移 | 本任务 | `tests/test_architecture_gate.py::test_rule_map_covers_all_contract_rules` |
+| 全量 | 规则与落点漂移、文档里的测试引用失效 | 本任务 | `tests/test_architecture_gate.py::test_doc_test_references_exist`（扫描本文件与冻结清单的 `tests/…py::test_x` 引用：已存在的文件必须真有该函数；尚未存在的测试文件只允许出现在 §4 承诺表） |
 
 ## 5. 维护规则
 
 1. 新增规则 → 必须同时给出落点（测试或 RC 编号），否则 `contract_write` 后的门禁测试失败；
 2. 删除/改写规则 → 走 ADR，并同步本表与 `tests/test_architecture_gate.py`；
-3. 测试改名 → 本表的引用必须同步改，门禁测试会校验「引用到的测试函数真实存在」；
+3. 测试改名 → 本表的引用必须同步改：门禁 `test_doc_test_references_exist` 会扫描本文件与冻结清单里的 `tests/…py::test_x` 引用，已存在的文件必须真有该函数；尚未存在的测试文件（如 `tests/test_agent_files.py`）只允许出现在 §4 承诺表，落地后再引用即受同一校验约束；
 4. 评审清单项（RC）不得只写在 PR 评论里，必须回到本文件，否则下一轮评审无法复用。

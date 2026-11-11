@@ -93,8 +93,15 @@
 
 ### 5. 门禁
 
-`tests/test_architecture_gate.py` 自动检查：不存在 `proposed` ADR、`adrs.json` 与 ADR 文件的「状态」一致、
-带条件的 ADR 有「条件」段、18 条 contract 规则均有落点、冻结接口与代码签名一致。任一不满足即 CI 失败。
+`tests/test_architecture_gate.py` 自动检查：`adrs.json` 与 ADR 文件的「状态」一致、带条件的 ADR 有「条件」段且承接项存在、
+18 条 contract 规则均有落点、冻结接口与代码签名一致、文档里引用的测试真实存在。任一不满足即 CI 失败。
+
+**proposed 的口径（2026-11-11 评审修订）**——门禁不禁止 proposed，只禁止「无主的 proposed」：
+
+1. 本次门禁裁决的 8 条（002/010/013–018）**不允许**再回到 `proposed`；
+2. 其他 ADR 若处于 `proposed`，必须在文件头带 `- 追认截止：YYYY-MM-DD`，且该日期未过期，否则 CI 失败；
+3. 追认截止日 = 首个实现提交合并到 main 之日 + 7 个自然日（第 2 条），超期即由门禁拦下；
+4. 反例由 `test_proposed_discipline_gate_rejects_missing_deadline` 守住（合成一条缺截止日的 proposed，断言给出可读错误）。
 
 ### 6. 状态变更记录（2026-11-10）
 
@@ -104,7 +111,7 @@
 | ADR-010 | 研究语义与「无 alpha」 | proposed | accepted-with-conditions | C1/C2 | plan-20261103-006 |
 | ADR-013 | Agent 运行时 | proposed | accepted | — | — |
 | ADR-014 | 模型网关 | proposed | accepted | — | — |
-| ADR-015 | 文件导入与检索 | proposed | accepted-with-conditions | C1/C2/C3 | plan-20261107-003 |
+| ADR-015 | 文件导入与检索 | proposed | accepted-with-conditions | C1–C4 | plan-20261107-003（C1–C3）+ plan-20261107-004（C4） |
 | ADR-016 | 图表 ChartSpec | proposed | accepted | — | plan-20261107-005 |
 | ADR-017 | 审计与安全边界 | proposed | accepted-with-conditions | C1/C2/C3 | plan-20261107-008 |
 | ADR-018 | 实时口径 | proposed | accepted-with-conditions | C1/C2 | plan-20261107-006 |

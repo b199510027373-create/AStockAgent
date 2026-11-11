@@ -20,7 +20,8 @@
     "（ADR-016 C1）渲染只接受声明式 spec，禁止 exec/eval 任意 Python；交给模型的 schema 就是字段与枚举白名单",
     "（ADR-016 C2 + ADR-008）K 线默认 qfq；涨跌停/成交异常标的可切 raw，并在图注注明价格口径",
     "（ADR-016 C3）每次渲染写 agent_artifacts 记录 {spec, params, data_as_of, data_time, source, code_version}，可凭 artifact_id 原样复现",
-    "（ADR-016）图与表同屏展示 data_as_of 与 data_time；无 kaleido 时降级为 HTML artifact 并在 ToolResult.metadata 标注 degraded"
+    "（ADR-016）图与表同屏展示 data_as_of 与 data_time；无 kaleido 时降级为 HTML artifact 并在 ToolResult.metadata 标注 degraded",
+    "（ADR-016 C1）period/range 词表消歧：分钟档只用 1min/5min/15min/30min/60min，月档只用 1mo/3mo/6mo；schema 用例分别断言 period=1min 取 1 分钟 bar、range=1mo 取 1 个月窗口，不得共用 1m"
   ],
   "tags": [
     "agent",
