@@ -116,6 +116,9 @@ class RecommendationCorePathTests(unittest.TestCase):
         batches = ledger.recommendation_batches()
         self.assertEqual(batches[0]["run_id"], "r1")
         self.assertEqual(batches[0]["rows"][0]["代码"], "600519.SH")
+        runs = ledger.list_runs()
+        self.assertEqual(runs[0]["run_id"], "r1")
+        self.assertEqual(runs[0]["items"], 1)
 
     def test_tracking_rows_joins_rank_and_keeps_live_only(self):
         payload = {

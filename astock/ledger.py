@@ -286,8 +286,10 @@ def latest_run() -> dict | None:
 def list_runs(limit: int = 50) -> list[dict]:
     with _read() as conn:
         rows = conn.execute(
-            "SELECT run_id, data_as_of, tradable_from, generated_at, source, status "
-            "FROM runs ORDER BY generated_at DESC LIMIT ?",
+            "SELECT r.run_id, r.data_as_of, r.tradable_from, r.generated_at, "
+            "r.source, r.status, COUNT(i.rank) AS items "
+            "FROM runs r LEFT JOIN items i ON i.run_id = r.run_id "
+            "GROUP BY r.run_id ORDER BY r.generated_at DESC LIMIT ?",
             (max(1, int(limit)),),
         ).fetchall()
         return [dict(x) for x in rows]
