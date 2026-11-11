@@ -10,7 +10,24 @@
   "evidence": "本次提交把原来 compute_tracking 里 `try: ... save_tracking(...) except Exception: pass` 的写入块抽成 `_save_tracking_rows()`（astock/track.py:1044-1075，只 try 了 import），并在 astock/track.py:1174 直接调用、无异常保护。于是 SQLite 写失败（如调度线程正在写 ledger 时的 `database is locked`）会从 compute_tracking 抛出，被 astock/use_cases.py:470-480 转成 `failed` + `_empty_tracking_payload`，整个「推荐跟踪」页变成 ❌ 且表格为空；改动前同样的写入失败只会丢持久化，表格仍能正常渲染。这是本次修复引入的与横幅无关的行为回归。",
   "suggestion": "在 compute_tracking 里包一层 `try/except Exception as exc:` 并 `status += f\" ⚠️ 跟踪结果未写入 ledger（{type(exc).__name__}），本次仅页面展示。\"`，保持表格可用；或在 `_save_tracking_rows` 内逐个 batch try 并把失败数返回给调用方。补一条测试：patch `ledger.save_tracking` 抛 sqlite3.OperationalError 时 `compute_tracking()` 仍返回非空 detail 且 status 含提示。修复人：本分支开发者。完全解决判据：写库失败不再让跟踪页整体失败，且有测试锁定。",
   "confidence": 0.7,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-10T08:16:55.852Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-10T08:29:14.930Z"
+  },
+  "createdAt": "2026-11-10T08:16:55.852Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-10T08:29:14.930Z"
+    }
+  ]
 }

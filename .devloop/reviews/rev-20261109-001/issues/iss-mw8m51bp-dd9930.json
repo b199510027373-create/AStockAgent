@@ -10,7 +10,24 @@
   "evidence": "track.py:630-636 超额 = port_at_bench − bench，其中 port_at_bench = nav.loc[last_idx, \"组合净值\"] 是自首个入场日起的累计值；而 case (b) 的 bench 在 anchor 日被重置为 1.0（:552-556 `bench_nav = aligned / base`，base 取 anchor 收盘）。因此当 anchor > start 时，bench 只度量 anchor→末日，组合却度量 start→末日，两者之差把 start→anchor 的组合涨跌算进了超额。:656-660 新增文案「沪深300 自 X 收盘起算（Y 缺基准 bar），此前不参与超额」正好承诺了相反的语义，数字与说明不一致。现有用例 test_bench_missing_entry_bar_uses_later_close_as_anchor（tests/test_track_nav.py:218-235）中个股用 flat() 全 10 元，anchor 日组合净值恰为 1.0，所以超额恒为 0，测不出这段偏差。",
   "suggestion": "在 nav_status_text 里按基准首个有效日归一组合：`first_idx = bench_values.index[0]; port_base = float(nav.loc[first_idx, \"组合净值\"]); 超额 = (port_at_bench / port_base - 1 - (bench - 1)) * 100`（anchor == start 时 first_idx=0、port_base=1.0，退回现公式，无需再分支）。并补一条 `test_excess_excludes_pre_anchor_drift`：个股在 start→anchor 期间从 10 涨到 11（anchor 之后横盘），基准从 anchor 起横盘，断言超额约 0.00pp 而非 +10pp；再加 `assertIn(\"此前不参与超额\")` 与数值一致性断言，避免文案与数字再次脱钩。仅改 track.py 的这一段与本测试文件，不影响 case (a)/(c)。",
   "confidence": 0.75,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-09T01:59:20.821Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T02:24:00.786Z"
+  },
+  "createdAt": "2026-11-09T01:59:20.821Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T02:24:00.786Z"
+    }
+  ]
 }

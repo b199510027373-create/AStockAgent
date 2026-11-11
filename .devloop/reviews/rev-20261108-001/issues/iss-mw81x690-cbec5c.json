@@ -10,7 +10,24 @@
   "evidence": "交接文档 §8 自述 backfill 未接入契约，但没说到下游后果：backfill.py:120-130 写出的 payload 只有 generated_at/as_of/source/market/ai/table/evidence，没有 schema_version、run_id、data_as_of、tradable_from、diagnostics；而 ledger.py:346-353 `sync_json_dir` 对 `recommend_*.json` 一视同仁 glob，缺 run_id 时补 `legacy_{stem}` 后直接 `save_run`，save_run(:141-144) 对缺失字段只写 NULL（`payload.get(\"schema_version\")`、`payload.get(\"data_as_of\") or payload.get(\"as_of\")`）。于是 SQLite 里会混入 schema_version=NULL、tradable_from=NULL 的 run，DATA-01「推荐 JSON 必须 schema_version=2」在 ledger 侧无法自证；track.py:241-253 的 JSON 回退路径也要靠 `as_of` 兜底才不跳过。这类 payload 目前只是碰巧被下游的 `.get()` 容错吞下，不是契约把关。",
   "suggestion": "按交接文档的后续计划单独迁移时，至少做两件事：(1) backfill 组装完 payload 后先 `validate_recommendation_run(payload, source=\"backfill_technical\")`，补齐 schema_version=2/run_id=f\"backfill_{date:%Y%m%d}\"/data_as_of/tradable_from（用 `next_open_date` 推导）/diagnostics；(2) 给 `ledger.sync_json_dir` 加一条断言或测试：缺 schema_version 的 payload 不得静默入库（或显式标注 legacy 并统计）。若本轮不迁移，建议在 ledger.sync_json_dir 里跳过无 schema_version 的文件，避免污染「运行事实以 ledger 为准」。这不阻塞本计划项，可挂到后续 backlog。",
   "confidence": 0.8,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-08T16:33:21.636Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-09T06:53:46.861Z"
+  },
+  "createdAt": "2026-11-08T16:33:21.636Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-09T06:53:46.861Z"
+    }
+  ]
 }
