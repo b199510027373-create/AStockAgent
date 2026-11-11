@@ -268,12 +268,17 @@ class LedgerCompatTests(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
 
-    def test_old_database_gains_percentile_column(self):
+    def test_old_database_gains_new_columns(self):
         import sqlite3
 
         conn = sqlite3.connect(self.db)
         conn.executescript(
-            """CREATE TABLE items (
+            """CREATE TABLE runs (
+                   run_id TEXT PRIMARY KEY, schema_version INTEGER, kind TEXT,
+                   data_as_of TEXT, tradable_from TEXT, generated_at TEXT,
+                   source TEXT, status TEXT, error TEXT, params_json TEXT,
+                   diagnostics_json TEXT, json_path TEXT, csv_path TEXT);
+               CREATE TABLE items (
                    run_id TEXT, rank INTEGER, code TEXT, name TEXT, industry TEXT,
                    composite REAL, technical REAL, event REAL, action TEXT, reason TEXT,
                    PRIMARY KEY (run_id, rank));"""
@@ -281,10 +286,16 @@ class LedgerCompatTests(unittest.TestCase):
         conn.close()
         conn = ledger._connect()
         try:
-            columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)")}
+            run_columns = {row["name"] for row in conn.execute("PRAGMA table_info(runs)")}
+            item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)")}
         finally:
             conn.close()
-        self.assertIn("percentile", columns)
+        self.assertIn("report_md", run_columns)
+        self.assertIn("status_line", run_columns)
+        self.assertIn("percentile", item_columns)
+        self.assertIn("close", item_columns)
+        self.assertIn("ret20", item_columns)
+        self.assertIn("rsi", item_columns)
 
     def test_legacy_action_word_is_saved_as_research_semantics(self):
         payload = {

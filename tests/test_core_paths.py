@@ -90,17 +90,31 @@ class RecommendationCorePathTests(unittest.TestCase):
         self.assertEqual(result.status, "success")
         table = result.payload["table"]
         self.assertEqual(len(table), 1)
+        for column in ("收盘", "20日%", "RSI"):
+            self.assertIn(column, table.columns)
         self.assertTrue(result.run_id.startswith("rec_"))
         self.assertEqual(result.payload["data_as_of"], last.strftime("%Y-%m-%d"))
+        # P1：详细报告与生成摘要必须随批次持久化并在页面读回，不能只剩台账六行摘要。
+        self.assertIn("## 今日候选", result.payload["report"])
+        self.assertIn("600519.SH", result.payload["report"])
+        self.assertIn("## 风险提示", result.payload["report"])
+        self.assertIn("股票池 1 只", result.payload["batch_md"])
         payload = json.loads(
             Path(result.payload["json_path"]).read_text(encoding="utf-8"),
             parse_constant=lambda x: (_ for _ in ()).throw(ValueError(x)),
         )
         self.assertEqual(payload["run_id"], result.run_id)
         self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["report_md"], result.payload["report"])
+        self.assertIn("股票池 1 只", payload["status_line"])
         saved = ledger.get_run(result.run_id)
         self.assertIsNotNone(saved)
         self.assertEqual(len(saved["items"]), 1)
+        self.assertEqual(saved["report_md"], result.payload["report"])
+        self.assertEqual(saved["status_line"], payload["status_line"])
+        for column in ("close", "ret20", "rsi"):
+            self.assertIn(column, saved["items"][0])
+        self.assertEqual(saved["items"][0]["close"], table.iloc[0]["收盘"])
 
     def test_ledger_batches_shape(self):
         payload = {

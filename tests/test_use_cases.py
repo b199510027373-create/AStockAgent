@@ -31,6 +31,9 @@ def _history_run(**overrides):
                 "technical": 80,
                 "event": 86,
                 "percentile": 92.0,
+                "close": 1688.0,
+                "ret20": 5.2,
+                "rsi": 61.3,
                 "action": "技术面强",
                 "reason": "测试",
             }
@@ -105,6 +108,15 @@ def _generated_run(**overrides):
         csv_path="/tmp/gen.csv",
         json_path="/tmp/gen.json",
     )
+    run["report_md"] = (
+        "# 每日推荐 · 2026-11-06\n\n"
+        "**数据截止**：2026-11-06 收盘；**可成交起点**：2026-11-09 开盘\n\n"
+        "## 今日候选\n\n### 1. 000001.SZ 平安银行 · 综合 88.0\n"
+    )
+    run["status_line"] = (
+        "股票池 1 只 · 有效日线 1 只 · 技术预筛 1 · 输出 1 只"
+        "（同行业最多 2 只） · run_id rec_gen"
+    )
     run["items"][0].update(
         {"code": "000001.SZ", "name": "平安银行", "reason": "来自台账"}
     )
@@ -162,8 +174,12 @@ class GenerateRecommendationTests(unittest.TestCase):
         self.assertEqual(result.payload["read_source"], "ledger")
         self.assertEqual(result.payload["table"].iloc[0]["代码"], "000001.SZ")
         self.assertEqual(result.payload["table"].iloc[0]["理由"], "来自台账")
-        self.assertIn("### SQLite 推荐记录", result.payload["report"])
-        self.assertIn("rec_gen", result.payload["report"])
+        for column in ("收盘", "20日%", "RSI"):
+            self.assertIn(column, result.payload["table"].columns)
+        self.assertIn("# 每日推荐 · 2026-11-06", result.payload["report"])
+        self.assertIn("## 今日候选", result.payload["report"])
+        self.assertIn("000001.SZ 平安银行", result.payload["report"])
+        self.assertNotIn("### SQLite 推荐记录", result.payload["report"])
         self.assertIn("测试标题", result.payload["evidence_md"])
         self.assertEqual(result.payload["files"], ["/tmp/gen.csv", "/tmp/gen.json"])
         self.assertIn("已生成并写入 SQLite 台账 rec_gen", result.payload["status_text"])
@@ -172,6 +188,8 @@ class GenerateRecommendationTests(unittest.TestCase):
         self.assertIn("2026-11-09", result.payload["batch_md"])
         self.assertIn("candidate_pool", result.payload["batch_md"])
         self.assertIn("diagnostics（台账记录）", result.payload["batch_md"])
+        self.assertIn("生成摘要（台账记录）", result.payload["batch_md"])
+        self.assertIn("股票池 1 只", result.payload["batch_md"])
         self.assertIn("JSON 归档", result.payload["batch_md"])
         self.assertEqual(result.diagnostics["reason"], "generated")
         self.assertEqual(result.diagnostics["read_source"], "ledger")
@@ -512,7 +530,8 @@ class HistoryListTests(unittest.TestCase):
         self.assertEqual(list(table["run_id"]), ["rec_b", "rec_a"])
         self.assertEqual(list(table["items"]), [5, 3])
         self.assertEqual(result.payload["run_ids"], ["rec_b", "rec_a"])
-        self.assertIn("共 2 个批次", result.payload["status_text"])
+        self.assertIn("已显示最近 2 个批次", result.payload["status_text"])
+        self.assertIn("上限 20", result.payload["status_text"])
         self.assertEqual(result.diagnostics["count"], 2)
         list_runs.assert_called_once_with(limit=20)
 

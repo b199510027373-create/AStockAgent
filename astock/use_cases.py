@@ -62,6 +62,9 @@ RECOMMEND_COLUMNS = (
     "技术分位",
     "技术分",
     "事件分",
+    "收盘",
+    "20日%",
+    "RSI",
     "技术面",
     "理由",
 )
@@ -127,6 +130,7 @@ def _empty_recommend_payload() -> dict[str, Any]:
     return {
         "table": pd.DataFrame(columns=list(RECOMMEND_COLUMNS)),
         "report": "",
+        "generation_status": "",
         "evidence_md": "",
         "files": None,
         "csv_path": None,
@@ -242,6 +246,18 @@ def _batch_markdown(
     lines.extend(["", "<details><summary>diagnostics（台账记录）</summary>", ""])
     lines.extend(_diagnostics_markdown(payload.get("diagnostics")))
     lines.extend(["", "</details>"])
+    generation_status = str(payload.get("generation_status") or "").strip()
+    if generation_status:
+        lines.extend(
+            [
+                "",
+                "<details><summary>生成摘要（台账记录）</summary>",
+                "",
+                generation_status,
+                "",
+                "</details>",
+            ]
+        )
     if payload.get("json_path"):
         lines.extend(
             [
@@ -312,6 +328,7 @@ def _render_recommendation(
     return {
         "table": table,
         "report": report,
+        "generation_status": str(payload.get("generation_status") or ""),
         "evidence_md": evidence_md,
         "files": files,
         "csv_path": csv_path,
@@ -357,6 +374,9 @@ def _ledger_view(
             "技术分位": item.get("percentile"),
             "技术分": item.get("technical"),
             "事件分": item.get("event"),
+            "收盘": item.get("close"),
+            "20日%": item.get("ret20"),
+            "RSI": item.get("rsi"),
             "技术面": item.get("action"),
             "理由": item.get("reason"),
         }
@@ -364,6 +384,8 @@ def _ledger_view(
     ]
     payload = {
         "table": pd.DataFrame(rows, columns=list(RECOMMEND_COLUMNS)),
+        "report": str(run.get("report_md") or ""),
+        "generation_status": str(run.get("status_line") or ""),
         "evidence": run.get("evidence") or [],
         "csv_path": run.get("csv_path"),
         "json_path": run.get("json_path"),
@@ -495,7 +517,8 @@ def run_recommendation(
         mode: ``generate`` 生成新批次并立即从台账读回；``latest`` 读取台账
             最近一批；``run`` 按 ``run_id`` 读取指定批次。
         run_id: ``mode="run"`` 时必填。
-        now: 生成时传给流水线、历史读取时用于判断数据是否落后；默认当前时间。
+        now: 仅历史读取用于判断数据是否落后；生成路径的流水线不使用此参数，
+            批次新鲜度以生成时写入台账的 diagnostics 为准。
     """
     if mode not in ("generate", "latest", "run"):
         raise ValueError(f"未知 mode={mode!r}，只支持 generate/latest/run")
@@ -612,7 +635,7 @@ def run_recommendation_history(limit: int = 50) -> RunResult:
         _history_payload(
             rows,
             status_text=(
-                f"✅ 台账共 {len(rows)} 个批次（最多显示 {limit} 个）；"
+                f"✅ 已显示最近 {len(rows)} 个批次（上限 {limit}）；"
                 "选择 run_id 后点「加载所选批次」查看详情与证据链。"
             ),
         ),
