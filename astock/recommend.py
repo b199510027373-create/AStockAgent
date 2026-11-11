@@ -19,6 +19,7 @@ from . import llm
 from .config import BASE_DIR
 from .contracts import (
     ContractError,
+    action_short,
     normalize_action,
     validate_recommendation_run,
 )
@@ -269,8 +270,25 @@ def _action(score: float) -> str:
     return "技术面弱"
 
 
+def percentile_basis(n: int) -> str:
+    """分位口径文案：分位一律在候选池内计算，展示时必须带上 N。"""
+    return f"候选池分位（N={int(n)}）" if n else "候选池分位"
+
+
+def assign_percentiles(rows: list[dict], candidate_n: int) -> list[dict]:
+    """按综合分取候选池并写入分位，返回候选池。
+
+    live 与 backfill 共用同一基准：候选池（N=min(candidate_n, len(rows))）内
+    rank(pct)，因此任意批次的分位都能按同一口径复算。
+    """
+    pool = sorted(rows, key=lambda r: r["composite"], reverse=True)[: max(1, int(candidate_n))]
+    for row, pct in zip(pool, pool_percentile([r["composite"] for r in pool])):
+        row["percentile"] = pct
+    return pool
+
+
 def pool_percentile(scores) -> list[float | None]:
-    """综合分的池内分位（0-100，越大越靠前）；非有限值给 None。"""
+    """候选池内综合分分位（0-100，越大越靠前）；非有限值给 None。"""
     values = [float(s) for s in scores]
     ranked = pd.Series(values, dtype=float).rank(pct=True) * 100.0
     return [
@@ -359,7 +377,8 @@ def _llm_rank(rows: list[dict], evidence_map: dict[str, list[dict]], market: str
     lines = [
         "你是A股研究员。只能使用下面提供的数据，不得编造新闻、价格或业绩。",
         "为每只候选给出 reason、catalysts、risks、evidence（引用的 E 编号）；"
-        "不要给出买卖建议或动作词——技术面强弱由规则按综合分与池内分位给出，你只负责解释证据。",
+        "不要给出买卖建议或动作词——技术面强弱由规则按综合分给出（池内分位仅作横截面展示），"
+        "你只负责解释证据。",
         "输出严格 JSON：{\"market\":\"一句话市场判断\",\"items\":[{\"code\":\"600519.SH\",\"reason\":\"...\",\"catalysts\":[\"...\"],\"risks\":[\"...\"],\"evidence\":[\"E1\"]}],\"risk_note\":\"...\"}",
         "",
         f"市场背景：{market}",
@@ -442,6 +461,7 @@ def _report_markdown(
     ai: dict,
     as_of: str,
     tradable_from: str = "",
+    candidate_n: int = 0,
 ) -> str:
     ai_items = {str(x.get("code")): x for x in (ai.get("items") or []) if isinstance(x, dict)}
     lines = [
@@ -458,17 +478,18 @@ def _report_markdown(
         ai_row = ai_items.get(row["code"], {})
         action = normalize_action(row.get("action")) or _action(row["composite"])
         pct = row.get("percentile")
+        pct_label = percentile_basis(candidate_n or len(result_rows))
         pct_text = (
-            f"池内分位 {pct:.0f}%"
+            f"{pct_label}：{pct:.0f}%"
             if isinstance(pct, (int, float)) and math.isfinite(pct)
-            else "池内分位 —"
+            else f"{pct_label}：—"
         )
         reason = ai_row.get("reason") or row.get("reason", "")
         lines.append(
             f"### {i}. {row['code']} {row['name']} · 综合 {row['composite']:.1f}"
         )
         lines.append(
-            f"- **技术面**：{action}；{pct_text}；技术 {row['technical_score']:.1f} / 事件 {row['event_score']:.1f}；"
+            f"- **技术面**：{action_short(action)}；{pct_text}；技术 {row['technical_score']:.1f} / 事件 {row['event_score']:.1f}；"
             f"收盘 {row['close']}，20日 {row['ret20']*100:+.1f}%，RSI {row['rsi']:.1f}"
         )
         lines.append(f"- **逻辑**：{reason}")
@@ -795,9 +816,8 @@ def generate_recommendation(
         row["confidence"] = confidence
 
     candidates.sort(key=lambda x: x["composite"], reverse=True)
-    # ADR-010 C1：综合分同时给出池内分位（技术预筛池内横截面）。
-    for row, pct in zip(candidates, pool_percentile([r["composite"] for r in candidates])):
-        row["percentile"] = pct
+    # ADR-010 C1：分位基准 = 候选池（N=candidate_n），与 backfill 共用 assign_percentiles。
+    assign_percentiles(candidates, len(candidates))
     ai_rows = candidates[: min(8, len(candidates))]
 
     step(0.78, "生成市场背景与 AI 归因")
@@ -864,7 +884,9 @@ def generate_recommendation(
         params=params,
         diagnostics=diagnostics,
     )
-    report = _report_markdown(final_rows, market, ai, data_as_of, tradable_from)
+    report = _report_markdown(
+        final_rows, market, ai, data_as_of, tradable_from, candidate_n=len(candidates)
+    )
     evidence_md = _evidence_markdown(final_rows, evidence_map)
 
     elapsed = time.time() - started

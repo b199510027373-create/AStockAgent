@@ -2,19 +2,20 @@
   "id": "plan-20261103-006",
   "title": "动作词与分位口径全站一致性核查",
   "description": "ADR-010 的第一条已在 scoring 落地（技术面强/中性/弱），但需要全站一致性核查：推荐表、AI 对话、简报、导出 CSV 是否仍有「关注/回避」；是否同时给出池内分位；旧批次是否做兼容映射。工作量小，但直接决定产品叙事是否自洽。",
-  "status": "in_review",
+  "status": "doing",
   "priority": "P2",
   "milestone": "ms-product",
   "owner": "human",
   "start": "2026-11-18",
   "due": "2026-11-19",
   "estimateH": 3,
-  "progress": 90,
+  "progress": 75,
   "acceptance": [
     "（ADR-010 C1）全站不再出现「关注/观察/回避」等投资动作词",
-    "（ADR-010 C1）推荐表同时展示技术面强弱与池内分位",
+    "（ADR-010 C1）推荐表同时展示技术面强弱与候选池分位（N=candidate_n，live 与 backfill 同基准）",
     "（ADR-010 C1）AI 对话与简报的提示词同步为研究语义",
-    "（ADR-010 C2）回归：旧批次渲染时做字段兼容映射"
+    "（ADR-010 C1）回归：旧批次渲染时做字段兼容映射",
+    "（ADR-010 C2）横幅四状态文案去重：insufficient/unavailable/positive/negative/no_alpha 各保留一句说明，同屏不重复「样本不足/未验证」提示"
   ],
   "tags": [
     "product",
@@ -25,8 +26,8 @@
     "adr": [
       "ADR-010"
     ],
-    "commit": "ec4354c",
     "branch": "feat/adr-gate-freeze",
+    "commit": "ec4354c",
     "test": [
       "全量：.venv/Scripts/python.exe -m pytest tests -q → 287 passed, 1 skipped（沙箱下 tempdir 需临时 tempfix 插件，见 worklog）",
       "目标：pytest tests/test_research_semantics.py → 15 passed",
@@ -35,7 +36,7 @@
     ]
   },
   "createdAt": "2026-11-03T12:10:38.187Z",
-  "updatedAt": "2026-11-11T04:01:46.283Z",
+  "updatedAt": "2026-11-11T04:21:38.711Z",
   "deps": [
     "plan-20261110-003"
   ],

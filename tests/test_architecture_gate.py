@@ -152,23 +152,62 @@ def test_plan_references_point_at_live_plan_items() -> None:
     assert broken == [], f"门禁数据源引用了不可用的计划项：{broken}"
 
 
+def _condition_titles(section: str) -> dict[str, str]:
+    """条件段标题：`- **C1 标题**：…` → {"C1": "标题"}。"""
+    return {
+        m.group(1): m.group(2).strip()
+        for m in re.finditer(r"\*\*(C\d)\s+([^*]+?)\*\*", section)
+    }
+
+
+def _condition_keywords(title: str) -> set[str]:
+    """标题的 2-3 字片段；验收条目必须命中其中至少两个，才算覆盖语义。"""
+    grams: set[str] = set()
+    for chunk in re.split(r"[^\u4e00-\u9fffA-Za-z0-9]+", title):
+        for n in (2, 3):
+            grams |= {chunk[i : i + n] for i in range(len(chunk) - n + 1)}
+    return grams
+
+
+def _unowned_conditions(titles: dict[str, str], acceptance: list[str]) -> list[str]:
+    """只写条件编号、不写条件语义的验收条目视为无主（token 匹配不算承接）。"""
+    joined = "\n".join(acceptance)
+    missing: list[str] = []
+    for condition, title in titles.items():
+        if condition not in joined:
+            missing.append(condition)
+            continue
+        hits = [gram for gram in _condition_keywords(title) if gram in joined]
+        if len(hits) < 2:
+            missing.append(f"{condition}（验收未覆盖标题语义：{title}）")
+    return missing
+
+
 def test_adr_conditions_are_owned_by_live_followup_plans() -> None:
     """每个条件号 C1..Cn 必须能在承接计划的验收条目里找到，且承接项不得是已取消项。"""
     index = {entry["id"]: entry for entry in _adr_index()}
     for adr_id in WITH_CONDITIONS:
         section = _condition_section(_read(ARCH / index[adr_id]["file"]))
-        condition_ids = sorted(set(re.findall(r"\*\*(C\d)", section)))
+        titles = _condition_titles(section)
         plan_ids = sorted(set(PLAN_REF.findall(section)))
-        assert condition_ids, f"{adr_id} 的条件段没有 C1..Cn 编号"
+        assert titles, f"{adr_id} 的条件段没有 C1..Cn 编号"
         assert plan_ids, f"{adr_id} 的条件段没有承接计划项"
         acceptance: list[str] = []
         for plan_id in plan_ids:
             item = _plan_item(plan_id)
             assert item.get("status") != "cancelled", f"{adr_id} 的条件挂在已取消的 {plan_id}"
             acceptance.extend(item.get("acceptance", []))
-        joined = "\n".join(acceptance)
-        unowned = [condition for condition in condition_ids if condition not in joined]
+        unowned = _unowned_conditions(titles, acceptance)
         assert unowned == [], f"{adr_id} 的条件 {unowned} 没有出现在承接项验收里（无主条件）"
+
+
+def test_condition_gate_rejects_number_only_acceptance() -> None:
+    """反例：验收里只写「（ADR-010 C2）」而不写「四状态/文案去重」，门禁必须报无主。"""
+    titles = {"C2": "横幅四状态文案去重"}
+    old = ["（ADR-010 C2）回归：旧批次渲染时做字段兼容映射"]
+    assert _unowned_conditions(titles, old) == [
+        "C2（验收未覆盖标题语义：横幅四状态文案去重）"
+    ]
 
 
 def test_adr_index_status_values_are_known() -> None:

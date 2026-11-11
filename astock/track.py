@@ -416,7 +416,7 @@ def alpha_banner_markdown(banner: AlphaBanner) -> str:
 
     if banner.state == "insufficient":
         head = f"🧪 {title} · 样本不足"
-        detail = "**样本不足，不显示显著性**（有效独立样本 < 10）。"
+        detail = "有效独立样本 < 10，暂不显示显著性结论。"
         body = f"{head}<br>{numbers}<br>{detail}{note_html}<br><sub>{method}</sub>"
         return _banner_box(body, background="#f1f3f5", border="#868e96")
 

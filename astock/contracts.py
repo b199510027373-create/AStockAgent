@@ -34,6 +34,7 @@ __all__ = [
     "Evidence",
     "RecommendationRun",
     "normalize_action",
+    "action_short",
     "validate_bars",
     "validate_events",
     "validate_evidence",
@@ -57,6 +58,11 @@ def normalize_action(value: Any) -> str:
     if not text or text.lower() in {"nan", "none"}:
         return ""
     return LEGACY_ACTION_WORDS.get(text, text)
+
+
+def action_short(value: Any) -> str:
+    """句内短标签：技术面强 → 强；表格单元格仍保留完整短语。"""
+    return normalize_action(value).removeprefix("技术面")
 
 
 class ContractError(ValueError):
@@ -496,7 +502,7 @@ RECOMMENDATION_TABLE_COLUMNS: tuple[str, ...] = (
     "事件分",
     "技术面",
 )
-# ADR-010 C2：旧批次（动作词时代）用「建议」存动作标签且没有池内分位；
+# ADR-010 C2：旧批次（动作词时代）用「建议」存动作标签且没有候选池分位；
 # 校验时把「建议」当作「技术面」的别名，并放行缺失的「技术分位」。
 RECOMMENDATION_LEGACY_ACTION_COLUMN = "建议"
 RECOMMENDATION_LEGACY_OPTIONAL_COLUMNS: tuple[str, ...] = ("技术分位",)
@@ -593,7 +599,7 @@ class RecommendationRun:
                 if legacy and column == "技术面":
                     continue  # 旧批次「建议」兼容为「技术面」
                 if legacy and column in cls.legacy_optional_columns:
-                    continue  # 旧批次没有池内分位
+                    continue  # 旧批次没有候选池分位
                 row_missing.append(column)
             if row_missing:
                 raise ContractError(

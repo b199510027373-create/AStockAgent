@@ -11,9 +11,9 @@ from .events import stock_basic
 from .recommend import (
     _action,
     _pick_diverse,
+    assign_percentiles,
     load_many,
     parse_universe,
-    pool_percentile,
     technical_score,
 )
 
@@ -38,6 +38,7 @@ def backfill_technical(
     top_n: int = 5,
     universe_text: str = "",
     progress=None,
+    candidate_n: int = 15,
 ) -> tuple[int, str]:
     """用历史日线回填「技术分」推荐批次。
 
@@ -100,10 +101,9 @@ def backfill_technical(
                 f"技术分回填：{row.get('trend', '震荡')}；"
                 f"20日 {row['ret20']*100:+.1f}%；RSI {row['rsi']:.1f}；事件分固定 50。"
             )
-        rows.sort(key=lambda x: x["composite"], reverse=True)
-        for row, pct in zip(rows, pool_percentile([r["composite"] for r in rows])):
-            row["percentile"] = pct
-        selected = _pick_diverse(rows, top_n, max_per_industry=2)
+        # 与 live 同一基准：先截断到候选池（N=candidate_n），再在池内算分位。
+        pool = assign_percentiles(rows, candidate_n)
+        selected = _pick_diverse(pool, top_n, max_per_industry=2)
         table = []
         for i, r in enumerate(selected, 1):
             table.append(
@@ -127,7 +127,10 @@ def backfill_technical(
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "as_of": key,
             "source": "backfill_technical",
-            "market": "技术分回填（事件分固定 50），不是完整实盘推荐，仅用于检验技术分排序。",
+            "market": (
+                "技术分回填（事件分固定 50），不是完整实盘推荐，仅用于检验技术分排序；"
+                f"分位基准=候选池（N={candidate_n}）。"
+            ),
             "ai": {},
             "table": table,
             "evidence": {},

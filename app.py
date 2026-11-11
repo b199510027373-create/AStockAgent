@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
-from astock.contracts import normalize_action
+from astock.contracts import action_short
 from astock.data import load_daily as _load_daily
 from astock.indicators import add_all as _add_indicators
 from astock.ui import build_multiperiod_tab
@@ -342,7 +342,7 @@ def _latest_recommendation_context():
             pct_text = "" if pct in (None, "") else f" 技术分位{pct}%"
             lines.append(
                 f"{row.get('代码')} {row.get('名称')} 综合{row.get('综合分')}{pct_text} "
-                f"技术面{normalize_action(row.get('技术面') or row.get('建议'))}：{str(row.get('理由', ''))[:80]}"
+                f"技术面：{action_short(row.get('技术面') or row.get('建议'))}｜{str(row.get('理由', ''))[:80]}"
             )
         return "\n".join(lines)
     except Exception:

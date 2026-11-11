@@ -364,7 +364,21 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
 | `session` | `pre`/`open`/`lunch`/`closed`/`non_trading_day` | 交易时段 |
 | `freshness` | `live`/`delayed`/`eod`/`suspended` | 数据新鲜度；非交易时段必须是 `eod`，`rt_min` 超 2 分钟未更新必须 `delayed` |
 
-## 7. 未决问题的去向
+### 6.4 推荐表「技术分位」基准（plan-20261103-006，ADR-010 C1）
+
+`技术分位` = 综合分在**候选池**内的横截面百分位：`rank(pct=True) * 100`，0–100，越大越靠前。
+
+| 项 | 定义 |
+| --- | --- |
+| 基准池 | 按综合分降序截断到 `candidate_n`（UI 默认 15，上限 30）的候选池；**不是**全股票池 |
+| 生产者 | `astock/recommend.py` 的 `assign_percentiles(rows, candidate_n)`；live 与 `astock/backfill.py` 共用同一函数 |
+| 落库 | `ledger.items.percentile`（REAL，可空）；旧库由 `ALTER TABLE` 补齐 |
+| 展示 | 一律写「候选池分位（N=候选池大小）：92%」，缺失写「—」，不得只写「池内分位」而不给 N |
+| 复算 | 任意批次都可用该批次 JSON `table` 的前 `candidate_n` 行、按 `pool_percentile(综合分)` 复算 |
+
+> 注意：分位是综合分的横截面展示，**不参与**技术面强/中/弱的判定；判定只有 `_action(综合分)`（≥68 强 / ≥52 中性 / 其余弱）。
+
+
 
 | 未决问题 | 结论 | 落点 |
 | --- | --- | --- |

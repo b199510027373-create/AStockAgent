@@ -1,6 +1,7 @@
-"""ADR-010 C1/C2 回归：研究语义动作词、池内分位与旧批次兼容映射。"""
+"""ADR-010 C1/C2 回归：研究语义动作词、候选池分位与旧批次兼容映射。"""
 
 import ast
+import json
 import math
 import tempfile
 import unittest
@@ -30,7 +31,33 @@ class ActionVocabularyTests(unittest.TestCase):
         self.assertEqual(contracts.normalize_action("跑赢大盘"), "跑赢大盘")
 
 
-class PoolPercentileTests(unittest.TestCase):
+class ActionShortTests(unittest.TestCase):
+    def test_short_label_strips_research_prefix(self):
+        self.assertEqual(contracts.action_short("技术面强"), "强")
+        self.assertEqual(contracts.action_short("技术面中性"), "中性")
+        # 旧批次动作词先归一化，再取短标签。
+        self.assertEqual(contracts.action_short("回避"), "弱")
+        self.assertEqual(contracts.action_short(None), "")
+
+
+class PercentileBasisTests(unittest.TestCase):
+    def test_live_and_backfill_share_the_candidate_pool_basis(self):
+        rows = [{"composite": float(i), "code": f"{i:06d}"} for i in range(40)]
+
+        # live 与 backfill 都走 assign_percentiles：先截断到候选池，再在池内排名。
+        pool = recommend.assign_percentiles(rows, 15)
+
+        self.assertEqual(len(pool), 15)
+        self.assertEqual(pool[0]["code"], "000039")
+        expected = recommend.pool_percentile([r["composite"] for r in pool])
+        self.assertEqual([r["percentile"] for r in pool], expected)
+        self.assertEqual(pool[0]["percentile"], 100.0)
+        self.assertAlmostEqual(pool[-1]["percentile"], round(100 / 15, 1))
+        # 候选池外的行不参与分位，也不会被误标（池 = 综合分前 15 = rows[25:]）。
+        self.assertFalse(any("percentile" in r for r in rows[:25]))
+
+
+
     def test_percentile_is_monotonic_and_bounded(self):
         ranked = recommend.pool_percentile([50.0, 60.0, 70.0, 90.0])
         self.assertEqual(len(ranked), 4)
@@ -102,20 +129,71 @@ def _row(**overrides) -> dict:
 
 class ReportMarkdownTests(unittest.TestCase):
     def test_report_shows_research_action_and_percentile(self):
-        text = recommend._report_markdown([_row()], "震荡", {}, "2026-11-06", "2026-11-09")
-        self.assertIn("**技术面**：技术面强", text)
-        self.assertIn("池内分位 92%", text)
+        text = recommend._report_markdown(
+            [_row()], "震荡", {}, "2026-11-06", "2026-11-09", candidate_n=15
+        )
+        # 句内用短标签，避免「技术面：技术面强」的前缀重复。
+        self.assertIn("**技术面**：强", text)
+        self.assertNotIn("技术面：技术面强", text)
+        # 分位口径写进文案：候选池内 rank(pct)，展示时带 N。
+        self.assertIn("候选池分位（N=15）：92%", text)
         self.assertNotIn("**建议**", text)
         # 免责声明保留：合规文案不属于投资动作词。
         self.assertIn("不构成投资建议", text)
 
     def test_report_handles_missing_percentile(self):
         text = recommend._report_markdown(
-            [_row(percentile=None, action="关注")], "震荡", {}, "2026-11-06"
+            [_row(percentile=None, action="关注")], "震荡", {}, "2026-11-06", candidate_n=15
         )
-        self.assertIn("**技术面**：技术面强", text)
-        self.assertIn("池内分位 —", text)
+        self.assertIn("**技术面**：强", text)
+        self.assertIn("候选池分位（N=15）：—", text)
         self.assertNotIn("关注", text)
+
+    def test_percentile_basis_label_always_names_the_pool(self):
+        self.assertEqual(recommend.percentile_basis(15), "候选池分位（N=15）")
+
+
+class LatestContextTests(unittest.TestCase):
+    """app 的「最新批次摘要」不能拼出「技术面技术面强」，旧批次也要归一化。"""
+
+    def test_context_shortens_action_and_keeps_percentile(self):
+        try:
+            import app as app_module
+        except Exception as exc:  # pragma: no cover - optional heavy import
+            raise unittest.SkipTest(f"app import failed: {exc}") from exc
+
+        payload = {
+            "table": [
+                {
+                    "代码": "600519.SH",
+                    "名称": "贵州茅台",
+                    "综合分": 91.0,
+                    "技术分位": 92.0,
+                    "技术面": "技术面强",
+                    "理由": "趋势向上",
+                },
+                {
+                    "代码": "000001.SZ",
+                    "名称": "平安银行",
+                    "综合分": 80.0,
+                    "建议": "关注",
+                    "理由": "旧批次",
+                },
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            rec_dir = Path(tmp) / "data" / "recommendations"
+            rec_dir.mkdir(parents=True)
+            (rec_dir / "latest.json").write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+            )
+            with patch.object(app_module, "BASE_DIR", tmp):
+                text = app_module._latest_recommendation_context()
+
+        self.assertNotIn("技术面技术面", text)
+        self.assertIn("技术面：强｜趋势向上", text)
+        self.assertIn("技术面：强｜旧批次", text)
+        self.assertIn("技术分位92.0%", text)
 
 
 class LedgerCompatTests(unittest.TestCase):
