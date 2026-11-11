@@ -68,7 +68,7 @@ class FakeModel:
     def reflect(self, *, step: int, result: ToolResult) -> str:
         self.reflect_calls.append((step, result))
         if result.ok:
-            return "已观察工具结果，信息可用于回答。"
+            return "已读取工具结果，信息可用于回答。"
         return f"工具报错（{result.error}），需要调整参数或改用其他工具。"
 
 

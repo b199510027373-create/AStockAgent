@@ -28,6 +28,7 @@ from .recommend import (
     Recommendation,
     StaleDataError,
     generate_recommendation,
+    normalize_table,
 )
 from .track import (
     alpha_banner_error_markdown,
@@ -56,9 +57,10 @@ RECOMMEND_COLUMNS = (
     "名称",
     "行业",
     "综合分",
+    "技术分位",
     "技术分",
     "事件分",
-    "建议",
+    "技术面",
     "理由",
 )
 
@@ -187,6 +189,8 @@ def _render_recommendation(
         table = pd.DataFrame(table or [])
     if table.empty and not len(table.columns):
         table = pd.DataFrame(columns=list(RECOMMEND_COLUMNS))
+    # ADR-010 C1（兼容映射）：旧批次的「建议」/旧动作词在此统一映射为研究语义并列。
+    table = normalize_table(table)
 
     report = str(payload.get("report") or "")
     if not report and payload.get("run_id"):
@@ -215,6 +219,17 @@ def _render_recommendation(
             status_text = f"✅ {status_text}"
         if diagnostics.get("calendar_error"):
             status_text += "\n\n⚠️ 交易日历不可用，未校验数据新鲜度。"
+
+    # 分位口径披露（ADR-010 C1）：表格列名固定为「技术分位」，同屏给出池大小 N，
+    # 避免跨 candidate_n 批次把不同基准的数值直接比较。
+    basis_n = int(
+        (diagnostics or {}).get("candidate_n")
+        or (payload.get("params") or {}).get("candidate_n")
+        or len(table)
+        or 0
+    )
+    if basis_n and "技术分位" in table.columns:
+        status_text += f"\n\n> 分位基准：候选池（N={basis_n}），数值为综合分在池内的 rank(pct)。"
 
     return {
         "table": table,
@@ -289,9 +304,10 @@ def _ledger_view(
             "名称": item.get("name"),
             "行业": item.get("industry"),
             "综合分": item.get("composite"),
+            "技术分位": item.get("percentile"),
             "技术分": item.get("technical"),
             "事件分": item.get("event"),
-            "建议": item.get("action"),
+            "技术面": item.get("action"),
             "理由": item.get("reason"),
         }
         for item in (run.get("items") or [])

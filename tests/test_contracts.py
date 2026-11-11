@@ -81,12 +81,13 @@ def _recommend_payload(**overrides) -> dict:
                 "名称": "贵州茅台",
                 "行业": "白酒",
                 "综合分": 70.0,
+                "技术分位": 92.0,
                 "技术分": 72.0,
                 "事件分": 66.0,
                 "收盘": 1500.0,
                 "20日%": 3.2,
                 "RSI": 58.0,
-                "建议": "关注",
+                "技术面": "技术面强",
                 "理由": "趋势向上",
             }
         ],
@@ -233,10 +234,28 @@ class RecommendationRunContractTests(unittest.TestCase):
 
     def test_table_row_requires_documented_columns(self):
         payload = _recommend_payload()
-        payload["table"][0].pop("建议")
+        payload["table"][0].pop("技术面")
         with self.assertRaises(ContractError) as ctx:
             validate_recommendation_run(payload)
-        self.assertIn("建议", str(ctx.exception))
+        self.assertIn("技术面", str(ctx.exception))
+
+    def test_legacy_table_row_with_action_word_is_accepted(self):
+        """ADR-010 C1：旧批次只有「建议」列且没有「技术分位」，必须仍能校验通过。"""
+        payload = _recommend_payload()
+        row = payload["table"][0]
+        row["建议"] = "关注"
+        row.pop("技术面")
+        row.pop("技术分位")
+        out = validate_recommendation_run(payload)
+        self.assertEqual(out["table"][0]["建议"], "关注")
+
+    def test_row_without_any_action_column_is_rejected(self):
+        payload = _recommend_payload()
+        payload["table"][0].pop("技术面")
+        payload["table"][0].pop("技术分位")
+        with self.assertRaises(ContractError) as ctx:
+            validate_recommendation_run(payload)
+        self.assertIn("技术面", ctx.exception.missing)
 
     def test_nan_rejected(self):
         payload = _recommend_payload()
@@ -364,6 +383,7 @@ class RecommendEntryContractTests(unittest.TestCase):
             "name": "贵州茅台",
             "industry": "白酒",
             "composite": 70.0,
+            "percentile": 92.0,
             "technical_score": 72.0,
             "event_score": 66.0,
             "close": 1500.0,
@@ -408,9 +428,11 @@ class RecommendEntryContractTests(unittest.TestCase):
         }
         with (
             patch.object(recommend, "REC_DIR", self.root),
+            # _save 会同步写 ledger；隔离到临时库，避免污染开发机 data/astock.db。
+            patch.object(ledger, "DB_PATH", self.root / "ledger.db"),
             patch.object(recommend, "_atomic_write_text", wraps=recommend._atomic_write_text),
         ):
-            _, json_path = recommend._save(
+            csv_path, json_path = recommend._save(
                 [self._row()],
                 "A股",
                 {},
@@ -423,6 +445,12 @@ class RecommendEntryContractTests(unittest.TestCase):
         payload = json.loads(Path(json_path).read_text(encoding="utf-8"))
         self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["evidence"]["600519.SH"][0]["pub_time"], "2025-01-05T09:00:00")
+        csv_text = Path(csv_path).read_text(encoding="utf-8-sig").splitlines()[0]
+        header = csv_text.split(",")
+        self.assertIn("技术分位", header)
+        self.assertIn("技术面", header)
+        self.assertNotIn("建议", header)
+        self.assertIn("技术面强", Path(csv_path).read_text(encoding="utf-8-sig"))
 
 
 class ReviewRegressionTests(unittest.TestCase):
@@ -616,7 +644,7 @@ def _synthetic_daily(n: int = 140, start: str = "2025-01-02") -> pd.DataFrame:
 
 
 class LlmActionContractTests(unittest.TestCase):
-    """AI-01：LLM 只能补充理由，不能覆盖规则算出的「建议」。"""
+    """AI-01：LLM 只能补充理由，不能覆盖规则算出的「技术面」。"""
 
     def test_llm_action_cannot_override_rule_action(self):
         tmp = tempfile.TemporaryDirectory()
@@ -669,9 +697,11 @@ class LlmActionContractTests(unittest.TestCase):
         row = result.table.iloc[0]
         # 前提：规则给出的建议不是"技术面弱"，否则 AI 的"回避"覆盖与否无法区分。
         self.assertGreaterEqual(row["综合分"], 52)
-        self.assertEqual(row["建议"], recommend._action(row["综合分"]))
-        self.assertIn(row["建议"], ("技术面强", "技术面中性", "技术面弱"))
-        self.assertNotEqual(row["建议"], "回避")
+        self.assertEqual(row["技术面"], recommend._action(row["综合分"]))
+        self.assertIn(row["技术面"], ("技术面强", "技术面中性", "技术面弱"))
+        self.assertNotEqual(row["技术面"], "回避")
+        self.assertGreaterEqual(row["技术分位"], 0.0)
+        self.assertLessEqual(row["技术分位"], 100.0)
         self.assertEqual(row["理由"], "AI 看空")
 
 

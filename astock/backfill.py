@@ -8,7 +8,14 @@ import pandas as pd
 
 from .config import BASE_DIR
 from .events import stock_basic
-from .recommend import _pick_diverse, load_many, parse_universe, technical_score
+from .recommend import (
+    _action,
+    _pick_diverse,
+    assign_percentiles,
+    load_many,
+    parse_universe,
+    technical_score,
+)
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
 REC_DIR.mkdir(parents=True, exist_ok=True)
@@ -31,6 +38,7 @@ def backfill_technical(
     top_n: int = 5,
     universe_text: str = "",
     progress=None,
+    candidate_n: int = 15,
 ) -> tuple[int, str]:
     """用历史日线回填「技术分」推荐批次。
 
@@ -88,17 +96,15 @@ def backfill_technical(
             row["technical_score"] = round(0.45 * row["technical_score"] + 0.55 * rank, 1)
             row["event_score"] = 50.0
             row["composite"] = 0.65 * row["technical_score"] + 0.35 * 50.0
-            row["action"] = (
-                "技术面强"
-                if row["composite"] >= 68
-                else ("技术面中性" if row["composite"] >= 52 else "技术面弱")
-            )
+            row["action"] = _action(row["composite"])
             row["reason"] = (
                 f"技术分回填：{row.get('trend', '震荡')}；"
                 f"20日 {row['ret20']*100:+.1f}%；RSI {row['rsi']:.1f}；事件分固定 50。"
             )
-        rows.sort(key=lambda x: x["composite"], reverse=True)
-        selected = _pick_diverse(rows, top_n, max_per_industry=2)
+        # 与 live 同一基准：先截断到候选池（N=candidate_n），再在池内算分位。
+        pool = assign_percentiles(rows, candidate_n)
+        pool_n = len(pool)
+        selected = _pick_diverse(pool, top_n, max_per_industry=2)
         table = []
         for i, r in enumerate(selected, 1):
             table.append(
@@ -108,12 +114,13 @@ def backfill_technical(
                     "名称": r["name"],
                     "行业": r["industry"],
                     "综合分": round(r["composite"], 1),
+                    "技术分位": r["percentile"],
                     "技术分": round(r["technical_score"], 1),
                     "事件分": 50.0,
                     "收盘": r["close"],
                     "20日%": round(r["ret20"] * 100, 2),
                     "RSI": round(r["rsi"], 1),
-                    "建议": r["action"],
+                    "技术面": r["action"],
                     "理由": r["reason"],
                 }
             )
@@ -121,7 +128,18 @@ def backfill_technical(
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "as_of": key,
             "source": "backfill_technical",
-            "market": "技术分回填（事件分固定 50），不是完整实盘推荐，仅用于检验技术分排序。",
+            "market": (
+                "技术分回填（事件分固定 50），不是完整实盘推荐，仅用于检验技术分排序；"
+                f"分位基准=候选池（N={pool_n}）。"
+            ),
+            "params": {"candidate_n": int(candidate_n), "pool_size": pool_n},
+            "diagnostics": {
+                "candidate_n": pool_n,
+                "percentile_basis": "candidate_pool",
+                "candidate_pool": [
+                    {"code": r["code"], "composite": float(r["composite"])} for r in pool
+                ],
+            },
             "ai": {},
             "table": table,
             "evidence": {},

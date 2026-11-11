@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
+from astock.contracts import action_short
 from astock.data import load_daily as _load_daily
 from astock.indicators import add_all as _add_indicators
 from astock.ui import build_multiperiod_tab
@@ -144,7 +145,7 @@ def single(ts_code, view_mode="basic"):
         news_ctx, citations = "", []
     user_content = summary + (f"\n\n{news_ctx}" if news_ctx else "")
     ai = ds_chat([
-        {"role": "system", "content": "你是A股资深分析师，给操作建议；有参考资料时用[1][2]标注来源，不要编造。"},
+        {"role": "system", "content": "你是A股研究助手，只描述技术面强弱与数据事实，不给出买卖或操作建议；有参考资料时用[1][2]标注来源，不要编造。"},
         {"role": "user", "content": user_content},
     ])
     ai += _citation_block(citations)
@@ -265,7 +266,7 @@ def daily_report():
         L = df.iloc[-1]
         parts.append(f"{c}: 收{L.close:.2f} MA{L.ma5:.1f}/{L.ma20:.1f} RSI{L.rsi:.1f}")
     if not parts: return "⚠️ 无数据"
-    ai = ds_chat([{"role":"system","content":"你是A股投顾。"}, {"role":"user","content":f"今天{datetime.date.today()}\n"+"\n".join(parts)+"\n生成每日简报。"}])
+    ai = ds_chat([{"role":"system","content":"你是A股研究助手，只描述技术面强弱与数据事实，不给出买卖或操作建议。"}, {"role":"user","content":f"今天{datetime.date.today()}\n"+"\n".join(parts)+"\n生成每日研究简报：说明技术面强弱与关键数据，不给出买卖建议。"}])
     return f"# 📰 {datetime.date.today()}\n\n## 🤖 AI简报\n{ai}\n\n---\n*非投资建议*"
 
 # ====== 8. 策略选股（全指标）=====
@@ -335,11 +336,16 @@ def _latest_recommendation_context():
         rows = data.get("table", [])[:3]
         if not rows:
             return ""
-        lines = ["【最新每日推荐摘要】"]
+        diagnostics = data.get("diagnostics") or {}
+        params = data.get("params") or {}
+        pool_n = diagnostics.get("candidate_n") or params.get("candidate_n") or len(data.get("table", []))
+        lines = ["【最新研究批次摘要】"]
         for row in rows:
+            pct = row.get("技术分位")
+            pct_text = "" if pct in (None, "") else f" 候选池分位(N={pool_n}){pct}%"
             lines.append(
-                f"{row.get('代码')} {row.get('名称')} 综合{row.get('综合分')} "
-                f"建议{row.get('建议')}：{str(row.get('理由', ''))[:80]}"
+                f"{row.get('代码')} {row.get('名称')} 综合{row.get('综合分')}{pct_text} "
+                f"技术面：{action_short(row.get('技术面') or row.get('建议'))}｜{str(row.get('理由', ''))[:80]}"
             )
         return "\n".join(lines)
     except Exception:
@@ -356,7 +362,7 @@ def ai_chat(message, history, p_text):
     rec_ctx = _latest_recommendation_context()
 
     system = (
-        "你是A股投顾，回答要区分事实与推断。"
+        "你是A股研究助手，回答要区分事实与推断，只描述技术面强弱与研究结论，不给出买卖或操作建议。"
         "如果提供了参考资料，优先使用并用 [1][2] 标注来源；资料不足时明确说明，不要编造新闻、公告或研报。\n"
         f"上下文：{ctx}\n{rec_ctx}\n{news_ctx}"
     )

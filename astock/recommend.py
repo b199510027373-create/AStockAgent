@@ -17,7 +17,12 @@ import pandas as pd
 
 from . import llm
 from .config import BASE_DIR
-from .contracts import ContractError, validate_recommendation_run
+from .contracts import (
+    ContractError,
+    action_short,
+    normalize_action,
+    validate_recommendation_run,
+)
 from .data import enrich, last_completed_trade_date, load_daily, load_index_daily, load_trade_cal, next_open_date
 from .events import (
     evidence_for_stock,
@@ -36,6 +41,7 @@ from .utils import is_code, normalize_code
 REC_DIR = BASE_DIR / "data" / "recommendations"
 REC_DIR.mkdir(parents=True, exist_ok=True)
 SCHEMA_VERSION = 2
+MISSING_PERCENTILE = "—"
 _TLS = threading.local()
 
 
@@ -264,6 +270,69 @@ def _action(score: float) -> str:
     return "技术面弱"
 
 
+def percentile_basis(n: int) -> str:
+    """分位口径文案：分位一律在候选池内计算，展示时必须带上 N。"""
+    return f"候选池分位（N={int(n)}）" if n else "候选池分位"
+
+
+def assign_percentiles(rows: list[dict], candidate_n: int) -> list[dict]:
+    """按综合分取候选池并写入分位，返回候选池。
+
+    live 与 backfill 共用同一基准：候选池（N=min(candidate_n, len(rows))）内
+    rank(pct)，因此任意批次的分位都能按同一口径复算。
+    """
+    pool = sorted(rows, key=lambda r: r["composite"], reverse=True)[: max(1, int(candidate_n))]
+    for row, pct in zip(pool, pool_percentile([r["composite"] for r in pool])):
+        row["percentile"] = pct
+    return pool
+
+
+def pool_percentile(scores) -> list[float | None]:
+    """候选池内综合分分位（0-100，越大越靠前）；非有限值给 None。"""
+    values = [float(s) for s in scores]
+    ranked = pd.Series(values, dtype=float).rank(pct=True) * 100.0
+    return [
+        round(float(x), 1) if math.isfinite(v) and math.isfinite(x) else None
+        for v, x in zip(values, ranked)
+    ]
+
+
+def _display_percentile(value):
+    """池内分位展示值：数值原样保留，缺失/非有限值显示占位符。"""
+    if isinstance(value, bool) or value is None:
+        return MISSING_PERCENTILE
+    try:
+        return float(value) if math.isfinite(float(value)) else MISSING_PERCENTILE
+    except (TypeError, ValueError):
+        return MISSING_PERCENTILE
+
+
+def normalize_table(table) -> pd.DataFrame:
+    """统一推荐表列：旧批次的「建议」列映射为「技术面」，并补齐「技术分位」。"""
+    df = table.copy() if isinstance(table, pd.DataFrame) else pd.DataFrame(list(table or []))
+    if "建议" in df.columns:
+        df = df.rename(columns={"建议": "技术面"}) if "技术面" not in df.columns else df.drop(columns=["建议"])
+    if "技术面" not in df.columns:
+        if "综合分" in df.columns:
+            df["技术面"] = df["综合分"].map(
+                lambda s: _action(float(s)) if pd.notna(s) else ""
+            )
+        else:
+            df["技术面"] = ""
+    df["技术面"] = df["技术面"].map(normalize_action)
+    if "技术分位" not in df.columns:
+        df["技术分位"] = MISSING_PERCENTILE
+    else:
+        df["技术分位"] = df["技术分位"].map(_display_percentile)
+    preferred = [
+        "排名", "代码", "名称", "行业", "综合分", "技术分位", "技术分",
+        "事件分", "收盘", "20日%", "RSI", "技术面", "理由",
+    ]
+    if set(preferred) & set(df.columns):
+        df = df[[c for c in preferred if c in df.columns] + [c for c in df.columns if c not in preferred]]
+    return df
+
+
 def _fallback_reason(row: dict, evidence: list[dict]) -> tuple[str, list[str], list[str], str, float]:
     parts = [row.get("trend", "震荡")]
     if row.get("reasons"):
@@ -308,7 +377,8 @@ def _llm_rank(rows: list[dict], evidence_map: dict[str, list[dict]], market: str
     lines = [
         "你是A股研究员。只能使用下面提供的数据，不得编造新闻、价格或业绩。",
         "为每只候选给出 reason、catalysts、risks、evidence（引用的 E 编号）；"
-        "不要给出 action/建议——「建议」由规则按综合分决定，你只负责解释。",
+        "不要给出买卖建议或动作词——技术面强弱由规则按综合分给出（池内分位仅作横截面展示），"
+        "你只负责解释证据。",
         "输出严格 JSON：{\"market\":\"一句话市场判断\",\"items\":[{\"code\":\"600519.SH\",\"reason\":\"...\",\"catalysts\":[\"...\"],\"risks\":[\"...\"],\"evidence\":[\"E1\"]}],\"risk_note\":\"...\"}",
         "",
         f"市场背景：{market}",
@@ -391,6 +461,7 @@ def _report_markdown(
     ai: dict,
     as_of: str,
     tradable_from: str = "",
+    candidate_n: int = 0,
 ) -> str:
     ai_items = {str(x.get("code")): x for x in (ai.get("items") or []) if isinstance(x, dict)}
     lines = [
@@ -405,13 +476,20 @@ def _report_markdown(
     ]
     for i, row in enumerate(result_rows, 1):
         ai_row = ai_items.get(row["code"], {})
-        action = row.get("action") or _action(row["composite"])
+        action = normalize_action(row.get("action")) or _action(row["composite"])
+        pct = row.get("percentile")
+        pct_label = percentile_basis(candidate_n or len(result_rows))
+        pct_text = (
+            f"{pct_label}：{pct:.0f}%"
+            if isinstance(pct, (int, float)) and math.isfinite(pct)
+            else f"{pct_label}：—"
+        )
         reason = ai_row.get("reason") or row.get("reason", "")
         lines.append(
             f"### {i}. {row['code']} {row['name']} · 综合 {row['composite']:.1f}"
         )
         lines.append(
-            f"- **建议**：{action}；技术 {row['technical_score']:.1f} / 事件 {row['event_score']:.1f}；"
+            f"- **技术面**：{action_short(action)}；{pct_text}；技术 {row['technical_score']:.1f} / 事件 {row['event_score']:.1f}；"
             f"收盘 {row['close']}，20日 {row['ret20']*100:+.1f}%，RSI {row['rsi']:.1f}"
         )
         lines.append(f"- **逻辑**：{reason}")
@@ -510,12 +588,13 @@ def _save(
                 "名称": row["name"],
                 "行业": row["industry"],
                 "综合分": round(row["composite"], 1),
+                "技术分位": row.get("percentile"),
                 "技术分": round(row["technical_score"], 1),
                 "事件分": round(row["event_score"], 1),
                 "收盘": row["close"],
                 "20日%": round(row["ret20"] * 100, 2) if math.isfinite(row.get("ret20", np.nan)) else None,
                 "RSI": round(row["rsi"], 1) if math.isfinite(row.get("rsi", np.nan)) else None,
-                "建议": row.get("action", ""),
+                "技术面": normalize_action(row.get("action")) or _action(row["composite"]),
                 "理由": row.get("reason", ""),
             }
             for i, row in enumerate(result_rows, 1)
@@ -737,6 +816,8 @@ def generate_recommendation(
         row["confidence"] = confidence
 
     candidates.sort(key=lambda x: x["composite"], reverse=True)
+    # ADR-010 C1：分位基准 = 候选池（N=candidate_n），与 backfill 共用 assign_percentiles。
+    assign_percentiles(candidates, len(candidates))
     ai_rows = candidates[: min(8, len(candidates))]
 
     step(0.78, "生成市场背景与 AI 归因")
@@ -781,6 +862,13 @@ def generate_recommendation(
         "tradable_from": tradable_from,
         "stale_data": bool(stale_data),
         "industry_relaxed": len(final_rows) < top_n,
+        # 审计链：分位在候选池内计算，落盘只保留 final_rows，因此把池快照一并写入，
+        # 供「读回 JSON → 对 candidate_pool 复算 pool_percentile → 与 table 逐行相等」复现。
+        "candidate_n": len(candidates),
+        "candidate_pool": [
+            {"code": r["code"], "composite": float(r["composite"])} for r in candidates
+        ],
+        "percentile_basis": "candidate_pool",
     }
     step(0.92, "保存结果")
     params = {
@@ -803,7 +891,9 @@ def generate_recommendation(
         params=params,
         diagnostics=diagnostics,
     )
-    report = _report_markdown(final_rows, market, ai, data_as_of, tradable_from)
+    report = _report_markdown(
+        final_rows, market, ai, data_as_of, tradable_from, candidate_n=len(candidates)
+    )
     evidence_md = _evidence_markdown(final_rows, evidence_map)
 
     elapsed = time.time() - started
@@ -829,12 +919,13 @@ def generate_recommendation(
                     "名称": r["name"],
                     "行业": r["industry"],
                     "综合分": round(r["composite"], 1),
+                    "技术分位": r.get("percentile"),
                     "技术分": round(r["technical_score"], 1),
                     "事件分": round(r["event_score"], 1),
                     "收盘": r["close"],
                     "20日%": round(r["ret20"] * 100, 2) if math.isfinite(r.get("ret20", np.nan)) else None,
                     "RSI": round(r["rsi"], 1) if math.isfinite(r.get("rsi", np.nan)) else None,
-                    "建议": r["action"],
+                    "技术面": normalize_action(r.get("action")) or _action(r["composite"]),
                     "理由": r["reason"],
                 }
                 for i, r in enumerate(final_rows, 1)

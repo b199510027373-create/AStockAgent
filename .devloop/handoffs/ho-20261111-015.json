@@ -1,0 +1,94 @@
+{
+  "id": "ho-20261111-015",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-006",
+  "threadId": null,
+  "sessionId": "session-220c8f42-b3a7-4832-9fd9-c539d019a00c",
+  "title": "plan-20261103-006：PR #8 CI 通过（修复轮）",
+  "summary": "状态记录：修复轮（8884a60）与交付记录（a8ea168）已推送，PR #8 的 CI 重跑通过（run 42959291520，57s）。相对上一份交付 ho-20261111-014 无代码改动，仅补 CI 结果与交付状态（pr-open → ci-passed）。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "全站动作词研究语义化（AST 回归）",
+      "source": "acceptance#1"
+    },
+    {
+      "id": "R2",
+      "text": "推荐表同屏展示技术面强弱与候选池分位（N=candidate_n，live/backfill 同基准）",
+      "source": "acceptance#2"
+    },
+    {
+      "id": "R3",
+      "text": "AI 对话/简报提示词研究语义",
+      "source": "acceptance#3"
+    },
+    {
+      "id": "R4",
+      "text": "旧批次字段兼容映射",
+      "source": "acceptance#4"
+    },
+    {
+      "id": "R5",
+      "text": "横幅五状态各一句说明、同屏不重复「样本不足/未验证」",
+      "source": "acceptance#5（C2）"
+    },
+    {
+      "id": "R6",
+      "text": "全出口（推荐表/对话/简报/CSV）核查",
+      "source": "description"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261103-006.json",
+      "summary": "计划项 links.test 更新为本轮证据，状态 in_review",
+      "commit": "a8ea168"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261111-014.md",
+      "summary": "修复轮交付文档（C2、候选池分位、P2 与测试证据）",
+      "commit": "a8ea168"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 8",
+      "result": "CI 通过（GitHub Actions run 42959291520）",
+      "passed": true,
+      "evidence": "test\\tpass\\t57s"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write",
+      "reason": "修改仓库文件",
+      "status": "granted"
+    },
+    {
+      "name": "git push / PR 创建",
+      "reason": "用户指示按交付文档推进（m00592）",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze",
+    "commit": "a8ea168",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/8",
+    "ci": "passed — run 42959291520（57s），commit a8ea168",
+    "merge": "未合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261111-014",
+  "next": "PR #8 等待复审：rev-20261111-002 的两项 P1 与三项 P2 已修复（8884a60）且 CI 通过，复审通过后由评审/用户合并；合并后可做一次真实数据 smoke。",
+  "createdAt": "2026-11-11T04:28:14.462Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-015.md"
+}

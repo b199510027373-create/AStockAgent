@@ -61,7 +61,8 @@ class AlphaBannerStatsTests(unittest.TestCase):
         md = alpha_banner_markdown(banner)
         self.assertIn("实盘样本 **4** 个交易日", md)
         self.assertIn("独立窗口≈**1**", md)
-        self.assertIn("样本不足，不显示显著性", md)
+        self.assertIn("有效独立样本 < 10，暂不显示显著性结论", md)
+        self.assertEqual(md.count("样本不足"), 1)
         # 无可信统计时不得出现任何 p 值
         self.assertNotIn("p=", md)
         self.assertIn("#f1f3f5", md)
@@ -190,6 +191,48 @@ class AlphaBannerStatsTests(unittest.TestCase):
         ):
             with self.assertRaises(sqlite3.OperationalError):
                 alpha_banner_snapshot()
+
+
+class BannerCaveatDedupTests(unittest.TestCase):
+    """ADR-010 C2：横幅五状态各一句说明，静态提示不再复述「样本不足/未验证」。"""
+
+    DETAILS = {
+        "insufficient": "有效独立样本 < 10，暂不显示显著性结论",
+        "unavailable": "p 值暂不可计算",
+        "no_alpha": "差异不显著",
+        "positive": "历史样本内暂优于其余",
+        "negative": "显著弱于其余",
+    }
+
+    def _banner(self, state: str) -> AlphaBanner:
+        p_value = None if state in {"insufficient", "unavailable"} else 0.01
+        return AlphaBanner(
+            state=state,
+            horizon=5,
+            live_days=20,
+            independent_windows=6,
+            effective_n=12.0,
+            p_value=p_value,
+            top2_mean=1.2,
+            rest_mean=0.3,
+        )
+
+    def test_static_note_does_not_repeat_the_banner_caveat(self):
+        from astock import recommend_ui
+
+        for word in ("样本不足", "未验证"):
+            self.assertNotIn(word, recommend_ui.RESEARCH_NOTE)
+
+    def test_each_state_has_one_explanation_on_screen(self):
+        from astock import recommend_ui
+
+        for state, detail in self.DETAILS.items():
+            md = alpha_banner_markdown(self._banner(state))
+            self.assertIn(detail, md)
+            screen = recommend_ui.RESEARCH_NOTE + md
+            # 同一屏幕最多一处「样本不足」、一处「未验证」。
+            self.assertLessEqual(screen.count("样本不足"), 1)
+            self.assertLessEqual(screen.count("未验证"), 1)
 
 
 class RecommendTabBannerTests(unittest.TestCase):

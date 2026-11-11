@@ -6,6 +6,16 @@ from .use_cases import RunResult, run_alpha_banner, run_recommendation
 
 NEWS_CHOICES = {"3日": 3, "7日": 7, "30日": 30}
 
+# ADR-010 C2：静态提示不再复述横幅的样本不足结论，避免同屏出现两处「未验证」表述。
+RESEARCH_NOTE = (
+    "> ⚠️ **研究候选，不是交易指令。** 上方横幅实时展示实盘样本与显著性，"
+    "请结合仓位、流动性和自身风险承受能力复核。\n\n"
+    "技术面（日线趋势/动量/量能/波动）+ 事件面（公告/研报/新闻/政策库）综合打分，"
+    "再用 DeepSeek 做归因表述。**AI 不改变量化排序，不构成投资建议。**\n\n"
+    "> 应用运行时，每个交易日 16:40 自动生成一次（`ASTOCK_AUTO_RECOMMEND=0` 可关闭；"
+    "也可单独运行 `start_scheduler.bat`）。"
+)
+
 
 def _outputs(result: RunResult):
     """页面只做结果映射，不再拼装 payload 或计算统计。"""
@@ -52,15 +62,7 @@ def load_latest_ledger():
 def build_recommend_tab() -> gr.Markdown:
     with gr.Tab("📰 每日推荐"):
         banner = gr.Markdown(value=banner_markdown(), elem_id="alpha-banner")
-        gr.Markdown(
-            "### 每日股票推荐\n"
-            "> ⚠️ **研究候选，不是交易指令。** 上方横幅实时展示实盘样本与显著性；"
-            "若显示「样本不足」，说明还不能下结论。请结合仓位、流动性和自身风险承受能力复核。\n\n"
-            "技术面（日线趋势/动量/量能/波动）+ 事件面（公告/研报/新闻/政策库）综合打分，"
-            "再用 DeepSeek 做归因表述。**AI 不改变量化排序，不构成投资建议。**\n\n"
-            "> 应用运行时，每个交易日 16:40 自动生成一次（`ASTOCK_AUTO_RECOMMEND=0` 可关闭；"
-            "也可单独运行 `start_scheduler.bat`）。"
-        )
+        gr.Markdown("### 每日股票推荐\n" + RESEARCH_NOTE)
         with gr.Row():
             universe = gr.Textbox(
                 label="股票池（逗号分隔，留空用 stocks.csv）",

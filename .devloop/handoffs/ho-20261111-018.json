@@ -1,0 +1,117 @@
+{
+  "id": "ho-20261111-018",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "第 2 轮修复已推送，PR #8 CI 通过",
+  "summary": "第 2 轮评审修复已推送并提交 PR #8：commit 3cad679（代码/文档/ADR/测试）+ 9741d29（plan/handoff/calendar）。CI 工作流 test 在 9741d29 上通过（run 42961637599，59s），PR #8 OPEN 且 MERGEABLE。plan-20261103-006 状态 in_review，progress 90，links.test 已更新（全量 296 passed / 1 skipped、目标 21 passed、ruff、mypy）。",
+  "requirements": [],
+  "changes": [
+    {
+      "path": "astock/recommend.py",
+      "summary": "diagnostics 落盘 candidate_n / candidate_pool / percentile_basis",
+      "commit": "3cad679"
+    },
+    {
+      "path": "astock/backfill.py",
+      "summary": "N=len(pool)，payload 带池快照与 params",
+      "commit": "3cad679"
+    },
+    {
+      "path": "astock/use_cases.py",
+      "summary": "status_text 追加分位基准（N）；注释 C1",
+      "commit": "3cad679"
+    },
+    {
+      "path": "app.py",
+      "summary": "最新摘要展示候选池分位(N=…)",
+      "commit": "3cad679"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§6.4 快照复算、恢复 §7 标题",
+      "commit": "3cad679"
+    },
+    {
+      "path": "tests/test_research_semantics.py",
+      "summary": "落盘复算与池不足 N 测试",
+      "commit": "3cad679"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-006.json",
+      "summary": "五状态验收与 links.test",
+      "commit": "9741d29"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261111-017.json",
+      "summary": "本轮交付文档",
+      "commit": "9741d29"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests -q -p no:cacheprovider -p tempfix",
+      "result": "296 passed",
+      "passed": true,
+      "evidence": "296 passed, 1 skipped（16.44s）；沙箱 tempdir 限制用临时插件，未提交"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_research_semantics.py -q",
+      "result": "21 passed",
+      "passed": true,
+      "evidence": "21 passed（9.94s）"
+    },
+    {
+      "command": "ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "pass",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "pass",
+      "passed": true,
+      "evidence": "Success: no issues found in 31 source files"
+    },
+    {
+      "command": "gh pr checks 8",
+      "result": "CI passed",
+      "passed": true,
+      "evidence": "test pass 59s, run 42961637599; PR #8 OPEN/MERGEABLE head 9741d29"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push / PR 更新",
+      "reason": "本会话已推送 3cad679..9741d29 并更新 PR #8",
+      "status": "granted"
+    },
+    {
+      "name": "合并 PR",
+      "reason": "合并由评审/用户执行；openP1 未关闭前不得合并",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze",
+    "commit": "9741d29",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/8",
+    "ci": "passed（run 42961637599, 59s）",
+    "merge": "未合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261111-017",
+  "next": "等待评审第 3 轮 full 复核（重点：落盘 candidate_pool 复算、N 披露、docs §7、C2 归属）。评审通过后由评审/用户合并；合并后可做真实数据 smoke（推荐 Tab / 简报）。",
+  "createdAt": "2026-11-11T04:50:36.359Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-018.md"
+}
