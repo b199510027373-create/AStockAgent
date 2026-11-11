@@ -82,4 +82,4 @@ ChartSpec v1 在 `docs/AStockAgent_interface_freeze_v1.md` §3 **逐字冻结**�
 - `astock/charts.py`（K 线/区间图已存在）、`astock/indicators.py`（指标唯一实现）
 - `astock/stats.py` / `factors.py`（统计量来源）、`astock/backtest.py`（净值/回撤）
 - 用户 2026-11-07 消息
-- 冻结规格：`docs/AStockAgent_interface_freeze_v1.md` §3；承接项 plan-20261110-005
+- 冻结规格：`docs/AStockAgent_interface_freeze_v1.md` §3；承接项 plan-20261107-005

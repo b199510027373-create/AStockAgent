@@ -104,12 +104,20 @@
 | ADR-010 | 研究语义与「无 alpha」 | proposed | accepted-with-conditions | C1/C2 | plan-20261103-006 |
 | ADR-013 | Agent 运行时 | proposed | accepted | — | — |
 | ADR-014 | 模型网关 | proposed | accepted | — | — |
-| ADR-015 | 文件导入与检索 | proposed | accepted-with-conditions | C1/C2/C3 | plan-20261110-004 |
-| ADR-016 | 图表 ChartSpec | proposed | accepted | — | plan-20261110-005 |
-| ADR-017 | 审计与安全边界 | proposed | accepted-with-conditions | C1/C2/C3 | plan-20261110-006 |
-| ADR-018 | 实时口径 | proposed | accepted-with-conditions | C1/C2 | plan-20261110-007 |
+| ADR-015 | 文件导入与检索 | proposed | accepted-with-conditions | C1/C2/C3 | plan-20261107-003 |
+| ADR-016 | 图表 ChartSpec | proposed | accepted | — | plan-20261107-005 |
+| ADR-017 | 审计与安全边界 | proposed | accepted-with-conditions | C1/C2/C3 | plan-20261107-008 |
+| ADR-018 | 实时口径 | proposed | accepted-with-conditions | C1/C2 | plan-20261107-006 |
 
 无 `deferred` 条目；没有阻塞性接口问题，003（ledger）与 005（时间语义）可按原计划于 11-15 开工。
+
+### 7. 排期合并记录（2026-11-11）
+
+条件承接项原为 2026-11-10 新建的 `plan-20261110-004~007`，与既有 `plan-20261107-003/004/005/006/008`
+指向同一模块（文件导入、图表、审计表、行情工具）。2026-11-11 决定取消前者，验收条目并入后者：
+`004 → 003（布局/抽取）+ 004（FTS5 检索）`、`005 → 005（ChartSpec v1）`、
+`006 → 008（审计三表，起始日 11-29 提前到 11-18）`、`007 → 006（行情/指标工具时点口径）`。
+上表「承接项」列已按合并后的计划项更新，**ADR 条件编号与内容不变**，只换承接载体。
 
 ## 证据
 

@@ -59,14 +59,14 @@
 
 ## 条件
 
-以下条件不阻塞 003/005（SQLite ledger / 时间语义）开工，但必须在 plan-20261110-004 内完成：
+以下条件不阻塞 003/005（SQLite ledger / 时间语义）开工，但必须在 plan-20261107-003 内完成：
 
 - **C1 布局与索引逐字一致**：`files.py` 必须按冻结布局落盘（四件产物齐全），`meta.json` 13 个必填字段
   一个不缺，FTS5 建表语句与 `docs/AStockAgent_interface_freeze_v1.md` §4 字符级一致，检索结果能回溯到
   `file_id + page + block`。验收：`tests/test_agent_files.py::test_layout_matches_frozen_spec`。
 - **C2 依赖与限额集中管理**：`pdfplumber` / `python-docx` / `duckdb` 写进 `requirements.txt` 并给版本下限；
   20 MiB / 5 文件 / 200 页三个常量定义在 `files.py` 顶部，由工具层复用而不是各自硬编码；
-  OCR/加密/宏/超限一律返回 `status` + `warnings`，不得抛未捕获异常。承接 plan-20261110-004。
+  OCR/加密/宏/超限一律返回 `status` + `warnings`，不得抛未捕获异常。承接 plan-20261107-003。
 - **C3 抽取质量自检与降级可见**：解析后必须自检（页数 vs 文本块数、`text_chars`、表行列是否为空、
   空文本比例），异常时写 `meta.status = suspected_scan|empty_text|encrypted|unsupported` 并在 `warnings`
   给出可读提示；**禁止静默返回空文档**。验收：`tests/test_agent_files.py::test_scan_like_pdf_is_flagged`。

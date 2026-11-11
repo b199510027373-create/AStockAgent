@@ -8,26 +8,37 @@
   "owner": "human",
   "start": "2026-11-15",
   "due": "2026-11-22",
-  "estimateH": 14,
+  "estimateH": 20,
   "progress": 0,
   "acceptance": [
     "ChartSpec 支持 candlestick/line/bar/scatter/heatmap/histogram",
     "非法 spec 返回结构化错误（字段 + 原因），可回传模型重试",
     "spec → Plotly HTML artifact，带 data_as_of/params/spec 元数据",
     "K 线支持 MA/BOLL/成交量；口径复用 data/indicators",
-    "图与数据快照可被回答引用（artifact_id）"
+    "图与数据快照可被回答引用（artifact_id）",
+    "（ADR-016 C1，并入自 plan-20261110-005）ChartSpec v1 字段/枚举与《接口冻结清单》§3 逐字一致：`version`/`kind`/`data`/`encode`/`transforms`/`panes`/`style`/`annotations`；未知字段、非白名单 transform op 一律报错，不静默忽略",
+    "（ADR-016 C1）渲染只接受声明式 spec，禁止 exec/eval 任意 Python；交给模型的 schema 就是字段与枚举白名单",
+    "（ADR-016 C2 + ADR-008）K 线默认 qfq；涨跌停/成交异常标的可切 raw，并在图注注明价格口径",
+    "（ADR-016 C3）每次渲染写 agent_artifacts 记录 {spec, params, data_as_of, data_time, source, code_version}，可凭 artifact_id 原样复现",
+    "（ADR-016）图与表同屏展示 data_as_of 与 data_time；无 kaleido 时降级为 HTML artifact 并在 ToolResult.metadata 标注 degraded"
   ],
   "tags": [
     "agent",
     "chart",
     "plotly"
   ],
-  "deps": [],
+  "deps": [
+    "plan-20261110-003"
+  ],
   "links": {
     "adr": [
-      "ADR-016"
+      "ADR-016",
+      "ADR-008"
+    ],
+    "mergedFrom": [
+      "plan-20261110-005"
     ]
   },
   "createdAt": "2026-11-07T14:12:07.117Z",
-  "updatedAt": "2026-11-07T14:13:12.184Z"
+  "updatedAt": "2026-11-10T08:34:48.517Z"
 }

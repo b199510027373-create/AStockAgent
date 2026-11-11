@@ -30,13 +30,26 @@
 | ADR-010 | 研究语义与「无 alpha」 | proposed | **accepted-with-conditions** | 2 | plan-20261103-006 |
 | ADR-013 | Agent 运行时 | proposed | **accepted** | 0 | — |
 | ADR-014 | 模型网关 | proposed | **accepted** | 0（流式转二期） | — |
-| ADR-015 | 文件导入与检索 | proposed | **accepted-with-conditions** | 3 | plan-20261110-004 |
-| ADR-016 | 图表 ChartSpec | proposed | **accepted** | 0（任意 Python 转二期） | plan-20261110-005 |
-| ADR-017 | 审计与安全边界 | proposed | **accepted-with-conditions** | 3 | plan-20261110-006 |
-| ADR-018 | 实时口径 | proposed | **accepted-with-conditions** | 2 | plan-20261110-007 |
+| ADR-015 | 文件导入与检索 | proposed | **accepted-with-conditions** | 3 | plan-20261107-003 |
+| ADR-016 | 图表 ChartSpec | proposed | **accepted** | 0（任意 Python 转二期） | plan-20261107-005 |
+| ADR-017 | 审计与安全边界 | proposed | **accepted-with-conditions** | 3 | plan-20261107-008 |
+| ADR-018 | 实时口径 | proposed | **accepted-with-conditions** | 2 | plan-20261107-006 |
 
 **无 deferred**：没有发现阻塞性接口问题，003（SQLite ledger）与 005（时间语义）可以在 11-15 照常开工。
 判定依据：015/016/017/018 的接口草案在字段级可以确定，剩余问题都是「实现补齐」而非「设计未定」。
+
+**2026-11-11 排期调整（承接项合并）**：上表「承接计划项」原为 2026-11-10 新建的
+`plan-20261110-004~007`，与既有 `plan-20261107-003/004/005/006/008` 指向同一模块（文件导入、图表、
+审计表、行情工具）。为避免同一模块并行两条计划线，已取消 `plan-20261110-004~007`，其验收条目并入：
+
+| 原承接项 | 并入目标 | 理由 |
+| --- | --- | --- |
+| plan-20261110-004（files.py 布局 + FTS5） | plan-20261107-003（解析）+ plan-20261107-004（检索） | 布局与抽取同批落地，FTS5 属检索 |
+| plan-20261110-005（ChartSpec v1） | plan-20261107-005（图表 spec 与渲染管线） | 同一交付物的规格与实现 |
+| plan-20261110-006（agent_* 三表） | plan-20261107-008（审计表与安全限额） | 三表即审计表，且起始日提前到 11-18 |
+| plan-20261110-007（data_time 生产者） | plan-20261107-006（行情/指标工具） | data_time 由行情工具产出 |
+
+合并后 ADR-017 的条件最早 11-18 开工（原 11-29），仍在「冻结后 2 周内实现」的窗口内。
 
 ### 0.3 为什么这次只给 conditions 不给 deferred
 
@@ -135,7 +148,7 @@ class ChatModel(Protocol):
 
 ## 3. 冻结接口三：`ChartSpec` v1
 
-代码锚点：待建 `astock/agent/chart_spec.py`（plan-20261110-005）。状态：**冻结草案，未实现**。
+代码锚点：待建 `astock/agent/chart_spec.py`（plan-20261107-005）。状态：**冻结草案，未实现**。
 
 ### 3.1 字段表（`additionalProperties: false`，未知键直接拒绝）
 
@@ -191,7 +204,7 @@ hline     {y: number, label?: str ≤ 60}   vline {x: str|number, label?}   text
 
 ## 4. 冻结接口四：文件存储布局 v1
 
-代码锚点：待建 `astock/agent/files.py`（plan-20261110-004）。状态：**冻结草案，未实现**。
+代码锚点：待建 `astock/agent/files.py`（plan-20261107-003）。状态：**冻结草案，未实现**。
 
 ```text
 data/agent/files/<sha256>/            # sha256 为原文 64 位小写十六进制；内容寻址，不可变
@@ -247,7 +260,7 @@ GC 只删目录与索引行，不删 `agent_steps`/`agent_artifacts`。
 
 ## 5. 冻结接口五：`agent_*` 三表
 
-代码锚点：待建 `astock/agent/store.py`（plan-20261110-006）。状态：**冻结草案，未实现**。
+代码锚点：待建 `astock/agent/store.py`（plan-20261107-008）。状态：**冻结草案，未实现**。
 同库 `data/astock.db`，与既有五表（runs/items/evidence/jobs/tracking）共存；建表幂等。
 
 ```sql
@@ -311,7 +324,7 @@ artifact 路径与去重：`data/agent/artifacts/<digest[:2]>/<digest>/<filename
 ## 6. 冻结接口六：`data_as_of` / `data_time`
 
 代码锚点：`astock/agent/types.py:90-91`（已实现字段）、`astock/data.py`（缺生产者）。
-状态：**字段已实现；生产者冻结，待 plan-20261110-007 落地**。
+状态：**字段已实现；生产者冻结，待 plan-20261107-006 落地**。
 
 ### 6.1 语义
 

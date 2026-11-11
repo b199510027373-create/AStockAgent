@@ -1,8 +1,8 @@
 {
   "id": "plan-20261110-005",
   "title": "ADR-016 图表：ChartSpec v1 校验与渲染（不执行任意 Python）",
-  "description": "依据 ADR-016（2026-11-11 预评审裁决 accepted）与《接口冻结清单》§3「ChartSpec v1」。实现 astock/agent/chart_spec.py（手写 schema 校验，字段/枚举/长度白名单）与 chart_render.py（spec → Plotly Figure → 自包含 HTML artifact；PNG 走可选 kaleido）。transforms 只支持 filter/groupby/agg/sort/limit 白名单；越界返回结构化错误给 Agent 重试。任意 Python 执行与代码沙箱为二期非目标。",
-  "status": "todo",
+  "description": "依据 ADR-016（2026-11-11 预评审裁决 accepted）与《接口冻结清单》§3「ChartSpec v1」。实现 astock/agent/chart_spec.py（手写 schema 校验，字段/枚举/长度白名单）与 chart_render.py（spec → Plotly Figure → 自包含 HTML artifact；PNG 走可选 kaleido）。transforms 只支持 filter/groupby/agg/sort/limit 白名单；越界返回结构化错误给 Agent 重试。任意 Python 执行与代码沙箱为二期非目标。\n\n【2026-11-11 合并】本项不单独执行：验收条目已并入 plan-20261107-005（ChartSpec v1 与渲染管线）（同一模块，避免两条计划线）。原始验收条目保留在本项历史中可追溯。",
+  "status": "cancelled",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",

@@ -70,7 +70,7 @@ Agent 会读用户文件、查行情、画图、调用多个工具。一旦没�
 
 ## 条件
 
-以下条件不阻塞 003（ledger）开工，但必须在 plan-20261110-006 内完成：
+以下条件不阻塞 003（ledger）开工，但必须在 plan-20261107-008 内完成：
 
 - **C1 三表按冻结 DDL 落地**：列名、类型、CHECK 约束、索引、外键与
   `docs/AStockAgent_interface_freeze_v1.md` §5 一致；建表幂等（`CREATE TABLE IF NOT EXISTS`），
@@ -93,4 +93,4 @@ Agent 会读用户文件、查行情、画图、调用多个工具。一旦没�
 - `astock/agent/registry.py:66-75`（`Permission` 七标签）、`registry.py:260-305`（`ToolSpec`）
 - `astock/ledger.py`（现有五表，无 `agent_*`）
 - ADR-009（LLM 边界）、ADR-015（文件约束）、ADR-016（图表产物）
-- 冻结 DDL：`docs/AStockAgent_interface_freeze_v1.md` §5；承接项 plan-20261110-006
+- 冻结 DDL：`docs/AStockAgent_interface_freeze_v1.md` §5；承接项 plan-20261107-008

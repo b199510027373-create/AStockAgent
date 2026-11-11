@@ -1,8 +1,8 @@
 {
   "id": "plan-20261110-006",
   "title": "ADR-017 审计：agent_* 三表与 artifact 内容寻址、留存/GC",
-  "description": "依据 ADR-017（2026-11-11 预评审裁决 accepted-with-conditions）与《接口冻结清单》§5「agent_* 三表」。实现 astock/agent/store.py：三表建表与写入、artifact 内容寻址（data/agent/artifacts/<digest>/）、留存/GC。实现回写要点：工具权限已由 registry.Permission 定为七个资源级标签（无 read/compute/write 三级），ADR-017 §4 按实现改写；ADR 原 DDL 缺 hash 列与索引，冻结 DDL 补齐 digest 与索引。",
-  "status": "todo",
+  "description": "依据 ADR-017（2026-11-11 预评审裁决 accepted-with-conditions）与《接口冻结清单》§5「agent_* 三表」。实现 astock/agent/store.py：三表建表与写入、artifact 内容寻址（data/agent/artifacts/<digest>/）、留存/GC。实现回写要点：工具权限已由 registry.Permission 定为七个资源级标签（无 read/compute/write 三级），ADR-017 §4 按实现改写；ADR 原 DDL 缺 hash 列与索引，冻结 DDL 补齐 digest 与索引。\n\n【2026-11-11 合并】本项不单独执行：验收条目已并入 plan-20261107-008（审计三表与安全限额）（同一模块，避免两条计划线）。原始验收条目保留在本项历史中可追溯。",
+  "status": "cancelled",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",

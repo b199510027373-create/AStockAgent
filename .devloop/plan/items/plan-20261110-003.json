@@ -9,7 +9,7 @@
   "start": "2026-11-11",
   "due": "2026-11-12",
   "estimateH": 6,
-  "progress": 95,
+  "progress": 100,
   "acceptance": [
     "8 条 proposed ADR（002/010/013–018）全部给出结论：accepted / accepted-with-conditions / deferred，工作台不再出现「已实现但仍是 proposed」",
     "001/002 实现与 ADR-013/014 的偏差写回 ADR「实现回写」章节，不重写已通过评审的代码",
@@ -41,20 +41,23 @@
       "ADR-017",
       "ADR-018"
     ],
-    "module": "architecture",
     "branch": "feat/adr-gate-freeze",
+    "ci": "GitHub Actions CI run 42950484195 on PR #7 head 06af067 -> success (1m3s, job test)",
     "doc": [
       "docs/AStockAgent_interface_freeze_v1.md",
       "docs/AStockAgent_contract_rule_map_v1.md"
     ],
+    "module": "architecture",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/7",
     "test": [
-      "目标：.venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q → 20 passed, 1 skipped (跳过项为 astock/agent/tools 未实现，plan-20261110-004/005)",
-      "全量：.venv\\Scripts\\python.exe -m pytest tests -q → 259 passed, 1 skipped, 2 subtests passed in 13.72s",
+      "目标：.venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q → 21 passed, 1 skipped (跳过项为 astock/agent/tools 未实现，plan-20261110-004/005)",
+      "全量：.venv\\Scripts\\python.exe -m pytest tests -q → 260 passed, 1 skipped, 2 subtests passed in 13.79s",
       "类型：.venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py → Success: no issues found in 32 source files",
-      "静态：.venv\\Scripts\\python.exe -m ruff check astock tests/test_architecture_gate.py --select E9,F63,F7,F82 → All checks passed!"
+      "静态：.venv\\Scripts\\python.exe -m ruff check astock tests/test_architecture_gate.py --select E9,F63,F7,F82 → All checks passed!",
+      "远端：PR #7 CI run 42950484195 → success"
     ]
   },
   "createdAt": "2026-11-10T08:34:43.436Z",
-  "updatedAt": "2026-11-10T08:49:34.547Z",
+  "updatedAt": "2026-11-11T03:08:07.535Z",
   "devSessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7"
 }

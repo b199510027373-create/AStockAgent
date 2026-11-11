@@ -314,7 +314,7 @@ def test_data_time_gap_is_declared() -> None:
     index = {entry["id"]: entry for entry in _adr_index()}
     adr18 = _read(ARCH / index["ADR-018"]["file"])
     assert "唯一生产者" in adr18
-    assert "plan-20261110-007" in adr18
+    assert "plan-20261107-006" in adr18
 
 
 # ---------------------------------------------------------------- 依赖方向 / 供应商隔离
@@ -348,7 +348,7 @@ def test_agent_tools_dir_has_no_shell_or_http_capability() -> None:
     """AGENT-01：v1 工具层不得出现 shell / 任意 HTTP / 删文件能力（目录尚未实现时自动跳过）。"""
     tools_dir = ROOT / "astock" / "agent" / "tools"
     if not tools_dir.exists():
-        pytest.skip("astock/agent/tools 尚未实现（plan-20261110-004/005）")
+        pytest.skip("astock/agent/tools 尚未实现（plan-20261107-003/005）")
     forbidden = {"subprocess", "os", "shutil", "requests", "httpx", "urllib", "socket"}
     offenders: list[str] = []
     for path in tools_dir.rglob("*.py"):

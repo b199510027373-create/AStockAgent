@@ -16,7 +16,7 @@
 | `review` | 8 | 8（含 4 条已部分自动化） | 0 | 0 |
 | 合计 | 18 | 16 | 2 | 0 |
 
-「部分覆盖」不是免责：AGENT-02/AGENT-04 的缺口已挂到 plan-20261110-006 / -005 / -007，
+「部分覆盖」不是免责：AGENT-02/AGENT-04 的缺口已挂到 plan-20261107-008 / -005 / -006，
 这些计划项的验收标准里含「必须新增对应测试」，未补测试不得标 done。
 
 ## 2. 逐条落点
@@ -36,9 +36,9 @@
 | PIT-01 SW2014/SW2021 切换 | test | `tests/test_data_pit_events.py::test_snapshot_inserts_switch_date`、`tests/test_hardening.py::test_sw_industry_asof` | 已覆盖 |
 | CACHE-01 base_factor 失效 + 原子写 | test | `tests/test_data_pit_events.py::test_load_daily_disk_cache_avoids_second_fetch`、`tests/test_data_pit_events.py::test_load_adj_factors_cache_and_empty_error`、`tests/test_quant.py::test_minute_qfq_uses_latest_factor_as_base` | 已覆盖 |
 | AGENT-01 白名单工具、禁 shell/HTTP/删文件/写推荐 | review | RC-05；已部分自动化：`tests/test_agent_runtime.py::test_allowed_permissions_enforced` | 已覆盖 |
-| AGENT-02 工具调用落 agent_steps | test | 现阶段：`tests/test_agent_runtime.py::test_long_table_is_trimmed_and_archived`、`tests/test_agent_runtime.py::test_artifact_writer_failure_still_returns_trimmed_table`；缺三表落库测试，挂 plan-20261110-006 | 部分覆盖 |
+| AGENT-02 工具调用落 agent_steps | test | 现阶段：`tests/test_agent_runtime.py::test_long_table_is_trimmed_and_archived`、`tests/test_agent_runtime.py::test_artifact_writer_failure_still_returns_trimmed_table`；缺三表落库测试，挂 plan-20261107-008 | 部分覆盖 |
 | AGENT-03 Agent 对推荐/跟踪只读 | review | RC-06；已部分自动化：`tests/test_agent_runtime.py::test_permissions_and_schema_exposed` | 已覆盖 |
-| AGENT-04 引用与时点强制 | test | 现阶段：`tests/test_agent_runtime.py::test_tool_result_trim_and_signature`（字段透传）；工具级必填校验待 plan-20261110-005 / -007 补测试 | 部分覆盖 |
+| AGENT-04 引用与时点强制 | test | 现阶段：`tests/test_agent_runtime.py::test_tool_result_trim_and_signature`（字段透传）；工具级必填校验待 plan-20261107-005 / -006 补测试 | 部分覆盖 |
 | AGENT-05 文件内容视为不可信数据 | review | RC-07；已部分自动化：`tests/test_agent_runtime.py::test_system_prompt_marks_tool_content_untrusted` | 已覆盖 |
 | AGENT-06 不直接 import 供应商 SDK | review | RC-08；已自动化：`tests/test_architecture_gate.py::test_no_vendor_sdk_import_outside_gateway` | 已覆盖 |
 
@@ -99,8 +99,8 @@
 
 | 规则 | 缺什么 | 承接项 | 承诺的测试 |
 | --- | --- | --- | --- |
-| AGENT-02 | 三表落库、artifact digest 去重 | plan-20261110-006 | `tests/test_agent_store.py::test_tool_call_writes_step_row`、`tests/test_agent_store.py::test_artifact_digest_dedupes` |
-| AGENT-04 | 行情工具的 `data_as_of`/`data_time` 必填校验、文件结论 `source` 必填校验 | plan-20261110-005、plan-20261110-007 | `tests/test_agent_tools.py::test_market_result_requires_both_timestamps`、`tests/test_agent_tools.py::test_file_result_requires_source` |
+| AGENT-02 | 三表落库、artifact digest 去重 | plan-20261107-008 | `tests/test_agent_store.py::test_tool_call_writes_step_row`、`tests/test_agent_store.py::test_artifact_digest_dedupes` |
+| AGENT-04 | 行情工具的 `data_as_of`/`data_time` 必填校验、文件结论 `source` 必填校验 | plan-20261107-005、plan-20261107-006 | `tests/test_agent_tools.py::test_market_result_requires_both_timestamps`、`tests/test_agent_tools.py::test_file_result_requires_source` |
 | 全量 | 规则与落点漂移 | 本任务 | `tests/test_architecture_gate.py::test_rule_map_covers_all_contract_rules` |
 
 ## 5. 维护规则

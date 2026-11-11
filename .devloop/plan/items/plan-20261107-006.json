@@ -8,14 +8,20 @@
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-29",
-  "estimateH": 12,
+  "estimateH": 20,
   "progress": 0,
   "acceptance": [
     "工具：quote / kline / indicator 可被 Agent 调用",
     "交易时段返回带 data_time 的最新分钟 K 线",
     "非交易时段明确标注「最近交易日收盘」，不伪造实时",
     "rt_min 延迟/失败时标记 delayed 并回退，图上有提示",
-    "指标值与 astock.indicators 对同一序列的计算一致"
+    "指标值与 astock.indicators 对同一序列的计算一致",
+    "（ADR-018 C1，并入自 plan-20261110-007）`data.py` 提供唯一 bar 时点生产者 `latest_bar_time(df, freq)`；行情工具的 data_time 只由它生成，禁止各处自行拼时间字符串",
+    "（ADR-018 C2）行情/指标工具返回值必须同时带 data_as_of（YYYY-MM-DD）与 data_time（YYYY-MM-DD HH:MM），缺一即按契约失败处理",
+    "（ADR-018）非交易时段返回最近收盘 bar，data_time 取最后一根 bar 时间并在 metadata 标 `freshness=eod`，不得把昨日收盘当实时",
+    "（ADR-018）rt_min 失败或超 2s 未返回时降级并标注 `freshness=delayed`，退回 stk_mins/日线",
+    "（ADR-018）停牌/无成交标的显式标注；指标在复权价上计算，MA 类前向填充但 metadata 记 ffill 段",
+    "（ADR-018 非目标）tick/Level-2 属 v1 非目标，接口不得预留伪实时字段"
   ],
   "tags": [
     "agent",
@@ -30,6 +36,9 @@
     "adr": [
       "ADR-016",
       "ADR-018"
+    ],
+    "mergedFrom": [
+      "plan-20261110-007"
     ]
   },
   "createdAt": "2026-11-07T14:12:10.292Z",

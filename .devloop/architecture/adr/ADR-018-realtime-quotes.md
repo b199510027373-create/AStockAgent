@@ -65,7 +65,7 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
 
 ## 条件
 
-以下条件不阻塞 003/005 开工，但必须在 plan-20261110-007 内完成：
+以下条件不阻塞 003/005 开工，但必须在 plan-20261107-006 内完成：
 
 - **C1 唯一生产者落地**：`latest_bar_time` 按冻结签名实现并成为唯一入口，所有工具与渲染器不得自行格式化时点；
   行情/图表 `ToolResult` 两个字段必须非空（`error` 除外）。验收：
