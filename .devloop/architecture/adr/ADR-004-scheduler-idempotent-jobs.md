@@ -25,7 +25,7 @@
 7. 状态机：`pending → running → success/stale/failed`；失败保留 `attempts` 与错误文本。
 8. `jobs` 表是调度状态唯一权威：每次尝试先写 `running`（含 `attempts`、`started_at`、`late_by_min`），结束写 `success/stale/failed` 与 `as_of/finished_at/error`。`scheduler_state.json` 降级为**只读迁移源**，不再写入；启动时只补缺失行、绝不覆盖已有行。
 9. 启动自检：`migrate_legacy_state()` → `recover_interrupted_jobs()`（running 超过 180 分钟或无 `started_at` 标记 failed）→ `sync_due_job()`（交易日过 run_time 仍无 close 行时插入 `pending`，表达“该跑但没跑”）→ `heartbeat_check()`。各步骤异常独立记录日志，不阻断其余步骤。
-10. 心跳：以“已到期”的最近收盘交易日为参照（run_time 之前用当天 00:00 计算，避免把当天未到期的 close 算作漏跑），倒序统计连续未 success 的 close 交易日；连续缺失达到阈值（默认 2，`ASTOCK_HEARTBEAT_THRESHOLD_DAYS`）写 `data/recommendations/scheduler_alerts.jsonl` 并记 `scheduler.log`。告警签名持久化在 JSONL 中用于跨进程去重；台账只有当天 `pending`、尚无任何历史记录时返回 `initialized=false` 且不告警。
+10. 心跳：以“已到期”的最近收盘交易日为参照（run_time 之前用当天 00:00 计算，避免把当天未到期的 close 算作漏跑），倒序统计连续未 success 的 close 交易日；连续缺失达到阈值（默认 2，`ASTOCK_HEARTBEAT_THRESHOLD_DAYS`）写 `data/recommendations/scheduler_alerts.jsonl` 并记 `scheduler.log`。告警签名持久化在 JSONL 中用于跨进程去重；历史存在性按全表判断，台账只有当天 `pending`、尚无任何历史记录时返回 `initialized=false` 且不告警；窗口内无任何行但全表存在更早历史时视为停摆超过窗口，`streak` 取窗口长度并照常告警。
 11. 验收：`python -m astock.jobs --report 5` 输出最近 5 个交易日 close 状态与 `all_success`，退出码 0/2；`--heartbeat` 输出心跳结果，退出码 0/2。连续 5 个交易日成功即可复现 §4.6 P0 验收。
 
 ## 后果

@@ -310,6 +310,20 @@ class SchedulerLedgerTests(unittest.TestCase):
         self.assertEqual(result["threshold_days"], 3)
         self.assertFalse(scheduler.ALERTS_PATH.exists())
 
+    def test_heartbeat_detects_long_outage_beyond_lookback_window(self):
+        self._success("2026-06-01")
+        with patch.object(
+            scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-06")
+        ):
+            result = scheduler.heartbeat_check(datetime(2026, 11, 6, 16, 45))
+        self.assertTrue(result["initialized"])
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["alerted"])
+        self.assertEqual(result["streak"], scheduler.HEARTBEAT_LOOKBACK_DAYS)
+        self.assertIsNone(result["last_success"])
+        lines = scheduler.ALERTS_PATH.read_text(encoding="utf-8").strip().splitlines()
+        self.assertEqual(len(lines), 1)
+
     def test_acceptance_report_reproduces_five_successful_days(self):
         days = ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06"]
         for day in days:

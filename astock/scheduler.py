@@ -306,10 +306,13 @@ def heartbeat_check(
         )
 
     # 空库/新部署：仅有当天刚登记的 pending 行时不算“连续漏跑”。
+    # 是否有历史必须查全表，不能只看最近 60 个交易日窗口，否则长期停摆会被误判为“无历史”。
     today = pd.Timestamp(now.date()).normalize()
+    today_key = f"{today:%Y-%m-%d}"
+    recent_close = ledger.list_jobs(slot="close", limit=2)
     initialized = any(
-        job is not None and (day < today or job.get("status") != "pending")
-        for day, job in records
+        (job.get("trade_date") or "") < today_key or job.get("status") != "pending"
+        for job in recent_close
     )
     if not initialized:
         _log("心跳检查：尚无调度历史，跳过告警")
@@ -327,9 +330,12 @@ def heartbeat_check(
             "alert_path": None,
         }
 
-    # 以窗口内最早一条 job 为下界，避免把安装前的空白历史算成漏跑。
-    earliest = min(day for day, job in records if job is not None)
-    missed = [item for item in missed if pd.Timestamp(item["trade_date"]) >= earliest]
+    # 以窗口内最早一条 job 为下界，避免把安装前的空白历史算成漏跑；
+    # 窗口内没有任何行但全表有历史时，说明已停摆超过整个窗口，streak 取窗口长度。
+    window_days = [day for day, job in records if job is not None]
+    if window_days:
+        earliest = min(window_days)
+        missed = [item for item in missed if pd.Timestamp(item["trade_date"]) >= earliest]
     streak = len(missed)
     ok = streak < threshold
     alerted = False
