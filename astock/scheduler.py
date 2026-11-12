@@ -30,7 +30,6 @@ HEARTBEAT_LOOKBACK_DAYS = 60
 
 _LOCK_HANDLE = None
 _THREAD = None
-_LAST_ALERT_SIGNATURE: str | None = None
 
 
 def _log(message: str) -> None:
@@ -49,6 +48,18 @@ def _run_time() -> tuple[int, int]:
         return max(0, min(23, hour)), max(0, min(59, minute))
     except Exception:
         return 16, 40
+
+
+def _due_reference(now: datetime) -> datetime:
+    """close 任务尚未到期时，以当天 00:00 作为“最近已完成交易日”的参考。
+
+    last_completed_trade_date 在 15:00 后就会返回当天，但 close 任务 16:40 才到期。
+    若不回退参考时刻，15:00–16:40 之间会把当天未到期的任务算作漏跑。
+    """
+    hour, minute = _run_time()
+    if (now.hour, now.minute) < (hour, minute):
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return now
 
 
 def _heartbeat_threshold() -> int:
@@ -102,7 +113,7 @@ def _job_key(trade_date: pd.Timestamp, slot: str) -> str:
 
 def _recent_trading_days(now: datetime, count: int) -> list[pd.Timestamp]:
     """最近 count 个已收盘交易日，按时间倒序。"""
-    reference = last_completed_trade_date(now)
+    reference = last_completed_trade_date(_due_reference(now))
     if reference is None:
         return []
     reference = pd.Timestamp(reference).normalize()
@@ -218,6 +229,39 @@ def sync_due_job(now: datetime | None = None) -> str | None:
     return key
 
 
+def _alert_signature(reference: str, streak: int, threshold: int) -> str:
+    return f"{reference}:{streak}:{threshold}"
+
+
+def _last_alert_signature() -> str | None:
+    """从告警文件读取最后一次心跳签名，保证重启后仍能去重。"""
+    try:
+        lines = ALERTS_PATH.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return None
+    for line in reversed(lines):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except Exception:
+            continue
+        if record.get("kind") != "scheduler_heartbeat":
+            continue
+        signature = record.get("signature")
+        if isinstance(signature, str) and signature:
+            return signature
+        try:
+            return _alert_signature(
+                str(record.get("reference_trade_date")),
+                int(record.get("streak")),
+                int(record.get("threshold_days")),
+            )
+        except Exception:
+            return None
+    return None
+
+
 def heartbeat_check(
     now: datetime | None = None,
     alert: bool = True,
@@ -226,16 +270,24 @@ def heartbeat_check(
     """检查最近交易日 close 任务是否连续缺失；达到阈值写告警。"""
     now = now or datetime.now()
     threshold = threshold or _heartbeat_threshold()
-    reference = last_completed_trade_date(now)
+    reference = last_completed_trade_date(_due_reference(now))
     if reference is None:
-        return {"ok": False, "reason": "no_trade_date", "threshold_days": threshold}
+        return {
+            "ok": False,
+            "initialized": False,
+            "reason": "no_trade_date",
+            "threshold_days": threshold,
+        }
+    reference_ts = pd.Timestamp(reference).normalize()
 
     days = _recent_trading_days(now, HEARTBEAT_LOOKBACK_DAYS)
     missed: list[dict[str, Any]] = []
     last_success: dict[str, Any] | None = None
+    records: list[tuple[pd.Timestamp, dict[str, Any] | None]] = []
     for day in days:
         key = _job_key(day, "close")
         job = ledger.get_job(key)
+        records.append((day, job))
         status = job["status"] if job else "missing"
         if status == "success":
             last_success = {
@@ -253,27 +305,51 @@ def heartbeat_check(
             }
         )
 
+    # 空库/新部署：仅有当天刚登记的 pending 行时不算“连续漏跑”。
+    today = pd.Timestamp(now.date()).normalize()
+    initialized = any(
+        job is not None and (day < today or job.get("status") != "pending")
+        for day, job in records
+    )
+    if not initialized:
+        _log("心跳检查：尚无调度历史，跳过告警")
+        return {
+            "ok": True,
+            "initialized": False,
+            "reason": "no_history",
+            "at": _now_iso(),
+            "threshold_days": threshold,
+            "reference_trade_date": f"{reference_ts:%Y-%m-%d}",
+            "streak": 0,
+            "missed_days": [],
+            "last_success": None,
+            "alerted": False,
+            "alert_path": None,
+        }
+
+    # 以窗口内最早一条 job 为下界，避免把安装前的空白历史算成漏跑。
+    earliest = min(day for day, job in records if job is not None)
+    missed = [item for item in missed if pd.Timestamp(item["trade_date"]) >= earliest]
     streak = len(missed)
     ok = streak < threshold
     alerted = False
     if not ok and alert:
-        global _LAST_ALERT_SIGNATURE
-        signature = f"{pd.Timestamp(reference):%Y-%m-%d}:{streak}:{threshold}"
-        if signature != _LAST_ALERT_SIGNATURE:
+        signature = _alert_signature(f"{reference_ts:%Y-%m-%d}", streak, threshold)
+        if signature != _last_alert_signature():
             record = {
                 "kind": "scheduler_heartbeat",
                 "at": _now_iso(),
-                "reference_trade_date": f"{pd.Timestamp(reference):%Y-%m-%d}",
+                "reference_trade_date": f"{reference_ts:%Y-%m-%d}",
                 "threshold_days": threshold,
                 "streak": streak,
                 "missed_days": missed,
                 "last_success": last_success,
+                "signature": signature,
             }
             try:
                 ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
                 with ALERTS_PATH.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-                _LAST_ALERT_SIGNATURE = signature
                 alerted = True
             except Exception:  # noqa: BLE001 - 告警写盘失败不能拖垮调度
                 _log("心跳告警写盘失败：" + traceback.format_exc())
@@ -284,9 +360,10 @@ def heartbeat_check(
 
     return {
         "ok": ok,
+        "initialized": True,
         "at": _now_iso(),
         "threshold_days": threshold,
-        "reference_trade_date": f"{pd.Timestamp(reference):%Y-%m-%d}",
+        "reference_trade_date": f"{reference_ts:%Y-%m-%d}",
         "streak": streak,
         "missed_days": missed,
         "last_success": last_success,
@@ -328,12 +405,32 @@ def acceptance_report(days: int = 5, now: datetime | None = None) -> dict[str, A
 
 
 def startup_maintenance(now: datetime | None = None) -> dict[str, Any]:
-    """进程启动自检：旧状态迁移、中断恢复、该跑登记、心跳检查。"""
+    """进程启动自检：旧状态迁移、中断恢复、该跑登记、心跳检查。
+
+    任一环节的台账异常都只记录日志，不向调度线程抛出。
+    """
     now = now or datetime.now()
-    migrated = migrate_legacy_state()
-    recovered = recover_interrupted_jobs(now)
-    due = sync_due_job(now)
-    heartbeat = heartbeat_check(now, alert=True)
+    migrated = 0
+    try:
+        migrated = migrate_legacy_state()
+    except Exception:  # noqa: BLE001 - 启动自检不能用异常终止调度线程
+        _log("启动自检-迁移失败：" + traceback.format_exc())
+    recovered: list[str] = []
+    try:
+        recovered = recover_interrupted_jobs(now)
+    except Exception:  # noqa: BLE001
+        _log("启动自检-中断恢复失败：" + traceback.format_exc())
+    due: str | None = None
+    try:
+        due = sync_due_job(now)
+    except Exception:  # noqa: BLE001
+        _log("启动自检-到期登记失败：" + traceback.format_exc())
+    heartbeat: dict[str, Any] = {}
+    try:
+        heartbeat = heartbeat_check(now, alert=True)
+    except Exception:  # noqa: BLE001
+        _log("启动自检-心跳检查失败：" + traceback.format_exc())
+        heartbeat = {"ok": False, "initialized": False, "error": "heartbeat_failed"}
     _log(
         "启动自检："
         f"迁移={migrated} 恢复={len(recovered)} due={due} "
@@ -414,7 +511,11 @@ def run_once(
     State machine lives in the ledger jobs table (ADR-004).
     """
     now = now or datetime.now()
-    _prepare_ledger(now)
+    try:
+        _prepare_ledger(now)
+    except Exception:  # noqa: BLE001 - 台账不可用时跳过本轮，由 loop 重试
+        _log("台账预检失败，本轮跳过：" + traceback.format_exc())
+        return None
     hour, minute = _run_time()
     slot = slot or ("close" if (now.hour, now.minute) >= (hour, minute) else "premarket")
     trade_date = last_completed_trade_date(now)
@@ -424,7 +525,11 @@ def run_once(
     key = _job_key(trade_date, slot)
     scheduled = datetime(trade_date.year, trade_date.month, trade_date.day, hour, minute)
     late_by = max(0.0, (now - scheduled).total_seconds() / 60.0)
-    previous = ledger.get_job(key)
+    try:
+        previous = ledger.get_job(key)
+    except Exception:  # noqa: BLE001
+        _log("读取任务状态失败，本轮跳过：" + traceback.format_exc())
+        return None
     if not force and previous is not None and previous.get("status") == "success":
         _log(f"任务已完成（{key}），跳过")
         return None
@@ -432,15 +537,19 @@ def run_once(
     attempts = int((previous or {}).get("attempts") or 0) + 1
     started_at = _now_iso()
     _log(f"开始自动生成每日推荐（{key}，late_by={late_by:.0f}m，attempt={attempts}）")
-    ledger.save_job(
-        key,
-        trade_date=f"{trade_date:%Y-%m-%d}",
-        slot=slot,
-        status="running",
-        attempts=attempts,
-        started_at=started_at,
-        late_by_min=round(late_by, 1),
-    )
+    try:
+        ledger.save_job(
+            key,
+            trade_date=f"{trade_date:%Y-%m-%d}",
+            slot=slot,
+            status="running",
+            attempts=attempts,
+            started_at=started_at,
+            late_by_min=round(late_by, 1),
+        )
+    except Exception:  # noqa: BLE001 - 写 running 失败时不启动推荐，避免状态失真
+        _log("写入 running 状态失败，本轮跳过：" + traceback.format_exc())
+        return None
     try:
         result = run_recommendation(
             mode="generate",
@@ -501,12 +610,15 @@ def run_once(
         _log("完成：" + result.status)
         return result
     except Exception as exc:  # noqa: BLE001
-        ledger.update_job(
-            key,
-            status="failed",
-            error=f"{type(exc).__name__}: {exc}",
-            finished_at=_now_iso(),
-        )
+        try:
+            ledger.update_job(
+                key,
+                status="failed",
+                error=f"{type(exc).__name__}: {exc}",
+                finished_at=_now_iso(),
+            )
+        except Exception:  # noqa: BLE001 - 失败状态也写不进去时仍要留日志
+            _log("写入 failed 状态失败：" + traceback.format_exc())
         _log("失败：" + traceback.format_exc())
         return None
 
@@ -517,32 +629,40 @@ def loop(stop_event: threading.Event | None = None) -> None:
     _log(f"调度器启动，交易日 {hour:02d}:{minute:02d} 运行；补偿窗口至 {CATCHUP_END_HOUR}:00")
     if stop.is_set():
         return
-    startup_maintenance()
+    try:
+        startup_maintenance()
+    except Exception:  # noqa: BLE001 - 启动自检异常不能让调度线程退出
+        _log("启动自检异常：" + traceback.format_exc())
+        stop.wait(600)
     while not stop.is_set():
-        now = datetime.now()
-        # 墙钟判断：休眠/唤醒后重新计算，不做 sleep 倒计时减法
-        if (
-            _is_trading_day(pd.Timestamp(now.date()))
-            and (now.hour, now.minute) >= (hour, minute)
-            and now.hour <= CATCHUP_END_HOUR
-        ):
-            key = sync_due_job(now)
-            job = ledger.get_job(key) if key else None
-            if key and (job is None or job.get("status") != "success"):
-                result = run_once(slot="close", now=now)
-                heartbeat_check(now, alert=True)
-                if result is None:
-                    stop.wait(600)
-                continue
-
-        target = _next_run(now)
-        _log(f"下次运行：{target:%Y-%m-%d %H:%M}")
-        while not stop.is_set():
+        try:
             now = datetime.now()
-            remaining = (target - now).total_seconds()
-            if remaining <= 0:
-                break
-            stop.wait(min(60.0, remaining))
+            # 墙钟判断：休眠/唤醒后重新计算，不做 sleep 倒计时减法
+            if (
+                _is_trading_day(pd.Timestamp(now.date()))
+                and (now.hour, now.minute) >= (hour, minute)
+                and now.hour <= CATCHUP_END_HOUR
+            ):
+                key = sync_due_job(now)
+                job = ledger.get_job(key) if key else None
+                if key and (job is None or job.get("status") != "success"):
+                    result = run_once(slot="close", now=now)
+                    heartbeat_check(now, alert=True)
+                    if result is None:
+                        stop.wait(600)
+                    continue
+
+            target = _next_run(now)
+            _log(f"下次运行：{target:%Y-%m-%d %H:%M}")
+            while not stop.is_set():
+                now = datetime.now()
+                remaining = (target - now).total_seconds()
+                if remaining <= 0:
+                    break
+                stop.wait(min(60.0, remaining))
+        except Exception:  # noqa: BLE001 - 单轮异常后等待重试，避免线程静默死亡
+            _log("调度循环异常：" + traceback.format_exc())
+            stop.wait(600)
 
 
 def start_background() -> threading.Thread | None:

@@ -5,6 +5,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta
@@ -35,6 +36,21 @@ def make_result(
 def fake_calendar() -> pd.DataFrame:
     dates = pd.bdate_range("2026-01-01", "2026-12-31")
     return pd.DataFrame({"cal_date": dates, "is_open": [1] * len(dates)})
+
+
+class FrozenDateTime(datetime):
+    """可注入的 datetime.now()，用于驱动 loop() 与 15:30 到期边界。"""
+
+    fixed = datetime(2026, 11, 6, 16, 41)
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls.fixed
+
+
+def last_completed_by_clock(now: datetime) -> pd.Timestamp:
+    """模拟 data.last_completed_trade_date：15:00 后返回当天，否则返回前一天。"""
+    return pd.Timestamp("2026-11-06") if now.hour >= 15 else pd.Timestamp("2026-11-05")
 
 
 class LedgerJobTests(unittest.TestCase):
@@ -138,7 +154,6 @@ class SchedulerLedgerTests(unittest.TestCase):
         ]
         for p in self.patches:
             p.start()
-        self._reset_alert_signature()
         self.refresh_patch = patch.object(
             scheduler, "refresh_tracking", return_value=(0, "skip")
         )
@@ -148,12 +163,7 @@ class SchedulerLedgerTests(unittest.TestCase):
         self.refresh_patch.stop()
         for p in self.patches:
             p.stop()
-        self._reset_alert_signature()
         self.tmp.cleanup()
-
-    @staticmethod
-    def _reset_alert_signature() -> None:
-        scheduler._LAST_ALERT_SIGNATURE = None
 
     def _success(self, day: str, *, run_id: str = "run_test") -> None:
         ledger.save_job(
@@ -347,15 +357,166 @@ class SchedulerLedgerTests(unittest.TestCase):
         # 新路径只写 jobs 表；旧 JSON 不应被创建或改写（ADR-004）。
         self.assertFalse(scheduler.STATE_PATH.exists())
 
-    def test_startup_maintenance_marks_due_job_and_heartbeat_state(self):
+    def test_startup_maintenance_marks_due_job_without_empty_history_alert(self):
         reference = pd.Timestamp("2026-11-06")
         with patch.object(scheduler, "last_completed_trade_date", return_value=reference):
             result = scheduler.startup_maintenance(datetime(2026, 11, 6, 16, 45))
         self.assertEqual(result["due"], "2026-11-06:close")
         self.assertEqual(ledger.get_job("2026-11-06:close")["status"], "pending")
-        self.assertFalse(result["heartbeat"]["ok"])
-        self.assertEqual(result["heartbeat"]["missed_days"][0]["status"], "pending")
-        self.assertTrue(result["heartbeat"]["alerted"])
+        heartbeat = result["heartbeat"]
+        self.assertTrue(heartbeat["ok"])
+        self.assertFalse(heartbeat["initialized"])
+        self.assertEqual(heartbeat["streak"], 0)
+        self.assertEqual(heartbeat["missed_days"], [])
+        self.assertFalse(heartbeat["alerted"])
+        self.assertFalse(scheduler.ALERTS_PATH.exists())
+
+    def test_report_at_1530_excludes_not_yet_due_today(self):
+        days = ["2026-10-30", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"]
+        for day in days:
+            self._success(day)
+        with patch.object(
+            scheduler, "last_completed_trade_date", side_effect=last_completed_by_clock
+        ):
+            report = scheduler.acceptance_report(5, datetime(2026, 11, 6, 15, 30))
+        self.assertTrue(report["all_success"])
+        self.assertEqual([row["trade_date"] for row in report["rows"]], days)
+
+    def test_heartbeat_at_1530_does_not_count_today(self):
+        self._success("2026-11-03")
+        self._success("2026-11-04")
+        ledger.save_job(
+            "2026-11-05:close",
+            trade_date="2026-11-05",
+            slot="close",
+            status="failed",
+            error="boom",
+        )
+        with patch.object(
+            scheduler, "last_completed_trade_date", side_effect=last_completed_by_clock
+        ):
+            result = scheduler.heartbeat_check(datetime(2026, 11, 6, 15, 30))
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["initialized"])
+        self.assertEqual(result["reference_trade_date"], "2026-11-05")
+        self.assertEqual(result["streak"], 1)
+        self.assertFalse(result["alerted"])
+        self.assertFalse(scheduler.ALERTS_PATH.exists())
+
+    def test_heartbeat_dedup_uses_persisted_alert_file(self):
+        self._success("2026-11-04")
+        ledger.save_job(
+            "2026-11-05:close",
+            trade_date="2026-11-05",
+            slot="close",
+            status="failed",
+            error="boom",
+        )
+        scheduler.ALERTS_PATH.write_text(
+            json.dumps(
+                {
+                    "kind": "scheduler_heartbeat",
+                    "reference_trade_date": "2026-11-06",
+                    "threshold_days": 2,
+                    "streak": 2,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        with patch.object(
+            scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-06")
+        ):
+            result = scheduler.heartbeat_check(datetime(2026, 11, 6, 17, 0))
+        self.assertFalse(result["alerted"])
+        lines = scheduler.ALERTS_PATH.read_text(encoding="utf-8").strip().splitlines()
+        self.assertEqual(len(lines), 1)
+
+    def test_run_once_survives_ledger_write_failure(self):
+        with patch.object(
+            ledger, "save_job", side_effect=sqlite3.OperationalError("database is locked")
+        ), patch.object(
+            scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-06")
+        ):
+            self.assertIsNone(
+                scheduler.run_once(slot="close", now=datetime(2026, 11, 6, 16, 41))
+            )
+
+    def test_startup_maintenance_survives_ledger_write_failure(self):
+        with patch.object(
+            ledger, "save_job", side_effect=sqlite3.OperationalError("database is locked")
+        ), patch.object(
+            scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-06")
+        ):
+            result = scheduler.startup_maintenance(datetime(2026, 11, 6, 16, 45))
+        self.assertIsNone(result["due"])
+        self.assertTrue(result["heartbeat"]["ok"])
+
+    def test_loop_runs_due_job_once_and_records_success(self):
+        stop = threading.Event()
+        calls: list[dict] = []
+
+        def fake_run(**kwargs):
+            calls.append(kwargs)
+            stop.set()
+            return make_result("2026-11-06")
+
+        FrozenDateTime.fixed = datetime(2026, 11, 6, 16, 41)
+        with patch.object(scheduler, "datetime", FrozenDateTime), patch.object(
+            scheduler, "_run_time", return_value=(16, 40)
+        ), patch.object(scheduler, "_is_trading_day", return_value=True), patch.object(
+            scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-06")
+        ), patch.object(scheduler, "run_recommendation", side_effect=fake_run):
+            scheduler.loop(stop)
+        self.assertEqual(len(calls), 1)
+        job = ledger.get_job("2026-11-06:close")
+        self.assertEqual(job["status"], "success")
+        self.assertEqual(job["attempts"], 1)
+
+    def test_loop_waits_600_after_stale_and_does_not_rerun(self):
+        stop = threading.Event()
+        waits: list[float | None] = []
+        calls: list[dict] = []
+
+        def fake_wait(timeout=None):
+            waits.append(timeout)
+            stop.set()
+            return True
+
+        def fake_run(**kwargs):
+            calls.append(kwargs)
+            return make_result("2026-11-05", status="stale", message="not ready")
+
+        FrozenDateTime.fixed = datetime(2026, 11, 6, 16, 41)
+        with patch.object(stop, "wait", side_effect=fake_wait), patch.object(
+            scheduler, "datetime", FrozenDateTime
+        ), patch.object(scheduler, "_run_time", return_value=(16, 40)), patch.object(
+            scheduler, "_is_trading_day", return_value=True
+        ), patch.object(
+            scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-06")
+        ), patch.object(scheduler, "run_recommendation", side_effect=fake_run):
+            scheduler.loop(stop)
+        self.assertEqual(len(calls), 1)
+        self.assertIn(600, waits)
+        self.assertEqual(ledger.get_job("2026-11-06:close")["status"], "stale")
+
+    def test_loop_survives_startup_failure(self):
+        stop = threading.Event()
+        waits: list[float | None] = []
+
+        def fake_wait(timeout=None):
+            waits.append(timeout)
+            stop.set()
+            return True
+
+        FrozenDateTime.fixed = datetime(2026, 11, 6, 16, 41)
+        with patch.object(
+            scheduler, "startup_maintenance", side_effect=RuntimeError("db locked")
+        ), patch.object(stop, "wait", side_effect=fake_wait), patch.object(
+            scheduler, "datetime", FrozenDateTime
+        ):
+            scheduler.loop(stop)
+        self.assertEqual(waits, [600])
 
 
 class JobsCliTests(unittest.TestCase):
@@ -371,12 +532,10 @@ class JobsCliTests(unittest.TestCase):
         ]
         for p in self.patches:
             p.start()
-        scheduler._LAST_ALERT_SIGNATURE = None
 
     def tearDown(self):
         for p in self.patches:
             p.stop()
-        scheduler._LAST_ALERT_SIGNATURE = None
         self.tmp.cleanup()
 
     @staticmethod
@@ -421,6 +580,39 @@ class JobsCliTests(unittest.TestCase):
         payload = json.loads(output)
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["streak"], 2)
+
+    def test_report_at_1530_returns_zero_for_completed_days(self):
+        days = ["2026-10-30", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"]
+        for day in days:
+            self._success(day)
+        FrozenDateTime.fixed = datetime(2026, 11, 6, 15, 30)
+        with patch.object(scheduler, "datetime", FrozenDateTime), patch.object(
+            scheduler, "last_completed_trade_date", side_effect=last_completed_by_clock
+        ):
+            code, output = self._run_cli("--report", "5")
+        self.assertEqual(code, 0)
+        self.assertTrue(json.loads(output)["all_success"])
+
+    def test_heartbeat_cli_at_1530_returns_zero_when_only_yesterday_failed(self):
+        self._success("2026-11-03")
+        self._success("2026-11-04")
+        ledger.save_job(
+            "2026-11-05:close",
+            trade_date="2026-11-05",
+            slot="close",
+            status="failed",
+            error="boom",
+        )
+        FrozenDateTime.fixed = datetime(2026, 11, 6, 15, 30)
+        with patch.object(scheduler, "datetime", FrozenDateTime), patch.object(
+            scheduler, "last_completed_trade_date", side_effect=last_completed_by_clock
+        ):
+            code, output = self._run_cli("--heartbeat")
+        self.assertEqual(code, 0)
+        payload = json.loads(output)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["reference_trade_date"], "2026-11-05")
+        self.assertEqual(payload["streak"], 1)
 
 
 if __name__ == "__main__":
