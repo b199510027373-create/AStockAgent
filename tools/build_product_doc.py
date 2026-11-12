@@ -815,7 +815,7 @@ table(
         ["推荐", "universe → 技术分/预筛 → 事件分 → 综合分 → LLM 理由 → table/report/evidence", "data/recommendations/*.json + latest.json"],
         ["跟踪", "ledger → qfq 日线 → T+N 收益/基准 → 日期级统计 → UI", "无独立表（内存计算）"],
         ["AI 对话", "问题 → 实体识别 → events 检索 → prompt+引用 → 回答+来源", "无长期会话存储"],
-        ["调度", "16:40 → run_once → recommendation → state/log", "scheduler_state.json、scheduler.log"],
+        ["调度", "16:40 → run_once → ledger jobs → recommendation", "data/astock.db jobs、scheduler.log、scheduler_alerts.jsonl"],
     ],
     widths=[2.4, 10.2, 4.2],
     font_size=8.6,
@@ -850,7 +850,7 @@ table(
         ["RecommendationItem", "JSON table", "code, rank, composite, action, reason", "拆表；关联 run_id"],
         ["Evidence", "JSON evidence", "kind, date, title, source, url", "独立表/去重/内容哈希"],
         ["TrackingResult", "内存计算", "run_id, code, horizon, return, excess", "持久化，支持回看"],
-        ["JobRun", "scheduler_state", "date, status, error, paths", "独立 job 表/重试次数"],
+        ["JobRun", "SQLite jobs 表", "date, status, attempts, error, paths", "已落库；心跳超阈值告警"],
         ["PITMembership", "内存", "date, code, total_mv", "物化到 SQLite/Parquet"],
     ],
     widths=[3.4, 4.2, 5.8, 3.4],
@@ -864,7 +864,7 @@ code_block(
 自动推荐：应用内线程（交易日 16:40）或 start_scheduler.bat
 关键环境变量：TUSHARE_TOKEN / TUSHARE_API_URL / DEEPSEEK_API_KEY
                 ASTOCK_AUTO_RECOMMEND / ASTOCK_RECOMMEND_TIME
-日志：data/recommendations/scheduler.log；状态：scheduler_state.json
+日志：data/recommendations/scheduler.log；状态：data/astock.db jobs 表（旧 scheduler_state.json 只读迁移）
 缓存：cache/（约 13MB）；推荐：data/recommendations/*.json|*.csv
 测试：python -m unittest discover -s tests -v
 发布：release/AStockAgent（git 工作区已同步，尚未 commit/push）"""

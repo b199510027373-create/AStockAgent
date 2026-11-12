@@ -42,7 +42,7 @@
     "title": "调度器：独立进程 + 墙钟 + 幂等 + 补偿窗口",
     "status": "accepted",
     "date": "2026-11-03",
-    "summary": "python -m astock.jobs 独立进程、单实例锁、(last_completed_trade_date, slot) 幂等、墙钟循环与 16:40–23:00 补偿。",
+    "summary": "python -m astock.jobs 独立进程、单实例锁、(last_completed_trade_date, slot) 幂等、墙钟循环与 16:40–23:00 补偿；状态机与 attempts 完整落 jobs 表，心跳告警与 5 日验收可复现。",
     "tags": [
       "调度",
       "可靠性"
