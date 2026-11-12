@@ -29,14 +29,14 @@
     "module": "scheduler",
     "branch": "feat/plan-20261103-007-scheduler-ledger",
     "test": [
-      "pytest tests/test_scheduler_ledger.py tests/test_hardening.py -q -> 39 passed, 1 warning in 5.36s",
-      "pytest tests -q -> 309 passed, 1 skipped, 1 warning, 2 subtests passed in 17.16s",
-      "mypy astock app.py -> Success: no issues found in 31 source files",
-      "ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed!",
-      "compileall -q astock app.py -> exit 0"
+      "python -m pytest tests/test_scheduler_ledger.py tests/test_hardening.py -q -> 49 passed, 1 warning in 6.75s",
+      "python -m pytest tests -q -> 319 passed, 1 skipped, 1 warning, 2 subtests passed in 19.04s",
+      "python -m mypy astock app.py -> Success: no issues found in 31 source files",
+      "python -m ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed!",
+      "python -m compileall -q astock app.py -> exit 0"
     ]
   },
   "createdAt": "2026-11-03T12:10:40.568Z",
-  "updatedAt": "2026-11-12T16:22:30.064Z",
+  "updatedAt": "2026-11-12T17:43:11.206Z",
   "devSessionId": "session-680f1ea7-de6d-4144-b50d-61c8204ae454"
 }

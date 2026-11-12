@@ -318,6 +318,26 @@
       "notes": "第 2 轮 · comment"
     },
     {
+      "id": "cal-rev-20261111-003-r3",
+      "type": "review",
+      "title": "评审：评审：推荐 UI 生成/历史读取统一到 ledger",
+      "start": "2026-11-12T16:37:04.806Z",
+      "end": "2026-11-12T16:38:07.268Z",
+      "planItemId": "plan-20261103-003",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261113-001-r1",
+      "type": "review",
+      "title": "评审：评审：调度状态机迁移 jobs 表 + 心跳告警",
+      "start": "2026-11-12T16:57:32.848Z",
+      "end": "2026-11-12T17:00:54.227Z",
+      "planItemId": "plan-20261103-007",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
       "id": "cal-plan-20261103-005-planned",
       "type": "planned",
       "title": "「无显著 alpha」实时横幅（ledger 驱动）",
