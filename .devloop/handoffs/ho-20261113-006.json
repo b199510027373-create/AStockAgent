@@ -1,0 +1,128 @@
+{
+  "id": "ho-20261113-006",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-007",
+  "threadId": "rev-20261113-001",
+  "sessionId": "",
+  "title": "plan-20261103-007 第 2 轮 approve 后 P2 修复与分支推送",
+  "summary": "复查 reviewer 交付 ho-20261113-005：第 2 轮 diff 复审 verdict=approve，第 1 轮 2×P1+3×P2 均已认可落实，无 P0；新增 1 条不阻断 P2 iss-mwdwnlvb-1e70b4（长期停摆超过 60 个交易日、更早有历史但窗口内无行时，被 initialized=false 判成“无历史”，心跳永不告警）。已修复：历史存在性改查 jobs 全表（list_jobs limit=2 判断任一更早或非 pending 行），窗口无行时不再 min()，保留全部 missed、streak=HEARTBEAT_LOOKBACK_DAYS=60 并照常告警；新增长期停摆用例；ADR-004 §10 同步。目标测试 50 passed、全量 320 passed，mypy/ruff/compileall 通过。提交 8ab44b4，分支已推送 origin；本机无 gh CLI，PR 未创建，远端 CI 未运行。",
+  "requirements": [
+    {
+      "id": "REQ-007-DESC",
+      "text": "调度状态机与 attempts/late_by_min 完整落 jobs 表，启动时从表判断“该跑但没跑”，并加心跳检查（超时告警）。",
+      "source": "plan-20261103-007 描述"
+    },
+    {
+      "id": "REQ-007-01",
+      "text": "jobs 表能完整表达 pending/running/success/stale/failed 与 attempts。",
+      "source": "plan-20261103-007 验收标准 1"
+    },
+    {
+      "id": "REQ-007-02",
+      "text": "scheduler_state.json 可停用或降级为只读迁移源。",
+      "source": "plan-20261103-007 验收标准 2"
+    },
+    {
+      "id": "REQ-007-03",
+      "text": "心跳超过阈值（如 2 个交易日未运行）触发告警。",
+      "source": "plan-20261103-007 验收标准 3"
+    },
+    {
+      "id": "REQ-007-04",
+      "text": "连续 5 个交易日 job 全 success 的验收可复现。",
+      "source": "plan-20261103-007 验收标准 4"
+    },
+    {
+      "id": "REQ-REV2-01",
+      "text": "长期停摆超过回看窗口（更早有历史、最近 60 个交易日内无行）不得被判为无历史；应 initialized=true、streak 取窗口长度并触发告警。",
+      "source": "评审 P2 iss-mwdwnlvb-1e70b4 / ho-20261113-005"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/scheduler.py",
+      "summary": "heartbeat_check 历史存在性改为查 jobs 全表：ledger.list_jobs(slot=\"close\", limit=2) 中任一行 trade_date < today 或 status != pending 即 initialized=True；窗口内无任何行时不做 min() 截断，保留窗口内全部 missed，streak=HEARTBEAT_LOOKBACK_DAYS 并照常写告警。",
+      "commit": "8ab44b4"
+    },
+    {
+      "path": "tests/test_scheduler_ledger.py",
+      "summary": "新增 test_heartbeat_detects_long_outage_beyond_lookback_window：仅 2026-06-01 success、now=2026-11-06 16:45，断言 initialized=True、ok=False、alerted=True、streak=60、last_success=None、ALERTS_PATH 1 行。",
+      "commit": "8ab44b4"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-004-scheduler-idempotent-jobs.md",
+      "summary": "§10 补充历史存在性按全表判断；窗口无行但更早有历史时视为停摆超过窗口，streak 取窗口长度并告警。",
+      "commit": "8ab44b4"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_scheduler_ledger.py tests/test_hardening.py -q",
+      "result": "50 passed, 1 warning in 10.36s",
+      "passed": true,
+      "evidence": "新增长期停摆用例通过；既有 jobs 状态机/幂等/锁/stale 用例无回归"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "320 passed, 1 skipped, 1 warning, 2 subtests passed in 24.71s",
+      "passed": true,
+      "evidence": "全量回归通过；skip 为仓库既有跳过项"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 31 source files",
+      "passed": true,
+      "evidence": "CI 同命令类型检查通过"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同规则静态检查通过"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m compileall -q astock app.py",
+      "result": "exit 0",
+      "passed": true,
+      "evidence": "CI 同命令编译检查通过"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write",
+      "reason": "修改 astock/tests/.devloop 并提交",
+      "status": "granted"
+    },
+    {
+      "name": "local-test-run",
+      "reason": "本地 pytest/mypy/ruff/compileall",
+      "status": "granted"
+    },
+    {
+      "name": "git-push",
+      "reason": "推送特性分支到 origin",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-007-scheduler-ledger",
+    "commit": "8ab44b4",
+    "pr": "未创建（本机无 gh CLI；可访问 https://github.com/b199510027373-create/AStockAgent/pull/new/feat/plan-20261103-007-scheduler-ledger 创建）",
+    "ci": "未运行远端 CI；本地 pytest 50/320、mypy、ruff、compileall 全部通过",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-004",
+  "next": "请 reviewer 按 diff 复核新增 P2 修复（commit 8ab44b4）：全表 initialized 语义、窗口无行时 streak=60 与告警记录。随后创建 PR 跑远端 CI；CI 通过并合并 main 后，在真实交易日连续运行 5 天并执行 .\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --report 5，确认 all_success 与退出码 0，同时观察 data/recommendations/scheduler_alerts.jsonl 不出现误告警。",
+  "createdAt": "2026-11-12T19:12:05.059Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-006.md"
+}
