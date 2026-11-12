@@ -8,7 +8,7 @@ A 股智能投顾本地系统，基于 Gradio + Tushare + DeepSeek。在原有�
 
 按代码/架构评审的 P0 清单修复：
 
-- **调度幂等**：任务键改为 `(last_completed_trade_date, slot)`，盘前运行不再吃掉 16:40 收盘槽；`scheduler_state.json` 记录 `jobs` 状态机（running/success/stale/failed）。
+- **调度幂等**：任务键改为 `(last_completed_trade_date, slot)`，盘前运行不再吃掉 16:40 收盘槽；SQLite `jobs` 表记录 `pending/running/success/stale/failed` 与 `attempts`，`scheduler_state.json` 仅作只读迁移源。
 - **墙钟调度**：循环每次用 `datetime.now()` 重算剩余时间，机器休眠后不会按旧倒计时漂移；16:40–23:00 补偿窗口。
 - **单实例锁**：`data/recommendations/scheduler.lock`；独立入口 `python -m astock.jobs`。
 - **`as_of` 拆分**：`data_as_of`（数据截止）与 `tradable_from`（可成交起点，下一开市日；若已开盘则顺延）；证据 `pub_time <= generated_at`。
@@ -17,7 +17,7 @@ A 股智能投顾本地系统，基于 Gradio + Tushare + DeepSeek。在原有�
 - **缓存**：Parquet/meta 原子写（唯一临时文件）、日历加载锁、读侧容错、内存缓存上限。
 - **统计**：Newey-West `lag=horizon-1`、Student-t p 值、有效独立样本 <10 隐藏 p、BH 多重检验；跟踪改为 `tradable_from` 开盘入场。
 - **口径**：遗留 Tab 统一 `astock.indicators.add_all` + qfq；ST 5% 涨跌停；Beta ddof 统一；`load_many(years=...)`；PIT union 按出现频次取前 400；`parse_universe` 支持别名。
-- **台账**：新增 SQLite `data/astock.db`，推荐/证据/调度任务双写；`python -m astock.ledger stats` 可查。
+- **台账**：新增 SQLite `data/astock.db`，推荐/证据双写，调度任务以 `jobs` 表为准；`python -m astock.ledger stats` 可查。
 - **PIT 指数池**：新增 `astock/pit.py`，用 `index_weight` 历史成分 + `stock_basic(D)` 退市过滤 + `bak_basic` 历史行业；因子 IC 支持 PIT沪深300/中证500/中证1000。
 
 测试从 18 个增加到 57 个（`tests/test_hardening.py`）。

@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     finished_at TEXT,
     error TEXT,
     late_by_min REAL,
-    run_id TEXT
+    run_id TEXT,
+    as_of TEXT
 );
 CREATE TABLE IF NOT EXISTS tracking (
     run_id TEXT NOT NULL,
@@ -90,11 +91,30 @@ def _db_path() -> Path:
     return DB_PATH
 
 
+JOB_STATUSES = ("pending", "running", "success", "stale", "failed")
+
+_JOB_FIELDS = (
+    "trade_date",
+    "slot",
+    "status",
+    "attempts",
+    "started_at",
+    "finished_at",
+    "error",
+    "late_by_min",
+    "run_id",
+    "as_of",
+)
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
-    """旧库就地补列（ADR-010 C1 池内分位），CREATE TABLE IF NOT EXISTS 不会改旧表。"""
+    """旧库就地补列，CREATE TABLE IF NOT EXISTS 不会改旧表。"""
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)")}
     if "percentile" not in columns:
         conn.execute("ALTER TABLE items ADD COLUMN percentile REAL")
+    job_columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if job_columns and "as_of" not in job_columns:
+        conn.execute("ALTER TABLE jobs ADD COLUMN as_of TEXT")
 
 
 def _connect() -> sqlite3.Connection:
@@ -224,19 +244,22 @@ def save_job(
     error: str | None = None,
     late_by_min: float | None = None,
     run_id: str | None = None,
+    as_of: str | None = None,
 ) -> None:
+    if status not in JOB_STATUSES:
+        raise ValueError(f"unknown job status: {status!r}")
     with transaction() as conn:
         conn.execute(
             """INSERT INTO jobs
                (job_key, trade_date, slot, status, attempts, started_at, finished_at,
-                error, late_by_min, run_id)
-               VALUES (?,?,?,?,?,?,?,?,?,?)
+                error, late_by_min, run_id, as_of)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(job_key) DO UPDATE SET
                  trade_date=excluded.trade_date, slot=excluded.slot,
                  status=excluded.status, attempts=excluded.attempts,
                  started_at=excluded.started_at, finished_at=excluded.finished_at,
                  error=excluded.error, late_by_min=excluded.late_by_min,
-                 run_id=excluded.run_id""",
+                 run_id=excluded.run_id, as_of=excluded.as_of""",
             (
                 job_key,
                 trade_date,
@@ -248,8 +271,61 @@ def save_job(
                 error,
                 late_by_min,
                 run_id,
+                as_of,
             ),
         )
+
+
+def update_job(job_key: str, **fields: Any) -> bool:
+    """部分更新一行 job；只写调用方明确给出的列，返回是否命中。"""
+    unknown = set(fields) - set(_JOB_FIELDS)
+    if unknown:
+        raise ValueError(f"unknown job fields: {sorted(unknown)}")
+    if "status" in fields and fields["status"] not in JOB_STATUSES:
+        raise ValueError(f"unknown job status: {fields['status']!r}")
+    if not fields:
+        return get_job(job_key) is not None
+    assignments = ", ".join(f"{name}=?" for name in fields)
+    values = [fields[name] for name in fields]
+    values.append(job_key)
+    with transaction() as conn:
+        cur = conn.execute(f"UPDATE jobs SET {assignments} WHERE job_key=?", values)
+        return cur.rowcount > 0
+
+
+def list_jobs(
+    *,
+    status: str | None = None,
+    slot: str | None = None,
+    limit: int = 200,
+) -> list[dict]:
+    sql = "SELECT * FROM jobs"
+    clauses: list[str] = []
+    params: list[Any] = []
+    if status is not None:
+        if status not in JOB_STATUSES:
+            raise ValueError(f"unknown job status: {status!r}")
+        clauses.append("status=?")
+        params.append(status)
+    if slot is not None:
+        clauses.append("slot=?")
+        params.append(slot)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY trade_date DESC, slot DESC LIMIT ?"
+    params.append(max(1, int(limit)))
+    with _read() as conn:
+        return [dict(row) for row in conn.execute(sql, params)]
+
+
+def latest_success_job(slot: str = "close") -> dict | None:
+    with _read() as conn:
+        row = conn.execute(
+            "SELECT * FROM jobs WHERE status='success' AND slot=? "
+            "ORDER BY trade_date DESC LIMIT 1",
+            (slot,),
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def get_job(job_key: str) -> dict | None:
