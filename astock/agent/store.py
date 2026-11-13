@@ -163,7 +163,12 @@ def ensure_run(
 
     渲染管线在独立调用（没有 Agent 循环）时也需要落 artifact；这里只补齐外键所需
     的最小 run 行，完整生命周期由 plan-20261107-008 接管。
+
+    ``status="running"`` 的 run 不写 ``finished_at``（运行中不能被当成已结束）。
     """
+    now = utc_now()
+    started = started_at or now
+    finished = None if status == "running" else now
     conn.execute(
         """
         INSERT INTO agent_runs(
@@ -181,8 +186,8 @@ def ensure_run(
             seed,
             code_version,
             status,
-            started_at or utc_now(),
-            started_at or utc_now(),
+            started,
+            finished,
         ),
     )
     conn.commit()

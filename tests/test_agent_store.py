@@ -185,7 +185,7 @@ def test_record_step_rejects_unknown_kind(tmp_path: Path) -> None:
         conn.close()
 
 
-
+def test_record_artifact_rejects_unknown_kind(tmp_path: Path) -> None:
     conn = store.connect(str(tmp_path / "agent.db"))
     try:
         store.ensure_run(conn, "run_1")
@@ -195,6 +195,32 @@ def test_record_step_rejects_unknown_kind(tmp_path: Path) -> None:
             )
     finally:
         conn.close()
+
+
+def test_ensure_run_running_leaves_finished_at_null(tmp_path: Path) -> None:
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1", status="running")
+        row = conn.execute("SELECT * FROM agent_runs WHERE run_id='run_1'").fetchone()
+        assert row["status"] == "running"
+        assert row["finished_at"] is None
+        assert row["started_at"]
+    finally:
+        conn.close()
+
+
+def test_ensure_run_success_sets_finished_at_not_before_started(tmp_path: Path) -> None:
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(
+            conn, "run_1", status="success", started_at="2026-01-02T03:04:05+00:00"
+        )
+        row = conn.execute("SELECT * FROM agent_runs WHERE run_id='run_1'").fetchone()
+        assert row["finished_at"] is not None
+        assert row["finished_at"] >= row["started_at"]
+    finally:
+        conn.close()
+
 
 
 def test_ensure_run_keeps_first_record(tmp_path: Path) -> None:

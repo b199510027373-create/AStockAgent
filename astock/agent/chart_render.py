@@ -211,7 +211,10 @@ def _load_market_frame(data: Mapping[str, Any]) -> pd.DataFrame:
 
     ref = str(data["ref"])
     period = str(data.get("period", "day"))
-    adj = str(data.get("adj", "qfq"))
+    # 冻结口径 → data 层参数：qfq/hfq 原样传，none（含 raw 别名）必须传 None，
+    # 否则 data.load_* 会按非空字符串做前复权（评审 P0）。
+    adj_key = str(data.get("adj", "qfq"))
+    adj = {"qfq": "qfq", "hfq": "hfq", "none": None}.get(adj_key, adj_key)
     start, end = _range_window(str(data.get("range", "1y")))
     if period in MINUTE_FREQS:
         days = max(1, min(30, (end - start).days + 1))
@@ -314,6 +317,8 @@ def apply_transforms(
             out = _transform_limit(out, transform, path)
         else:  # 校验阶段已拦截，这里兜底
             raise ChartSpecError([SpecIssue(f"{path}.op", f"不支持的算子 {op!r}")])
+    # pandas 的切片/排序不保证传播 attrs，而 artifact 回放要靠它做时点兜底。
+    out.attrs = dict(frame.attrs)
     return out
 
 
@@ -524,24 +529,26 @@ def _time_points(
     if data_as_of is not None or data_time is not None:
         # 显式传参优先；显式空串表示「时点未知」，不再回退猜测（图注写「时点未知」）
         return data_as_of or "", data_time or ""
+    from astock import data as market
+
+    # 先按实际渲染的数据重算（transforms 之后调用），artifacts 的旧 meta 只作兜底，
+    # 避免把首次渲染的错误时点固化到回放结果里（评审 P1）。
+    if not frame.empty:
+        probe = frame if _has_bar_time_column(frame) else _probe_time_frame(frame)
+        if probe is not None:
+            try:
+                return market.latest_bar_time(probe, freq=_period_freq(period))
+            except ValueError as exc:
+                warnings.append(f"无法确定时点：{exc}")
     snapshot_as_of = frame.attrs.get("data_as_of")
     if snapshot_as_of:
+        warnings.append("artifact 快照缺少可用时间列，回退到快照记录的时点")
         return str(snapshot_as_of), str(frame.attrs.get("data_time") or "")
     if frame.empty:
         warnings.append("数据为空，时点未知（data_as_of/data_time 置空）")
-        return "", ""
-    probe = frame if _has_bar_time_column(frame) else _probe_time_frame(frame)
-    if probe is None:
+    else:
         warnings.append("无法确定时点：数据缺少交易日/时间列（data_as_of/data_time 置空）")
-        return "", ""
-    from astock import data as market
-
-    try:
-        as_of, bar = market.latest_bar_time(probe, freq=_period_freq(period))
-    except ValueError as exc:
-        warnings.append(f"无法确定时点：{exc}")
-        return "", ""
-    return as_of, bar
+    return "", ""
 
 
 def _has_bar_time_column(frame: pd.DataFrame) -> bool:
@@ -1009,14 +1016,37 @@ def _json_scalar(value: Any) -> Any:
     return str(value)
 
 
+def _latest_position(frame: pd.DataFrame) -> int | None:
+    """最新 bar 的位置（按时间列取最大值，不依赖行序）；无时间列返回 None。"""
+    for column in ("trade_time", "trade_date"):
+        if column not in frame.columns:
+            continue
+        stamps = pd.to_datetime(frame[column], errors="coerce")
+        if stamps.notna().any():
+            return int(stamps.to_numpy().argmax())
+    return None
+
+
 def data_snapshot(frame: pd.DataFrame, *, limit: int = MAX_SNAPSHOT_ROWS) -> dict[str, Any]:
-    """生成可回放的数据快照（JSON 标量；超限取尾部并记录总行数）。"""
+    """生成可回放的数据快照（JSON 标量；超限取尾部并保证包含最新 bar）。
+
+    截断时必须保留最新一根 bar：图注的 ``data_as_of`` 由它决定，
+    否则 ``meta["data_as_of"]`` 会与 ``rows[-1]`` 指向不同交易日（评审 P1）。
+    """
     total = int(len(frame))
-    tail = frame.tail(limit) if total > limit else frame
+    if total > limit and limit > 0:
+        positions = list(range(total - limit, total))
+        latest = _latest_position(frame)
+        if latest is not None and latest not in positions:
+            # 丢掉最早的一行，把最新行补到末尾（快照仍按时间升序可回放）。
+            positions = positions[-(limit - 1) :] + [latest] if limit > 1 else [latest]
+        selected = frame.iloc[positions]
+    else:
+        selected = frame
     fields = [str(column) for column in frame.columns]
     rows = [
         {str(key): _json_scalar(value) for key, value in record.items()}
-        for record in tail.to_dict(orient="records")
+        for record in selected.to_dict(orient="records")
     ]
     snapshot: dict[str, Any] = {
         "fields": fields,
@@ -1092,17 +1122,18 @@ def render(
         )
         warnings.extend(resolve_warnings)
 
+        transformed = apply_transforms(frame_resolved, normalized["transforms"])
+        if transformed.empty:
+            warnings.append("transforms 之后数据为空，图为空态")
+
+        # 时点必须取自实际落图的 transformed 数据（快照也来自它）；显式参数仍优先。
         as_of, bar_time = _time_points(
-            frame_resolved,
+            transformed,
             period=period,
             data_as_of=data_as_of,
             data_time=data_time,
             warnings=warnings,
         )
-
-        transformed = apply_transforms(frame_resolved, normalized["transforms"])
-        if transformed.empty:
-            warnings.append("transforms 之后数据为空，图为空态")
 
         caption = _caption(normalized, as_of, bar_time)
         figure = _build_figure(transformed, normalized, caption=caption, period=period)

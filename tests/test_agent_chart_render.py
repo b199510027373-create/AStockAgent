@@ -395,6 +395,139 @@ def test_filter_on_missing_column_is_structured_error() -> None:
     assert {issue.field for issue in info.value.issues} == {"$.transforms[0].field"}
 
 
+# ---------------------------------------------------------------- 复权口径（评审 P0）
+
+
+@pytest.mark.parametrize(
+    ("adj", "expected"), [("qfq", "qfq"), ("hfq", "hfq"), ("none", None), ("raw", None)]
+)
+def test_market_adj_is_mapped_to_data_layer(
+    paths: dict[str, str], monkeypatch: pytest.MonkeyPatch, adj: str, expected: str | None
+) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_load_daily(ts_code: str, **kwargs: object) -> pd.DataFrame:
+        calls["ts_code"] = ts_code
+        calls["adj"] = kwargs.get("adj")
+        return ohlcv_frame()
+
+    monkeypatch.setattr("astock.data.load_daily", fake_load_daily)
+    spec = candlestick_spec()
+    spec["data"]["adj"] = adj
+    rendered = _render(spec, paths)
+
+    assert calls["ts_code"] == "000001.SZ"
+    # raw 必须映射成 None，否则 data 层会当成前复权（评审 P0 根因）
+    assert calls["adj"] is expected
+    assert rendered.params["adj"] == ("none" if adj == "raw" else adj)
+
+
+def test_minute_market_branch_maps_adj_too(
+    paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_load_minute(ts_code: str, **kwargs: object) -> pd.DataFrame:
+        calls["freq"] = kwargs.get("freq")
+        calls["adj"] = kwargs.get("adj")
+        return minute_frame(2)
+
+    monkeypatch.setattr("astock.data.load_minute", fake_load_minute)
+    spec = candlestick_spec()
+    spec["data"].update({"period": "5min", "adj": "none", "range": "1mo"})
+    spec["encode"] = {"x": "trade_time"}
+    rendered = _render(spec, paths)
+
+    assert calls["freq"] == "5min"
+    assert calls["adj"] is None
+    assert "不复权" in rendered.caption
+
+
+def test_market_branch_raw_caption_and_snapshot_agree(
+    paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw = ohlcv_frame()
+    monkeypatch.setattr("astock.data.load_daily", lambda ts_code, **kwargs: raw)
+
+    spec = candlestick_spec()
+    spec["data"]["adj"] = "raw"
+    rendered = _render(spec, paths)
+    row = _artifact_row(rendered, paths)
+
+    assert "不复权" in rendered.caption and "raw" in rendered.caption
+    # 渲染图注、artifact meta 与快照价格同源（都是 data 层返回的原始价）
+    assert rendered.source == "market"
+    assert row.meta["data"]["rows"][-1]["close"] == pytest.approx(raw["close"].iloc[-1])
+
+
+# ---------------------------------------------------------------- 时点与快照一致性（评审 P1）
+
+
+def test_time_point_follows_transformed_rows(paths: dict[str, str]) -> None:
+    spec = inline_line_spec(
+        transforms=[
+            {"op": "filter", "field": "close", "cmp": "gt", "value": 10.0},
+            {"op": "sort", "by": "close", "desc": True},
+            {"op": "limit", "n": 1},
+        ]
+    )
+    rendered = _render(spec, paths)
+    row = _artifact_row(rendered, paths)
+    assert rendered.data_as_of == "2024-01-03"
+    assert rendered.data_time == "2024-01-03 15:00"
+    assert row.meta["data_as_of"] == "2024-01-03"
+    assert row.meta["data_as_of"] == row.meta["data"]["rows"][-1]["day"]
+    assert "2024-01-03" in rendered.caption
+
+
+def test_artifact_replay_recomputes_time_from_snapshot(paths: dict[str, str]) -> None:
+    rendered = _render(
+        inline_line_spec(
+            transforms=[
+                {"op": "filter", "field": "close", "cmp": "gt", "value": 10.0},
+                {"op": "sort", "by": "close", "desc": True},
+                {"op": "limit", "n": 1},
+            ]
+        ),
+        paths,
+    )
+    row = _artifact_row(rendered, paths)
+    assert row is not None
+
+    # 篡改 meta 里的时点：回放必须按快照时间列重算，不得信任旧 meta
+    conn = store.connect(paths["db_path"])
+    try:
+        meta = dict(row.meta)
+        meta["data_as_of"] = "2020-01-01"
+        meta["data_time"] = "2020-01-01 15:00"
+        conn.execute(
+            "UPDATE agent_artifacts SET meta_json=? WHERE artifact_id=?",
+            (json.dumps(meta, ensure_ascii=False), row.artifact_id),
+        )
+        conn.commit()
+        spec = {
+            "version": 1,
+            "kind": "line",
+            "data": {"source": "artifact", "ref": row.artifact_id, "period": "day"},
+            "encode": {"x": "day", "y": "close"},
+        }
+        replay = _render(spec, paths)
+    finally:
+        conn.close()
+
+    assert replay.data_as_of == "2024-01-03"
+    assert "2024-01-03" in replay.caption
+
+
+def test_snapshot_truncation_always_keeps_latest_bar() -> None:
+    frame = ohlcv_frame(10).sort_values("trade_date", ascending=False)
+    snapshot = chart_render.data_snapshot(frame, limit=3)
+    assert snapshot["truncated"] is True
+    latest = pd.Timestamp(frame["trade_date"].max())
+    assert pd.Timestamp(snapshot["rows"][-1]["trade_date"]) == latest
+
+
+
 # ---------------------------------------------------------------- 安全边界
 
 

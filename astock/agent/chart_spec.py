@@ -446,6 +446,19 @@ def _check_params(
 # ---------------------------------------------------------------------------
 
 
+def _parse_range_date(text: str, path: str, issues: "_Issues") -> date | None:
+    """严格解析 ``YYYY-MM-DD:YYYY-MM-DD`` 的两端；非法日期转字段级错误，不抛裸 ValueError。
+
+    正则只约束形状，``2026-13-01`` / ``2026-02-30`` 这类日历上不存在的日期必须由
+    ``date.fromisoformat`` 拒绝，再由这里转成 ``$.data.range`` 的结构化错误回传模型。
+    """
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        issues.add(path, f"日期 {text!r} 不存在或格式错误（要求 YYYY-MM-DD）")
+        return None
+
+
 def _validate_data(data: Any, path: str, issues: _Issues) -> dict[str, Any]:
     if not isinstance(data, Mapping):
         issues.add(path, f"必须是 object，实际是 {_type_name(data)}")
@@ -501,12 +514,13 @@ def _validate_data(data: Any, path: str, issues: _Issues) -> dict[str, Any]:
                 f"取值 {range_value!r} 不是合法窗口：允许 {list(RANGES)} 或 YYYY-MM-DD:YYYY-MM-DD",
             )
         else:
-            start = date.fromisoformat(match.group(1))
-            end = date.fromisoformat(match.group(2))
-            if start > end:
-                issues.add(f"{path}.range", f"起始日 {start} 晚于结束日 {end}")
-            elif (end - start).days > MAX_RANGE_YEARS * 366:
-                issues.add(f"{path}.range", f"窗口跨度超过 {MAX_RANGE_YEARS} 年")
+            start = _parse_range_date(match.group(1), f"{path}.range", issues)
+            end = _parse_range_date(match.group(2), f"{path}.range", issues)
+            if start is not None and end is not None:
+                if start > end:
+                    issues.add(f"{path}.range", f"起始日 {start} 晚于结束日 {end}")
+                elif (end - start).days > MAX_RANGE_YEARS * 366:
+                    issues.add(f"{path}.range", f"窗口跨度超过 {MAX_RANGE_YEARS} 年")
 
     adj = data.get("adj", "qfq" if source == "market" else "none")
     if isinstance(adj, str) and adj in ADJ_ALIASES:
@@ -857,34 +871,121 @@ def check_chart_spec(spec: Any) -> dict[str, Any]:
 
 _FIELD_SCHEMA = {"type": "string", "pattern": FIELD_RE.pattern}
 
+_FIELD_OR_FIELDS: dict[str, Any] = {
+    "oneOf": [
+        _FIELD_SCHEMA,
+        {"type": "array", "items": _FIELD_SCHEMA, "minItems": 1, "maxItems": 3},
+    ]
+}
+
+_TRANSFORM_ITEM: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["op"],
+    "properties": {
+        "op": {"type": "string", "enum": list(TRANSFORM_OPS)},
+        "field": _FIELD_SCHEMA,
+        "cmp": {"type": "string", "enum": list(CMP_OPS)},
+        "value": {"type": ["number", "string", "array"]},
+        "by": _FIELD_OR_FIELDS,
+        "metrics": {
+            "type": "object",
+            "additionalProperties": {"type": "string", "enum": list(METRIC_FUNCS)},
+        },
+        "desc": {"type": "boolean"},
+        "n": {"type": "integer", "minimum": 1, "maximum": 5000},
+        "from": {"type": "string", "enum": ["head", "tail"]},
+    },
+}
+
+_LAYER_ITEM: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["type"],
+    "description": "各 type 只接受自己的参数，逐类型白名单由 validate_chart_spec 强制",
+    "properties": {
+        "type": {"type": "string", "enum": list(LAYER_TYPES)},
+        "window": {"type": "integer", "minimum": 2, "maximum": 250},
+        "k": {"type": "number", "minimum": 1, "maximum": 3},
+        "fast": {"type": "integer", "minimum": 8, "maximum": 20},
+        "slow": {"type": "integer", "minimum": 21, "maximum": 60},
+        "signal": {"type": "integer", "minimum": 5, "maximum": 15},
+        "n": {"type": "integer", "minimum": 5, "maximum": 90},
+        "m": {"type": "integer", "minimum": 3, "maximum": 3},
+    },
+}
+
+_ANNOTATION_ITEM: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["type"],
+    "properties": {
+        "type": {"type": "string", "enum": list(ANNOTATION_TYPES)},
+        "x": {"type": ["string", "number"]},
+        "y": {"type": "number"},
+        "label": {"type": "string", "maxLength": 60},
+    },
+}
+
 _JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "required": ["version", "kind", "data", "encode"],
+    "description": (
+        "ChartSpec v1（冻结清单 §3）。规范字段为 layers/theme/adj=none；"
+        "兼容别名 panes≡layers、style≡theme、adj=\"raw\"≡none，"
+        "别名不得与规范名同时出现。未知字段与未知算子一律报字段级错误。"
+    ),
     "properties": {
         "version": {"type": "integer", "enum": [SPEC_VERSION], "default": SPEC_VERSION},
         "kind": {"type": "string", "enum": list(KINDS)},
-        "title": {"type": "string", "maxLength": MAX_TITLE_CHARS},
+        "title": {"type": "string", "maxLength": MAX_TITLE_CHARS, "pattern": "^[^<>]*$"},
         "data": {
             "type": "object",
             "additionalProperties": False,
             "required": ["source"],
             "properties": {
                 "source": {"type": "string", "enum": list(SOURCES)},
-                "ref": {"type": "string"},
-                "rows": {"type": "array", "items": {"type": "object"}, "maxItems": MAX_INLINE_ROWS},
+                "ref": {
+                    "type": "string",
+                    "description": "market: 个股或指数代码；artifact: art_<16 hex>",
+                    "oneOf": [
+                        {"pattern": STOCK_REF_RE.pattern},
+                        {"pattern": INDEX_REF_RE.pattern},
+                        {"pattern": ARTIFACT_REF_RE.pattern},
+                    ],
+                },
+                "rows": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "maxItems": MAX_INLINE_ROWS,
+                },
                 "fields": {
                     "type": "array",
                     "items": _FIELD_SCHEMA,
                     "minItems": 1,
                     "maxItems": MAX_INLINE_FIELDS,
                 },
-                "period": {"type": "string", "enum": list(PERIODS), "default": "day"},
-                "range": {"type": "string", "default": "1y"},
+                "period": {
+                    "type": "string",
+                    "enum": list(PERIODS),
+                    "default": "day",
+                    "description": "分钟档必须带 min 后缀（1min…60min），不得写 1m",
+                },
+                "range": {
+                    "type": "string",
+                    "default": "1y",
+                    "description": "月档必须带 mo 后缀（1mo/3mo/6mo），不得写 1m",
+                    "oneOf": [
+                        {"enum": list(RANGES)},
+                        {"pattern": RANGE_RE.pattern},
+                    ],
+                },
                 "adj": {
                     "type": "string",
                     "enum": list(ADJ_VALUES) + sorted(ADJ_ALIASES),
                     "default": "qfq",
+                    "description": "规范值为 qfq/hfq/none；raw 是 none 的兼容别名",
                 },
             },
         },
@@ -895,10 +996,15 @@ _JSON_SCHEMA: dict[str, Any] = {
             "properties": {
                 "x": _FIELD_SCHEMA,
                 "y": {
-                    "type": ["string", "array"],
-                    "items": _FIELD_SCHEMA,
-                    "minItems": 1,
-                    "maxItems": MAX_Y_SERIES,
+                    "oneOf": [
+                        _FIELD_SCHEMA,
+                        {
+                            "type": "array",
+                            "items": _FIELD_SCHEMA,
+                            "minItems": 1,
+                            "maxItems": MAX_Y_SERIES,
+                        },
+                    ]
                 },
                 "color": _FIELD_SCHEMA,
             },
@@ -906,55 +1012,36 @@ _JSON_SCHEMA: dict[str, Any] = {
         "transforms": {
             "type": "array",
             "maxItems": MAX_TRANSFORMS,
-            "items": {
-                "type": "object",
-                "required": ["op"],
-                "properties": {
-                    "op": {"type": "string", "enum": list(TRANSFORM_OPS)},
-                    "field": _FIELD_SCHEMA,
-                    "cmp": {"type": "string", "enum": list(CMP_OPS)},
-                    "value": {"type": ["number", "string", "array"]},
-                    "by": {"type": ["string", "array"], "maxItems": 3},
-                    "metrics": {"type": "object"},
-                    "desc": {"type": "boolean"},
-                    "n": {"type": "integer", "minimum": 1, "maximum": 5000},
-                    "from": {"type": "string", "enum": ["head", "tail"]},
-                },
-            },
+            "items": _TRANSFORM_ITEM,
         },
         "layers": {
             "type": "array",
             "maxItems": MAX_LAYERS,
-            "items": {
-                "type": "object",
-                "required": ["type"],
-                "properties": {
-                    "type": {"type": "string", "enum": list(LAYER_TYPES)},
-                    "window": {"type": "integer", "minimum": 2, "maximum": 250},
-                    "k": {"type": "number", "minimum": 1, "maximum": 3},
-                    "fast": {"type": "integer", "minimum": 8, "maximum": 20},
-                    "slow": {"type": "integer", "minimum": 21, "maximum": 60},
-                    "signal": {"type": "integer", "minimum": 5, "maximum": 15},
-                    "n": {"type": "integer", "minimum": 5, "maximum": 90},
-                    "m": {"type": "integer", "minimum": 3, "maximum": 3},
-                },
-            },
+            "items": _LAYER_ITEM,
+        },
+        "panes": {
+            "type": "array",
+            "maxItems": MAX_LAYERS,
+            "items": _LAYER_ITEM,
+            "description": "layers 的兼容别名；不得与 layers 同时出现",
         },
         "annotations": {
             "type": "array",
             "maxItems": MAX_ANNOTATIONS,
-            "items": {
-                "type": "object",
-                "required": ["type"],
-                "properties": {
-                    "type": {"type": "string", "enum": list(ANNOTATION_TYPES)},
-                    "x": {"type": ["string", "number"]},
-                    "y": {"type": "number"},
-                    "label": {"type": "string", "maxLength": 60},
-                },
-            },
+            "items": _ANNOTATION_ITEM,
         },
         "theme": {"type": "string", "enum": list(THEMES), "default": "light"},
+        "style": {
+            "description": "theme 的兼容别名；字符串等于 theme，或 {\"theme\": ...}；不得与 theme 同时出现",
+            "oneOf": [
+                {"type": "string", "enum": list(THEMES)},
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {"theme": {"type": "string", "enum": list(THEMES)}},
+                },
+            ],
+        },
         "meta": {"type": "object"},
     },
 }

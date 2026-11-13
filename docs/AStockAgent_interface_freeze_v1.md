@@ -148,7 +148,7 @@ class ChatModel(Protocol):
 
 ## 3. 冻结接口三：`ChartSpec` v1
 
-代码锚点：待建 `astock/agent/chart_spec.py`（plan-20261107-005）。状态：**冻结草案，未实现**。
+代码锚点：`astock/agent/chart_spec.py`（plan-20261107-005）。状态：**已实现（v1）**。
 
 ### 3.1 字段表（`additionalProperties: false`，未知键直接拒绝）
 
@@ -175,10 +175,22 @@ class ChatModel(Protocol):
 | `fields` | `list[str]` | `source=inline` 必填，1–20 项，`^[a-z_][a-z0-9_]{0,31}$` |
 | `period` | `str` | `day`（默认）/`week`/`month`/`1min`/`5min`/`15min`/`30min`/`60min`；分钟周期仅允许 `source=market` |
 | `range` | `str` | `1mo`/`3mo`/`6mo`/`1y`（默认）/`3y`/`5y`/`ytd`/`max`，或 `YYYY-MM-DD:YYYY-MM-DD`（跨度 ≤ 10 年） |
+| `adj` | `str` | `qfq`（默认）/`hfq`/`none`；涨跌停与成交判断固定 `none`（ADR-008） |
 
 **消歧（2026-11-11 评审）**：`period` 的分钟档一律带 `min` 后缀（`1min`…`60min`），`range` 的月档一律带 `mo` 后缀（`1mo`/`3mo`/`6mo`）。
 两者**不共用 `1m`**：前者是「每根 bar 的粒度」，后者是「窗口长度」。schema 用例见 plan-20261107-005（`period=1min` 取 1 分钟 bar、`range=1mo` 取 1 个月窗口）。
-| `adj` | `str` | `qfq`（默认）/`hfq`/`none`；涨跌停与成交判断固定 `none`（ADR-008） |
+
+### 3.2.1 兼容别名（2026-11-13 评审补记）
+
+验收文字出现过 `panes`/`style`，但冻结字段只有 `layers`/`theme`；`adj` 的 `raw` 同理。为兼容历史 spec，**接受以下别名并归一化为规范名**（`validate_chart_spec` 输出的 spec 只含规范名）：
+
+| 别名 | 规范名 | 约束 |
+| --- | --- | --- |
+| `panes` | `layers` | 语义完全等价；**不得与 `layers` 同时出现**，否则报 `$.panes` 字段级错误 |
+| `style` | `theme` | 字符串等于 `theme`；也接受 `{"theme": "light"\|"dark"}`；**不得与 `theme` 同时出现**，否则报 `$.style` |
+| `data.adj="raw"` | `data.adj="none"` | 归一后按不复权取数，图注写「不复权（原始价格 raw）」 |
+
+规范名以 `layers`/`theme`/`adj=none` 为准；schema（`chart_spec_json_schema()`）同时声明别名并注明冲突规则，逐字段互斥由 `validate_chart_spec` 强制。未知键仍一律拒绝，不做模糊匹配。
 
 ### 3.3 算子与图层参数（白名单，越界拒绝并返回字段级错误）
 

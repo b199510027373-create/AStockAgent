@@ -532,3 +532,70 @@ def test_multiple_problems_are_collected_in_one_pass() -> None:
         validate_chart_spec({"version": 3, "kind": "pie", "encode": {}})
     fields = error_fields(info.value)
     assert {"$.version", "$.kind", "$.data", "$.encode.x"} <= fields
+
+
+# ---------------------------------------------------------------- 非法日期（评审 P1）
+
+
+@pytest.mark.parametrize("window", ["2026-13-01:2026-12-01", "2026-02-30:2026-12-01"])
+def test_impossible_calendar_dates_are_field_errors_not_crashes(window: str) -> None:
+    spec = market_spec()
+    spec["data"] = {
+        "source": "market",
+        "ref": "000001.SZ",
+        "range": window,
+    }
+    # 不抛裸 ValueError，而是结构化错误回传模型
+    payload = check_chart_spec(spec)
+    assert payload["ok"] is False
+    assert any(item["field"] == "$.data.range" for item in payload["errors"])
+    with pytest.raises(ChartSpecError) as info:
+        validate_chart_spec(spec)
+    assert "$.data.range" in error_fields(info.value)
+
+
+# ---------------------------------------------------------------- schema 封闭性（评审 P2）
+
+
+def test_json_schema_closes_nested_items_and_whitelists_metrics() -> None:
+    schema = chart_spec_json_schema()
+    transforms = schema["properties"]["transforms"]["items"]
+    layers = schema["properties"]["layers"]["items"]
+    annotations = schema["properties"]["annotations"]["items"]
+    assert transforms["additionalProperties"] is False
+    assert layers["additionalProperties"] is False
+    assert annotations["additionalProperties"] is False
+    metric_schema = transforms["properties"]["metrics"]["additionalProperties"]
+    assert metric_schema["enum"] == ["sum", "mean", "min", "max", "count", "last"]
+
+
+def test_json_schema_pins_ref_and_range_shapes() -> None:
+    schema = chart_spec_json_schema()
+    data = schema["properties"]["data"]["properties"]
+    assert len(data["ref"]["oneOf"]) == 3
+    patterns = [item["pattern"] for item in data["ref"]["oneOf"]]
+    assert any(r"art_" in pattern for pattern in patterns)
+    range_one_of = data["range"]["oneOf"]
+    assert any("1mo" in (item.get("enum") or []) for item in range_one_of)
+    assert any(
+        r"\d{4}-\d{2}-\d{2}" in (item.get("pattern") or "") for item in range_one_of
+    )
+    assert "1m" not in (range_one_of[0]["enum"])
+
+
+def test_json_schema_declares_compat_aliases() -> None:
+    schema = chart_spec_json_schema()
+    assert schema["properties"]["panes"]["maxItems"] == MAX_LAYERS
+    assert "别名" in schema["properties"]["panes"]["description"]
+    assert "别名" in schema["properties"]["style"]["description"]
+    assert "raw" in schema["properties"]["data"]["properties"]["adj"]["enum"]
+
+
+def test_freeze_doc_records_alias_semantics() -> None:
+    from pathlib import Path
+
+    doc = Path(__file__).resolve().parents[1] / "docs" / "AStockAgent_interface_freeze_v1.md"
+    text = doc.read_text(encoding="utf-8")
+    assert "3.2.1 兼容别名" in text
+    for token in ("panes", "style", "raw", "不得与 `layers` 同时出现"):
+        assert token in text

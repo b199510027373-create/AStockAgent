@@ -4,7 +4,7 @@ import json
 import os
 import threading
 import time
-from datetime import timedelta
+from datetime import time as clock_time, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -189,6 +189,18 @@ def non_trading_days(start: str | pd.Timestamp, end: str | pd.Timestamp) -> list
     return [d.strftime("%Y-%m-%d") for d in closed if d.weekday() < 5]
 
 
+def _normalize_adj(adj: str | None) -> str | None:
+    """复权口径归一：``qfq``/``hfq``/``None``（原始价）。
+
+    未知口径显式报错，绝不静默按前复权处理（评审 P0：raw 切换失效的根因）。
+    """
+    if adj in (None, ""):
+        return None
+    if adj not in ("qfq", "hfq"):
+        raise ValueError(f"未知复权方式: {adj!r}（只支持 qfq/hfq/None）")
+    return adj
+
+
 def _cache_paths(ts_code: str, adj: str | None) -> tuple[Path, Path]:
     # qfq 口径 v3：保留原始价列（raw_*），用于涨跌停/交易规则判断
     suffix = (adj or "raw") + ("_v3" if adj else "")
@@ -240,8 +252,10 @@ def _fetch_daily(
         for col in PRICE_COLS:
             if col in merged.columns:
                 merged[f"raw_{col}"] = merged[col].astype(float)
-        # 以前复权基准：使用区间内最新的复权因子（可能对应今天，即使今天日线尚未更新）
-        base = float(fct["adj_factor"].iloc[-1])
+        # 口径基准（ADR-008）：
+        # - qfq：以区间内最新复权因子为基准（可能对应今天，即使今天日线尚未更新）
+        # - hfq：以原始因子 1.0 为基准，价格随因子累乘放大
+        base = float(fct["adj_factor"].iloc[-1]) if adj == "qfq" else 1.0
         ratio = merged["adj_factor"] / base if base else 1.0
         for col in PRICE_COLS:
             if col in merged.columns:
@@ -271,6 +285,9 @@ def load_daily(
 ) -> pd.DataFrame:
     """加载日线，默认前复权。
 
+    - ``adj="qfq"``（默认）：以区间最新复权因子为基准做前复权；
+    - ``adj="hfq"``：以原始因子 1.0 为基准做后复权；
+    - ``adj=None``：不复权（原始成交价），涨跌停/成交异常判断用。
     - 本地 parquet 缓存，按代码/复权方式分文件
     - 当天已更新过则直接用缓存；否则增量重拉
     - 返回按 trade_date 升序、DatetimeIndex 之外的普通列
@@ -278,6 +295,7 @@ def load_daily(
     ts_code = ts_code.strip().upper()
     if not ts_code:
         return pd.DataFrame()
+    adj = _normalize_adj(adj)
 
     end = end or _fmt(_today())
     start = start or DEFAULT_START
@@ -537,11 +555,15 @@ def load_adj_factors(
     return df.copy()
 
 
-def _apply_minute_adj(df: pd.DataFrame, factors: pd.DataFrame) -> pd.DataFrame:
-    """按日复权因子把分钟 OHLC 转成前复权；量/额不变。"""
+def _apply_minute_adj(
+    df: pd.DataFrame, factors: pd.DataFrame, adj: str = "qfq"
+) -> pd.DataFrame:
+    """按日复权因子调整分钟 OHLC：qfq 以最新因子为基准，hfq 以原始因子 1.0 为基准；量/额不变。"""
+    if adj not in ("qfq", "hfq"):
+        return df
     if df is None or df.empty or factors is None or factors.empty:
         return df
-    base = float(factors["adj_factor"].iloc[-1])
+    base = float(factors["adj_factor"].iloc[-1]) if adj == "qfq" else 1.0
     if not base:
         return df
     merged = df.merge(
@@ -571,13 +593,16 @@ def load_minute(
 
     - ``days <= 1``：走 ``rt_min`` 实时接口，取当日（或最近交易日）
     - ``days > 1``：走 ``stk_mins`` 历史接口，按块拉取，再补当日 ``rt_min``
-    - ``adj='qfq'``：按每日复权因子、以最新因子为基准做前复权（默认）
+    - ``adj="qfq"``：按每日复权因子、以最新因子为基准做前复权（默认）
+    - ``adj="hfq"``：以原始因子 1.0 为基准做后复权
+    - ``adj=None``：不复权（原始成交价）
     - vol 统一为手、amount 统一为千元
     - 当日缓存 30 秒，历史缓存 5 分钟
     """
     code = ts_code.strip().upper()
     if freq not in MINUTE_FREQ_MAP:
         raise ValueError(f"未知分钟周期: {freq}")
+    adj = _normalize_adj(adj)
     days = max(1, int(days))
 
     key = (code, freq, days, adj or "raw")
@@ -642,7 +667,7 @@ def load_minute(
 
     if adj and not df.empty:
         factors = load_adj_factors(code, end=_fmt(_today()), client=client)
-        df = _apply_minute_adj(df, factors)
+        df = _apply_minute_adj(df, factors, adj)
 
     df = validate_bars(
         df, allow_empty=True, source=f"load_minute({code},{freq})"
@@ -700,8 +725,11 @@ BAR_FREQS = ("D", "W", "M", "1min", "5min", "15min", "30min", "60min")
 _PERIOD_FREQ_ALIASES = {"day": "D", "week": "W", "month": "M"}
 _MINUTE_FREQS = ("1min", "5min", "15min", "30min", "60min")
 _DAILY_BAR_CLOSE = "15:00"
-_SESSION_OPEN = "09:30"
-_SESSION_CLOSE = "15:00"
+#: A 股连续竞价两段闭区间（午休 11:30–13:00 不是交易时段）。
+_MORNING_OPEN = clock_time(9, 30)
+_MORNING_CLOSE = clock_time(11, 30)
+_AFTERNOON_OPEN = clock_time(13, 0)
+_AFTERNOON_CLOSE = clock_time(15, 0)
 
 
 def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
@@ -728,12 +756,21 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
     series = pd.to_datetime(df[column], errors="coerce").dropna()
     if series.empty:
         raise ValueError(f"{column} 全部无效，无法确定时点")
-    stamp = pd.Timestamp(series.iloc[-1])
+    # 取时间最大值而不是 iloc[-1]：调用方可能传入 sort desc 或未排序的 DataFrame。
+    stamp = pd.Timestamp(series.max())
 
     if key in _MINUTE_FREQS:
-        clock = stamp.strftime("%H:%M")
-        if not (_SESSION_OPEN <= clock <= _SESSION_CLOSE):
-            raise ValueError(f"分钟 bar 时间 {stamp} 不在交易时段 09:30–15:00，拒绝该数据")
+        clock = stamp.time()
+        in_session = (
+            _MORNING_OPEN <= clock <= _MORNING_CLOSE
+            or _AFTERNOON_OPEN <= clock <= _AFTERNOON_CLOSE
+        )
+        if not in_session:
+            raise ValueError(
+                f"分钟 bar 时间 {stamp} 不在交易时段 "
+                f"{_MORNING_OPEN.strftime('%H:%M')}–{_MORNING_CLOSE.strftime('%H:%M')} / "
+                f"{_AFTERNOON_OPEN.strftime('%H:%M')}–{_AFTERNOON_CLOSE.strftime('%H:%M')}，拒绝该数据"
+            )
         as_of = stamp.strftime("%Y-%m-%d")
         data_time = stamp.strftime("%Y-%m-%d %H:%M")
     else:

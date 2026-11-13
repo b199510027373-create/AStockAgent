@@ -382,5 +382,109 @@ class EventFetchParsingTests(unittest.TestCase):
         self.assertEqual(out["source"].iloc[0], "国务院")
 
 
+class AdjCaliberTests(unittest.TestCase):
+    """ADR-008 口径：qfq/hfq/none 必须是三种不同算法（评审 P0 回归）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.raw = pd.DataFrame(
+            {
+                "ts_code": ["600519.SH"] * 3,
+                "trade_date": pd.to_datetime(["2025-01-02", "2025-01-03", "2025-01-06"]),
+                "open": [10.0, 11.0, 12.0],
+                "high": [10.5, 11.5, 12.5],
+                "low": [9.8, 10.8, 11.8],
+                "close": [10.2, 11.2, 12.2],
+                "pre_close": [10.0, 10.2, 11.2],
+                "vol": [1000.0, 1100.0, 1200.0],
+                "amount": [10000.0, 11000.0, 12000.0],
+            }
+        )
+        self.factors = pd.DataFrame(
+            {
+                "trade_date": pd.to_datetime(["2025-01-02", "2025-01-03", "2025-01-06"]),
+                "adj_factor": [1.0, 2.0, 4.0],
+            }
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_fetch_daily_none_keeps_raw_prices(self):
+        fake = FakeTushare(self.raw, self.factors)
+        out = data._fetch_daily(fake, "600519.SH", "20250102", "20250106", None)
+        self.assertNotIn("raw_close", out.columns)
+        self.assertAlmostEqual(float(out["close"].iloc[0]), 10.2)
+        self.assertAlmostEqual(float(out["close"].iloc[-1]), 12.2)
+        # none 口径不需要复权因子
+        self.assertEqual(fake.calls, ["daily"])
+
+    def test_fetch_daily_hfq_scales_against_original_factor(self):
+        fake = FakeTushare(self.raw, self.factors)
+        out = data._fetch_daily(fake, "600519.SH", "20250102", "20250106", "hfq")
+        self.assertAlmostEqual(float(out["close"].iloc[0]), 10.2 * 1.0)
+        self.assertAlmostEqual(float(out["close"].iloc[-1]), 12.2 * 4.0)
+        self.assertAlmostEqual(float(out["raw_close"].iloc[-1]), 12.2)
+
+    def test_load_daily_rejects_unknown_adj(self):
+        fake = FakeTushare(self.raw, self.factors)
+        with self.assertRaises(ValueError):
+            data.load_daily("600519.SH", adj="raw", client=fake)
+
+    def test_apply_minute_adj_none_is_identity(self):
+        minute = pd.DataFrame(
+            {
+                "trade_date": pd.to_datetime(["2025-01-06"]),
+                "open": [10.0],
+                "high": [10.5],
+                "low": [9.8],
+                "close": [10.2],
+                "pre_close": [10.0],
+            }
+        )
+        out = data._apply_minute_adj(minute, self.factors, None)
+        self.assertAlmostEqual(float(out["close"].iloc[0]), 10.2)
+        hfq = data._apply_minute_adj(minute, self.factors, "hfq")
+        self.assertAlmostEqual(float(hfq["close"].iloc[0]), 10.2 * 4.0)
+
+
+class LatestBarTimeTests(unittest.TestCase):
+    """§6.2 唯一时点生产者：取时间最大值、两段交易时段、不依赖行序（评审 P2）。"""
+
+    def test_daily_uses_max_date_not_row_order(self):
+        df = pd.DataFrame(
+            {
+                "trade_date": pd.to_datetime(["2024-01-04", "2024-01-02", "2024-01-03"]),
+                "close": [1.0, 2.0, 3.0],
+            }
+        )
+        as_of, bar_time = data.latest_bar_time(df)
+        self.assertEqual(as_of, "2024-01-04")
+        self.assertEqual(bar_time, "2024-01-04 15:00")
+
+    def test_minute_prefers_trade_time_and_accepts_session_edges(self):
+        for stamp in ("2024-01-02 09:30", "2024-01-02 11:30", "2024-01-02 13:00", "2024-01-02 15:00"):
+            df = pd.DataFrame({"trade_time": pd.to_datetime([stamp])})
+            as_of, bar_time = data.latest_bar_time(df, freq="5min")
+            self.assertEqual(as_of, "2024-01-02")
+            self.assertEqual(bar_time, stamp)
+
+    def test_minute_rejects_lunch_break_and_off_hours(self):
+        for stamp in ("2024-01-02 11:31", "2024-01-02 12:30", "2024-01-02 09:29", "2024-01-02 15:01"):
+            df = pd.DataFrame({"trade_time": pd.to_datetime([stamp])})
+            with self.assertRaises(ValueError):
+                data.latest_bar_time(df, freq="5min")
+
+    def test_empty_frame_raises(self):
+        with self.assertRaises(ValueError):
+            data.latest_bar_time(pd.DataFrame())
+
+    def test_unknown_freq_raises(self):
+        df = pd.DataFrame({"trade_date": pd.to_datetime(["2024-01-02"])})
+        with self.assertRaises(ValueError):
+            data.latest_bar_time(df, freq="1m")
+
+
 if __name__ == "__main__":
     unittest.main()
