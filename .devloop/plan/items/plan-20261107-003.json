@@ -2,14 +2,14 @@
   "id": "plan-20261107-003",
   "title": "文件导入解析：PDF / Excel / CSV / DOCX",
   "description": "依据 ADR-015 实现 astock/agent/files.py：PDF（pdfplumber 文本+表格，保留页码）、Excel（openpyxl/pandas，多 sheet、行列坐标）、CSV（编码/分隔符探测）、DOCX（python-docx）、TXT/MD。统一 ExtractedDoc {file_id, pages[], tables[]}；按 sha256 落 data/agent/files/<hash>/（original/extracted.jsonl/tables/*.parquet/meta.json）。明确拒绝扫描件 OCR、加密 PDF、宏文件，并提示原因。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-15",
   "due": "2026-11-22",
   "estimateH": 22,
-  "progress": 0,
+  "progress": 100,
   "acceptance": [
     "PDF（文本层）、XLSX/XLS、CSV、DOCX、TXT/MD 均可解析",
     "文件按 sha256 内容寻址存储，原始文件不可变",
@@ -35,8 +35,16 @@
     ],
     "mergedFrom": [
       "plan-20261110-004"
+    ],
+    "module": "file_ingest",
+    "test": [
+      "pytest tests/test_agent_files.py -q -p no:cacheprovider => 34 passed, 1 warning in 7.25s",
+      "pytest tests -q -p no:cacheprovider => 354 passed, 1 skipped, 2 subtests passed, 1 warning in 28.93s",
+      "ruff check astock app.py tests --select E9,F63,F7,F82 => All checks passed!",
+      "mypy astock app.py => Success: no issues found in 32 source files"
     ]
   },
   "createdAt": "2026-11-07T14:12:00.858Z",
-  "updatedAt": "2026-11-10T08:34:48.501Z"
+  "updatedAt": "2026-11-13T07:45:54.791Z",
+  "devSessionId": "session-3100e9bd-3b63-4022-9649-c18a3f5278f8"
 }
