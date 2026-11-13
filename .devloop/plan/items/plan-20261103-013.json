@@ -1,27 +1,32 @@
 {
   "id": "plan-20261103-013",
-  "title": "根目录清理与双目录源码一致性校验",
-  "description": "根目录当前堆了 mypy_core.txt / mypy_full.txt / coverage_report.txt / temp_600519.SH.png / daily_report.txt 等临时产物；真正关联 GitHub 的是 release/AStockAgent，两份代码需要保持同步。评审 PR#14 建议做根目录清理与仓库卫生。目标：归档临时文件、加一个\"双目录源码一致性\"校验脚本并纳入发布流程，避免推送旧代码。",
+  "title": "根目录卫生与仓库单一真源校验",
+  "description": "旧前提已过时：当前 git 仓库就是根目录 C:\\Users\\b1995\\Documents\\AStockAgent，remote 为 github.com/b199510027373-create/AStockAgent；release/AStockAgent 是旧的独立仓库，不再需要“双目录源码同步”。目标改为：清理根目录临时产物（mypy_core.txt/mypy_full.txt/coverage_report.txt/temp_*.png/daily_report.txt 等）；归档或忽略 handoff/review 草稿；加一个“当前仓库根/remote/分支”校验脚本，防止再按旧 release 目录发布；文档删除双目录同步表述。",
   "status": "todo",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
   "start": "2026-11-28",
   "due": "2026-11-30",
-  "estimateH": 6,
+  "estimateH": 4,
   "progress": 0,
   "acceptance": [
     "根目录只保留源码/配置/文档，临时产物归档或删除",
-    "根目录与 release/AStockAgent 的源码哈希一致性有一键校验脚本",
-    "校验脚本纳入 CI 或发布前 checklist",
-    "清理前后测试 57 个仍全部通过"
+    "脚本校验 `git rev-parse --show-toplevel` 指向工作区根且 remote 为 b199510027373-create/AStockAgent",
+    "release/AStockAgent 标记为历史旧仓库，不再作为发布源；删除双目录同步要求",
+    "handoff/review 草稿有归档目录或忽略规则，不污染 git status",
+    "清理后全量 pytest 与 mypy 通过；CI/发布文档同步更新"
   ],
   "tags": [
     "repo",
     "hygiene",
     "release"
   ],
-  "links": {},
+  "links": {
+    "docs": [
+      "docs/AStockAgent_CI_work_calendar.md"
+    ]
+  },
   "createdAt": "2026-11-03T12:10:59.950Z",
-  "updatedAt": "2026-11-03T12:10:59.950Z"
+  "updatedAt": "2026-11-13T19:09:24.706Z"
 }

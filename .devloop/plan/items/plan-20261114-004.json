@@ -1,0 +1,40 @@
+{
+  "id": "plan-20261114-004",
+  "title": "PR #9 调度 5 日生产验收与心跳告警观察",
+  "description": "PR #9（plan-20261103-007）已合并 a9c1248，jobs 表状态机与心跳告警进入 main；合并时仅完成 50 个自动化测试，真实交易日 5 日全 success 验收需在产线执行。目标：在最新 main 上连续 5 个交易日运行 python -m astock.jobs --report 5，确认 pending/running/success 状态、attempts、late_by_min、heartbeat 告警与去重均符合预期；若失败，回写 scheduler_ledger 测试或修复。",
+  "status": "todo",
+  "priority": "P2",
+  "milestone": "ms-quality",
+  "owner": "human",
+  "start": "2026-11-14",
+  "due": "2026-11-21",
+  "estimateH": 4,
+  "progress": 0,
+  "acceptance": [
+    "最新 main 上 tests/test_scheduler_ledger.py + tests/test_hardening.py 通过（已跑 50 passed）",
+    "连续 5 个交易日 python -m astock.jobs --report 5 全 success，留存报告",
+    "心跳告警在阈值 2 个交易日未 success 时触发，1 日不触发，签名去重有效",
+    "jobs 表 running 超时恢复 failed、到期未跑登记 pending、late_by_min 计算正确",
+    "异常场景（空台账、长期停摆）不误报；验收结果写回 plan-20261103-007 或新 issue"
+  ],
+  "tags": [
+    "scheduler",
+    "jobs",
+    "acceptance",
+    "heartbeat"
+  ],
+  "deps": [
+    "plan-20261103-007"
+  ],
+  "links": {
+    "adr": [
+      "ADR-004"
+    ],
+    "module": [
+      "jobs",
+      "scheduler"
+    ]
+  },
+  "createdAt": "2026-11-13T19:08:42.795Z",
+  "updatedAt": "2026-11-13T19:09:27.359Z"
+}

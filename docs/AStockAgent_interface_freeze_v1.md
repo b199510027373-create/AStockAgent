@@ -5,6 +5,11 @@
 > 必须先提新 ADR 并把版本号推进到 v2，不允许在实现里「顺手改」。
 > 关联文件：`docs/AStockAgent_contract_rule_map_v1.md`（18 条 contract 规则落点）、
 > `.devloop/architecture/contract.json`（v1.1）、`tests/test_architecture_gate.py`（防漂移门禁）。
+>
+> **2026-11-14 版本说明**：§3.4 图表 meta/`div_id` 与 §5 `agent_*` 三表已由
+> `docs/AStockAgent_chart_audit_v2_change_spec.md` 的 Q1/Q2/Q3/Q5/D9 模型覆盖；本文件相应条目
+> 已就地改为 v2 口径，旧 v1 语义不再作为实现依据。§4 文件 `meta.json` 明确为 15 个必填字段，
+> `bbox` 区分 PDF 页面坐标与 Excel/CSV/DOCX 表格坐标。冻结清单正式升版随 plan-20261114-002。
 
 ## 0. 评审记录
 
@@ -215,10 +220,10 @@ hline     {y: number, label?: str ≤ 60}   vline {x: str|number, label?}   text
 
 - `render(spec) -> RenderedFigure{html: str, png_path: str|None, artifact_id: str, warnings: list[str]}`；
 - 图题与角标同时展示 `data_as_of` 与 `data_time`；缺任一时点必须显式写 `时点未知`，不得留空；
-- 产物落 `agent_artifacts`，`meta_json` 记录 `{data_as_of, data_time, source, params, spec, code_version}`，并追加 `{time_point_scope, div_id, degraded, warnings, png_path, data}`；
-- `time_point_scope` ∈ `market`（未被 `transforms` 裁剪的行情时点）/`view`（图上前端视图时点）/`unknown`（取不到时点）；
-- 复现前提：同一 `spec`、同一份数据快照、**同一 plotly 版本与 `include_plotlyjs` 设置**。`params` 里记录 `plotly_version`/`python_version`/`include_plotlyjs`，HTML 的 div id 由 `spec + 数据快照` 派生（`astock-chart-<8 hex>`），因此同输入字节稳定、不同图不共享 id；
-- 同一 `artifact_id` 重复渲染时 `meta_json` 以**最新一次写入为准**（例如先降级出 HTML、后补齐 PNG，`degraded`/`png_path` 必须升级），行数仍为 1；
+- 产物落 `agent_artifacts`，`meta_json` 只存小型 provenance：`{data_as_of, data_time, view_as_of, view_time, source, params, spec, code_version, plotly_version, python_version, degraded, warnings, png_path, data_digest}`；5000 行数据快照落独立 `data.json`，不进 meta；
+- `data_as_of`/`data_time` 固定为**行情时点**（transforms 前），`view_as_of`/`view_time` 为 transforms 后图上的最后一根；图注同时展示，transforms 聚合掉时间列时 `view_*` 可空、写“视图时点未知”，但行情时点必须保留；不再使用 `time_point_scope` 单字段双义；
+- 复现前提：同一 `spec`、同一份数据快照、**同一 plotly/python 版本与 `include_plotlyjs` 设置**。`params` 记录版本；规范 HTML 的 div id 固定，`embed_html` 为每个嵌入实例分配唯一 `astock-chart-<8 hex>`，不同图/重复嵌入不共享 id；
+- 同一 `artifact_id` 重复渲染时**不覆盖 meta**：追加 `agent_artifact_versions`（`meta_digest`/`env_version`），修正走 `corrections`（actor/理由/旧值/新值/时间），行数不合并；旧 `as_recorded` 与 `recomputed` 回放分离，不一致只给 warning；
 - 无 `kaleido` 时只出 HTML（`png_path=None`），不抛异常，并在 `ToolResult.metadata` 标 `degraded=true`；PNG 在 ADR-016 补充裁决（2026-11-14 Q6=A）后升为 v1 支持功能，版本锁定/Chrome/字体/CI 真实导出由 plan-20261114-001 落地；
 - 渲染器**不得**执行 spec 之外的任何代码；`transforms` 只走白名单算子。
 - 审计边界（Q5=C）：目标形态是 `chart_service` 作为唯一审计入口、artifact 数据源走 `ArtifactReader` 只读协议；v1 暂由 `chart_render.render()` 直接写 `agent_artifacts`，迁移与拆分见 plan-20261114-002。
@@ -255,7 +260,9 @@ data/agent/files/<sha256>/            # sha256 为原文 64 位小写十六进�
 | `warnings` | `list[str]` | 可读提示，直接回显给用户 |
 
 `extracted.jsonl` 单行结构：
-`{"file_id", "page": int|null, "sheet": str|null, "block": int, "kind": "text"|"table", "text": str, "bbox": [x0,y0,x1,y1]|null, "cells": int|null}`。
+`{"file_id", "page": int|null, "sheet": str|null, "block": int, "kind": "text"|"table", "text": str, "bbox": ...|null, "cells": int|null}`。
+
+`bbox` 分两类，不得混用：PDF 页面坐标 `[x0,y0,x1,y1]`（points，左上原点）；Excel/CSV/DOCX 表格坐标 `[row_start,col_start,row_end,col_end]`（1-based 闭区间，DOCX 为源表格行号）。文本块 `bbox=null`；表格块必须带 `cells`（行×列）与 `sheet`（Excel）。
 
 表格落盘规则：`sheet_slug` = 工作表名转小写、非 `[a-z0-9]` 替换为 `_`、截断 40 字符、重名后缀 `_2`；
 parquet 列名取原始表头（去首尾空白），无表头时 `col_1..col_n`；数值列尽力转 `float`，转换失败**保留字符串**，
@@ -283,6 +290,11 @@ GC 只删目录与索引行，不删 `agent_steps`/`agent_artifacts`。
 
 代码锚点：待建 `astock/agent/store.py`（plan-20261107-008）。状态：**冻结草案，未实现**。
 同库 `data/astock.db`，与既有五表（runs/items/evidence/jobs/tracking）共存；建表幂等。
+
+> **v2 覆盖（2026-11-14）**：以下三表 DDL 为 v1 历史，`agent_artifacts.run_id NOT NULL` / 合成 run 模型已由
+> `docs/AStockAgent_chart_audit_v2_change_spec.md` §7 与 plan-20261107-008 的 v2 模型取代：artifact 去 `run_id`，
+> 新增 `agent_artifact_versions`、`agent_run_artifacts` 引用表与 `corrections`；直接渲染 `link.source=render`、
+> `run_id` 可空；行永久保留、只 GC 无引用文件。实现以 plan-20261107-008 的 v2 acceptance 为准。
 
 ```sql
 CREATE TABLE IF NOT EXISTS agent_runs(
@@ -343,8 +355,7 @@ artifact 路径与去重：`data/agent/artifacts/<digest[:2]>/<digest>/<filename
 `digest` 索引保持非唯一（同一张图可被两个 run 引用）。删除 artifact 文件后 run/step 记录仍可查（审计不断链）。
 
 留存清理：`astock/agent/store.py::prune_artifacts(conn, *, before, keep_digests=(), root=None, delete_files=True)`
-删除 `created_at < before` 的行并按需清理不再被引用的文件与空目录（只用 `Path.unlink`/`Path.rmdir`）；
-调度与默认保留期由 plan-20261107-008 决定。`meta_json` 可修正（回放按快照重算），**产物真实性以 `digest`（文件 sha256）为准**（决策记录 Q2）。
+只删 `created_at < before` 且**无引用**的 HTML/PNG 文件与空目录（只用 `Path.unlink`/`Path.rmdir`）；`agent_artifacts`/`agent_artifact_versions`/`agent_run_artifacts` 行**永久保留**，不按保留期删行。`meta_json` 不可变，修正只追加 `corrections`；产物真实性以 `content_digest + meta_digest` 为准（v2 决策）。
 
 ## 6. 冻结接口六：`data_as_of` / `data_time`
 

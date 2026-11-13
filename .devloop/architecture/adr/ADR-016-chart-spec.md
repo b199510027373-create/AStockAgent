@@ -29,7 +29,7 @@
    }
    ```
 2. 校验：手写 schema 校验（不引入 pydantic 重依赖），字段/枚举/长度白名单；非法 spec 返回结构化错误给 Agent 重试。
-3. 渲染 `astock/agent/chart_render.py`：spec → Plotly Figure → 自包含 HTML（`gr.HTML` 内嵌）+ 可选 PNG；图与数据快照一并落 artifact。
+3. 渲染 `astock/agent/chart_render.py`：spec → Plotly Figure → 自包含 HTML（`gr.HTML` 内嵌）+ PNG（v1 支持；基础设施见 plan-20261114-001）；图与数据快照一并落 artifact。
 4. 行情类图（v1 必备）：
    - 周期：日/周/月 + 1/5/15/30/60 分钟；
    - 叠加：MA5/10/20/60/120/250、BOLL、成交量、MACD、RSI、KDJ；
@@ -75,7 +75,7 @@ ChartSpec v1 在 `docs/AStockAgent_interface_freeze_v1.md` §3 **逐字冻结**�
 - 正面：安全、可复现、图与口径绑定；常见统计图/K 线一次到位。
 - 负面：表达力不如代码解释器；复杂自定义图需要扩展算子。
 - 扩展路径：先用新增白名单算子满足需求；确需通用计算时再走二期沙箱。
-- 依赖：Plotly 已有；PNG 导出需 `kaleido`，作为可选依赖，缺失时只出 HTML。
+- 依赖：Plotly 已有；PNG 导出需 `kaleido`，2026-11-14 Q6=A 后升级为 v1 支持功能，需锁定 Plotly/Kaleido 版本并保障 Chrome/中文字体/CI 真实导出（plan-20261114-001）。
 
 ## 证据
 
@@ -83,3 +83,13 @@ ChartSpec v1 在 `docs/AStockAgent_interface_freeze_v1.md` §3 **逐字冻结**�
 - `astock/stats.py` / `factors.py`（统计量来源）、`astock/backtest.py`（净值/回撤）
 - 用户 2026-11-07 消息
 - 冻结规格：`docs/AStockAgent_interface_freeze_v1.md` §3；承接项 plan-20261107-005
+
+
+## 补充裁决（2026-11-14）
+
+- **Q4=B**：删除 `panes`/`style`/`raw` 兼容别名；规范字段只保留 `layers`/`theme`/`adj=none`，未知键与旧别名一律报错。落地项 `plan-20261114-002`。
+- **Q5=C（完整版）**：`chart_render` 只负责校验/取数/指标/HTML/PNG，不写审计表；新增 `chart_service` 作为唯一审计入口，artifact 数据源通过 `ArtifactReader` 只读协议注入。落地项 `plan-20261114-002`。
+- **Q6=A**：PNG 导出从“可选降级”升级为 v1 支持功能；锁定 Plotly/Kaleido 版本，Windows/Linux CI 真实导出，中文字体与失败语义纳入验收。落地项 `plan-20261114-001`。
+- **D10（2026-11-14）**：禁止猜时间列。`encode.x` 或显式 `data.time_field` 必须指向可证明的时间列；`data_as_of` 只能由该列按 `Asia/Shanghai` 解析，字符串代码 `20240104`、标签 `2024-01-04 收盘` 一律不得当时间列。无显式时间列、无法证明时区/交易日语义时抛 `ChartSpecError`，不静默生成“看似合理”的图注；inline 数据必须自带 `time_field` 或声明 `time_semantics=none`。落地项 `plan-20261114-002`。
+- **D11（2026-11-14）**：`transforms` 的统计口径必须复用 `astock/stats.py`（或同一实现），不得手写另一套 pandas 聚合。`groupby` 默认 `dropna=False` 保留空组，`agg` 的 `mean/sum/min/max/count/last` 与 stats 对齐；空组/全 NaN 组保留并显式标 warning，不静默丢行；排序稳定（`kind="mergesort"`），同值不随机换序；字段覆盖同名时在结果里加后缀并报警，不静默覆盖。图上均值必须与表/报告一致。落地项 `plan-20261114-002`。
+- **D1（2026-11-14）**：`ChartSpec.data.adj` 增加 `hfq`（标准后复权，基准 1.0，定义见 ADR-008 补充裁决）；默认仍 `qfq`，`none` 保留给涨跌停/成交类图。分钟 hfq 必须标 `adj_source=daily`，不得与日线 hfq 混成连续序列。落地项 `plan-20261114-003`。

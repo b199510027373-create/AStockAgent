@@ -2,14 +2,14 @@
   "id": "plan-20261103-003",
   "title": "推荐 UI 生成/历史读取统一到 ledger",
   "description": "依据 ADR-003 与修复记录 §5.1。目前推荐页已有「加载最近一次（SQLite）」按钮，但生成路径仍走实时流水线，二者未统一。目标：历史批次列表、单批详情、证据链全部从 ledger 读；生成成功后立即写入并回到同一读取路径。避免\"同一按钮两种口径\"。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-contracts",
   "owner": "human",
   "start": "2026-11-18",
   "due": "2026-11-21",
   "estimateH": 8,
-  "progress": 95,
+  "progress": 100,
   "acceptance": [
     "推荐页的「生成」与「历史读取」都走 ledger",
     "页面能看到 run_id / data_as_of / tradable_from / diagnostics",
@@ -26,7 +26,7 @@
       "ADR-003"
     ],
     "branch": "feat/plan-20261103-003-ledger-ui",
-    "commit": "ade4e43",
+    "commit": "eec4a65",
     "test": [
       "pytest tests/test_use_cases.py tests/test_core_paths.py -q -p no:cacheprovider -> 45 passed, 2 subtests passed",
       "pytest tests/test_core_paths.py tests/test_alpha_banner.py tests/test_research_semantics.py tests/test_hardening.py -q -p no:cacheprovider -> 68 passed",
@@ -35,10 +35,12 @@
       "pytest tests/test_use_cases.py tests/test_core_paths.py tests/test_contracts.py tests/test_research_semantics.py -q -p no:cacheprovider -> 108 passed, 2 subtests passed (review fix ade4e43)",
       "pytest tests -q -p no:cacheprovider -> 305 passed, 1 skipped, 2 subtests passed (review fix ade4e43)",
       "mypy astock -> Success: no issues found in 30 source files (review fix ade4e43)"
-    ]
+    ],
+    "mergeCommit": "eec4a65",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/13"
   },
   "createdAt": "2026-11-03T12:10:29.795Z",
-  "updatedAt": "2026-11-11T05:54:18.153Z",
+  "updatedAt": "2026-11-13T19:07:16.995Z",
   "deps": [
     "plan-20261103-002"
   ],

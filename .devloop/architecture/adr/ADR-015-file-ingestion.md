@@ -42,7 +42,7 @@
 
 本 ADR 对应代码尚未开工（`astock/agent/files.py` 不存在，`astock/agent/tools/` 不存在），本次只做接口级评审：
 布局、索引、工具签名在 `docs/AStockAgent_interface_freeze_v1.md` §4 **逐字冻结**（目录、四件产物、
-`meta.json` 13 个必填字段、`extracted.jsonl` 单行结构、`sheet_slug` 规则、FTS5 建表语句与触发器）。
+`meta.json` 15 个必填字段、`extracted.jsonl` 单行结构、`sheet_slug` 规则、FTS5 建表语句与触发器）。
 冻结要点与原文的差异：
 
 1. 增加 `file_id = "f_" + sha256[:16]`：目录仍以完整 sha256 命名（内容寻址），但对外引用用短 id，
@@ -61,7 +61,7 @@
 
 以下条件不阻塞 003/005（SQLite ledger / 时间语义）开工。按「建」（落盘与解析，plan-20261107-003）与「用」（检索与表格查询，plan-20261107-004）拆成两组，避免同一条件被两个计划项同时认领：
 
-- **C1 布局与索引逐字一致（承接 plan-20261107-003）**：`files.py` 必须按冻结布局落盘（四件产物齐全），`meta.json` 13 个必填字段
+- **C1 布局与索引逐字一致（承接 plan-20261107-003）**：`files.py` 必须按冻结布局落盘（四件产物齐全），`meta.json` 15 个必填字段
   一个不缺，FTS5 建表语句与 `docs/AStockAgent_interface_freeze_v1.md` §4 字符级一致；FTS5 索引由 `files.py` 在抽取同批写入，
   不另起批处理；检索结果能回溯到 `file_id + page + block`。验收：`tests/test_agent_files.py::test_layout_matches_frozen_spec`。
 - **C2 依赖与限额集中管理（承接 plan-20261107-003）**：`pdfplumber` / `python-docx` / `duckdb` 写进 `requirements.txt` 并给版本下限；
@@ -73,6 +73,16 @@
 - **C4 检索与表格查询契约（承接 plan-20261107-004）**：`file_search` 命中必须能回查 `file_id + page + block`；
   `table_query` 只允许单条 `SELECT` + 强制 `LIMIT` + 5 秒超时，写语句/DDL 一律拒绝；DuckDB 只读连接不得落临时文件；
   文件内容进 prompt 必须包在不可信数据块内（ADR-017 §5）。验收：`tests/test_agent_files.py::test_table_query_rejects_write`。
+
+## 字段与 bbox 订正（2026-11-14）
+
+旧稿两处口径与冻结清单/实现不一致，按最新版本订正：
+
+1. **meta 必填字段是 15 个**，不是 13：`file_id`、`sha256`、`name`、`ext`、`media_type`、`size_bytes`、`uploaded_at`、`pages`、`sheets`、`text_chars`、`chunks_count`、`parser`、`parser_version`、`status`、`warnings`。缺任一字段视为解析失败；`docs/AStockAgent_interface_freeze_v1.md` §4 的表已按 15 个列出。
+2. **bbox 分两类，不得混用**：
+   - PDF 页面坐标：`[x0,y0,x1,y1]`，单位 points，左上原点；
+   - Excel / CSV / DOCX 表格坐标：`[row_start,col_start,row_end,col_end]`，1-based 闭区间；DOCX 的行号是源表格行号，Excel 需同时带 `sheet`。
+   - 文本块 `bbox=null`；表格块必须落 `cells`（行×列）。冻结清单 §4 的 `extracted.jsonl` 单行结构同步注明两种坐标。
 
 ## 后果
 
