@@ -28,7 +28,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from astock.config import BASE_DIR
 
@@ -366,3 +366,68 @@ def find_artifacts_by_digest(
         "SELECT * FROM agent_artifacts WHERE digest = ? ORDER BY created_at", (digest,)
     ).fetchall()
     return [record for record in (_row_to_record(row) for row in rows) if record]
+
+
+def prune_artifacts(
+    conn: sqlite3.Connection,
+    *,
+    before: str,
+    keep_digests: Sequence[str] = (),
+    root: str | Path | None = None,
+    delete_files: bool = True,
+) -> dict[str, int]:
+    """删除 ``created_at < before`` 的 artifact 行，并按需清理不再被引用的文件。
+
+    参数
+    ----
+    before:
+        ISO 时间下界（与 ``created_at`` 同格式，UTC ISO 字符串）。
+    keep_digests:
+        命中这些 digest 的行一律保留（例如最近一次回答引用的图）。
+    root:
+        artifact 根目录，默认 :data:`DEFAULT_ARTIFACT_ROOT`。
+    delete_files:
+        ``True`` 时删除没有其他行引用的文件与空目录；仅删行时传 ``False``。
+
+    返回 ``{"rows": 删除行数, "files": 删除文件数, "pruned_digests": 目录清理数}``。
+    只用 ``Path.unlink``/``Path.rmdir``（架构门禁禁止 ``shutil.rmtree``）。
+    """
+    base = Path(root) if root is not None else DEFAULT_ARTIFACT_ROOT
+    keep = {digest for digest in keep_digests if digest}
+    rows = conn.execute(
+        "SELECT artifact_id, digest FROM agent_artifacts WHERE created_at < ? ORDER BY created_at",
+        (before,),
+    ).fetchall()
+    targets = [row for row in rows if row["digest"] not in keep]
+    removed_rows = 0
+    removed_files = 0
+    pruned_dirs = 0
+    stale_digests: set[str] = set()
+    for row in targets:
+        conn.execute(
+            "DELETE FROM agent_artifacts WHERE artifact_id = ?", (row["artifact_id"],)
+        )
+        removed_rows += 1
+        stale_digests.add(row["digest"])
+    if delete_files:
+        for digest in stale_digests:
+            remaining = conn.execute(
+                "SELECT COUNT(*) AS n FROM agent_artifacts WHERE digest = ?", (digest,)
+            ).fetchone()["n"]
+            if remaining:
+                continue
+            directory = base / "artifacts" / digest[:2] / digest
+            if not directory.is_dir():
+                continue
+            for entry in sorted(directory.iterdir()):
+                if entry.is_file():
+                    entry.unlink()
+                    removed_files += 1
+            try:
+                directory.rmdir()
+                pruned_dirs += 1
+            except OSError:
+                # 目录非空或已被占用：保留目录，不影响行删除结果。
+                pass
+    conn.commit()
+    return {"rows": removed_rows, "files": removed_files, "pruned_digests": pruned_dirs}

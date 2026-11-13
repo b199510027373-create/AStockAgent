@@ -158,7 +158,16 @@ def test_artifact_meta_records_spec_params_time_points_source_version(
     rendered = _render(inline_line_spec(), paths)
     row = _artifact_row(rendered, paths)
     meta = row.meta
-    for key in ("spec", "params", "data_as_of", "data_time", "source", "code_version"):
+    for key in (
+        "spec",
+        "params",
+        "data_as_of",
+        "data_time",
+        "source",
+        "code_version",
+        "time_point_scope",
+        "div_id",
+    ):
         assert key in meta, key
     assert meta["data_as_of"] == "2024-01-04"
     assert meta["data_time"] == "2024-01-04 15:00"
@@ -167,6 +176,10 @@ def test_artifact_meta_records_spec_params_time_points_source_version(
     assert meta["spec"]["kind"] == "line"
     assert meta["params"]["kind"] == "line"
     assert meta["data"]["rows"][0]["day"].startswith("2024-01-02")
+    # 复现前提：记录运行时版本，避免「同 spec 同数据却字节不同」无从追查。
+    assert meta["params"]["plotly_version"]
+    assert meta["params"]["python_version"]
+    assert meta["params"]["code_version"] == rendered.code_version
 
 
 def test_same_spec_renders_to_same_artifact_id_and_single_row(paths: dict[str, str]) -> None:
@@ -526,6 +539,66 @@ def test_snapshot_truncation_always_keeps_latest_bar() -> None:
     latest = pd.Timestamp(frame["trade_date"].max())
     assert pd.Timestamp(snapshot["rows"][-1]["trade_date"]) == latest
 
+
+
+# ---------------------------------------------------------------- div id / 时点语义（D2/D4/D10）
+
+
+def test_div_id_is_derived_from_spec_and_snapshot(paths: dict[str, str]) -> None:
+    first = _render(inline_line_spec(), paths)
+    second = _render(inline_line_spec(), paths)
+    first_row = _artifact_row(first, paths)
+    assert first_row is not None
+    div_id = first_row.meta["div_id"]
+    assert div_id.startswith(chart_render.FIGURE_DIV_PREFIX + "-")
+    assert f'id="{div_id}"' in first.html
+    assert second.artifact_id == first.artifact_id
+    assert second.html == first.html
+
+    other = dict(inline_line_spec())
+    other["title"] = "换一张图"
+    other_row = _artifact_row(_render(other, paths), paths)
+    assert other_row is not None
+    assert other_row.meta["div_id"] != div_id  # 同页多图不共享 id
+
+
+def test_time_point_scope_marks_market_view_and_unknown(paths: dict[str, str]) -> None:
+    market = _render(candlestick_spec(), paths, frame=ohlcv_frame())
+    assert market.time_point_scope == "market"
+    assert market.metadata()["time_point_scope"] == "market"
+
+    viewed = _render(
+        inline_line_spec(
+            transforms=[{"op": "limit", "n": 1}],
+        ),
+        paths,
+    )
+    assert viewed.time_point_scope == "view"
+
+    unknown = _render(inline_line_spec(), paths, data_as_of="", data_time="")
+    assert unknown.time_point_scope == "unknown"
+    assert unknown.data_as_of == ""
+
+
+def test_time_probe_only_trusts_date_like_columns(paths: dict[str, str]) -> None:
+    # code 列的取值虽然形如日期，但列名不在白名单里 → 不得据此猜时点（D10）。
+    spec = {
+        "version": 1,
+        "kind": "line",
+        "data": {
+            "source": "inline",
+            "fields": ["code", "close"],
+            "rows": [
+                {"code": "20240102", "close": 10.0},
+                {"code": "20240103", "close": 10.2},
+            ],
+        },
+        "encode": {"x": "code", "y": "close"},
+    }
+    rendered = _render(spec, paths)
+    assert rendered.data_as_of == ""
+    assert rendered.time_point_scope == "unknown"
+    assert "时点未知" in rendered.caption
 
 
 # ---------------------------------------------------------------- 安全边界

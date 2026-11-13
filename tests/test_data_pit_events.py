@@ -470,11 +470,37 @@ class LatestBarTimeTests(unittest.TestCase):
             self.assertEqual(as_of, "2024-01-02")
             self.assertEqual(bar_time, stamp)
 
-    def test_minute_rejects_lunch_break_and_off_hours(self):
+    def test_minute_rejects_lunch_break_and_off_hours_in_strict_mode(self):
         for stamp in ("2024-01-02 11:31", "2024-01-02 12:30", "2024-01-02 09:29", "2024-01-02 15:01"):
             df = pd.DataFrame({"trade_time": pd.to_datetime([stamp])})
             with self.assertRaises(ValueError):
                 data.latest_bar_time(df, freq="5min")
+            with self.assertRaises(ValueError):
+                data.latest_bar_time(df, freq="5min", strict=True)
+
+    def test_minute_skips_out_of_session_bars_by_default(self):
+        # 集合竞价 09:25 bar 真实存在；默认跳过，取时段内最后一根（决策记录 Q7）。
+        df = pd.DataFrame(
+            {
+                "trade_time": pd.to_datetime(
+                    ["2024-01-02 09:25", "2024-01-02 09:35", "2024-01-02 15:01"]
+                )
+            }
+        )
+        notes: list[str] = []
+        as_of, bar_time = data.latest_bar_time(df, freq="5min", notes=notes)
+        self.assertEqual(as_of, "2024-01-02")
+        self.assertEqual(bar_time, "2024-01-02 09:35")
+        self.assertEqual(len(notes), 1)
+        self.assertIn("2 根", notes[0])
+
+        with self.assertRaises(ValueError):
+            data.latest_bar_time(df, freq="5min", strict=True)
+
+    def test_minute_raises_when_every_bar_is_out_of_session(self):
+        df = pd.DataFrame({"trade_time": pd.to_datetime(["2024-01-02 09:25"])})
+        with self.assertRaises(ValueError):
+            data.latest_bar_time(df, freq="5min")
 
     def test_empty_frame_raises(self):
         with self.assertRaises(ValueError):

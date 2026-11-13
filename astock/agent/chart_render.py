@@ -23,9 +23,12 @@ groupby/agg 的输出列名规则：``"{field}_{func}"``（如 ``amount_sum``）
 from __future__ import annotations
 
 import json
+import os
+import platform
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -33,6 +36,9 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from astock import __version__ as _PKG_VERSION
+from astock import data as market
+from astock import indicators
 from astock.agent.chart_spec import (
     ChartSpecError,
     SpecIssue,
@@ -46,21 +52,25 @@ from astock.agent.store import (
     get_artifact,
     put_content,
     record_artifact,
+    sha256_bytes,
 )
 from astock.agent.types import ToolResult
 
 __all__ = [
     "CODE_VERSION",
+    "FIGURE_DIV_PREFIX",
     "PRICE_DOWN",
     "PRICE_UP",
     "RenderedFigure",
     "apply_transforms",
+    "figure_div_id",
     "figure_tool_result",
     "render",
 ]
 
-#: 记录进 artifact 元数据的代码版本（冻结清单 §5 ``agent_runs.code_version`` 同源）。
-CODE_VERSION = "astock-0.1.0"
+#: 记录进 artifact 元数据的代码版本（``ASTOCK_CODE_VERSION`` 可覆盖，默认取包版本）。
+#: 冻结清单 §5 ``agent_runs.code_version`` 同源；不写死常量，避免版本与代码脱节。
+CODE_VERSION = os.getenv("ASTOCK_CODE_VERSION") or f"astock-{_PKG_VERSION}"
 
 #: 与 ``astock/charts.py`` 的 ``UP``/``DOWN`` 同值（A 股红涨绿跌）；测试里断言不漂移。
 PRICE_UP = "#EF5350"
@@ -69,9 +79,41 @@ LINE_COLORS = ("#1F77B4", "#FF7F0E", "#2CA02C", "#9467BD")
 GRID = "rgba(0,0,0,0.06)"
 
 MAX_SNAPSHOT_ROWS = 5000
-FIGURE_DIV_ID = "astock-chart"
+
+#: 图表 div id 前缀。完整 id 由「规范化 spec + 数据快照」派生（见 :func:`figure_div_id`）：
+#: 同一份 spec 与数据 → 同一 div id → 同一字节 → 同一 artifact_id（可复现）；
+#: 不同 spec/数据 → 不同 id，避免同页多张图互相覆盖（评审 D4/Q3）。
+FIGURE_DIV_PREFIX = "astock-chart"
 MINUTE_FREQS = ("1min", "5min", "15min", "30min", "60min")
 FREQ_ALIASES = {"day": "D", "week": "W", "month": "M"}
+#: 时点探测只认这些列名（防止把 ``code``/``label`` 之类误判成时间列，D10）。
+_TIME_COLUMN_NAMES = frozenset(
+    {"day", "date", "dt", "datetime", "trade_date", "trade_time", "time"}
+)
+_TIME_COLUMN_HINTS = ("date", "time")
+
+
+def figure_div_id(spec: Mapping[str, Any], snapshot: Mapping[str, Any]) -> str:
+    """确定性 div id：``astock-chart-<8 hex>``，输入 = 规范化 spec + 数据快照行。"""
+    seed = json.dumps(
+        {"spec": spec, "rows": snapshot.get("rows") or []},
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    return f"{FIGURE_DIV_PREFIX}-{sha256_bytes(seed.encode('utf-8'))[:8]}"
+
+
+def _runtime_versions() -> dict[str, str]:
+    """记录复现所需的运行环境版本（plotly 6.x 与 7.x 输出的 HTML 字节不同）。"""
+    try:
+        plotly_version = _pkg_version("plotly")
+    except PackageNotFoundError:  # pragma: no cover - plotly 是硬依赖
+        plotly_version = "unknown"
+    return {
+        "plotly_version": plotly_version,
+        "python_version": platform.python_version(),
+    }
 
 #: 数据方来源解析器：签名 ``(data_section) -> DataFrame``，供工具层注入自定义取数。
 DataResolver = Callable[[Mapping[str, Any]], pd.DataFrame]
@@ -100,6 +142,9 @@ class RenderedFigure:
     degraded: bool = False
     run_id: str = ""
     code_version: str = CODE_VERSION
+    #: 时点语义：``market``=未被 transforms 裁剪的行情时点；``view``=图上前端视图时点；
+    #: ``unknown``=取不到时点（决策记录 D2/Q1）。
+    time_point_scope: str = "view"
 
     @property
     def caption(self) -> str:
@@ -130,6 +175,7 @@ class RenderedFigure:
             "degraded": self.degraded,
             "run_id": self.run_id,
             "code_version": self.code_version,
+            "time_point_scope": self.time_point_scope,
         }
 
     def metadata(self) -> dict[str, Any]:
@@ -141,6 +187,7 @@ class RenderedFigure:
             "figure_params": dict(self.params),
             "data_as_of": self.data_as_of,
             "data_time": self.data_time,
+            "time_point_scope": self.time_point_scope,
             "degraded": self.degraded,
             "warnings": list(self.warnings),
             "code_version": self.code_version,
@@ -207,8 +254,6 @@ def _range_window(range_value: str, *, end: date | None = None) -> tuple[date, d
 
 def _load_market_frame(data: Mapping[str, Any]) -> pd.DataFrame:
     """按冻结词表取行情：日/周/月走 ``load_daily`` + ``period_frame``，分钟走 ``load_minute``。"""
-    from astock import data as market  # 延迟导入：模块导入不触发 Tushare 客户端
-
     ref = str(data["ref"])
     period = str(data.get("period", "day"))
     # 冻结口径 → data 层参数：qfq/hfq 原样传，none（含 raw 别名）必须传 None，
@@ -396,8 +441,6 @@ def _transform_limit(
 
 def _indicator_frame(frame: pd.DataFrame, layers: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """按 layers 计算覆盖列与副图指标，返回 ``{"overlays": {...}, "panes": [...]}``。"""
-    from astock import indicators
-
     overlays: dict[str, pd.Series] = {}
     panes: list[dict[str, Any]] = []
     close = frame["close"] if "close" in frame.columns else None
@@ -428,8 +471,6 @@ def _indicator_frame(frame: pd.DataFrame, layers: Sequence[Mapping[str, Any]]) -
 def _pane_series(
     frame: pd.DataFrame, pane: Mapping[str, Any]
 ) -> dict[str, pd.Series] | pd.DataFrame:
-    from astock import indicators
-
     kind = pane["type"]
     close = frame["close"]
     if kind == "macd":
@@ -529,7 +570,6 @@ def _time_points(
     if data_as_of is not None or data_time is not None:
         # 显式传参优先；显式空串表示「时点未知」，不再回退猜测（图注写「时点未知」）
         return data_as_of or "", data_time or ""
-    from astock import data as market
 
     # 先按实际渲染的数据重算（transforms 之后调用），artifacts 的旧 meta 只作兜底，
     # 避免把首次渲染的错误时点固化到回放结果里（评审 P1）。
@@ -537,7 +577,9 @@ def _time_points(
         probe = frame if _has_bar_time_column(frame) else _probe_time_frame(frame)
         if probe is not None:
             try:
-                return market.latest_bar_time(probe, freq=_period_freq(period))
+                return market.latest_bar_time(
+                    probe, freq=_period_freq(period), notes=warnings
+                )
             except ValueError as exc:
                 warnings.append(f"无法确定时点：{exc}")
     snapshot_as_of = frame.attrs.get("data_as_of")
@@ -555,9 +597,23 @@ def _has_bar_time_column(frame: pd.DataFrame) -> bool:
     return "trade_date" in frame.columns or "trade_time" in frame.columns
 
 
-def _probe_time_frame(frame: pd.DataFrame) -> pd.DataFrame | None:
-    """inline 数据可能只带业务日期列（如 day），补一列 trade_date 交给唯一生产者。"""
+def _time_column_candidates(frame: pd.DataFrame) -> list[str]:
+    """时间列白名单：列名必须像日期/时间（防止 ``code``/``label`` 被误判，D10）。"""
+    names: list[str] = []
     for column in frame.columns:
+        name = str(column).strip().lower()
+        if name in _TIME_COLUMN_NAMES or any(hint in name for hint in _TIME_COLUMN_HINTS):
+            names.append(str(column))
+    return names
+
+
+def _probe_time_frame(frame: pd.DataFrame) -> pd.DataFrame | None:
+    """inline 数据可能只带业务日期列（如 day），补一列 trade_date 交给唯一生产者。
+
+    只考虑列名像日期/时间的列（``_TIME_COLUMN_NAMES`` 或被 ``date``/``time`` 包含），
+    且该列必须整列可解析；否则返回 ``None``，由调用方写「时点未知」。
+    """
+    for column in _time_column_candidates(frame):
         series = frame[column]
         if pd.api.types.is_numeric_dtype(series.dtype):
             continue
@@ -1057,7 +1113,7 @@ def data_snapshot(frame: pd.DataFrame, *, limit: int = MAX_SNAPSHOT_ROWS) -> dic
     return snapshot
 
 
-def _params(spec: Mapping[str, Any]) -> dict[str, Any]:
+def _params(spec: Mapping[str, Any], *, code_version: str = CODE_VERSION) -> dict[str, Any]:
     data = spec.get("data") or {}
     return {
         "kind": spec.get("kind"),
@@ -1071,6 +1127,9 @@ def _params(spec: Mapping[str, Any]) -> dict[str, Any]:
         "layers": [dict(item) for item in spec.get("layers") or []],
         "annotations": [dict(item) for item in spec.get("annotations") or []],
         "theme": spec.get("theme"),
+        # 复现前提：同 spec 同数据在不同 plotly 版本下 HTML 字节不同（D4/Q3）。
+        **_runtime_versions(),
+        "code_version": code_version,
     }
 
 
@@ -1136,17 +1195,27 @@ def render(
         )
 
         caption = _caption(normalized, as_of, bar_time)
+        # 时点语义（D2/Q1）：未被 transforms 裁剪的行情数据 → market；否则只是视图时点。
+        if not as_of:
+            scope = "unknown"
+        elif source == "market" and not normalized["transforms"]:
+            scope = "market"
+        else:
+            scope = "view"
         figure = _build_figure(transformed, normalized, caption=caption, period=period)
+
+        version = code_version or CODE_VERSION
+        snapshot = data_snapshot(transformed)
+        # div id 由 spec + 数据快照派生：同 spec 同数据字节稳定（artifact_id 可复现），
+        # 不同图不共享 id（同页多图不会互相覆盖）。
+        div_id = figure_div_id(normalized, snapshot)
         html = figure.to_html(
             full_html=True,
             include_plotlyjs=include_plotlyjs,
             config={"displaylogo": False, "responsive": True},
-            # 固定 div id：plotly 默认随机 uuid 会让同一份 spec 每次产出不同字节，
-            # 破坏内容寻址（artifact_id 复现 / digest 去重）。
-            div_id=FIGURE_DIV_ID,
+            div_id=div_id,
         )
 
-        version = code_version or CODE_VERSION
         digest, rel_path, absolute = put_content(
             html,
             filename="chart.html",
@@ -1180,15 +1249,16 @@ def render(
             status="partial" if degraded else "success",
         )
 
-        params = _params(normalized)
-        snapshot = data_snapshot(transformed)
+        params = _params(normalized, code_version=version)
         meta = {
             "spec": normalized,
             "params": params,
             "data_as_of": as_of,
             "data_time": bar_time,
+            "time_point_scope": scope,
             "source": source,
             "code_version": version,
+            "div_id": div_id,
             "degraded": degraded,
             "warnings": list(warnings),
             "png_path": png_path,
@@ -1222,6 +1292,7 @@ def render(
         degraded=degraded,
         run_id=run_key,
         code_version=version,
+        time_point_scope=scope,
     )
 
 

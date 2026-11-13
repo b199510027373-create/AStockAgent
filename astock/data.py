@@ -4,6 +4,7 @@ import json
 import os
 import threading
 import time
+from typing import Any
 from datetime import time as clock_time, timedelta
 from pathlib import Path
 
@@ -732,7 +733,13 @@ _AFTERNOON_OPEN = clock_time(13, 0)
 _AFTERNOON_CLOSE = clock_time(15, 0)
 
 
-def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
+def latest_bar_time(
+    df: pd.DataFrame,
+    *,
+    freq: str = "D",
+    strict: bool = False,
+    notes: list[str] | None = None,
+) -> tuple[str, str]:
     """返回 ``(data_as_of, data_time)``，是全局唯一的时点格式化入口（ADR-018 C1）。
 
     冻结语义见《接口冻结清单》§6.1/§6.2：
@@ -740,7 +747,12 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
     - ``data_as_of``：``YYYY-MM-DD``，最后一根有效 bar 所在交易日；
     - ``data_time``：``YYYY-MM-DD HH:MM``，日/周/月线固定 ``15:00``，分钟线取 bar 结束时间；
     - 不变量：``data_time[:10] == data_as_of``；空 DataFrame 抛 ``ValueError``
-      （不允许返回空串骗过必填校验）；分钟 bar 时间越出交易时段视为数据错误并拒绝。
+      （不允许返回空串骗过必填校验）。
+
+    分钟档的越界 bar（集合竞价 09:25、盘后 15:01 等）默认**跳过**并取时段内最后一根，
+    因为真实行情源会带这类 bar，硬失败会让整张图不可用；跳过时若传了 ``notes`` 会追加一条
+    说明供图注/日志留痕。``strict=True`` 时改为抛 ``ValueError``（数据校验场景）。
+    若时段内一根都没有，两种模式都抛错。
 
     工具与渲染器**不得**自行 ``strftime`` 拼时点，一律经此函数。
     """
@@ -757,25 +769,43 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
     if series.empty:
         raise ValueError(f"{column} 全部无效，无法确定时点")
     # 取时间最大值而不是 iloc[-1]：调用方可能传入 sort desc 或未排序的 DataFrame。
-    stamp = pd.Timestamp(series.max())
+    stamps = series.sort_values()
 
     if key in _MINUTE_FREQS:
-        clock = stamp.time()
-        in_session = (
-            _MORNING_OPEN <= clock <= _MORNING_CLOSE
-            or _AFTERNOON_OPEN <= clock <= _AFTERNOON_CLOSE
-        )
-        if not in_session:
+        session = stamps[stamps.map(_is_session_time)]
+        if session.empty:
+            stamp = pd.Timestamp(stamps.iloc[-1])
+            raise ValueError(
+                f"分钟 bar 时间 {stamp} 全部不在交易时段 "
+                f"{_MORNING_OPEN.strftime('%H:%M')}–{_MORNING_CLOSE.strftime('%H:%M')} / "
+                f"{_AFTERNOON_OPEN.strftime('%H:%M')}–{_AFTERNOON_CLOSE.strftime('%H:%M')}，拒绝该数据"
+            )
+        if strict and len(session) != len(stamps):
+            stamp = pd.Timestamp(stamps[~stamps.map(_is_session_time)].iloc[-1])
             raise ValueError(
                 f"分钟 bar 时间 {stamp} 不在交易时段 "
                 f"{_MORNING_OPEN.strftime('%H:%M')}–{_MORNING_CLOSE.strftime('%H:%M')} / "
                 f"{_AFTERNOON_OPEN.strftime('%H:%M')}–{_AFTERNOON_CLOSE.strftime('%H:%M')}，拒绝该数据"
             )
+        skipped = len(stamps) - len(session)
+        if skipped and notes is not None:
+            notes.append(f"已跳过 {skipped} 根交易时段外的分钟 bar（集合竞价/盘后）")
+        stamp = pd.Timestamp(session.iloc[-1])
         as_of = stamp.strftime("%Y-%m-%d")
         data_time = stamp.strftime("%Y-%m-%d %H:%M")
     else:
+        stamp = pd.Timestamp(stamps.iloc[-1])
         as_of = stamp.strftime("%Y-%m-%d")
         data_time = f"{as_of} {_DAILY_BAR_CLOSE}"
     if data_time[:10] != as_of:  # pragma: no cover - 构造上恒成立，守住不变量
         raise ValueError(f"data_time {data_time} 与 data_as_of {as_of} 不同日")
     return as_of, data_time
+
+
+def _is_session_time(stamp: Any) -> bool:
+    """分钟 bar 的时间戳是否落在连续竞价两段闭区间内。"""
+    clock = pd.Timestamp(stamp).time()
+    return (
+        _MORNING_OPEN <= clock <= _MORNING_CLOSE
+        or _AFTERNOON_OPEN <= clock <= _AFTERNOON_CLOSE
+    )

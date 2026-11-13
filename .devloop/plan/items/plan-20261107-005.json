@@ -1,7 +1,7 @@
 {
   "id": "plan-20261107-005",
   "title": "图表 spec 与渲染管线",
-  "description": "依据 ADR-016 实现 astock/agent/chart_spec.py + chart_render.py：声明式 ChartSpec（kind/title/data/encode/transforms/layers/annotations），手写校验（枚举、长度、白名单算子），渲染为 Plotly Figure → 自包含 HTML（gr.HTML）并可导出 PNG（kaleido 可选）。统计图复用 backtest/factors/stats/track 的既有输出，不重新发明计算。v1 不执行任意 Python，transforms 仅支持 filter/groupby/agg/sort/limit。",
+  "description": "依据 ADR-016 实现 astock/agent/chart_spec.py + chart_render.py：声明式 ChartSpec（kind/title/data/encode/transforms/layers/annotations），手写校验（枚举、长度、白名单算子），渲染为 Plotly Figure → 自包含 HTML（gr.HTML）；PNG 为 v1 支持功能（Kaleido/Chrome/字体见 plan-20261114-001）。统计图复用 backtest/factors/stats/track 的既有输出，不重新发明计算。v1 不执行任意 Python，transforms 仅支持 filter/groupby/agg/sort/limit。 2026-11-14 补充裁决：Q4=B 删除 panes/style/raw 别名；Q5=C 完整版（chart_render 不写审计、chart_service 唯一审计入口）；Q6=A PNG 导出纳入 v1，基础设施见 plan-20261114-001，落地项 plan-20261114-002。",
   "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
@@ -9,19 +9,20 @@
   "start": "2026-11-15",
   "due": "2026-11-22",
   "estimateH": 20,
-  "progress": 80,
+  "progress": 95,
   "acceptance": [
     "ChartSpec 支持 candlestick/line/bar/scatter/heatmap/histogram",
     "非法 spec 返回结构化错误（字段 + 原因），可回传模型重试",
     "spec → Plotly HTML artifact，带 data_as_of/params/spec 元数据",
     "K 线支持 MA/BOLL/成交量；口径复用 data/indicators",
     "图与数据快照可被回答引用（artifact_id）",
-    "（ADR-016 C1，并入自 plan-20261110-005）ChartSpec v1 字段/枚举与《接口冻结清单》§3 逐字一致：`version`/`kind`/`data`/`encode`/`transforms`/`panes`/`style`/`annotations`；未知字段、非白名单 transform op 一律报错，不静默忽略",
+    "（ADR-016 C1，并入自 plan-20261110-005）ChartSpec v1 字段/枚举与《接口冻结清单》§3 逐字一致：`version`/`kind`/`data`/`encode`/`transforms`/`layers`/`theme`/`annotations`；未知字段、非白名单 transform op 一律报错，不静默忽略；2026-11-14 Q4=B：panes/style/raw 别名已删除",
     "（ADR-016 C1）渲染只接受声明式 spec，禁止 exec/eval 任意 Python；交给模型的 schema 就是字段与枚举白名单",
-    "（ADR-016 C2 + ADR-008）K 线默认 qfq；涨跌停/成交异常标的可切 raw，并在图注注明价格口径",
-    "（ADR-016 C3）每次渲染写 agent_artifacts 记录 {spec, params, data_as_of, data_time, source, code_version}，可凭 artifact_id 原样复现",
-    "（ADR-016）图与表同屏展示 data_as_of 与 data_time；无 kaleido 时降级为 HTML artifact 并在 ToolResult.metadata 标注 degraded",
-    "（ADR-016 C1）period/range 词表消歧：分钟档只用 1min/5min/15min/30min/60min，月档只用 1mo/3mo/6mo；schema 用例分别断言 period=1min 取 1 分钟 bar、range=1mo 取 1 个月窗口，不得共用 1m"
+    "（ADR-016 C2 + ADR-008）K 线默认 qfq；涨跌停/成交异常标的可切 none（旧称 raw，别名已删除），并在图注注明价格口径",
+    "（ADR-016 C3）每次渲染的 artifact 记录由 chart_service 统一写入 {spec, params, data_as_of, data_time, source, code_version}，可凭 artifact_id 原样复现（Q5=C）",
+    "（ADR-016 2026-11-14 补充）图与表同屏展示 data_as_of 与 data_time；PNG 导出纳入 v1，由 plan-20261114-001 保障；缺依赖时显式错误/降级，不每图静默 degraded",
+    "（ADR-016 C1）period/range 词表消歧：分钟档只用 1min/5min/15min/30min/60min，月档只用 1mo/3mo/6mo；schema 用例分别断言 period=1min 取 1 分钟 bar、range=1mo 取 1 个月窗口，不得共用 1m",
+    "（2026-11-14 Q4/Q5/Q6 裁决）别名清理与渲染/审计边界按 plan-20261114-002 执行；PNG 基础设施按 plan-20261114-001 执行"
   ],
   "tags": [
     "agent",
@@ -37,15 +38,15 @@
       "ADR-008"
     ],
     "branch": "feat/agent-chart-pipeline",
-    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43402817240",
+    "module": "chart_spec",
     "mergedFrom": [
       "plan-20261110-005"
     ],
-    "module": "chart_spec",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
-    "test": "目标：pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py -q → 46/21/8 passed；全量（本分支）：pytest tests -q → 444 passed, 1 skipped；mypy astock → 34 files Success；test_architecture_gate.py → 32 passed, 1 skipped；CI run 43402817240 pass。注：根目录 pytest 会误收 release/AStockAgent 旧 test_ma.py 造成同名模块冲突，全量统一跑 tests。"
+    "review": "rev-20261113-003",
+    "test": "目标：pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py tests/test_data_pit_events.py -q -> 121 passed；全量：pytest tests -q -> 478 passed, 2 skipped, 2 subtests；mypy astock -> Success 34 files；test_architecture_gate.py -> 32 passed, 1 skipped。本轮：div_id 由 spec+快照派生、params 记 plotly/python 版本、time_point_scope、latest_bar_time strict/notes、prune_artifacts、看板边补齐、冻结清单同步；Q4/Q5/Q6 裁决落地转 plan-20261114-001/002。"
   },
   "createdAt": "2026-11-07T14:12:07.117Z",
-  "updatedAt": "2026-11-13T09:38:53.873Z",
+  "updatedAt": "2026-11-13T17:31:46.228Z",
   "devSessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063"
 }

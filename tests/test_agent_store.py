@@ -235,3 +235,81 @@ def test_ensure_run_keeps_first_record(tmp_path: Path) -> None:
         assert rows[0]["steps"] == 0
     finally:
         conn.close()
+
+
+def test_prune_artifacts_removes_old_rows_and_unreferenced_files(tmp_path: Path) -> None:
+    root = tmp_path / "agent"
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1")
+        old_digest, old_path, _ = store.put_content(
+            b"<html>old</html>", filename="chart.html", root=str(root)
+        )
+        new_digest, new_path, _ = store.put_content(
+            b"<html>new</html>", filename="chart.html", root=str(root)
+        )
+        store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=old_path,
+            digest=old_digest,
+            created_at="2026-01-01T00:00:00+00:00",
+        )
+        keep_id = store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=new_path,
+            digest=new_digest,
+            created_at="2026-06-01T00:00:00+00:00",
+        )
+
+        stats = store.prune_artifacts(
+            conn, before="2026-03-01T00:00:00+00:00", root=str(root)
+        )
+        assert stats == {"rows": 1, "files": 1, "pruned_digests": 1}
+        remaining = conn.execute("SELECT * FROM agent_artifacts").fetchall()
+        assert [row["artifact_id"] for row in remaining] == [keep_id]
+        assert not (root / old_path).exists()
+        assert (root / new_path).exists()
+    finally:
+        conn.close()
+
+
+def test_prune_artifacts_honours_keep_digests_and_delete_files_flag(tmp_path: Path) -> None:
+    root = tmp_path / "agent"
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1")
+        digest, path, _ = store.put_content(
+            b"<html>kept</html>", filename="chart.html", root=str(root)
+        )
+        store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            created_at="2026-01-01T00:00:00+00:00",
+        )
+        stats = store.prune_artifacts(
+            conn,
+            before="2026-03-01T00:00:00+00:00",
+            keep_digests=[digest],
+            root=str(root),
+        )
+        assert stats == {"rows": 0, "files": 0, "pruned_digests": 0}
+        assert (root / path).exists()
+
+        stats = store.prune_artifacts(
+            conn,
+            before="2026-03-01T00:00:00+00:00",
+            root=str(root),
+            delete_files=False,
+        )
+        assert stats["rows"] == 1
+        assert stats["files"] == 0
+        assert (root / path).exists()
+    finally:
+        conn.close()
