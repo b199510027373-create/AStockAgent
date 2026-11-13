@@ -467,9 +467,26 @@ def _load_pdfplumber() -> Any | None:
     return pdfplumber
 
 
-def _is_encryption_error(exc: BaseException) -> bool:
+def _is_encryption_error(exc: BaseException, _depth: int = 0) -> bool:
+    """判断异常链是否表示加密。
+
+    pdfplumber 会把 pdfminer 的 ``PDFPasswordIncorrect`` 包进
+    ``PdfminerException(PDFPasswordIncorrect())``，外层 ``str()`` 为空串，
+    因此必须递归检查 ``args`` 与 ``__cause__``/``__context__``。
+    """
+
+    if _depth > 5:
+        return False
     text = f"{type(exc).__name__}: {exc}".lower()
-    return "password" in text or "encrypt" in text or "加密" in text
+    if "password" in text or "encrypt" in text or "加密" in text:
+        return True
+    for arg in getattr(exc, "args", ()):
+        if isinstance(arg, BaseException) and _is_encryption_error(arg, _depth + 1):
+            return True
+    for linked in (exc.__cause__, exc.__context__):
+        if linked is not None and _is_encryption_error(linked, _depth + 1):
+            return True
+    return False
 
 
 def _parse_pdf(source: Path) -> _Parsed:
@@ -525,6 +542,18 @@ def _parse_pdf(source: Path) -> _Parsed:
                     page=number,
                     bbox=bbox,
                 )
+    except _Rejected:
+        raise
+    except Exception as exc:
+        # 部分加密 PDF 在 open 时静默通过，直到访问页面才抛 PDFPasswordIncorrect。
+        if _is_encryption_error(exc):
+            raise _Rejected(
+                STATUS_ENCRYPTED,
+                [f"PDF 已加密（{type(exc).__name__}），v1 不支持解密；请提供无密码副本。"],
+            ) from exc
+        raise _Rejected(
+            STATUS_UNSUPPORTED, [f"PDF 解析失败：{type(exc).__name__}: {exc}"]
+        ) from exc
     finally:
         close = getattr(pdf, "close", None)
         if callable(close):

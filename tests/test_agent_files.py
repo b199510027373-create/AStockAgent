@@ -663,6 +663,28 @@ def test_pdf_encrypted_is_reported_not_empty(
     assert not (tmp_path / "store").exists()
 
 
+def test_pdf_encryption_detected_on_page_access(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _LateEncryptedPDF:
+        @property
+        def pages(self) -> list[_FakePage]:
+            raise RuntimeError(ValueError("PDFPasswordIncorrect"))
+
+        def close(self) -> None:
+            return None
+
+    plumber = SimpleNamespace(__version__="0.11.0", open=lambda _path: _LateEncryptedPDF())
+    monkeypatch.setattr(F, "_load_pdfplumber", lambda: plumber)
+    source = tmp_path / "late.pdf"
+    source.write_bytes(b"%PDF-1.4 late encrypted")
+
+    result = F.ingest_file(source, root=tmp_path / "store")
+
+    assert result.status == F.STATUS_ENCRYPTED
+    assert any("加密" in warning for warning in result.warnings)
+
+
 def test_pdf_page_limit_is_enforced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_pdf(monkeypatch, pages=[_FakePage("p")] * (F.MAX_PDF_PAGES + 1))
     source = tmp_path / "huge.pdf"
@@ -715,6 +737,88 @@ def test_pdf_without_pdfplumber_explains_missing_dependency(
 
     assert result.status == F.STATUS_UNSUPPORTED
     assert any("pdfplumber" in warning for warning in result.warnings)
+
+
+# ---------------------------------------------------------------------------
+# PDF（真实 pdfplumber + 已提交的 PDF 夹具；未安装 pdfplumber 时跳过）
+# ---------------------------------------------------------------------------
+
+
+def test_real_pdf_text_layer_keeps_pages_and_tables(tmp_path: Path) -> None:
+    pytest.importorskip("pdfplumber")
+    source = FIXTURES / "pdf_text_tables.pdf"
+
+    result = F.ingest_file(source, root=tmp_path / "store")
+
+    assert result.status == F.STATUS_OK, result.warnings
+    meta = _assert_layout(result, tmp_path / "store", "pdf")
+    assert meta["pages"] == 2
+    assert meta["parser"] == "pdfplumber"
+    assert meta["parser_version"].startswith("0.11")
+    assert meta["text_chars"] > 0
+    assert [sheet["slug"] for sheet in meta["sheets"]] == ["p1_table_1", "p2_table_1"]
+    assert all(sheet["header_row"] == 1 for sheet in meta["sheets"])
+
+    rows = _blocks(result, tmp_path / "store")
+    assert {row["page"] for row in rows if row["page"] is not None} == {1, 2}
+    first_page_text = " ".join(
+        row["text"] for row in rows if row["page"] == 1 and row["kind"] == "text"
+    )
+    assert "Quarterly Report 2026 Q3" in first_page_text
+
+    row_chunks = [row for row in rows if row["sheet"] == "p1_table_1" and row["kind"] == "table"]
+    assert [row["bbox"] for row in row_chunks] == [[2, 1, 2, 3], [3, 1, 3, 3]]
+    assert all(row["page"] == 1 for row in row_chunks)
+
+    summary = next(row for row in rows if row["sheet"] == "p1_table_1" and row["kind"] == "text")
+    assert summary["bbox"] is not None and len(summary["bbox"]) == 4
+    assert summary["bbox"][2] > summary["bbox"][0]
+
+    frame = F.load_table(result.doc.file_id, "p1_table_1", root=tmp_path / "store")  # type: ignore[union-attr]
+    assert frame.shape == (2, 3)
+    assert list(frame.columns) == ["Item", "Amount", "YoY"]
+    assert frame["Amount"].tolist() == [1250000.0, 230000.0]
+    assert frame["Item"].tolist() == ["Revenue", "Net profit"]
+
+
+def test_real_encrypted_pdf_is_reported_as_encrypted(tmp_path: Path) -> None:
+    pytest.importorskip("pdfplumber")
+    result = F.ingest_file(FIXTURES / "pdf_encrypted.pdf", root=tmp_path / "store")
+
+    assert result.status == F.STATUS_ENCRYPTED, result.warnings
+    assert any("加密" in warning for warning in result.warnings)
+    assert not (tmp_path / "store").exists()
+
+
+def test_real_scan_like_pdf_is_suspected_scan(tmp_path: Path) -> None:
+    pytest.importorskip("pdfplumber")
+    result = F.ingest_file(FIXTURES / "pdf_scan_like.pdf", root=tmp_path / "store")
+
+    assert result.status == F.STATUS_SUSPECTED_SCAN, result.warnings
+    assert any("扫描件" in warning for warning in result.warnings)
+    assert result.meta is not None and result.meta["text_chars"] == 0
+
+
+def test_real_cjk_pdf_keeps_chinese_text(tmp_path: Path) -> None:
+    pytest.importorskip("pdfplumber")
+    result = F.ingest_file(FIXTURES / "pdf_cjk.pdf", root=tmp_path / "store")
+
+    assert result.status == F.STATUS_OK, result.warnings
+    text = "".join(row["text"] for row in _blocks(result, tmp_path / "store"))
+    assert "贵州茅台" in text
+    assert "营业收入 125.6 亿元" in text
+    assert "同比增长 12.5%" in text
+    assert result.meta is not None and result.meta["pages"] == 1
+
+
+def test_encryption_detection_unwraps_nested_exception() -> None:
+    inner = ValueError("PDFPasswordIncorrect")
+    wrapped = RuntimeError("PdfminerException")
+    wrapped.__cause__ = inner
+
+    assert F._is_encryption_error(wrapped) is True
+    assert F._is_encryption_error(RuntimeError(inner)) is True
+    assert F._is_encryption_error(ValueError("bad xref table")) is False
 
 
 # ---------------------------------------------------------------------------

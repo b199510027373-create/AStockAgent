@@ -1,0 +1,9 @@
+# 二进制夹具：禁止行尾转换，避免 PDF/Excel/图片在 Windows 上被 CRLF 污染
+*.pdf binary
+*.xls binary
+*.xlsx binary
+*.docx binary
+*.parquet binary
+*.png binary
+*.jpg binary
+*.jpeg binary
