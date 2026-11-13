@@ -578,6 +578,8 @@ def _save(
     source: str = "live",
     params: dict | None = None,
     diagnostics: dict | None = None,
+    report_md: str = "",
+    status_line: str = "",
 ) -> tuple[str, str]:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     table = pd.DataFrame(
@@ -615,6 +617,8 @@ def _save(
         "diagnostics": diagnostics or {},
         "market": market,
         "ai": ai,
+        "report_md": report_md,
+        "status_line": status_line,
         "table": table.to_dict("records"),
         "evidence": {
             code: [
@@ -870,6 +874,25 @@ def generate_recommendation(
         ],
         "percentile_basis": "candidate_pool",
     }
+    report = _report_markdown(
+        final_rows, market, ai, data_as_of, tradable_from, candidate_n=len(candidates)
+    )
+    evidence_md = _evidence_markdown(final_rows, evidence_map)
+
+    elapsed = time.time() - started
+    ai_ok = bool((ai or {}).get("items"))
+    industry_note = ""
+    if len(final_rows) < top_n:
+        industry_note = f" · 行业上限导致输出少于 {top_n} 只"
+    status = (
+        f"股票池 {len(codes)} 只 · 有效日线 {len(rows)} 只 · 技术预筛 {len(candidates)} · "
+        f"输出 {len(final_rows)} 只（同行业最多 2 只）{industry_note} · "
+        f"新闻 {min(3, news_days)} 天 / 公告 30 天 / 研报 7 天 / 政策 {news_days} 天 · "
+        f"AI归因 {'已生成' if ai_ok else '未生成（使用规则理由）'} · 用时 {elapsed:.1f}s · "
+        f"data_as_of {data_as_of} · tradable_from {tradable_from} · run_id {run_id}"
+    )
+    if failed:
+        status += f" · 失败/剔除 {len(failed)} 只（详见 JSON diagnostics）"
     step(0.92, "保存结果")
     params = {
         "top_n": top_n,
@@ -890,26 +913,9 @@ def generate_recommendation(
         source="live",
         params=params,
         diagnostics=diagnostics,
+        report_md=report,
+        status_line=status,
     )
-    report = _report_markdown(
-        final_rows, market, ai, data_as_of, tradable_from, candidate_n=len(candidates)
-    )
-    evidence_md = _evidence_markdown(final_rows, evidence_map)
-
-    elapsed = time.time() - started
-    ai_ok = bool((ai or {}).get("items"))
-    industry_note = ""
-    if len(final_rows) < top_n:
-        industry_note = f" · 行业上限导致输出少于 {top_n} 只"
-    status = (
-        f"股票池 {len(codes)} 只 · 有效日线 {len(rows)} 只 · 技术预筛 {len(candidates)} · "
-        f"输出 {len(final_rows)} 只（同行业最多 2 只）{industry_note} · "
-        f"新闻 {min(3, news_days)} 天 / 公告 30 天 / 研报 7 天 / 政策 {news_days} 天 · "
-        f"AI归因 {'已生成' if ai_ok else '未生成（使用规则理由）'} · 用时 {elapsed:.1f}s · "
-        f"data_as_of {data_as_of} · tradable_from {tradable_from} · run_id {run_id}"
-    )
-    if failed:
-        status += f" · 失败/剔除 {len(failed)} 只（详见 JSON diagnostics）"
     return Recommendation(
         table=pd.DataFrame(
             [

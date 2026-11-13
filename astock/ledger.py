@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS runs (
     error TEXT,
     params_json TEXT,
     diagnostics_json TEXT,
+    report_md TEXT,
+    status_line TEXT,
     json_path TEXT,
     csv_path TEXT
 );
@@ -41,6 +43,9 @@ CREATE TABLE IF NOT EXISTS items (
     technical REAL,
     event REAL,
     percentile REAL,
+    close REAL,
+    ret20 REAL,
+    rsi REAL,
     action TEXT,
     reason TEXT,
     PRIMARY KEY (run_id, rank)
@@ -108,10 +113,23 @@ _JOB_FIELDS = (
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """旧库就地补列，CREATE TABLE IF NOT EXISTS 不会改旧表。"""
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)")}
-    if "percentile" not in columns:
-        conn.execute("ALTER TABLE items ADD COLUMN percentile REAL")
+    """旧库就地补列（CREATE TABLE IF NOT EXISTS 不会改旧表）。"""
+    run_columns = {row["name"] for row in conn.execute("PRAGMA table_info(runs)")}
+    for column, ddl in (
+        ("report_md", "TEXT"),
+        ("status_line", "TEXT"),
+    ):
+        if column not in run_columns:
+            conn.execute(f"ALTER TABLE runs ADD COLUMN {column} {ddl}")
+    item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)")}
+    for column, ddl in (
+        ("percentile", "REAL"),
+        ("close", "REAL"),
+        ("ret20", "REAL"),
+        ("rsi", "REAL"),
+    ):
+        if column not in item_columns:
+            conn.execute(f"ALTER TABLE items ADD COLUMN {column} {ddl}")
     job_columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
     if job_columns and "as_of" not in job_columns:
         conn.execute("ALTER TABLE jobs ADD COLUMN as_of TEXT")
@@ -174,8 +192,9 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
         conn.execute(
             """INSERT OR REPLACE INTO runs
                (run_id, schema_version, kind, data_as_of, tradable_from, generated_at,
-                source, status, error, params_json, diagnostics_json, json_path, csv_path)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                source, status, error, params_json, diagnostics_json, report_md,
+                status_line, json_path, csv_path)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 run_id,
                 payload.get("schema_version"),
@@ -188,6 +207,8 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
                 payload.get("error"),
                 _json(payload.get("params")),
                 _json(payload.get("diagnostics")),
+                payload.get("report_md"),
+                payload.get("status_line"),
                 json_path,
                 csv_path,
             ),
@@ -196,8 +217,8 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
             conn.execute(
                 """INSERT OR REPLACE INTO items
                    (run_id, rank, code, name, industry, composite, technical, event,
-                    percentile, action, reason)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    percentile, close, ret20, rsi, action, reason)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     run_id,
                     row.get("排名"),
@@ -208,6 +229,9 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
                     row.get("技术分"),
                     row.get("事件分"),
                     _opt_float(row.get("技术分位")),
+                    _opt_float(row.get("收盘")),
+                    _opt_float(row.get("20日%")),
+                    _opt_float(row.get("RSI")),
                     normalize_action(row.get("技术面") or row.get("建议")),
                     row.get("理由"),
                 ),
@@ -362,8 +386,10 @@ def latest_run() -> dict | None:
 def list_runs(limit: int = 50) -> list[dict]:
     with _read() as conn:
         rows = conn.execute(
-            "SELECT run_id, data_as_of, tradable_from, generated_at, source, status "
-            "FROM runs ORDER BY generated_at DESC LIMIT ?",
+            "SELECT r.run_id, r.data_as_of, r.tradable_from, r.generated_at, "
+            "r.source, r.status, COUNT(i.rank) AS items "
+            "FROM runs r LEFT JOIN items i ON i.run_id = r.run_id "
+            "GROUP BY r.run_id ORDER BY r.generated_at DESC LIMIT ?",
             (max(1, int(limit)),),
         ).fetchall()
         return [dict(x) for x in rows]
