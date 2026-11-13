@@ -39,7 +39,8 @@
       "plan-20261110-004"
     ],
     "module": "file_ingest",
-    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10（已合并）",
+    "prFollowup": "https://github.com/b199510027373-create/AStockAgent/pull/11（真实 PDF 验证，待评审）",
     "test": [
       "pytest tests/test_agent_files.py -q -p no:cacheprovider => 49 passed, 1 warning in 4.43s",
       "C:\\Anaconda\\python.exe -m pytest tests/test_agent_files.py -q -p no:cacheprovider => 49 passed in 6.20s",
@@ -48,10 +49,12 @@
       "mypy astock app.py => Success: no issues found in 32 source files",
       "coverage run -m pytest tests + coverage report => TOTAL 73%（CI 门槛 50%）",
       "CI run 43393535403（bd8d2da）success；main 合并后 CI run 43394027292（f11fa8e）success",
-      "评审第 2 轮 approve（ho-20261113-015，openP0=0/openP1=0）；P2 iss-mweply8i-fc899f 已修；PR #10 已 squash 合并为 21dddaa"
+      "评审第 2 轮 approve（ho-20261113-015，openP0=0/openP1=0）；P2 iss-mweply8i-fc899f 已修；PR #10 已 squash 合并为 21dddaa",
+      "真实 PDF（pdfplumber 0.11.10 已装）：pytest tests/test_agent_files.py => 55 passed；pytest tests => 375 passed, 1 skipped；ruff/mypy 通过；coverage 74%",
+      "真实 PDF 夹具：pdf_text_tables.pdf（两页+两张表格，行 bbox [2,1,2,3]/[3,1,3,3]，Amount=[1250000.0,230000.0]）、pdf_cjk.pdf（中文文本层完整）、pdf_scan_like.pdf => suspected_scan、pdf_encrypted.pdf => encrypted（PdfminerException 递归识别）"
     ]
   },
   "createdAt": "2026-11-07T14:12:00.858Z",
-  "updatedAt": "2026-11-13T08:33:46.387Z",
+  "updatedAt": "2026-11-13T09:07:45.582Z",
   "devSessionId": "session-3100e9bd-3b63-4022-9649-c18a3f5278f8"
 }
