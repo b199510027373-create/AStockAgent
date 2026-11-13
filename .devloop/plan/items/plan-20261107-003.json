@@ -39,7 +39,7 @@
     "module": "file_ingest",
     "branch": "feat/agent-file-ingest",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10",
-    "commit": "2531119",
+    "commit": "499f60b",
     "test": [
       "pytest tests/test_agent_files.py -q -p no:cacheprovider => 48 passed, 1 warning in 4.21s（评审 P1/P2 修复后）",
       "C:\\Anaconda\\python.exe -m pytest tests/test_agent_files.py -q -p no:cacheprovider（python-docx 1.2.0 分支）=> 48 passed in 4.69s",
@@ -47,10 +47,11 @@
       "ruff check astock app.py tests --select E9,F63,F7,F82 => All checks passed!",
       "mypy astock app.py => Success: no issues found in 32 source files",
       "coverage run -m pytest tests + coverage report => TOTAL 73%（CI 门槛 50%）",
+      "CI run 43391713138（commit 499f60b，PR #10）=> success，1m20s，lint/type-check 与 coverage 50% 门槛均通过",
       "上一轮 34 passed / 354 passed 已被本轮 48 / 368 覆盖；旧 CI run 43388513193 pass"
     ]
   },
   "createdAt": "2026-11-07T14:12:00.858Z",
-  "updatedAt": "2026-11-13T08:13:57.865Z",
+  "updatedAt": "2026-11-13T08:16:10.846Z",
   "devSessionId": "session-3100e9bd-3b63-4022-9649-c18a3f5278f8"
 }
