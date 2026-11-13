@@ -2,7 +2,7 @@
   "id": "plan-20261107-005",
   "title": "图表 spec 与渲染管线",
   "description": "依据 ADR-016 实现 astock/agent/chart_spec.py + chart_render.py：声明式 ChartSpec（kind/title/data/encode/transforms/layers/annotations），手写校验（枚举、长度、白名单算子），渲染为 Plotly Figure → 自包含 HTML（gr.HTML）；PNG 为 v1 支持功能（Kaleido/Chrome/字体见 plan-20261114-001）。统计图复用 backtest/factors/stats/track 的既有输出，不重新发明计算。v1 不执行任意 Python，transforms 仅支持 filter/groupby/agg/sort/limit。 2026-11-14 补充裁决：Q4=B 删除 panes/style/raw 别名；Q5=C 完整版（chart_render 不写审计、chart_service 唯一审计入口）；Q6=A PNG 导出纳入 v1，基础设施见 plan-20261114-001，落地项 plan-20261114-002。",
-  "status": "changes_requested",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
@@ -38,16 +38,16 @@
       "ADR-008"
     ],
     "branch": "feat/agent-chart-pipeline",
-    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43473738669",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43484888881",
     "module": "chart_spec",
     "mergedFrom": [
       "plan-20261110-005"
     ],
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
     "review": "rev-20261113-003",
-    "test": "目标：pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py tests/test_data_pit_events.py -q -> 121 passed；全量：pytest tests -q -> 478 passed, 2 skipped, 2 subtests；mypy astock -> Success 34 files；test_architecture_gate.py -> 32 passed, 1 skipped；CI run 43473738669 pass（head 75b5d64）。本轮：div_id 由 spec+快照派生、params 记 plotly/python 版本、time_point_scope、latest_bar_time strict/notes、prune_artifacts、看板边补齐、冻结清单同步；Q4/Q5/Q6 裁决落地转 plan-20261114-001/002。"
+    "test": "目标 125 passed；全量 pytest tests -q -> 482 passed, 2 skipped；mypy 34 files；门禁 32 passed, 1 skipped；ruff 通过；CI 43484888881 pass（head b8736a8）。修第 3 轮 4 P1 + 3 P2：删 panes/style/raw 别名、ref anyOf + jsonschema、空 transforms 时点为空、meta upsert、params 记 include_plotlyjs、prune 扫孤儿目录、验收 #9 记 002 迁移。"
   },
   "createdAt": "2026-11-07T14:12:07.117Z",
-  "updatedAt": "2026-11-13T18:38:07.654Z",
+  "updatedAt": "2026-11-13T18:41:50.154Z",
   "devSessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063"
 }
