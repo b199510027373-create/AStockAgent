@@ -25,7 +25,6 @@ from . import ledger
 from .contracts import ContractError
 from .data import last_completed_trade_date
 from .recommend import (
-    Recommendation,
     StaleDataError,
     generate_recommendation,
     normalize_table,
@@ -43,10 +42,13 @@ from .track import (
 )
 
 __all__ = [
+    "HISTORY_COLUMNS",
     "RUN_STATUSES",
     "RunResult",
     "run_alpha_banner",
     "run_recommendation",
+    "run_recommendation_history",
+    "run_selected_recommendation",
     "run_tracking",
 ]
 
@@ -60,8 +62,20 @@ RECOMMEND_COLUMNS = (
     "技术分位",
     "技术分",
     "事件分",
+    "收盘",
+    "20日%",
+    "RSI",
     "技术面",
     "理由",
+)
+HISTORY_COLUMNS = (
+    "run_id",
+    "data_as_of",
+    "tradable_from",
+    "generated_at",
+    "source",
+    "status",
+    "items",
 )
 
 
@@ -116,6 +130,7 @@ def _empty_recommend_payload() -> dict[str, Any]:
     return {
         "table": pd.DataFrame(columns=list(RECOMMEND_COLUMNS)),
         "report": "",
+        "generation_status": "",
         "evidence_md": "",
         "files": None,
         "csv_path": None,
@@ -127,6 +142,10 @@ def _empty_recommend_payload() -> dict[str, Any]:
         "generated_at": "",
         "source": "",
         "run_id": "",
+        "read_source": "ledger",
+        "diagnostics": {},
+        "params": {},
+        "batch_md": "",
     }
 
 
@@ -174,6 +193,79 @@ def _evidence_markdown_from_ledger(evidence: Any) -> str:
         lines.append("")
     if shown == 0:
         lines.append("暂无证据记录。")
+    return "\n".join(lines)
+
+
+def _diagnostics_markdown(diagnostics: Any) -> list[str]:
+    """把台账里的批次 diagnostics 渲染成页面可读的明细，避免整段 JSON。"""
+    if not isinstance(diagnostics, dict) or not diagnostics:
+        return ["- 台账未记录 diagnostics（该批次可能由旧版本或 JSON 导入生成）。"]
+    lines: list[str] = []
+    for key in sorted(diagnostics):
+        value = diagnostics[key]
+        if key == "candidate_pool" and isinstance(value, (list, tuple)):
+            lines.append(f"- `{key}`：{len(value)} 项")
+        elif isinstance(value, (list, tuple)):
+            if not value:
+                lines.append(f"- `{key}`：0 项")
+            else:
+                head = ", ".join(str(x)[:80] for x in list(value)[:5])
+                suffix = f" …（共 {len(value)} 项）" if len(value) > 5 else ""
+                lines.append(f"- `{key}`：{head}{suffix}")
+        elif isinstance(value, dict):
+            lines.append(f"- `{key}`：{len(value)} 项")
+        else:
+            lines.append(f"- `{key}`：{str(value)[:200]}")
+    if len(lines) > 40:
+        lines = lines[:40] + [f"- …其余 {len(lines) - 40} 项已省略"]
+    return lines
+
+
+def _batch_markdown(
+    payload: dict[str, Any],
+    *,
+    status: str,
+    diagnostics: dict[str, Any],
+) -> str:
+    """批次身份、新鲜度与 diagnostics 的统一展示块（生成与历史读取共用）。"""
+    run_id = str(payload.get("run_id") or "")
+    if not run_id:
+        return ""
+    lines = [
+        "### 批次信息（SQLite 台账）",
+        f"- run_id：`{run_id}`",
+        f"- data_as_of：`{payload.get('data_as_of') or '—'}`",
+        f"- tradable_from：`{payload.get('tradable_from') or '—'}`",
+        f"- generated_at：`{payload.get('generated_at') or '—'}`",
+        f"- source：`{payload.get('source') or '—'}`",
+        f"- 读取来源：`{payload.get('read_source') or 'ledger'}`",
+        f"- 状态：`{status}`",
+    ]
+    if diagnostics.get("expected_trade_date"):
+        lines.append(f"- expected_trade_date：`{diagnostics['expected_trade_date']}`")
+    lines.extend(["", "<details><summary>diagnostics（台账记录）</summary>", ""])
+    lines.extend(_diagnostics_markdown(payload.get("diagnostics")))
+    lines.extend(["", "</details>"])
+    generation_status = str(payload.get("generation_status") or "").strip()
+    if generation_status:
+        lines.extend(
+            [
+                "",
+                "<details><summary>生成摘要（台账记录）</summary>",
+                "",
+                generation_status,
+                "",
+                "</details>",
+            ]
+        )
+    if payload.get("json_path"):
+        lines.extend(
+            [
+                "",
+                f"> JSON 归档：`{payload['json_path']}`"
+                "（仅归档下载，页面主读源为 SQLite 台账）",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -231,9 +323,12 @@ def _render_recommendation(
     if basis_n and "技术分位" in table.columns:
         status_text += f"\n\n> 分位基准：候选池（N={basis_n}），数值为综合分在池内的 rank(pct)。"
 
+    batch_md = _batch_markdown(payload, status=status, diagnostics=diagnostics)
+
     return {
         "table": table,
         "report": report,
+        "generation_status": str(payload.get("generation_status") or ""),
         "evidence_md": evidence_md,
         "files": files,
         "csv_path": csv_path,
@@ -245,6 +340,10 @@ def _render_recommendation(
         "generated_at": str(payload.get("generated_at") or ""),
         "source": str(payload.get("source") or ""),
         "run_id": str(payload.get("run_id") or ""),
+        "read_source": str(payload.get("read_source") or "ledger"),
+        "diagnostics": payload.get("diagnostics") or {},
+        "params": payload.get("params") or {},
+        "batch_md": batch_md,
     }
 
 
@@ -254,38 +353,6 @@ def _failed_recommendation(message: str, *, reason: str) -> RunResult:
         _empty_recommend_payload(), status="failed", diagnostics=diagnostics
     )
     return RunResult("", "failed", payload, diagnostics)
-
-
-def _generate_view(rec: Recommendation) -> RunResult:
-    diagnostics = dict(rec.diagnostics or {})
-    stale = bool(diagnostics.get("stale_data"))
-    status = "stale" if stale else "success"
-    if stale:
-        expected = diagnostics.get("expected_trade_date")
-        diagnostics["message"] = (
-            f"数据未更新：data_as_of={rec.data_as_of} < expected={expected or '最近交易日'}；"
-            "本次结果仅供参考，建议等数据源更新后重新生成。"
-        )
-    else:
-        diagnostics["message"] = ""
-    diagnostics["reason"] = "generated"
-
-    payload = {
-        "table": rec.table,
-        "report": rec.report,
-        "evidence_md": rec.evidence_md,
-        "evidence": rec.evidence,
-        "csv_path": rec.csv_path,
-        "json_path": rec.json_path,
-        "status_line": rec.status,
-        "data_as_of": rec.data_as_of,
-        "tradable_from": rec.tradable_from,
-        "generated_at": str(diagnostics.get("generated_at") or ""),
-        "source": "live",
-        "run_id": rec.run_id,
-    }
-    view = _render_recommendation(payload, status=status, diagnostics=diagnostics)
-    return RunResult(rec.run_id, status, view, diagnostics)
 
 
 def _ledger_view(
@@ -307,6 +374,9 @@ def _ledger_view(
             "技术分位": item.get("percentile"),
             "技术分": item.get("technical"),
             "事件分": item.get("event"),
+            "收盘": item.get("close"),
+            "20日%": item.get("ret20"),
+            "RSI": item.get("rsi"),
             "技术面": item.get("action"),
             "理由": item.get("reason"),
         }
@@ -314,6 +384,8 @@ def _ledger_view(
     ]
     payload = {
         "table": pd.DataFrame(rows, columns=list(RECOMMEND_COLUMNS)),
+        "report": str(run.get("report_md") or ""),
+        "generation_status": str(run.get("status_line") or ""),
         "evidence": run.get("evidence") or [],
         "csv_path": run.get("csv_path"),
         "json_path": run.get("json_path"),
@@ -322,54 +394,105 @@ def _ledger_view(
         "generated_at": str(run.get("generated_at") or ""),
         "source": str(run.get("source") or ""),
         "run_id": run_id,
+        "read_source": "ledger",
+        "diagnostics": (
+            run.get("diagnostics") if isinstance(run.get("diagnostics"), dict) else {}
+        ),
+        "params": run.get("params") if isinstance(run.get("params"), dict) else {},
     }
-    payload["status_line"] = (
-        f"已从 SQLite 读取 {run_id}；data_as_of={data_as_of}，"
-        f"tradable_from={tradable_from}；{len(rows)} 条推荐。"
-    )
+    if mode == "generate":
+        payload["status_line"] = (
+            f"已生成并写入 SQLite 台账 {run_id}；从台账读取 data_as_of={data_as_of}，"
+            f"tradable_from={tradable_from}；{len(rows)} 条推荐。"
+        )
+    else:
+        payload["status_line"] = (
+            f"已从 SQLite 读取 {run_id}；data_as_of={data_as_of}，"
+            f"tradable_from={tradable_from}；{len(rows)} 条推荐。"
+        )
 
+    batch = payload["diagnostics"]
     diagnostics: dict[str, Any] = {
-        "reason": "ledger_latest" if mode == "latest" else "ledger_run",
+        "reason": {
+            "generate": "generated",
+            "latest": "ledger_latest",
+        }.get(mode, "ledger_run"),
         "message": "",
         "data_as_of": data_as_of,
         "tradable_from": tradable_from,
         "run_id": run_id,
+        "read_source": "ledger",
+        "batch_diagnostics": batch,
     }
-    now = now or datetime.now()
-    expected = None
-    try:
-        expected = last_completed_trade_date(now)
-    except Exception as exc:  # noqa: BLE001 - 日历不可用时不应阻断历史读取
-        diagnostics["calendar_error"] = f"{type(exc).__name__}: {exc}"
-
-    if expected is not None:
-        diagnostics["expected_trade_date"] = pd.Timestamp(expected).strftime("%Y-%m-%d")
-    stale = False
-    if not data_as_of:
-        stale = True
-        diagnostics["message"] = (
-            "该推荐记录缺少 data_as_of，无法确认数据新鲜度；请重新生成后再使用。"
-        )
-    elif expected is None:
-        # 日历不可用时无法确认新鲜度：保持 success，由渲染器附加“未校验”提示。
-        diagnostics["freshness_checked"] = False
-    else:
+    if batch.get("candidate_n") not in (None, ""):
         try:
-            as_of_ts = pd.Timestamp(data_as_of)
-        except Exception:
+            diagnostics["candidate_n"] = int(batch["candidate_n"])
+        except (TypeError, ValueError):
+            pass
+
+    now = now or datetime.now()
+    stale = False
+    expected = None
+    if mode == "generate" and "stale_data" in batch:
+        # 生成批次的新鲜度结论已在生成时计算并随台账持久化；此处直接采用，
+        # 避免用读取时刻的日历重算导致同一批次出现两种口径。
+        stale = bool(batch.get("stale_data"))
+        persisted_expected = batch.get("expected_trade_date")
+        if persisted_expected:
+            try:
+                diagnostics["expected_trade_date"] = pd.Timestamp(
+                    persisted_expected
+                ).strftime("%Y-%m-%d")
+            except (TypeError, ValueError):
+                diagnostics["expected_trade_date"] = str(persisted_expected)
+        diagnostics["freshness_source"] = "generation"
+        if not data_as_of:
             stale = True
             diagnostics["message"] = (
-                f"该推荐记录 data_as_of={data_as_of} 无法解析，无法确认数据新鲜度；"
-                "请重新生成后再使用。"
+                "该推荐记录缺少 data_as_of，无法确认数据新鲜度；请重新生成后再使用。"
             )
+        elif stale:
+            expected_text = diagnostics.get("expected_trade_date") or "最近交易日"
+            diagnostics["message"] = (
+                f"数据未更新：data_as_of={data_as_of} < expected={expected_text}；"
+                "本次结果仅供参考，建议等数据源更新后重新生成。"
+            )
+    else:
+        try:
+            expected = last_completed_trade_date(now)
+        except Exception as exc:  # noqa: BLE001 - 日历不可用时不应阻断历史读取
+            diagnostics["calendar_error"] = f"{type(exc).__name__}: {exc}"
+
+        if expected is not None:
+            diagnostics["expected_trade_date"] = pd.Timestamp(expected).strftime(
+                "%Y-%m-%d"
+            )
+        diagnostics["freshness_source"] = "calendar"
+        if not data_as_of:
+            stale = True
+            diagnostics["message"] = (
+                "该推荐记录缺少 data_as_of，无法确认数据新鲜度；请重新生成后再使用。"
+            )
+        elif expected is None:
+            # 日历不可用时无法确认新鲜度：保持 success，由渲染器附加“未校验”提示。
+            diagnostics["freshness_checked"] = False
         else:
-            # 与生成侧 recommend.py 同口径：落后于最近交易日即 stale，不加收盘时间门限。
-            stale = as_of_ts < pd.Timestamp(expected)
-            if stale:
+            try:
+                as_of_ts = pd.Timestamp(data_as_of)
+            except Exception:
+                stale = True
                 diagnostics["message"] = (
-                    f"最近一次推荐 data_as_of={data_as_of} 早于最近交易日 "
-                    f"{pd.Timestamp(expected):%Y-%m-%d}；历史结果仅供参考，请重新生成。"
+                    f"该推荐记录 data_as_of={data_as_of} 无法解析，无法确认数据新鲜度；"
+                    "请重新生成后再使用。"
                 )
+            else:
+                # 与生成侧 recommend.py 同口径：落后于最近交易日即 stale，不加收盘时间门限。
+                stale = as_of_ts < pd.Timestamp(expected)
+                if stale:
+                    diagnostics["message"] = (
+                        f"最近一次推荐 data_as_of={data_as_of} 早于最近交易日 "
+                        f"{pd.Timestamp(expected):%Y-%m-%d}；历史结果仅供参考，请重新生成。"
+                    )
     diagnostics["stale_data"] = stale
     status = "stale" if stale else "success"
     view = _render_recommendation(payload, status=status, diagnostics=diagnostics)
@@ -391,10 +514,11 @@ def run_recommendation(
     """推荐用例统一入口。
 
     Args:
-        mode: ``generate`` 生成新批次；``latest`` 读取台账最近一批；
-            ``run`` 按 ``run_id`` 读取指定批次。
+        mode: ``generate`` 生成新批次并立即从台账读回；``latest`` 读取台账
+            最近一批；``run`` 按 ``run_id`` 读取指定批次。
         run_id: ``mode="run"`` 时必填。
-        now: 仅历史读取用于判断数据是否落后；默认当前时间。
+        now: 仅历史读取用于判断数据是否落后；生成路径的流水线不使用此参数，
+            批次新鲜度以生成时写入台账的 diagnostics 为准。
     """
     if mode not in ("generate", "latest", "run"):
         raise ValueError(f"未知 mode={mode!r}，只支持 generate/latest/run")
@@ -429,7 +553,22 @@ def run_recommendation(
             return _failed_recommendation(
                 f"生成失败：{type(exc).__name__}: {exc}", reason="generate_error"
             )
-        return _generate_view(rec)
+        try:
+            run = ledger.get_run(rec.run_id)
+        except Exception as exc:  # noqa: BLE001 - 生成已落盘，但台账读取失败
+            return _failed_recommendation(
+                f"生成已归档 JSON（{rec.json_path}），但读取台账失败："
+                f"{type(exc).__name__}: {exc}",
+                reason="ledger_read_after_generate",
+            )
+        if not run:
+            return _failed_recommendation(
+                f"生成完成但 SQLite 台账中缺少 run_id={rec.run_id}；页面不从 JSON 读取，"
+                "请执行 `python -m astock.ledger sync` 后重试"
+                f"（JSON 归档：{rec.json_path}）。",
+                reason="ledger_missing_after_generate",
+            )
+        return _ledger_view(run, mode="generate", now=now)
 
     try:
         run = ledger.latest_run() if mode == "latest" else ledger.get_run(str(run_id))
@@ -445,6 +584,74 @@ def run_recommendation(
         )
         return _failed_recommendation(message, reason="not_found")
     return _ledger_view(run, mode=mode, now=now)
+
+
+def _history_payload(
+    rows: list[dict[str, Any]], *, status_text: str
+) -> dict[str, Any]:
+    table = (
+        pd.DataFrame(rows, columns=list(HISTORY_COLUMNS))
+        if rows
+        else pd.DataFrame(columns=list(HISTORY_COLUMNS))
+    )
+    run_ids = [str(row.get("run_id")) for row in rows if row.get("run_id")]
+    return {"history": table, "run_ids": run_ids, "status_text": status_text}
+
+
+def run_recommendation_history(limit: int = 50) -> RunResult:
+    """历史批次列表（只读 ledger，不触发任何生成流水线）。"""
+    try:
+        rows = ledger.list_runs(limit=limit)
+    except Exception as exc:  # noqa: BLE001 - 台账故障转统一 failed 诊断
+        message = f"读取台账失败：{type(exc).__name__}: {exc}"
+        diagnostics = {"reason": "ledger_list_error", "message": message}
+        return RunResult(
+            "",
+            "failed",
+            _history_payload([], status_text=f"❌ {message}"),
+            diagnostics,
+        )
+    if not rows:
+        message = (
+            "台账里还没有推荐记录（空状态）。先点击「生成今日推荐」，"
+            "或执行 `python -m astock.ledger sync` 导入历史 JSON；"
+            "页面不会为了补列表而重跑流水线。"
+        )
+        diagnostics = {"reason": "ledger_list_empty", "message": message}
+        return RunResult(
+            "",
+            "success",
+            _history_payload([], status_text=f"ℹ️ {message}"),
+            diagnostics,
+        )
+    list_diagnostics: dict[str, Any] = {
+        "reason": "ledger_list",
+        "message": "",
+        "count": len(rows),
+    }
+    return RunResult(
+        "",
+        "success",
+        _history_payload(
+            rows,
+            status_text=(
+                f"✅ 已显示最近 {len(rows)} 个批次（上限 {limit}）；"
+                "选择 run_id 后点「加载所选批次」查看详情与证据链。"
+            ),
+        ),
+        list_diagnostics,
+    )
+
+
+def run_selected_recommendation(run_id: str | None) -> RunResult:
+    """按用户下拉选择读取指定批次；空选择给出明确提示，不猜测最近一批。"""
+    selected = str(run_id or "").strip()
+    if not selected:
+        return _failed_recommendation(
+            "请先在下拉框选择一个 run_id，再点「加载所选批次」。",
+            reason="missing_run_id",
+        )
+    return run_recommendation(mode="run", run_id=selected)
 
 
 # ---------------------------------------------------------------------------
