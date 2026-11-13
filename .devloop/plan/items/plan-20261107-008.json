@@ -14,13 +14,13 @@
     "agent_runs 只记录真实 Agent；直接渲染不创建 run，link.source=render 且 run_id 可空",
     "agent_artifacts 无 run_id；内容寻址、digest 去重；同内容多来源通过 link 保留归属",
     "agent_artifact_versions 保存 meta_json/meta_digest/env_version，meta 不可变；correction 追加且 actor/理由/时间必填",
-    "agent_run_artifacts 支持 run 删除后 artifact 保留；删 run 只删 link，GC 只删无引用文件",
+    "（ADR-017 C3，留存与审计不断链）agent_run_artifacts 支持 run 删除后 artifact 保留；删 run 只删 link，GC 只删无引用文件",
     "旧 agent_* 三表迁移：新表→拷贝→重建→改名，备份+PRAGMA foreign_keys 处理，旧合成 run 标 run_kind=render 且指标排除",
     "指标查询默认排除 render；成功后 token/步数统计不受每图合成 run 污染",
     "路径白名单与上传类型/大小校验、文件内容按不可信数据包裹、禁止 shell/HTTP/文件删除/推荐写入",
     "工具调用参数/结果摘要/耗时完整记录；失败与非法参数也落 agent_steps",
-    "权限只用七个只读/计算标签，越权标签注册期拒绝；AST 扫描双保险",
-    "DDL 与冻结清单 v2 一致；迁移脚本在旧库 fixture 跑通，全量测试与 mypy 通过"
+    "（ADR-017 C2）权限只用七个只读/计算标签，越权标签注册期拒绝；AST 扫描双保险",
+    "（ADR-017 C1）DDL 与冻结清单 v2 一致；迁移脚本在旧库 fixture 跑通，全量测试与 mypy 通过"
   ],
   "tags": [
     "agent",
