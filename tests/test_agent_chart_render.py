@@ -131,7 +131,9 @@ def _artifact_row(rendered, paths: dict[str, str]):
 def test_line_chart_renders_self_contained_html_and_records_artifact(paths: dict[str, str]) -> None:
     rendered = _render(inline_line_spec(), paths, include_plotlyjs="inline")
 
-    assert rendered.html.startswith("<html>")
+    # plotly 6.x 的 full_html 以 <html> 开头，plotly 7.x 前置 <!doctype html>，两者都是完整文档
+    head = rendered.html.lstrip().lower()
+    assert head.startswith("<!doctype html>") or head.startswith("<html>")
     assert "plotly.js" in rendered.html
     assert len(rendered.html) > 1_000_000  # plotly.js 内联 → 自包含
     assert rendered.data_as_of == "2024-01-04"
