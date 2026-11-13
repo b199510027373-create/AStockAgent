@@ -668,10 +668,13 @@ def _parse_docx(source: Path) -> _Parsed:
 
 def _docx_body(source: Path) -> tuple[Any, str, str]:
     """返回 (body 元素, parser, version)；优先 python-docx，缺失时用 zipfile 兜底。"""
+    DocxDocument: Any
     try:
-        from docx import Document as DocxDocument  # type: ignore[import-not-found]
+        from docx import Document as _DocxDocument
     except Exception:
         DocxDocument = None
+    else:
+        DocxDocument = _DocxDocument
 
     if DocxDocument is not None:
         try:
