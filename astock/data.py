@@ -693,3 +693,52 @@ def period_frame(df: pd.DataFrame, period: str) -> pd.DataFrame:
     rule = rules[period]
     out = df.copy() if rule is None else resample_ohlcv(df, rule)
     return enrich(out)
+
+
+#: ``latest_bar_time`` 接受的频率（与 ChartSpec ``data.period`` 同构：分钟档带 min）。
+BAR_FREQS = ("D", "W", "M", "1min", "5min", "15min", "30min", "60min")
+_PERIOD_FREQ_ALIASES = {"day": "D", "week": "W", "month": "M"}
+_MINUTE_FREQS = ("1min", "5min", "15min", "30min", "60min")
+_DAILY_BAR_CLOSE = "15:00"
+_SESSION_OPEN = "09:30"
+_SESSION_CLOSE = "15:00"
+
+
+def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
+    """返回 ``(data_as_of, data_time)``，是全局唯一的时点格式化入口（ADR-018 C1）。
+
+    冻结语义见《接口冻结清单》§6.1/§6.2：
+
+    - ``data_as_of``：``YYYY-MM-DD``，最后一根有效 bar 所在交易日；
+    - ``data_time``：``YYYY-MM-DD HH:MM``，日/周/月线固定 ``15:00``，分钟线取 bar 结束时间；
+    - 不变量：``data_time[:10] == data_as_of``；空 DataFrame 抛 ``ValueError``
+      （不允许返回空串骗过必填校验）；分钟 bar 时间越出交易时段视为数据错误并拒绝。
+
+    工具与渲染器**不得**自行 ``strftime`` 拼时点，一律经此函数。
+    """
+    key = _PERIOD_FREQ_ALIASES.get(freq, freq)
+    if key not in BAR_FREQS:
+        raise ValueError(f"未知频率: {freq}（允许 {BAR_FREQS}）")
+    if df is None or df.empty:
+        raise ValueError("空 DataFrame 没有有效 bar，无法确定 data_as_of/data_time")
+
+    column = "trade_time" if "trade_time" in df.columns else "trade_date"
+    if column not in df.columns:
+        raise ValueError("缺少 trade_date/trade_time 列，无法确定时点")
+    series = pd.to_datetime(df[column], errors="coerce").dropna()
+    if series.empty:
+        raise ValueError(f"{column} 全部无效，无法确定时点")
+    stamp = pd.Timestamp(series.iloc[-1])
+
+    if key in _MINUTE_FREQS:
+        clock = stamp.strftime("%H:%M")
+        if not (_SESSION_OPEN <= clock <= _SESSION_CLOSE):
+            raise ValueError(f"分钟 bar 时间 {stamp} 不在交易时段 09:30–15:00，拒绝该数据")
+        as_of = stamp.strftime("%Y-%m-%d")
+        data_time = stamp.strftime("%Y-%m-%d %H:%M")
+    else:
+        as_of = stamp.strftime("%Y-%m-%d")
+        data_time = f"{as_of} {_DAILY_BAR_CLOSE}"
+    if data_time[:10] != as_of:  # pragma: no cover - 构造上恒成立，守住不变量
+        raise ValueError(f"data_time {data_time} 与 data_as_of {as_of} 不同日")
+    return as_of, data_time

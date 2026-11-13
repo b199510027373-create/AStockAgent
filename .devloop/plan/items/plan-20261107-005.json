@@ -2,14 +2,14 @@
   "id": "plan-20261107-005",
   "title": "图表 spec 与渲染管线",
   "description": "依据 ADR-016 实现 astock/agent/chart_spec.py + chart_render.py：声明式 ChartSpec（kind/title/data/encode/transforms/layers/annotations），手写校验（枚举、长度、白名单算子），渲染为 Plotly Figure → 自包含 HTML（gr.HTML）并可导出 PNG（kaleido 可选）。统计图复用 backtest/factors/stats/track 的既有输出，不重新发明计算。v1 不执行任意 Python，transforms 仅支持 filter/groupby/agg/sort/limit。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-15",
   "due": "2026-11-22",
   "estimateH": 20,
-  "progress": 0,
+  "progress": 80,
   "acceptance": [
     "ChartSpec 支持 candlestick/line/bar/scatter/heatmap/histogram",
     "非法 spec 返回结构化错误（字段 + 原因），可回传模型重试",
@@ -38,8 +38,12 @@
     ],
     "mergedFrom": [
       "plan-20261110-005"
-    ]
+    ],
+    "branch": "feat/agent-chart-pipeline",
+    "module": "chart_spec",
+    "test": "目标：pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py -q → 46/21/8 passed；全量：pytest tests -q → 450 passed, 1 skipped；mypy astock → 34 files Success；test_architecture_gate.py 全绿。注：根目录 pytest 会误收 release/AStockAgent 旧 test_ma.py 导致 astock 同名模块冲突，全量统一跑 tests。"
   },
   "createdAt": "2026-11-07T14:12:07.117Z",
-  "updatedAt": "2026-11-10T08:34:48.517Z"
+  "updatedAt": "2026-11-13T09:33:11.156Z",
+  "devSessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063"
 }

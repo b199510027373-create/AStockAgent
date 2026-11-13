@@ -99,7 +99,7 @@
 
 | 规则 | 缺什么 | 承接项 | 承诺的测试 |
 | --- | --- | --- | --- |
-| AGENT-02 | 三表落库、artifact digest 去重 | plan-20261107-008 | `tests/test_agent_store.py::test_tool_call_writes_step_row`、`tests/test_agent_store.py::test_artifact_digest_dedupes` |
+| AGENT-02 | `agent_steps` 完整写入语义与留存清理（三表最小落库、artifact digest 去重已随 plan-20261107-005 落地） | plan-20261107-008 | `tests/test_agent_store.py::test_tool_call_writes_step_row`、`tests/test_agent_store.py::test_artifact_digest_dedupes` |
 | AGENT-04 | 行情工具的 `data_as_of`/`data_time` 必填校验、文件结论 `source` 必填校验 | plan-20261107-005、plan-20261107-006 | `tests/test_agent_tools.py::test_market_result_requires_both_timestamps`、`tests/test_agent_tools.py::test_file_result_requires_source` |
 | 全量 | 规则与落点漂移、文档里的测试引用失效 | 本任务 | `tests/test_architecture_gate.py::test_doc_test_references_exist`（扫描本文件与冻结清单的 `tests/…py::test_x` 引用：已存在的文件必须真有该函数；尚未存在的测试文件只允许出现在 §4 承诺表） |
 

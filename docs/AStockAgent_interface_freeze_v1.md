@@ -326,8 +326,8 @@ artifact 路径与去重：`data/agent/artifacts/<digest[:2]>/<digest>/<filename
 
 ## 6. 冻结接口六：`data_as_of` / `data_time`
 
-代码锚点：`astock/agent/types.py:90-91`（已实现字段）、`astock/data.py`（缺生产者）。
-状态：**字段已实现；生产者冻结，待 plan-20261107-006 落地**。
+代码锚点：`astock/agent/types.py:90-91`（已实现字段）、`astock/data.py`（`latest_bar_time` 已落地）。
+状态：**字段与唯一生产者均已实现**（生产者随 plan-20261107-005 图表管线先行落地，plan-20261107-006 只消费、不另写时点逻辑）。
 
 ### 6.1 语义
 
