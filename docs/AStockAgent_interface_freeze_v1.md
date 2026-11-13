@@ -148,7 +148,7 @@ class ChatModel(Protocol):
 
 ## 3. 冻结接口三：`ChartSpec` v1
 
-代码锚点：待建 `astock/agent/chart_spec.py`（plan-20261107-005）。状态：**冻结草案，未实现**。
+代码锚点：`astock/agent/chart_spec.py`（plan-20261107-005）。状态：**已实现（v1）**。
 
 ### 3.1 字段表（`additionalProperties: false`，未知键直接拒绝）
 
@@ -175,10 +175,22 @@ class ChatModel(Protocol):
 | `fields` | `list[str]` | `source=inline` 必填，1–20 项，`^[a-z_][a-z0-9_]{0,31}$` |
 | `period` | `str` | `day`（默认）/`week`/`month`/`1min`/`5min`/`15min`/`30min`/`60min`；分钟周期仅允许 `source=market` |
 | `range` | `str` | `1mo`/`3mo`/`6mo`/`1y`（默认）/`3y`/`5y`/`ytd`/`max`，或 `YYYY-MM-DD:YYYY-MM-DD`（跨度 ≤ 10 年） |
+| `adj` | `str` | `qfq`（默认）/`hfq`/`none`；涨跌停与成交判断固定 `none`（ADR-008） |
 
 **消歧（2026-11-11 评审）**：`period` 的分钟档一律带 `min` 后缀（`1min`…`60min`），`range` 的月档一律带 `mo` 后缀（`1mo`/`3mo`/`6mo`）。
 两者**不共用 `1m`**：前者是「每根 bar 的粒度」，后者是「窗口长度」。schema 用例见 plan-20261107-005（`period=1min` 取 1 分钟 bar、`range=1mo` 取 1 个月窗口）。
-| `adj` | `str` | `qfq`（默认）/`hfq`/`none`；涨跌停与成交判断固定 `none`（ADR-008） |
+
+### 3.2.1 兼容别名已删除（ADR-016 Q4=B，2026-11-14 裁决）
+
+早期验收文字出现过 `panes`/`style`，`adj` 也出现过 `raw`；ADR-016 的 2026-11-14 补充裁决定为 **Q4=B：删除别名**。自本版起：
+
+| 旧别名 | 现行行为 |
+| --- | --- |
+| `panes` | 未知字段，报 `$.panes` 字段级错误 |
+| `style` | 未知字段（含 `{"theme": ...}` 对象形式），报 `$.style` |
+| `data.adj="raw"` | 枚举外取值，报 `$.data.adj`；不复权请写 `adj="none"` |
+
+规范字段只有 `layers`/`theme`/`adj∈{qfq,hfq,none}`；`chart_spec_json_schema()` 不再声明任何别名，`additionalProperties: false` 对未知键一律拒绝。删除别名的落地随 plan-20261107-005 完成，plan-20261114-002 继续处理渲染/审计边界（Q5=C）。
 
 ### 3.3 算子与图层参数（白名单，越界拒绝并返回字段级错误）
 
@@ -197,13 +209,19 @@ kdj       {n: 5..90, k: 3, m: 3}
 hline     {y: number, label?: str ≤ 60}   vline {x: str|number, label?}   text {x, y, label ≤ 60}
 ```
 
+`groupby`/`agg` 的输出列名为 `<field>_<func>`（如 `amount_sum`），回答与后端断言都按该规则取列。
+
 ### 3.4 渲染契约
 
 - `render(spec) -> RenderedFigure{html: str, png_path: str|None, artifact_id: str, warnings: list[str]}`；
 - 图题与角标同时展示 `data_as_of` 与 `data_time`；缺任一时点必须显式写 `时点未知`，不得留空；
-- 产物落 `agent_artifacts`，`meta_json` 记录 `{data_as_of, data_time, source, params, spec, code_version}`；
-- 无 `kaleido` 时只出 HTML（`png_path=None`），不抛异常；
+- 产物落 `agent_artifacts`，`meta_json` 记录 `{data_as_of, data_time, source, params, spec, code_version}`，并追加 `{time_point_scope, div_id, degraded, warnings, png_path, data}`；
+- `time_point_scope` ∈ `market`（未被 `transforms` 裁剪的行情时点）/`view`（图上前端视图时点）/`unknown`（取不到时点）；
+- 复现前提：同一 `spec`、同一份数据快照、**同一 plotly 版本与 `include_plotlyjs` 设置**。`params` 里记录 `plotly_version`/`python_version`/`include_plotlyjs`，HTML 的 div id 由 `spec + 数据快照` 派生（`astock-chart-<8 hex>`），因此同输入字节稳定、不同图不共享 id；
+- 同一 `artifact_id` 重复渲染时 `meta_json` 以**最新一次写入为准**（例如先降级出 HTML、后补齐 PNG，`degraded`/`png_path` 必须升级），行数仍为 1；
+- 无 `kaleido` 时只出 HTML（`png_path=None`），不抛异常，并在 `ToolResult.metadata` 标 `degraded=true`；PNG 在 ADR-016 补充裁决（2026-11-14 Q6=A）后升为 v1 支持功能，版本锁定/Chrome/字体/CI 真实导出由 plan-20261114-001 落地；
 - 渲染器**不得**执行 spec 之外的任何代码；`transforms` 只走白名单算子。
+- 审计边界（Q5=C）：目标形态是 `chart_service` 作为唯一审计入口、artifact 数据源走 `ArtifactReader` 只读协议；v1 暂由 `chart_render.render()` 直接写 `agent_artifacts`，迁移与拆分见 plan-20261114-002。
 
 ## 4. 冻结接口四：文件存储布局 v1
 
@@ -324,10 +342,14 @@ CREATE INDEX IF NOT EXISTS idx_agent_artifacts_digest ON agent_artifacts(digest)
 artifact 路径与去重：`data/agent/artifacts/<digest[:2]>/<digest>/<filename>`；同 digest 复用目录、只插一行，
 `digest` 索引保持非唯一（同一张图可被两个 run 引用）。删除 artifact 文件后 run/step 记录仍可查（审计不断链）。
 
+留存清理：`astock/agent/store.py::prune_artifacts(conn, *, before, keep_digests=(), root=None, delete_files=True)`
+删除 `created_at < before` 的行并按需清理不再被引用的文件与空目录（只用 `Path.unlink`/`Path.rmdir`）；
+调度与默认保留期由 plan-20261107-008 决定。`meta_json` 可修正（回放按快照重算），**产物真实性以 `digest`（文件 sha256）为准**（决策记录 Q2）。
+
 ## 6. 冻结接口六：`data_as_of` / `data_time`
 
-代码锚点：`astock/agent/types.py:90-91`（已实现字段）、`astock/data.py`（缺生产者）。
-状态：**字段已实现；生产者冻结，待 plan-20261107-006 落地**。
+代码锚点：`astock/agent/types.py:90-91`（已实现字段）、`astock/data.py`（`latest_bar_time` 已落地）。
+状态：**字段与唯一生产者均已实现**（生产者随 plan-20261107-005 图表管线先行落地，plan-20261107-006 只消费、不另写时点逻辑）。
 
 ### 6.1 语义
 
@@ -347,13 +369,20 @@ artifact 路径与去重：`data/agent/artifacts/<digest[:2]>/<digest>/<filename
 
 ```python
 # astock/data.py
-def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
+def latest_bar_time(
+    df: pd.DataFrame,
+    *,
+    freq: str = "D",
+    strict: bool = False,
+    notes: list[str] | None = None,
+) -> tuple[str, str]:
     """返回 (data_as_of, data_time)，是全局唯一的时点格式化入口。"""
 ```
 
 - 工具与渲染器**不得**自行 `strftime` 拼时点；所有 `ToolResult.data_as_of/data_time` 必须由它产出；
 - `freq` ∈ `D`/`W`/`M`/`1min`/`5min`/`15min`/`30min`/`60min`，与 `ChartSpec.data.period` 同构（分钟档带 `min`，月档带 `mo`，不共用 `1m`）；
-- 空 DataFrame 抛 `ValueError`（不允许返回空字符串骗过必填校验）。
+- 空 DataFrame 抛 `ValueError`（不允许返回空字符串骗过必填校验）；
+- 分钟档越界 bar（集合竞价 `09:25`、盘后 `15:01` 等）：默认**跳过**并取时段内最后一根（`strict=False`），`strict=True` 时抛 `ValueError`；时段内一根都没有则两种模式都抛错（2026-11-16 决策记录 Q7）。
 
 ### 6.3 降级标注（元数据键冻结）
 

@@ -1,27 +1,28 @@
 {
   "id": "plan-20261107-005",
   "title": "图表 spec 与渲染管线",
-  "description": "依据 ADR-016 实现 astock/agent/chart_spec.py + chart_render.py：声明式 ChartSpec（kind/title/data/encode/transforms/layers/annotations），手写校验（枚举、长度、白名单算子），渲染为 Plotly Figure → 自包含 HTML（gr.HTML）并可导出 PNG（kaleido 可选）。统计图复用 backtest/factors/stats/track 的既有输出，不重新发明计算。v1 不执行任意 Python，transforms 仅支持 filter/groupby/agg/sort/limit。",
-  "status": "todo",
+  "description": "依据 ADR-016 实现 astock/agent/chart_spec.py + chart_render.py：声明式 ChartSpec（kind/title/data/encode/transforms/layers/annotations），手写校验（枚举、长度、白名单算子），渲染为 Plotly Figure → 自包含 HTML（gr.HTML）；PNG 为 v1 支持功能（Kaleido/Chrome/字体见 plan-20261114-001）。统计图复用 backtest/factors/stats/track 的既有输出，不重新发明计算。v1 不执行任意 Python，transforms 仅支持 filter/groupby/agg/sort/limit。 2026-11-14 补充裁决：Q4=B 删除 panes/style/raw 别名；Q5=C 完整版（chart_render 不写审计、chart_service 唯一审计入口）；Q6=A PNG 导出纳入 v1，基础设施见 plan-20261114-001，落地项 plan-20261114-002。",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-15",
   "due": "2026-11-22",
   "estimateH": 20,
-  "progress": 0,
+  "progress": 95,
   "acceptance": [
     "ChartSpec 支持 candlestick/line/bar/scatter/heatmap/histogram",
     "非法 spec 返回结构化错误（字段 + 原因），可回传模型重试",
     "spec → Plotly HTML artifact，带 data_as_of/params/spec 元数据",
     "K 线支持 MA/BOLL/成交量；口径复用 data/indicators",
     "图与数据快照可被回答引用（artifact_id）",
-    "（ADR-016 C1，并入自 plan-20261110-005）ChartSpec v1 字段/枚举与《接口冻结清单》§3 逐字一致：`version`/`kind`/`data`/`encode`/`transforms`/`panes`/`style`/`annotations`；未知字段、非白名单 transform op 一律报错，不静默忽略",
+    "（ADR-016 C1，并入自 plan-20261110-005）ChartSpec v1 字段/枚举与《接口冻结清单》§3 逐字一致：`version`/`kind`/`data`/`encode`/`transforms`/`layers`/`theme`/`annotations`；未知字段、非白名单 transform op 一律报错，不静默忽略；2026-11-14 Q4=B：panes/style/raw 别名已删除",
     "（ADR-016 C1）渲染只接受声明式 spec，禁止 exec/eval 任意 Python；交给模型的 schema 就是字段与枚举白名单",
-    "（ADR-016 C2 + ADR-008）K 线默认 qfq；涨跌停/成交异常标的可切 raw，并在图注注明价格口径",
-    "（ADR-016 C3）每次渲染写 agent_artifacts 记录 {spec, params, data_as_of, data_time, source, code_version}，可凭 artifact_id 原样复现",
-    "（ADR-016）图与表同屏展示 data_as_of 与 data_time；无 kaleido 时降级为 HTML artifact 并在 ToolResult.metadata 标注 degraded",
-    "（ADR-016 C1）period/range 词表消歧：分钟档只用 1min/5min/15min/30min/60min，月档只用 1mo/3mo/6mo；schema 用例分别断言 period=1min 取 1 分钟 bar、range=1mo 取 1 个月窗口，不得共用 1m"
+    "（ADR-016 C2 + ADR-008）K 线默认 qfq；涨跌停/成交异常标的可切 none（旧称 raw，别名已删除），并在图注注明价格口径",
+    "（ADR-016 C3）每次渲染写 artifact 记录 {spec, params, data_as_of, data_time, source, code_version}，可凭 artifact_id 原样复现；v1 由 chart_render 直接落库满足，Q5=C 的 chart_service 唯一审计入口迁移见 plan-20261114-002（本项未完成部分已登记）",
+    "（ADR-016 2026-11-14 补充）图与表同屏展示 data_as_of 与 data_time；PNG 导出纳入 v1，由 plan-20261114-001 保障；缺依赖时显式错误/降级，不每图静默 degraded",
+    "（ADR-016 C1）period/range 词表消歧：分钟档只用 1min/5min/15min/30min/60min，月档只用 1mo/3mo/6mo；schema 用例分别断言 period=1min 取 1 分钟 bar、range=1mo 取 1 个月窗口，不得共用 1m",
+    "（2026-11-14 Q4/Q5/Q6 裁决）别名清理与渲染/审计边界按 plan-20261114-002 执行；PNG 基础设施按 plan-20261114-001 执行"
   ],
   "tags": [
     "agent",
@@ -36,10 +37,17 @@
       "ADR-016",
       "ADR-008"
     ],
+    "branch": "feat/agent-chart-pipeline",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43484888881",
+    "module": "chart_spec",
     "mergedFrom": [
       "plan-20261110-005"
-    ]
+    ],
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
+    "review": "rev-20261113-003",
+    "test": "目标 125 passed；全量 pytest tests -q -> 482 passed, 2 skipped；mypy 34 files；门禁 32 passed, 1 skipped；ruff 通过；CI 43484888881 pass（head b8736a8）。修第 3 轮 4 P1 + 3 P2：删 panes/style/raw 别名、ref anyOf + jsonschema、空 transforms 时点为空、meta upsert、params 记 include_plotlyjs、prune 扫孤儿目录、验收 #9 记 002 迁移。"
   },
   "createdAt": "2026-11-07T14:12:07.117Z",
-  "updatedAt": "2026-11-10T08:34:48.517Z"
+  "updatedAt": "2026-11-13T18:41:50.154Z",
+  "devSessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063"
 }

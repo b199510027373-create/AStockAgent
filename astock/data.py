@@ -4,7 +4,8 @@ import json
 import os
 import threading
 import time
-from datetime import timedelta
+from typing import Any
+from datetime import time as clock_time, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -189,6 +190,18 @@ def non_trading_days(start: str | pd.Timestamp, end: str | pd.Timestamp) -> list
     return [d.strftime("%Y-%m-%d") for d in closed if d.weekday() < 5]
 
 
+def _normalize_adj(adj: str | None) -> str | None:
+    """复权口径归一：``qfq``/``hfq``/``None``（原始价）。
+
+    未知口径显式报错，绝不静默按前复权处理（评审 P0：raw 切换失效的根因）。
+    """
+    if adj in (None, ""):
+        return None
+    if adj not in ("qfq", "hfq"):
+        raise ValueError(f"未知复权方式: {adj!r}（只支持 qfq/hfq/None）")
+    return adj
+
+
 def _cache_paths(ts_code: str, adj: str | None) -> tuple[Path, Path]:
     # qfq 口径 v3：保留原始价列（raw_*），用于涨跌停/交易规则判断
     suffix = (adj or "raw") + ("_v3" if adj else "")
@@ -240,8 +253,10 @@ def _fetch_daily(
         for col in PRICE_COLS:
             if col in merged.columns:
                 merged[f"raw_{col}"] = merged[col].astype(float)
-        # 以前复权基准：使用区间内最新的复权因子（可能对应今天，即使今天日线尚未更新）
-        base = float(fct["adj_factor"].iloc[-1])
+        # 口径基准（ADR-008）：
+        # - qfq：以区间内最新复权因子为基准（可能对应今天，即使今天日线尚未更新）
+        # - hfq：以原始因子 1.0 为基准，价格随因子累乘放大
+        base = float(fct["adj_factor"].iloc[-1]) if adj == "qfq" else 1.0
         ratio = merged["adj_factor"] / base if base else 1.0
         for col in PRICE_COLS:
             if col in merged.columns:
@@ -271,6 +286,9 @@ def load_daily(
 ) -> pd.DataFrame:
     """加载日线，默认前复权。
 
+    - ``adj="qfq"``（默认）：以区间最新复权因子为基准做前复权；
+    - ``adj="hfq"``：以原始因子 1.0 为基准做后复权；
+    - ``adj=None``：不复权（原始成交价），涨跌停/成交异常判断用。
     - 本地 parquet 缓存，按代码/复权方式分文件
     - 当天已更新过则直接用缓存；否则增量重拉
     - 返回按 trade_date 升序、DatetimeIndex 之外的普通列
@@ -278,6 +296,7 @@ def load_daily(
     ts_code = ts_code.strip().upper()
     if not ts_code:
         return pd.DataFrame()
+    adj = _normalize_adj(adj)
 
     end = end or _fmt(_today())
     start = start or DEFAULT_START
@@ -537,11 +556,15 @@ def load_adj_factors(
     return df.copy()
 
 
-def _apply_minute_adj(df: pd.DataFrame, factors: pd.DataFrame) -> pd.DataFrame:
-    """按日复权因子把分钟 OHLC 转成前复权；量/额不变。"""
+def _apply_minute_adj(
+    df: pd.DataFrame, factors: pd.DataFrame, adj: str = "qfq"
+) -> pd.DataFrame:
+    """按日复权因子调整分钟 OHLC：qfq 以最新因子为基准，hfq 以原始因子 1.0 为基准；量/额不变。"""
+    if adj not in ("qfq", "hfq"):
+        return df
     if df is None or df.empty or factors is None or factors.empty:
         return df
-    base = float(factors["adj_factor"].iloc[-1])
+    base = float(factors["adj_factor"].iloc[-1]) if adj == "qfq" else 1.0
     if not base:
         return df
     merged = df.merge(
@@ -571,13 +594,16 @@ def load_minute(
 
     - ``days <= 1``：走 ``rt_min`` 实时接口，取当日（或最近交易日）
     - ``days > 1``：走 ``stk_mins`` 历史接口，按块拉取，再补当日 ``rt_min``
-    - ``adj='qfq'``：按每日复权因子、以最新因子为基准做前复权（默认）
+    - ``adj="qfq"``：按每日复权因子、以最新因子为基准做前复权（默认）
+    - ``adj="hfq"``：以原始因子 1.0 为基准做后复权
+    - ``adj=None``：不复权（原始成交价）
     - vol 统一为手、amount 统一为千元
     - 当日缓存 30 秒，历史缓存 5 分钟
     """
     code = ts_code.strip().upper()
     if freq not in MINUTE_FREQ_MAP:
         raise ValueError(f"未知分钟周期: {freq}")
+    adj = _normalize_adj(adj)
     days = max(1, int(days))
 
     key = (code, freq, days, adj or "raw")
@@ -642,7 +668,7 @@ def load_minute(
 
     if adj and not df.empty:
         factors = load_adj_factors(code, end=_fmt(_today()), client=client)
-        df = _apply_minute_adj(df, factors)
+        df = _apply_minute_adj(df, factors, adj)
 
     df = validate_bars(
         df, allow_empty=True, source=f"load_minute({code},{freq})"
@@ -693,3 +719,93 @@ def period_frame(df: pd.DataFrame, period: str) -> pd.DataFrame:
     rule = rules[period]
     out = df.copy() if rule is None else resample_ohlcv(df, rule)
     return enrich(out)
+
+
+#: ``latest_bar_time`` 接受的频率（与 ChartSpec ``data.period`` 同构：分钟档带 min）。
+BAR_FREQS = ("D", "W", "M", "1min", "5min", "15min", "30min", "60min")
+_PERIOD_FREQ_ALIASES = {"day": "D", "week": "W", "month": "M"}
+_MINUTE_FREQS = ("1min", "5min", "15min", "30min", "60min")
+_DAILY_BAR_CLOSE = "15:00"
+#: A 股连续竞价两段闭区间（午休 11:30–13:00 不是交易时段）。
+_MORNING_OPEN = clock_time(9, 30)
+_MORNING_CLOSE = clock_time(11, 30)
+_AFTERNOON_OPEN = clock_time(13, 0)
+_AFTERNOON_CLOSE = clock_time(15, 0)
+
+
+def latest_bar_time(
+    df: pd.DataFrame,
+    *,
+    freq: str = "D",
+    strict: bool = False,
+    notes: list[str] | None = None,
+) -> tuple[str, str]:
+    """返回 ``(data_as_of, data_time)``，是全局唯一的时点格式化入口（ADR-018 C1）。
+
+    冻结语义见《接口冻结清单》§6.1/§6.2：
+
+    - ``data_as_of``：``YYYY-MM-DD``，最后一根有效 bar 所在交易日；
+    - ``data_time``：``YYYY-MM-DD HH:MM``，日/周/月线固定 ``15:00``，分钟线取 bar 结束时间；
+    - 不变量：``data_time[:10] == data_as_of``；空 DataFrame 抛 ``ValueError``
+      （不允许返回空串骗过必填校验）。
+
+    分钟档的越界 bar（集合竞价 09:25、盘后 15:01 等）默认**跳过**并取时段内最后一根，
+    因为真实行情源会带这类 bar，硬失败会让整张图不可用；跳过时若传了 ``notes`` 会追加一条
+    说明供图注/日志留痕。``strict=True`` 时改为抛 ``ValueError``（数据校验场景）。
+    若时段内一根都没有，两种模式都抛错。
+
+    工具与渲染器**不得**自行 ``strftime`` 拼时点，一律经此函数。
+    """
+    key = _PERIOD_FREQ_ALIASES.get(freq, freq)
+    if key not in BAR_FREQS:
+        raise ValueError(f"未知频率: {freq}（允许 {BAR_FREQS}）")
+    if df is None or df.empty:
+        raise ValueError("空 DataFrame 没有有效 bar，无法确定 data_as_of/data_time")
+
+    column = "trade_time" if "trade_time" in df.columns else "trade_date"
+    if column not in df.columns:
+        raise ValueError("缺少 trade_date/trade_time 列，无法确定时点")
+    series = pd.to_datetime(df[column], errors="coerce").dropna()
+    if series.empty:
+        raise ValueError(f"{column} 全部无效，无法确定时点")
+    # 取时间最大值而不是 iloc[-1]：调用方可能传入 sort desc 或未排序的 DataFrame。
+    stamps = series.sort_values()
+
+    if key in _MINUTE_FREQS:
+        session = stamps[stamps.map(_is_session_time)]
+        if session.empty:
+            stamp = pd.Timestamp(stamps.iloc[-1])
+            raise ValueError(
+                f"分钟 bar 时间 {stamp} 全部不在交易时段 "
+                f"{_MORNING_OPEN.strftime('%H:%M')}–{_MORNING_CLOSE.strftime('%H:%M')} / "
+                f"{_AFTERNOON_OPEN.strftime('%H:%M')}–{_AFTERNOON_CLOSE.strftime('%H:%M')}，拒绝该数据"
+            )
+        if strict and len(session) != len(stamps):
+            stamp = pd.Timestamp(stamps[~stamps.map(_is_session_time)].iloc[-1])
+            raise ValueError(
+                f"分钟 bar 时间 {stamp} 不在交易时段 "
+                f"{_MORNING_OPEN.strftime('%H:%M')}–{_MORNING_CLOSE.strftime('%H:%M')} / "
+                f"{_AFTERNOON_OPEN.strftime('%H:%M')}–{_AFTERNOON_CLOSE.strftime('%H:%M')}，拒绝该数据"
+            )
+        skipped = len(stamps) - len(session)
+        if skipped and notes is not None:
+            notes.append(f"已跳过 {skipped} 根交易时段外的分钟 bar（集合竞价/盘后）")
+        stamp = pd.Timestamp(session.iloc[-1])
+        as_of = stamp.strftime("%Y-%m-%d")
+        data_time = stamp.strftime("%Y-%m-%d %H:%M")
+    else:
+        stamp = pd.Timestamp(stamps.iloc[-1])
+        as_of = stamp.strftime("%Y-%m-%d")
+        data_time = f"{as_of} {_DAILY_BAR_CLOSE}"
+    if data_time[:10] != as_of:  # pragma: no cover - 构造上恒成立，守住不变量
+        raise ValueError(f"data_time {data_time} 与 data_as_of {as_of} 不同日")
+    return as_of, data_time
+
+
+def _is_session_time(stamp: Any) -> bool:
+    """分钟 bar 的时间戳是否落在连续竞价两段闭区间内。"""
+    clock = pd.Timestamp(stamp).time()
+    return (
+        _MORNING_OPEN <= clock <= _MORNING_CLOSE
+        or _AFTERNOON_OPEN <= clock <= _AFTERNOON_CLOSE
+    )

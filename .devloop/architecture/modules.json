@@ -518,6 +518,21 @@
       "to": "chart_spec"
     },
     {
+      "from": "chart_render",
+      "to": "data",
+      "label": "market-read"
+    },
+    {
+      "from": "chart_render",
+      "to": "indicators",
+      "label": "compute"
+    },
+    {
+      "from": "chart_render",
+      "to": "agent_store",
+      "label": "artifact-write"
+    },
+    {
       "from": "file_ingest",
       "to": "agent_store"
     },
