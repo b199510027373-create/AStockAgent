@@ -36,14 +36,16 @@
       "ADR-016",
       "ADR-008"
     ],
+    "branch": "feat/agent-chart-pipeline",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43402817240",
     "mergedFrom": [
       "plan-20261110-005"
     ],
-    "branch": "feat/agent-chart-pipeline",
     "module": "chart_spec",
-    "test": "目标：pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py -q → 46/21/8 passed；全量：pytest tests -q → 450 passed, 1 skipped；mypy astock → 34 files Success；test_architecture_gate.py 全绿。注：根目录 pytest 会误收 release/AStockAgent 旧 test_ma.py 导致 astock 同名模块冲突，全量统一跑 tests。"
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
+    "test": "目标：pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py -q → 46/21/8 passed；全量（本分支）：pytest tests -q → 444 passed, 1 skipped；mypy astock → 34 files Success；test_architecture_gate.py → 32 passed, 1 skipped；CI run 43402817240 pass。注：根目录 pytest 会误收 release/AStockAgent 旧 test_ma.py 造成同名模块冲突，全量统一跑 tests。"
   },
   "createdAt": "2026-11-07T14:12:07.117Z",
-  "updatedAt": "2026-11-13T09:33:11.156Z",
+  "updatedAt": "2026-11-13T09:38:53.873Z",
   "devSessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063"
 }
