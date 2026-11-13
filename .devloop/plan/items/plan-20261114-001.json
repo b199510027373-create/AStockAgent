@@ -1,0 +1,41 @@
+{
+  "id": "plan-20261114-001",
+  "title": "PNG 导出基础设施：Kaleido/Chrome/字体与 CI",
+  "description": "2026-11-14 裁决 Q6=A：PNG 导出从“可选降级”升级为 v1 支持功能。依据 ADR-016 补充裁决，锁定 plotly 与 kaleido 版本，打通 Windows 开发机 + Linux CI 的真实导出链路；解决 Chromium/无头模式、中文字体、超时/降级、PNG artifact 记录与文档。先做半天 spike 验证目标环境组合，再固化依赖与 CI。与 plan-20261107-005（渲染管线）配套，但不改 ChartSpec 语义。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-15",
+  "due": "2026-11-21",
+  "estimateH": 12,
+  "progress": 0,
+  "acceptance": [
+    "锁定 plotly 与 kaleido 精确版本，requirements 不再用无上限的 >= 漂移",
+    "Windows 开发机与 Linux CI 均能生成 PNG；先完成目标环境 spike 并记录 Chrome/字体/版本组合",
+    "中文标题、坐标轴、图例导出无方块；至少覆盖一张带中文的 K 线 PNG",
+    "CI 增加真实导出用例（非 monkeypatch），失败/超时可观测，不拖垮主测试流水线",
+    "PNG 导出失败时语义明确：显式请求则报错或标 degraded；默认路径不得每图静默 degraded",
+    "PNG artifact 与 HTML artifact 关联记录，路径/尺寸/字体/版本可追溯",
+    "部署与 CI 文档写明 Chrome/Chromium、中文字体、版本升级检查清单"
+  ],
+  "tags": [
+    "agent",
+    "chart",
+    "png",
+    "infra",
+    "ci"
+  ],
+  "deps": [
+    "plan-20261107-005"
+  ],
+  "links": {
+    "adr": [
+      "ADR-016"
+    ],
+    "module": "chart_render",
+    "branch": "feat/agent-chart-pipeline"
+  },
+  "createdAt": "2026-11-13T16:36:18.516Z",
+  "updatedAt": "2026-11-13T16:36:51.995Z"
+}

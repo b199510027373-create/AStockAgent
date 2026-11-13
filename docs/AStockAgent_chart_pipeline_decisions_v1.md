@@ -4,7 +4,11 @@
 > 关联：plan-20261107-005 · ADR-016（图表 spec 与渲染管线）· ADR-008（复权口径）· ADR-018 C1（时点唯一生产者）
 > 冻结契约：`docs/AStockAgent_interface_freeze_v1.md` §3（ChartSpec v1）、§5（agent_* 三表 DDL）、§6（data_as_of / data_time）
 > 代码：`astock/agent/chart_spec.py`、`astock/agent/chart_render.py`、`astock/agent/store.py`、`astock/data.py`
-> 交付状态：PR #12，功能提交 `75c60e3`，CI run 43405286628 pass，计划项 `in_review`（等待复审）
+> 交付状态：PR #12，功能提交 `75c60e3`，CI run 43405286628 pass，计划项已合并（merge commit `351c66b`）
+>
+> **2026-11-14 已被取代**：Q1/Q2/Q3/Q4/Q5/Q6/Q7/D9 的最终裁决见
+> `docs/AStockAgent_chart_audit_v2_change_spec.md` 与 ADR-016 补充裁决；本文件保留决策过程，
+> 不再作为实现依据。D1/D10/D11 见 ADR-008/ADR-016 补充裁决。
 
 ---
 

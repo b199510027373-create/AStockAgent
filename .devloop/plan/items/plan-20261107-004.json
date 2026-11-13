@@ -1,14 +1,14 @@
 {
   "id": "plan-20261107-004",
   "title": "文件检索 / 表格查询 + 强制引用",
-  "description": "依据 ADR-015 实现文件检索与表格查询工具：SQLite FTS5 索引文本块（file_chunks：file_id/page/chunk/text）；表格用 DuckDB 只读查 Parquet（仅 SELECT、强制 LIMIT、5s 超时）。工具：file_list / file_search / file_read / table_schema / table_query。回答强制引用「文件名 + 页码/工作表/单元格范围」，无引用即标「未在文件中找到」。",
+  "description": "依据 ADR-015 实现文件检索与表格查询工具：SQLite FTS5 索引文本块（file_chunks：file_id/page/chunk/text）；表格用 DuckDB 只读查 Parquet（仅 SELECT、强制 LIMIT、5s 超时）。工具：file_list / file_search / file_read / table_schema / table_query。回答强制引用「文件名 + 页码/工作表/单元格范围」，无引用即标「未在文件中找到」。开工前先订正 ADR-015 的两处旧口径：meta 必填字段由 13 改为实际 15（file_id/sha256/name/ext/media_type/size_bytes/uploaded_at/pages/sheets/text_chars/chunks_count/parser/parser_version/status/warnings）；表格 bbox 明确区分 PDF 页面坐标 `[x0,y0,x1,y1]`（points）与 Excel/CSV/DOCX 表格坐标 `[row_start,col_start,row_end,col_end]`（1-based，闭区间），不得混用。",
   "status": "todo",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-28",
-  "estimateH": 14,
+  "estimateH": 18,
   "progress": 0,
   "acceptance": [
     "file_search 返回 chunk + 页码，可被回答引用",
@@ -16,7 +16,11 @@
     "基于文件的回答必须带文件名 + 页码/工作表引用",
     "无命中的问题明确回答「未在文件中找到」",
     "查询 10 万行 Excel 的响应时间 < 3s",
-    "（ADR-015 C4，并入自 plan-20261110-004）file_chunks 用 FTS5 建立全文索引并与抽取同批写入；file_search 命中必须能回查 file_id + 页码/行号，不得只返回拼好的文本片段"
+    "（ADR-015 C4）file_chunks 用 FTS5 建立全文索引并与抽取同批写入；命中可回查 file_id + 页码/行号",
+    "meta 必填字段 15 个，与 ADR-015 和实现一致；有字段数/缺字段测试",
+    "PDF 表格 bbox 用 `[x0,y0,x1,y1]` points；Excel/CSV/DOCX 用 `[row_start,col_start,row_end,col_end]` 1-based 闭区间；两类不混用",
+    "DOCX 表格写回源行号；Excel 多 sheet 的引用含工作表名与单元格范围",
+    "冻结清单与 ADR-015 同步更新，旧 13 字段/bbox 表述删除"
   ],
   "tags": [
     "agent",
@@ -31,10 +35,13 @@
     "adr": [
       "ADR-015"
     ],
+    "module": [
+      "file_ingest"
+    ],
     "mergedFrom": [
       "plan-20261110-004"
     ]
   },
   "createdAt": "2026-11-07T14:12:03.517Z",
-  "updatedAt": "2026-11-07T14:13:12.172Z"
+  "updatedAt": "2026-11-13T19:09:17.043Z"
 }

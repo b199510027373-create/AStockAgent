@@ -1,7 +1,7 @@
 {
   "id": "plan-20261103-012",
-  "title": "CI 深化：全库 mypy + 覆盖率 65% + 依赖锁定",
-  "description": "当前 CI 已含 ruff 基础规则、mypy（22 个源文件，含 app.py）、覆盖率 57% / 门槛 50%、57 个测试。下一步：把 mypy 扩到全部非 UI 模块；覆盖率门槛提到 65%；依赖锁版本（当前全是 >=）；保证 PR 与 main 都跑。这也是评审 PR#15 的延伸。",
+  "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定",
+  "description": "旧基线（22 源文件 / 57 tests / coverage 57% / 门槛 50%）已过时。最新合并树实测：pytest 378 passed + 1 skipped（PR #12 合并后预计 471），mypy astock 31 files Success。目标改为：mypy 扩到全部非 UI 模块并全库通过；用最新实测覆盖率重设门槛（不得低于当前实测，分阶段提升）；requirements/requirements-dev 全部锁版本（当前多为 >=）；CI 在 PR 与 main 都跑并连续两次通过。不再写死 65% 作为未测量的假设。",
   "status": "todo",
   "priority": "P2",
   "milestone": "ms-quality",
@@ -11,10 +11,11 @@
   "estimateH": 8,
   "progress": 0,
   "acceptance": [
-    "mypy 覆盖扩展到全部非 UI 模块（当前 22 个源文件）",
-    "覆盖率门槛从 50% 提升到 65% 并稳定通过",
-    "requirements/requirements-dev 锁定版本（可复现安装）",
-    "CI 在 main 上连续两次通过"
+    "mypy 覆盖全部非 UI 模块，最新 main 全库通过（当前 31 files Success）",
+    "记录最新 coverage 实测值，门槛按实测重设且不低于当前；分阶段提升目标写入 CI 注释",
+    "requirements/requirements-dev 锁定精确版本，可复现安装；含 plotly/kaleido 等图表依赖",
+    "CI 在 PR 与 main 均运行 pytest+mypy+ruff，连续两次通过",
+    "清理旧文档中的 22 文件/57 tests/50% 门槛表述，避免与现状冲突"
   ],
   "tags": [
     "ci",
@@ -22,7 +23,14 @@
     "coverage",
     "pinning"
   ],
-  "links": {},
+  "links": {
+    "module": [
+      "ci"
+    ],
+    "docs": [
+      "docs/AStockAgent_CI_work_calendar.md"
+    ]
+  },
   "createdAt": "2026-11-03T12:10:57.134Z",
-  "updatedAt": "2026-11-03T12:10:57.134Z"
+  "updatedAt": "2026-11-13T19:09:21.384Z"
 }

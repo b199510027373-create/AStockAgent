@@ -408,6 +408,17 @@
       "notes": "第 4 轮 · request_changes"
     },
     {
+      "id": "cal-plan-20261114-004-planned",
+      "type": "planned",
+      "title": "PR #9 调度 5 日生产验收与心跳告警观察",
+      "start": "2026-11-14T00:00:00+08:00",
+      "end": "2026-11-21T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261114-004",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261103-005-planned",
       "type": "planned",
       "title": "「无显著 alpha」实时横幅（ledger 驱动）",
@@ -518,6 +529,28 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-plan-20261107-008-planned",
+      "type": "planned",
+      "title": "Agent 审计表与安全限额（v2：内容/版本/引用）",
+      "start": "2026-11-18T00:00:00+08:00",
+      "end": "2026-11-28T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261107-008",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261114-003-planned",
+      "type": "planned",
+      "title": "复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
+      "start": "2026-11-18T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261114-003",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261110-007-planned",
       "type": "planned",
       "title": "ADR-018 实时口径：data_as_of/data_time 生产者与降级标注",
@@ -540,17 +573,6 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261103-012-planned",
-      "type": "planned",
-      "title": "CI 深化：全库 mypy + 覆盖率 65% + 依赖锁定",
-      "start": "2026-11-23T00:00:00+08:00",
-      "end": "2026-11-27T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261103-012",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
       "id": "cal-plan-20261107-004-planned",
       "type": "planned",
       "title": "文件检索 / 表格查询 + 强制引用",
@@ -562,6 +584,17 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-plan-20261103-012-planned",
+      "type": "planned",
+      "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定",
+      "start": "2026-11-23T00:00:00+08:00",
+      "end": "2026-11-27T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-012",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261107-006-planned",
       "type": "planned",
       "title": "行情/指标工具：实时 K 线与指标",
@@ -569,17 +602,6 @@
       "end": "2026-11-29T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261107-006",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
-      "id": "cal-plan-20261114-002-planned",
-      "type": "planned",
-      "title": "图表管线 v2：Q4 别名清理与 Q5 渲染/审计边界",
-      "start": "2026-11-23T00:00:00+08:00",
-      "end": "2026-11-30T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261114-002",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
@@ -597,7 +619,7 @@
     {
       "id": "cal-plan-20261103-013-planned",
       "type": "planned",
-      "title": "根目录清理与双目录源码一致性校验",
+      "title": "根目录卫生与仓库单一真源校验",
       "start": "2026-11-28T00:00:00+08:00",
       "end": "2026-11-30T23:59:00+08:00",
       "allDay": true,
@@ -606,13 +628,13 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261107-008-planned",
+      "id": "cal-plan-20261114-002-planned",
       "type": "planned",
-      "title": "Agent 审计表与安全限额",
-      "start": "2026-11-29T00:00:00+08:00",
-      "end": "2026-12-04T23:59:00+08:00",
+      "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
+      "start": "2026-11-30T00:00:00+08:00",
+      "end": "2026-12-08T23:59:00+08:00",
       "allDay": true,
-      "planItemId": "plan-20261107-008",
+      "planItemId": "plan-20261114-002",
       "source": "devloop",
       "notes": "由计划项自动生成"
     }

@@ -1,0 +1,51 @@
+{
+  "id": "plan-20261114-002",
+  "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
+  "description": "2026-11-14 统一裁决。以 docs/AStockAgent_chart_audit_v2_change_spec.md 为准，一次完成图表语义与审计迁移：Q1 data_as_of/data_time 固定行情时点，新增 view_as_of/view_time 为 transforms 后视图时点，图注同时展示；Q2 meta_json 不可变 provenance，快照移出 meta，新增 meta_digest/版本与 correction，回放分 as_recorded/recomputed；Q3 artifact 逻辑身份=规范化 spec+数据快照+环境版本，HTML 为展示产物，div_id 每图实例唯一；Q4 删除 panes/style/raw 别名，只留 layers/theme/adj=none；Q5 chart_render 不写审计，新增 chart_service 唯一入口与 ArtifactReader 只读协议，直接渲染不合成 run；Q7 09:25 集合竞价接受并标 session=pre，连续指标默认排除，strict 另置；D10 禁止猜时间列，无显式时间列/无法证明时抛契约错误；D11 transforms 统一走 stats 口径，保留空组并显式报错；§12 artifact/version 行永久保留只 GC 文件，correction 仅维护脚本/管理员且 actor+理由必填。与 plan-20261107-008 的 v2 三表模型对齐。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-30",
+  "due": "2026-12-08",
+  "estimateH": 32,
+  "progress": 0,
+  "acceptance": [
+    "Q4：panes/style/raw 别名删除，schema 只声明 layers/theme/adj=none，旧别名与未知键均报错",
+    "Q1：data_as_of/data_time 行情时点 + view_as_of/view_time 视图时点，图注同时展示；runtime/gateway 仍读行情时点",
+    "Q2：meta 不含大快照，meta_digest/版本/correction 落库；回放 as_recorded 与 recomputed 分离且不静默覆盖",
+    "Q3：artifact 逻辑身份含 spec+数据快照+plotly/python/code 版本；embed_html 每图唯一 div_id，双图/重复嵌入验收",
+    "Q5：chart_render 不 import agent_store 写路径；chart_service 唯一审计入口；ArtifactReader 只读 data.source=artifact",
+    "Q7：09:25/盘后固定价可渲染并标 session=pre/auction；连续指标默认排除；strict 模式可硬失败；不回退前一日",
+    "D10：无显式时间列或无法证明时间语义时抛契约错误，禁止猜第一个可解析列",
+    "D11：transforms 走 stats 口径，空组/NaN/排序行为有对照测试，图上均值与表一致",
+    "§12：artifact/version 行永久保留、孤儿文件 GC；correction 仅维护脚本/管理员，actor/理由/时间必填",
+    "冻结清单 v2、ADR-016/017/018 补丁、迁移脚本与全量回归通过；文档与实现一致"
+  ],
+  "tags": [
+    "agent",
+    "chart",
+    "refactor",
+    "audit"
+  ],
+  "deps": [
+    "plan-20261114-001",
+    "plan-20261114-003",
+    "plan-20261107-005",
+    "plan-20261107-008"
+  ],
+  "links": {
+    "adr": [
+      "ADR-016",
+      "ADR-017",
+      "ADR-018"
+    ],
+    "module": [
+      "chart_render",
+      "chart_service",
+      "chart_spec"
+    ]
+  },
+  "createdAt": "2026-11-13T16:36:35.797Z",
+  "updatedAt": "2026-11-13T19:09:07.755Z"
+}

@@ -1,27 +1,26 @@
 {
   "id": "plan-20261107-008",
-  "title": "Agent 审计表与安全限额",
-  "description": "依据 ADR-017 实现 astock/agent/store.py：agent_runs / agent_steps / agent_artifacts 三表（与 ledger 同库），每次工具调用记录工具名/参数/结果摘要/耗时；artifact 不可变、按 hash 去重。安全：路径白名单（仅 data/agent/files 与只读缓存）、上传类型/大小校验、文件内容按不可信数据包裹、禁止 shell/任意 HTTP、步数/token/时长限额。留存默认 90 天，清理只删 artifact 文件不删 run/step。",
+  "title": "Agent 审计表与安全限额（v2：内容/版本/引用）",
+  "description": "依据 ADR-017 与 docs/AStockAgent_chart_audit_v2_change_spec.md §7 实现 astock/agent/store.py v2 模型：agent_runs 只放真实 Agent；agent_artifacts 去 run_id，存内容寻址 path/content_digest/kind/env/created_at；新增 agent_artifact_versions（meta_json/meta_digest/env/created_at）与 agent_run_artifacts 引用表（link_id/artifact_id/run_id 可空/artifact_version/step/source=agent|render|import/session_id/created_at）；corrections 追加表。直接渲染写 link 且 run_id=NULL，不再合成 run；删 run 只删 link，artifact/version 行永久保留，孤儿文件按引用计数+保留期 GC；指标查询默认排除 run_kind=render。含旧三表幂等迁移、备份、回滚。安全：路径白名单、上传校验、提示注入包裹、工具权限、步数/token/时长限额。",
   "status": "todo",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-18",
   "due": "2026-11-28",
-  "estimateH": 20,
+  "estimateH": 24,
   "progress": 0,
   "acceptance": [
-    "agent_runs/agent_steps/agent_artifacts 三表落库，run 可查全部步骤",
-    "工具调用参数/结果摘要/耗时完整记录",
-    "路径白名单与上传类型/大小校验生效",
-    "文件内容按不可信数据包裹，注入指令不被执行",
-    "留存清理任务可删 artifact 但保留 run/step",
-    "（ADR-017 C1，并入自 plan-20261110-006）agent_runs/agent_steps/agent_artifacts 三表 DDL 与《接口冻结清单》§5 逐字一致（列名、类型、NOT NULL、索引名）；已有库走幂等迁移，不重建丢数据",
-    "（ADR-017 C1）每次工具调用必落一行 agent_steps：tool/args_json/result_digest/latency_ms/status，失败与非法参数调用同样落库",
-    "（ADR-017）artifact 内容寻址 `data/agent/artifacts/<sha256>/`，digest 相同即复用，不重复写盘",
-    "（ADR-017 C3）GC/留存 90 天只删 artifact 文件与重表行，run/step 记录保留；清理后 run 详情页显示「artifact 已清理」而不是断链",
-    "（ADR-017 C2）权限只用实现中的七个标签（market:read/indicator:compute/chart:render/file:read/research:read/ledger:read/user:ask），不存在 `:write`；越权标签在注册期即拒绝",
-    "（ADR-017）安全负例：工具实现中不得出现 subprocess/os.system/HTTP 客户端/文件删除/推荐写入路径，以 AST 扫描 + 注册期检查双保险"
+    "agent_runs 只记录真实 Agent；直接渲染不创建 run，link.source=render 且 run_id 可空",
+    "agent_artifacts 无 run_id；内容寻址、digest 去重；同内容多来源通过 link 保留归属",
+    "agent_artifact_versions 保存 meta_json/meta_digest/env_version，meta 不可变；correction 追加且 actor/理由/时间必填",
+    "agent_run_artifacts 支持 run 删除后 artifact 保留；删 run 只删 link，GC 只删无引用文件",
+    "旧 agent_* 三表迁移：新表→拷贝→重建→改名，备份+PRAGMA foreign_keys 处理，旧合成 run 标 run_kind=render 且指标排除",
+    "指标查询默认排除 render；成功后 token/步数统计不受每图合成 run 污染",
+    "路径白名单与上传类型/大小校验、文件内容按不可信数据包裹、禁止 shell/HTTP/文件删除/推荐写入",
+    "工具调用参数/结果摘要/耗时完整记录；失败与非法参数也落 agent_steps",
+    "权限只用七个只读/计算标签，越权标签注册期拒绝；AST 扫描双保险",
+    "DDL 与冻结清单 v2 一致；迁移脚本在旧库 fixture 跑通，全量测试与 mypy 通过"
   ],
   "tags": [
     "agent",
@@ -35,12 +34,16 @@
   ],
   "links": {
     "adr": [
+      "ADR-013",
       "ADR-017"
     ],
-    "mergedFrom": [
-      "plan-20261110-006"
+    "module": [
+      "agent_store"
+    ],
+    "docs": [
+      "docs/AStockAgent_chart_audit_v2_change_spec.md"
     ]
   },
   "createdAt": "2026-11-07T14:12:15.935Z",
-  "updatedAt": "2026-11-10T08:34:48.531Z"
+  "updatedAt": "2026-11-13T19:09:12.935Z"
 }

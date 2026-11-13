@@ -90,3 +90,6 @@ ChartSpec v1 在 `docs/AStockAgent_interface_freeze_v1.md` §3 **逐字冻结**�
 - **Q4=B**：删除 `panes`/`style`/`raw` 兼容别名；规范字段只保留 `layers`/`theme`/`adj=none`，未知键与旧别名一律报错。落地项 `plan-20261114-002`。
 - **Q5=C（完整版）**：`chart_render` 只负责校验/取数/指标/HTML/PNG，不写审计表；新增 `chart_service` 作为唯一审计入口，artifact 数据源通过 `ArtifactReader` 只读协议注入。落地项 `plan-20261114-002`。
 - **Q6=A**：PNG 导出从“可选降级”升级为 v1 支持功能；锁定 Plotly/Kaleido 版本，Windows/Linux CI 真实导出，中文字体与失败语义纳入验收。落地项 `plan-20261114-001`。
+- **D10（2026-11-14）**：禁止猜时间列。`encode.x` 或显式 `data.time_field` 必须指向可证明的时间列；`data_as_of` 只能由该列按 `Asia/Shanghai` 解析，字符串代码 `20240104`、标签 `2024-01-04 收盘` 一律不得当时间列。无显式时间列、无法证明时区/交易日语义时抛 `ChartSpecError`，不静默生成“看似合理”的图注；inline 数据必须自带 `time_field` 或声明 `time_semantics=none`。落地项 `plan-20261114-002`。
+- **D11（2026-11-14）**：`transforms` 的统计口径必须复用 `astock/stats.py`（或同一实现），不得手写另一套 pandas 聚合。`groupby` 默认 `dropna=False` 保留空组，`agg` 的 `mean/sum/min/max/count/last` 与 stats 对齐；空组/全 NaN 组保留并显式标 warning，不静默丢行；排序稳定（`kind="mergesort"`），同值不随机换序；字段覆盖同名时在结果里加后缀并报警，不静默覆盖。图上均值必须与表/报告一致。落地项 `plan-20261114-002`。
+- **D1（2026-11-14）**：`ChartSpec.data.adj` 增加 `hfq`（标准后复权，基准 1.0，定义见 ADR-008 补充裁决）；默认仍 `qfq`，`none` 保留给涨跌停/成交类图。分钟 hfq 必须标 `adj_source=daily`，不得与日线 hfq 混成连续序列。落地项 `plan-20261114-003`。

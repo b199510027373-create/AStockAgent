@@ -1,0 +1,39 @@
+{
+  "id": "plan-20261114-003",
+  "title": "复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
+  "description": "2026-11-14 用户裁决 D1。明确 hfq 为“标准后复权，基准 1.0”：以该证券最早可用交易日的 adj_factor 为 1.0，价格 = raw * adj_factor / base_factor；不得把最新因子当 1.0（那是 qfq）。adj_factor 缺失/空/<=0/非有限一律抛 DataContractError，禁止静默回退 qfq 或用 1.0 填充。分钟线按交易日日线 adj_factor 复权，metadata 单独标注 adj=hfq、adj_base、adj_source=daily；分钟 hfq 不与日线 hfq 连续序列混用，缺因子报错。涨跌停/成交额/绝对价位仍用 raw。同步 ADR-008 与 data.py 测试。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-18",
+  "due": "2026-11-22",
+  "estimateH": 8,
+  "progress": 0,
+  "acceptance": [
+    "hfq 基准 1.0 公式与最早可用交易日 base_factor 写入 ADR-008 和 data.py 注释",
+    "构造已知因子序列验证 hfq 价格与收益率；qfq 仍以最新因子为基准，二者不混用",
+    "adj_factor 缺失/空/<=0/NaN/inf 抛 DataContractError，禁止回退 qfq 或填充 1.0",
+    "分钟线使用当日日线 adj_factor，metadata 带 adj/adj_base/adj_source=daily；缺因子报错",
+    "涨跌停、成交额、绝对价位判断仍用 raw；缓存 meta 的 base_factor 变化视为失效",
+    "plan-20261107-006 的行情工具与 plan-20261114-002 的图表图注展示复权口径"
+  ],
+  "tags": [
+    "data",
+    "adjustment",
+    "hfq",
+    "qfq",
+    "contract"
+  ],
+  "deps": [],
+  "links": {
+    "adr": [
+      "ADR-008"
+    ],
+    "module": [
+      "data"
+    ]
+  },
+  "createdAt": "2026-11-13T19:08:42.756Z",
+  "updatedAt": "2026-11-13T19:09:27.318Z"
+}
