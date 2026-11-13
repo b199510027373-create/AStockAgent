@@ -33,6 +33,7 @@ import os
 import platform
 import re
 import sqlite3
+import uuid
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -181,6 +182,11 @@ CREATE TRIGGER IF NOT EXISTS file_chunks_au AFTER UPDATE ON file_chunks BEGIN
 END;"""
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+# 前导零标识符（股票代码、工号、订单号等）：转 float 会丢零，必须保留文本。
+_LEADING_ZERO_RE = re.compile(r"^0\d")
+# sheet_slug 白名单（冻结布局：tables/<sheet_slug>.parquet，见 §4）。
+_SHEET_SLUG_RE = re.compile(r"[a-z0-9_]{1,48}")
 
 
 def describe_limits() -> str:
@@ -567,8 +573,13 @@ def _page_tables(page: Any) -> list[tuple[list[list[Any]], list[float] | None]]:
 
 
 def _parse_excel(source: Path, ext: str) -> _Parsed:
+    # 显式指定引擎：pandas 的文件格式嗅探只认 ZIP（xlsx）与 CFB（xls），
+    # 裸 BIFF2/BIFF5 旧工作簿会被判成“无法确定格式”，xlrd 自己反而能读。
+    engine = "openpyxl" if ext == "xlsx" else "xlrd"
     try:
-        frames = pd.read_excel(source, sheet_name=None, header=None, dtype=object)
+        frames = pd.read_excel(
+            source, sheet_name=None, header=None, dtype=object, engine=engine
+        )
     except ImportError as exc:
         engine = "openpyxl>=3.1" if ext == "xlsx" else "xlrd>=2.0"
         raise _Rejected(
@@ -763,9 +774,13 @@ def _add_sheet(
         header_label = None
 
     padded = [_pad_row(row, len(columns)) for row in data_rows]
-    frame = pd.DataFrame(
-        {column: _coerce_column([row[i] for row in padded]) for i, column in enumerate(columns)}
-    )
+    series_by_column: dict[str, pd.Series] = {}
+    for index, column in enumerate(columns):
+        series, warning = _coerce_column([row[index] for row in padded], column)
+        series_by_column[column] = series
+        if warning:
+            parsed.warnings.append(f"{warning}（工作表 {name}）")
+    frame = pd.DataFrame(series_by_column)
     slug = _sheet_slug(name, used_slugs)
     parsed.tables[slug] = frame
     parsed.sheet_meta.append(
@@ -908,16 +923,30 @@ def _columns_from(header: Sequence[Any]) -> list[str]:
     return columns
 
 
-def _coerce_column(values: Sequence[Any]) -> pd.Series:
+def _coerce_column(
+    values: Sequence[Any], column: str
+) -> tuple[pd.Series, str | None]:
+    """数值列尽量转 float；含前导零标识符的列保持文本并返回告警。"""
     series = pd.Series(list(values), dtype=object)
     non_null = series.dropna()
     if non_null.empty:
-        return series
+        return series, None
+    # “000001”“007”这类代码/编号一旦转成 float 就丢失前导零，与 extracted.jsonl
+    # 的文本块不一致，因此整列保留字符串（AGENT-05：不得静默改写文件内容）。
+    leading_zero = any(
+        isinstance(value, str) and _LEADING_ZERO_RE.match(value.strip())
+        for value in non_null
+    )
+    if leading_zero:
+        return series, (
+            f"{EXTRACTION_WARNING_PREFIX} 列「{column}」含前导零标识符，已按文本保留，"
+            "避免代码/编号被改写成数值。"
+        )
     numeric = pd.to_numeric(non_null, errors="coerce")
     if numeric.notna().all():
         converted = pd.to_numeric(series, errors="coerce")
-        return converted.astype(float)
-    return series
+        return converted.astype(float), None
+    return series, None
 
 
 def _sheet_slug(name: str, used: set[str]) -> str:
@@ -1172,9 +1201,13 @@ def _package_version(name: str) -> str:
 
 def _atomic_write_bytes(target: Path, payload: bytes) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}.tmp-{os.getpid()}")
-    tmp.write_bytes(payload)
-    os.replace(tmp, target)
+    # 同一进程可能并发写同一个 sha256：tmp 名必须带随机后缀，不能只用 pid。
+    tmp = target.with_name(f".{target.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}")
+    try:
+        tmp.write_bytes(payload)
+        os.replace(tmp, target)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _atomic_write_text(target: Path, text: str) -> None:
@@ -1282,6 +1315,16 @@ def iter_chunks(file_id: str, *, root: str | Path | None = None) -> Iterator[dic
 def load_table(
     file_id: str, sheet_slug: str, *, root: str | Path | None = None
 ) -> pd.DataFrame:
-    """读取某张表的 parquet（只读）。"""
-    path = file_dir(file_id, root=root) / "tables" / f"{sheet_slug}.parquet"
+    """读取某张表的 parquet（只读）。
+
+    ``sheet_slug`` 直接来自模型/工具参数，必须按冻结白名单校验并确认解析后的
+    路径仍在 ``tables/`` 内，否则 ``../`` 或绝对路径会越出内容寻址目录
+    （AGENT-05）。
+    """
+    if not isinstance(sheet_slug, str) or not _SHEET_SLUG_RE.fullmatch(sheet_slug):
+        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
+    tables_dir = (file_dir(file_id, root=root) / "tables").resolve()
+    path = (tables_dir / f"{sheet_slug}.parquet").resolve()
+    if not path.is_relative_to(tables_dir):
+        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
     return pd.read_parquet(path)

@@ -1,8 +1,9 @@
 """文件导入解析（ADR-015）离线测试。
 
-覆盖：TXT/MD、CSV（编码/分隔符/表头）、XLSX（多 sheet/行列坐标/parquet）、
-DOCX（段落/分页/表格）、PDF（用 pdfplumber 桩：页码/表格 bbox/加密/扫描件/页数上限），
-以及内容寻址、冻结布局与字段、限额、FTS 索引、读取辅助。
+覆盖：TXT/MD、CSV（编码/分隔符/表头/前导零代码列）、XLSX/XLS（多 sheet、
+行列坐标、parquet）、DOCX（段落/分页/表格）、PDF（用 pdfplumber 桩：页码/表格
+bbox/加密/扫描件/页数上限），以及内容寻址、冻结布局与字段、限额、FTS 索引及其
+降级、原子写失败清理、读取辅助与 sheet_slug 越界防护。
 
 pdfplumber 与本机无关：``_load_pdfplumber`` 被 monkeypatch 成假模块，
 所以这些 PDF 用例在任何环境都能跑；CI 上装了真依赖时 DOCX 用例会走
@@ -27,6 +28,7 @@ import pytest
 from astock.agent import files as F
 
 UPLOADED_AT = "2026-11-13T00:00:00+08:00"
+FIXTURES = Path(__file__).with_name("fixtures")
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +174,35 @@ def _assert_layout(result: F.IngestResult, root: Path, ext: str) -> dict[str, An
     assert meta["status"] in F.STATUSES
     assert meta["file_id"] == "f_" + meta["sha256"][:16]
     return meta
+
+
+@pytest.mark.parametrize("ext", ["txt", "csv", "xlsx", "xls", "docx", "pdf"])
+def test_layout_matches_frozen_spec(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ext: str
+) -> None:
+    """ADR-015 锚点：六种格式都落成 §4 的四件产物（original/extracted/tables/meta）。"""
+    path = tmp_path / f"spec.{ext}"
+    if ext == "txt":
+        _write(path, "标题\n\n正文")
+    elif ext == "csv":
+        _write(path, "a,b\n1,2\n")
+    elif ext == "xlsx":
+        _make_xlsx(path, {"Sheet1": [["a", "b"], [1, 2]]})
+    elif ext == "xls":
+        shutil.copyfile(FIXTURES / "legacy_two_sheets.xls", path)
+    elif ext == "docx":
+        _make_docx(path)
+    else:
+        _patch_pdf(monkeypatch, pages=[_FakePage("只有文字")])
+        path.write_bytes(b"%PDF-1.4 fake bytes")
+
+    result = F.ingest_file(path, root=tmp_path / "store")
+
+    assert result.status == F.STATUS_OK
+    meta = _assert_layout(result, tmp_path / "store", ext)
+    assert meta["pages"] is None or meta["pages"] >= 1
+    directory = tmp_path / "store" / meta["sha256"]
+    assert (directory / "extracted.jsonl").stat().st_size > 0
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +379,12 @@ def test_csv_utf8_bom_header_and_coordinates(tmp_path: Path) -> None:
     assert list(frame.columns) == ["代码", "收盘价", "成交量"]
     assert frame.shape == (2, 3)
     assert frame["收盘价"].tolist() == [12.5, 13.5]
+    # 前导零代码列不得被转成 1.0：整列保持文本，并给出 extraction_warning。
+    assert frame["代码"].tolist() == ["600000", "000001"]
+    assert any(
+        warning.startswith(F.EXTRACTION_WARNING_PREFIX) and "前导零" in warning
+        for warning in result.warnings
+    )
 
 
 @pytest.mark.parametrize("delimiter", [";", "\t", "|"])
@@ -449,6 +486,38 @@ def test_xlsx_sheet_slug_collision_gets_suffix(tmp_path: Path) -> None:
 
     assert result.meta is not None
     assert [sheet["slug"] for sheet in result.meta["sheets"]] == ["a_b", "a_b_2"]
+
+
+def test_legacy_xls_is_parsed_with_coordinates(tmp_path: Path) -> None:
+    """真实 .xls（BIFF8 两 sheet 夹具，见 tests/fixtures/build_legacy_xls.py）走 xlrd。"""
+    source = tmp_path / "legacy.xls"
+    shutil.copyfile(FIXTURES / "legacy_two_sheets.xls", source)
+
+    result = F.ingest_file(source, root=tmp_path / "store")
+
+    assert result.status == F.STATUS_OK
+    meta = _assert_layout(result, tmp_path / "store", "xls")
+    assert meta["parser"] == "xlrd"
+    assert meta["pages"] is None
+    assert [sheet["name"] for sheet in meta["sheets"]] == ["利润表", "现金流"]
+    assert [sheet["slug"] for sheet in meta["sheets"]] == ["sheet", "sheet_2"]
+    assert meta["sheets"][0]["rows"] == 2
+    assert meta["sheets"][0]["cols"] == 3
+    assert meta["sheets"][0]["header_row"] == 1
+
+    rows = _blocks(result, tmp_path / "store")
+    first_sheet = [row for row in rows if row["sheet"] == "利润表"]
+    data = [row for row in first_sheet if row["kind"] == "table"]
+    assert [row["bbox"] for row in data] == [[2, 1, 2, 3], [3, 1, 3, 3]]
+
+    profit = F.load_table(result.doc.file_id, "sheet", root=tmp_path / "store")  # type: ignore[union-attr]
+    assert list(profit.columns) == ["项目", "本期", "上期"]
+    assert profit.shape == (2, 3)
+    assert profit["本期"].tolist() == [100.0, 20.0]
+
+    cash = F.load_table(result.doc.file_id, "sheet_2", root=tmp_path / "store")  # type: ignore[union-attr]
+    assert cash["代码"].tolist() == ["000001", "600000"]
+    assert cash["金额"].tolist() == [30.0, 12.5]
 
 
 def test_xls_without_engine_reports_missing_dependency(
@@ -582,7 +651,7 @@ def test_pdf_page_limit_is_enforced(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert any(f"{F.MAX_PDF_PAGES} 页" in warning for warning in result.warnings)
 
 
-def test_pdf_without_text_layer_is_suspected_scan(
+def test_scan_like_pdf_is_flagged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_pdf(monkeypatch, pages=[_FakePage(""), _FakePage("")])
@@ -692,6 +761,69 @@ def test_file_dir_accepts_sha256_and_rejects_traversal(tmp_path: Path) -> None:
         F.file_dir("../../etc", root=root)
     with pytest.raises(FileNotFoundError):
         F.file_dir("f_deadbeefdeadbeef", root=root)
+
+
+@pytest.mark.parametrize(
+    "bad_slug",
+    ["../../x", "../meta", "C:/Windows/win.ini", "..\\..\\escape", "sheet/../sheet"],
+)
+def test_load_table_rejects_traversal(tmp_path: Path, bad_slug: str) -> None:
+    """sheet_slug 来自工具/模型参数，必须按白名单拒绝越出 tables/ 的路径。"""
+    root = tmp_path / "store"
+    result = F.ingest_file(_write(tmp_path / "a.csv", "a,b\n1,2\n"), root=root)
+    assert result.meta is not None
+
+    with pytest.raises(ValueError, match="sheet_slug"):
+        F.load_table(result.meta["file_id"], bad_slug, root=root)
+
+
+def test_atomic_write_failure_leaves_no_tmp_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """原子写失败时不得残留 .meta.json.tmp-*，也不得留下半截 meta.json。"""
+    source = _write(tmp_path / "a.txt", "内容")
+    store = tmp_path / "store"
+    real_write_bytes = Path.write_bytes
+
+    def failing_write(self: Path, payload: bytes) -> int:
+        if self.name.startswith(".meta.json.tmp-"):
+            raise OSError("disk full")
+        return real_write_bytes(self, payload)
+
+    monkeypatch.setattr(Path, "write_bytes", failing_write)
+
+    result = F.ingest_file(source, root=store)
+
+    assert result.status == F.STATUS_UNSUPPORTED
+    assert any("disk full" in warning for warning in result.warnings)
+    directory = store / hashlib.sha256(source.read_bytes()).hexdigest()
+    assert directory.is_dir()
+    assert not (directory / "meta.json").exists()
+    assert not list(directory.glob(".meta.json.tmp-*"))
+
+
+def test_index_failure_does_not_block_ingest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FTS 索引失败只降级检索能力，抽取结果与 status 不受影响。"""
+    source = _write(tmp_path / "notes.txt", "第一段\n\n第二段")
+
+    def failing_index(*_args: Any, **_kwargs: Any) -> int:
+        raise sqlite3.OperationalError("fts5 unavailable")
+
+    monkeypatch.setattr(F, "index_chunks", failing_index)
+    result = F.ingest_file(source, root=tmp_path / "store", db_path=tmp_path / "idx.db")
+
+    assert result.status == F.STATUS_OK
+    assert any(
+        warning.startswith(F.EXTRACTION_WARNING_PREFIX) and "索引" in warning
+        for warning in result.warnings
+    )
+    assert result.meta is not None
+    meta = F.load_meta(result.meta["file_id"], root=tmp_path / "store")
+    assert list(meta) == list(F.META_FIELDS)
+    chunks = list(F.iter_chunks(meta["file_id"], root=tmp_path / "store"))
+    assert len(chunks) == meta["chunks_count"]
 
 
 def test_extracted_doc_pages_group_by_page_and_sheet(
