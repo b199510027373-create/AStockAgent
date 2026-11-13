@@ -180,19 +180,17 @@ class ChatModel(Protocol):
 **消歧（2026-11-11 评审）**：`period` 的分钟档一律带 `min` 后缀（`1min`…`60min`），`range` 的月档一律带 `mo` 后缀（`1mo`/`3mo`/`6mo`）。
 两者**不共用 `1m`**：前者是「每根 bar 的粒度」，后者是「窗口长度」。schema 用例见 plan-20261107-005（`period=1min` 取 1 分钟 bar、`range=1mo` 取 1 个月窗口）。
 
-### 3.2.1 兼容别名（2026-11-13 评审补记）
+### 3.2.1 兼容别名已删除（ADR-016 Q4=B，2026-11-14 裁决）
 
-验收文字出现过 `panes`/`style`，但冻结字段只有 `layers`/`theme`；`adj` 的 `raw` 同理。为兼容历史 spec，**接受以下别名并归一化为规范名**（`validate_chart_spec` 输出的 spec 只含规范名）：
+早期验收文字出现过 `panes`/`style`，`adj` 也出现过 `raw`；ADR-016 的 2026-11-14 补充裁决定为 **Q4=B：删除别名**。自本版起：
 
-| 别名 | 规范名 | 约束 |
-| --- | --- | --- |
-| `panes` | `layers` | 语义完全等价；**不得与 `layers` 同时出现**，否则报 `$.panes` 字段级错误 |
-| `style` | `theme` | 字符串等于 `theme`；也接受 `{"theme": "light"\|"dark"}`；**不得与 `theme` 同时出现**，否则报 `$.style` |
-| `data.adj="raw"` | `data.adj="none"` | 归一后按不复权取数，图注写「不复权（原始价格 raw）」 |
+| 旧别名 | 现行行为 |
+| --- | --- |
+| `panes` | 未知字段，报 `$.panes` 字段级错误 |
+| `style` | 未知字段（含 `{"theme": ...}` 对象形式），报 `$.style` |
+| `data.adj="raw"` | 枚举外取值，报 `$.data.adj`；不复权请写 `adj="none"` |
 
-规范名以 `layers`/`theme`/`adj=none` 为准；schema（`chart_spec_json_schema()`）同时声明别名并注明冲突规则，逐字段互斥由 `validate_chart_spec` 强制。未知键仍一律拒绝，不做模糊匹配。
-
-**新写入的 spec 必须直接用规范名**（别名只为读取历史 spec 而保留，2026-11-16 决策记录 Q4）。
+规范字段只有 `layers`/`theme`/`adj∈{qfq,hfq,none}`；`chart_spec_json_schema()` 不再声明任何别名，`additionalProperties: false` 对未知键一律拒绝。删除别名的落地随 plan-20261107-005 完成，plan-20261114-002 继续处理渲染/审计边界（Q5=C）。
 
 ### 3.3 算子与图层参数（白名单，越界拒绝并返回字段级错误）
 
@@ -219,9 +217,11 @@ hline     {y: number, label?: str ≤ 60}   vline {x: str|number, label?}   text
 - 图题与角标同时展示 `data_as_of` 与 `data_time`；缺任一时点必须显式写 `时点未知`，不得留空；
 - 产物落 `agent_artifacts`，`meta_json` 记录 `{data_as_of, data_time, source, params, spec, code_version}`，并追加 `{time_point_scope, div_id, degraded, warnings, png_path, data}`；
 - `time_point_scope` ∈ `market`（未被 `transforms` 裁剪的行情时点）/`view`（图上前端视图时点）/`unknown`（取不到时点）；
-- 复现前提：同一 `spec`、同一份数据快照、**同一 plotly 版本与 `include_plotlyjs` 设置**。`params` 里记录 `plotly_version`/`python_version`，HTML 的 div id 由 `spec + 数据快照` 派生（`astock-chart-<8 hex>`），因此同输入字节稳定、不同图不共享 id；
+- 复现前提：同一 `spec`、同一份数据快照、**同一 plotly 版本与 `include_plotlyjs` 设置**。`params` 里记录 `plotly_version`/`python_version`/`include_plotlyjs`，HTML 的 div id 由 `spec + 数据快照` 派生（`astock-chart-<8 hex>`），因此同输入字节稳定、不同图不共享 id；
+- 同一 `artifact_id` 重复渲染时 `meta_json` 以**最新一次写入为准**（例如先降级出 HTML、后补齐 PNG，`degraded`/`png_path` 必须升级），行数仍为 1；
 - 无 `kaleido` 时只出 HTML（`png_path=None`），不抛异常，并在 `ToolResult.metadata` 标 `degraded=true`；PNG 在 ADR-016 补充裁决（2026-11-14 Q6=A）后升为 v1 支持功能，版本锁定/Chrome/字体/CI 真实导出由 plan-20261114-001 落地；
 - 渲染器**不得**执行 spec 之外的任何代码；`transforms` 只走白名单算子。
+- 审计边界（Q5=C）：目标形态是 `chart_service` 作为唯一审计入口、artifact 数据源走 `ArtifactReader` 只读协议；v1 暂由 `chart_render.render()` 直接写 `agent_artifacts`，迁移与拆分见 plan-20261114-002。
 
 ## 4. 冻结接口四：文件存储布局 v1
 

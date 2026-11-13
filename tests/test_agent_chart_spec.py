@@ -89,10 +89,12 @@ def test_inline_source_defaults_to_unadjusted_prices() -> None:
     assert spec["data"]["fields"] == ["day", "close"]
 
 
-def test_raw_adj_is_alias_of_none_and_kept_verbatim_in_caption_source() -> None:
+def test_adj_raw_is_rejected_after_q4_b() -> None:
     spec = market_spec()
     spec["data"]["adj"] = "raw"
-    assert validate_chart_spec(spec)["data"]["adj"] == "none"
+    with pytest.raises(ChartSpecError) as info:
+        validate_chart_spec(spec)
+    assert "$.data.adj" in error_fields(info.value)
 
 
 def test_layers_and_annotations_are_filled_with_documented_defaults() -> None:
@@ -444,28 +446,22 @@ def test_inline_requires_rows_and_fields() -> None:
     assert "$.data.rows" in fields and "$.data.fields" in fields
 
 
-# ---------------------------------------------------------------- 别名（验收字段串 panes/style）
+# ---------------------------------------------------------------- Q4=B：别名已删除
 
 
-def test_panes_is_alias_of_layers() -> None:
-    spec = market_spec(panes=[{"type": "volume"}])
-    normalized = validate_chart_spec(spec)
-    assert normalized["layers"] == [{"type": "volume"}]
-    assert "panes" not in normalized
-
-
-def test_style_is_alias_of_theme_and_accepts_mapping() -> None:
-    assert validate_chart_spec(market_spec(style="dark"))["theme"] == "dark"
-    assert validate_chart_spec(market_spec(style={"theme": "dark"}))["theme"] == "dark"
-
-
-def test_alias_and_canonical_field_conflict_is_rejected() -> None:
+def test_panes_and_style_are_rejected_as_unknown_fields() -> None:
     with pytest.raises(ChartSpecError) as info:
-        validate_chart_spec(market_spec(panes=[], layers=[]))
+        validate_chart_spec(market_spec(panes=[{"type": "volume"}]))
     assert "$.panes" in error_fields(info.value)
 
     with pytest.raises(ChartSpecError) as info:
-        validate_chart_spec(market_spec(style="dark", theme="light"))
+        validate_chart_spec(market_spec(style="dark"))
+    assert "$.style" in error_fields(info.value)
+
+
+def test_style_object_form_is_rejected_too() -> None:
+    with pytest.raises(ChartSpecError) as info:
+        validate_chart_spec(market_spec(style={"theme": "dark"}))
     assert "$.style" in error_fields(info.value)
 
 
@@ -572,8 +568,8 @@ def test_json_schema_closes_nested_items_and_whitelists_metrics() -> None:
 def test_json_schema_pins_ref_and_range_shapes() -> None:
     schema = chart_spec_json_schema()
     data = schema["properties"]["data"]["properties"]
-    assert len(data["ref"]["oneOf"]) == 3
-    patterns = [item["pattern"] for item in data["ref"]["oneOf"]]
+    assert len(data["ref"]["anyOf"]) == 3
+    patterns = [item["pattern"] for item in data["ref"]["anyOf"]]
     assert any(r"art_" in pattern for pattern in patterns)
     range_one_of = data["range"]["oneOf"]
     assert any("1mo" in (item.get("enum") or []) for item in range_one_of)
@@ -583,19 +579,70 @@ def test_json_schema_pins_ref_and_range_shapes() -> None:
     assert "1m" not in (range_one_of[0]["enum"])
 
 
-def test_json_schema_declares_compat_aliases() -> None:
+def test_json_schema_uses_anyof_for_overlapping_ref_patterns() -> None:
     schema = chart_spec_json_schema()
-    assert schema["properties"]["panes"]["maxItems"] == MAX_LAYERS
-    assert "别名" in schema["properties"]["panes"]["description"]
-    assert "别名" in schema["properties"]["style"]["description"]
-    assert "raw" in schema["properties"]["data"]["properties"]["adj"]["enum"]
+    ref = schema["properties"]["data"]["properties"]["ref"]
+    assert "oneOf" not in ref
+    assert len(ref["anyOf"]) == 3
+    patterns = [item["pattern"] for item in ref["anyOf"]]
+    assert any(r"art_" in pattern for pattern in patterns)
 
 
-def test_freeze_doc_records_alias_semantics() -> None:
+def test_jsonschema_accepts_index_refs_and_rejects_old_aliases() -> None:
+    jsonschema = pytest.importorskip("jsonschema")
+    schema = chart_spec_json_schema()
+
+    for ref in ("000001.SH", "399001.SZ", "000001.SZ", "830799.BJ"):
+        jsonschema.validate(
+            {
+                "version": 1,
+                "kind": "candlestick",
+                "data": {"source": "market", "ref": ref},
+                "encode": {"x": "trade_date"},
+            },
+            schema,
+        )
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            {
+                "version": 1,
+                "kind": "candlestick",
+                "data": {"source": "market", "ref": "000001.SZ"},
+                "encode": {"x": "trade_date"},
+                "panes": [],
+            },
+            schema,
+        )
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            {
+                "version": 1,
+                "kind": "candlestick",
+                "data": {"source": "market", "ref": "000001.SZ", "adj": "raw"},
+                "encode": {"x": "trade_date"},
+            },
+            schema,
+        )
+
+
+def test_json_schema_no_longer_declares_compat_aliases() -> None:
+    schema = chart_spec_json_schema()
+    assert "panes" not in schema["properties"]
+    assert "style" not in schema["properties"]
+    assert schema["properties"]["data"]["properties"]["adj"]["enum"] == [
+        "qfq",
+        "hfq",
+        "none",
+    ]
+
+
+def test_freeze_doc_records_alias_removal() -> None:
     from pathlib import Path
 
     doc = Path(__file__).resolve().parents[1] / "docs" / "AStockAgent_interface_freeze_v1.md"
     text = doc.read_text(encoding="utf-8")
-    assert "3.2.1 兼容别名" in text
-    for token in ("panes", "style", "raw", "不得与 `layers` 同时出现"):
-        assert token in text
+    assert "别名已删除" in text
+    assert "Q4=B" in text
+    assert "panes" in text and "style" in text and "raw" in text

@@ -256,7 +256,7 @@ def _load_market_frame(data: Mapping[str, Any]) -> pd.DataFrame:
     """按冻结词表取行情：日/周/月走 ``load_daily`` + ``period_frame``，分钟走 ``load_minute``。"""
     ref = str(data["ref"])
     period = str(data.get("period", "day"))
-    # 冻结口径 → data 层参数：qfq/hfq 原样传，none（含 raw 别名）必须传 None，
+    # 冻结口径 → data 层参数：qfq/hfq 原样传，none 必须传 None，
     # 否则 data.load_* 会按非空字符串做前复权（评审 P0）。
     adj_key = str(data.get("adj", "qfq"))
     adj = {"qfq": "qfq", "hfq": "hfq", "none": None}.get(adj_key, adj_key)
@@ -505,7 +505,7 @@ def _adj_label(adj: str) -> str:
     if adj == "hfq":
         return "后复权（hfq）"
     if adj == "none":
-        return "不复权（原始价格 raw，用于涨跌停/成交异常判断）"
+        return "不复权（原始价格，用于涨跌停/成交异常判断）"
     return f"口径未知（{adj}）"
 
 
@@ -571,25 +571,26 @@ def _time_points(
         # 显式传参优先；显式空串表示「时点未知」，不再回退猜测（图注写「时点未知」）
         return data_as_of or "", data_time or ""
 
+    if frame.empty:
+        # transforms 过滤后可能一行不剩；attrs 里还带着过滤前的旧时点，不能拿来用（评审 P2）。
+        warnings.append("数据为空（transforms 过滤后无行），时点未知（data_as_of/data_time 置空）")
+        return "", ""
+
     # 先按实际渲染的数据重算（transforms 之后调用），artifacts 的旧 meta 只作兜底，
     # 避免把首次渲染的错误时点固化到回放结果里（评审 P1）。
-    if not frame.empty:
-        probe = frame if _has_bar_time_column(frame) else _probe_time_frame(frame)
-        if probe is not None:
-            try:
-                return market.latest_bar_time(
-                    probe, freq=_period_freq(period), notes=warnings
-                )
-            except ValueError as exc:
-                warnings.append(f"无法确定时点：{exc}")
+    probe = frame if _has_bar_time_column(frame) else _probe_time_frame(frame)
+    if probe is not None:
+        try:
+            return market.latest_bar_time(
+                probe, freq=_period_freq(period), notes=warnings
+            )
+        except ValueError as exc:
+            warnings.append(f"无法确定时点：{exc}")
     snapshot_as_of = frame.attrs.get("data_as_of")
     if snapshot_as_of:
         warnings.append("artifact 快照缺少可用时间列，回退到快照记录的时点")
         return str(snapshot_as_of), str(frame.attrs.get("data_time") or "")
-    if frame.empty:
-        warnings.append("数据为空，时点未知（data_as_of/data_time 置空）")
-    else:
-        warnings.append("无法确定时点：数据缺少交易日/时间列（data_as_of/data_time 置空）")
+    warnings.append("无法确定时点：数据缺少交易日/时间列（data_as_of/data_time 置空）")
     return "", ""
 
 
@@ -1113,7 +1114,12 @@ def data_snapshot(frame: pd.DataFrame, *, limit: int = MAX_SNAPSHOT_ROWS) -> dic
     return snapshot
 
 
-def _params(spec: Mapping[str, Any], *, code_version: str = CODE_VERSION) -> dict[str, Any]:
+def _params(
+    spec: Mapping[str, Any],
+    *,
+    code_version: str = CODE_VERSION,
+    include_plotlyjs: str | bool = "inline",
+) -> dict[str, Any]:
     data = spec.get("data") or {}
     return {
         "kind": spec.get("kind"),
@@ -1128,6 +1134,7 @@ def _params(spec: Mapping[str, Any], *, code_version: str = CODE_VERSION) -> dic
         "annotations": [dict(item) for item in spec.get("annotations") or []],
         "theme": spec.get("theme"),
         # 复现前提：同 spec 同数据在不同 plotly 版本下 HTML 字节不同（D4/Q3）。
+        "include_plotlyjs": include_plotlyjs,
         **_runtime_versions(),
         "code_version": code_version,
     }
@@ -1249,7 +1256,9 @@ def render(
             status="partial" if degraded else "success",
         )
 
-        params = _params(normalized, code_version=version)
+        params = _params(
+            normalized, code_version=version, include_plotlyjs=include_plotlyjs
+        )
         meta = {
             "spec": normalized,
             "params": params,

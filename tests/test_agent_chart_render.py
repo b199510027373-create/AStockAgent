@@ -180,6 +180,48 @@ def test_artifact_meta_records_spec_params_time_points_source_version(
     assert meta["params"]["plotly_version"]
     assert meta["params"]["python_version"]
     assert meta["params"]["code_version"] == rendered.code_version
+    assert meta["params"]["include_plotlyjs"] == "cdn"
+
+
+def test_rerender_upgrades_stale_degraded_meta(paths: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """先降级、后补齐 PNG：同一 artifact_id 的 meta 必须升级，不能停在旧降级态（评审 P1）。"""
+    monkeypatch.setattr(
+        chart_render,
+        "_try_png",
+        lambda figure, *, width, height: (None, "kaleido missing"),
+    )
+    first = _render(inline_line_spec(), paths, export_png=True)
+    assert first.degraded is True
+    assert _artifact_row(first, paths).meta["degraded"] is True
+
+    monkeypatch.setattr(
+        chart_render, "_try_png", lambda figure, *, width, height: (b"\x89PNG\r\n", None)
+    )
+    second = _render(inline_line_spec(), paths, export_png=True)
+    assert second.artifact_id == first.artifact_id
+    assert second.degraded is False
+
+    row = _artifact_row(second, paths)
+    assert row.meta["degraded"] is False
+    assert row.meta["png_path"] == second.png_path
+    conn = store.connect(paths["db_path"])
+    try:
+        count = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+    finally:
+        conn.close()
+    assert count == 1
+
+
+def test_empty_transform_result_reports_unknown_time_points(paths: dict[str, str]) -> None:
+    """transforms 过滤掉全部行后，不能沿用过滤前的旧时点（评审 P2）。"""
+    spec = inline_line_spec()
+    spec["transforms"] = [{"op": "filter", "field": "close", "cmp": "gt", "value": 999}]
+    rendered = _render(spec, paths)
+
+    assert rendered.data_as_of == ""
+    assert rendered.data_time == ""
+    assert "时点未知" in rendered.caption
+    assert _artifact_row(rendered, paths).meta["data_as_of"] == ""
 
 
 def test_same_spec_renders_to_same_artifact_id_and_single_row(paths: dict[str, str]) -> None:
@@ -311,12 +353,11 @@ def test_missing_time_points_render_unknown_not_realtime(paths: dict[str, str]) 
     assert "实时" not in caption
 
 
-def test_raw_price_caliber_is_noted_in_caption(paths: dict[str, str]) -> None:
+def test_unadjusted_price_caliber_is_noted_in_caption(paths: dict[str, str]) -> None:
     spec = candlestick_spec()
-    spec["data"]["adj"] = "raw"
+    spec["data"]["adj"] = "none"
     rendered = _render(spec, paths, frame=ohlcv_frame())
     assert "不复权" in rendered.caption
-    assert "raw" in rendered.caption
     assert "前复权" not in rendered.caption
 
 
@@ -412,7 +453,7 @@ def test_filter_on_missing_column_is_structured_error() -> None:
 
 
 @pytest.mark.parametrize(
-    ("adj", "expected"), [("qfq", "qfq"), ("hfq", "hfq"), ("none", None), ("raw", None)]
+    ("adj", "expected"), [("qfq", "qfq"), ("hfq", "hfq"), ("none", None)]
 )
 def test_market_adj_is_mapped_to_data_layer(
     paths: dict[str, str], monkeypatch: pytest.MonkeyPatch, adj: str, expected: str | None
@@ -430,9 +471,23 @@ def test_market_adj_is_mapped_to_data_layer(
     rendered = _render(spec, paths)
 
     assert calls["ts_code"] == "000001.SZ"
-    # raw 必须映射成 None，否则 data 层会当成前复权（评审 P0 根因）
+    # none 必须映射成 None，否则 data 层会当成前复权（评审 P0 根因）
     assert calls["adj"] is expected
-    assert rendered.params["adj"] == ("none" if adj == "raw" else adj)
+    assert rendered.params["adj"] == adj
+
+
+def test_adj_raw_is_rejected_before_touching_market_data(
+    paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def forbidden(*args: object, **kwargs: object) -> pd.DataFrame:  # noqa: ANN401
+        raise AssertionError("非法 spec 不应进入取数阶段")
+
+    monkeypatch.setattr("astock.data.load_daily", forbidden)
+    spec = candlestick_spec()
+    spec["data"]["adj"] = "raw"
+    with pytest.raises(ChartSpecError) as info:
+        _render(spec, paths)
+    assert "$.data.adj" in {issue.field for issue in info.value.issues}
 
 
 def test_minute_market_branch_maps_adj_too(
@@ -456,18 +511,18 @@ def test_minute_market_branch_maps_adj_too(
     assert "不复权" in rendered.caption
 
 
-def test_market_branch_raw_caption_and_snapshot_agree(
+def test_market_branch_unadjusted_caption_and_snapshot_agree(
     paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     raw = ohlcv_frame()
     monkeypatch.setattr("astock.data.load_daily", lambda ts_code, **kwargs: raw)
 
     spec = candlestick_spec()
-    spec["data"]["adj"] = "raw"
+    spec["data"]["adj"] = "none"
     rendered = _render(spec, paths)
     row = _artifact_row(rendered, paths)
 
-    assert "不复权" in rendered.caption and "raw" in rendered.caption
+    assert "不复权" in rendered.caption
     # 渲染图注、artifact meta 与快照价格同源（都是 data 层返回的原始价）
     assert rendered.source == "market"
     assert row.meta["data"]["rows"][-1]["close"] == pytest.approx(raw["close"].iloc[-1])

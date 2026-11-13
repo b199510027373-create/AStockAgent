@@ -313,3 +313,39 @@ def test_prune_artifacts_honours_keep_digests_and_delete_files_flag(tmp_path: Pa
         assert (root / path).exists()
     finally:
         conn.close()
+
+
+def test_prune_artifacts_sweeps_orphan_digest_dirs(tmp_path: Path) -> None:
+    """没有 DB 行的 digest 目录（例如降级升级留下的 PNG）也要清掉，避免磁盘泄漏（评审 P2）。"""
+    root = tmp_path / "agent"
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1")
+        digest, path, absolute = store.put_content(
+            b"<html>live</html>", filename="chart.html", root=str(root)
+        )
+        store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            created_at="2026-06-01T00:00:00+00:00",
+        )
+        orphan_digest, orphan_rel, orphan_abs = store.put_content(
+            b"\x89PNG\r\norphan", filename="chart_art_0123456789abcdef.png", root=str(root)
+        )
+
+        stats = store.prune_artifacts(
+            conn, before="2026-03-01T00:00:00+00:00", root=str(root)
+        )
+
+        assert stats["rows"] == 0
+        assert stats["files"] == 1
+        assert stats["pruned_digests"] == 1
+        assert absolute.exists() and (root / path).exists()
+        assert not orphan_abs.exists()
+        assert not (root / "artifacts" / orphan_digest[:2] / orphan_digest).exists()
+        assert store.find_artifacts_by_digest(conn, orphan_digest) == []
+    finally:
+        conn.close()

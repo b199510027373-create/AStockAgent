@@ -247,7 +247,7 @@ def record_artifact(
     step: int | None = None,
     created_at: str | None = None,
 ) -> str:
-    """插入 ``agent_artifacts``（同 id 只插一行），返回 ``artifact_id``。"""
+    """插入 ``agent_artifacts``（同 id 只插一行，meta 以最新一次写入为准），返回 ``artifact_id``。"""
     if kind not in ARTIFACT_KINDS:
         raise ValueError(f"kind 必须是 {ARTIFACT_KINDS} 之一，实际 {kind!r}")
     filename = Path(path).name
@@ -258,7 +258,7 @@ def record_artifact(
         INSERT INTO agent_artifacts(
             artifact_id, run_id, step, kind, path, digest, meta_json, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(artifact_id) DO NOTHING
+        ON CONFLICT(artifact_id) DO UPDATE SET meta_json = excluded.meta_json
         """,
         (artifact_id, run_id, step, kind, path, digest, payload, created_at or utc_now()),
     )
@@ -429,5 +429,30 @@ def prune_artifacts(
             except OSError:
                 # 目录非空或已被占用：保留目录，不影响行删除结果。
                 pass
+        referenced = {
+            row["digest"] for row in conn.execute("SELECT DISTINCT digest FROM agent_artifacts")
+        }
+        artifacts_root = base / "artifacts"
+        if artifacts_root.is_dir():
+            # 二次渲染/降级升级会留下没有 DB 行的 digest 目录（例如 PNG），一并清掉。
+            for shard in sorted(artifacts_root.iterdir()):
+                if not shard.is_dir():
+                    continue
+                for directory in sorted(shard.iterdir()):
+                    if not directory.is_dir() or directory.name in referenced:
+                        continue
+                    for entry in sorted(directory.iterdir()):
+                        if entry.is_file():
+                            entry.unlink()
+                            removed_files += 1
+                    try:
+                        directory.rmdir()
+                        pruned_dirs += 1
+                    except OSError:
+                        pass
+                try:
+                    shard.rmdir()
+                except OSError:
+                    pass
     conn.commit()
     return {"rows": removed_rows, "files": removed_files, "pruned_digests": pruned_dirs}

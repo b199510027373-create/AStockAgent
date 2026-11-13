@@ -13,14 +13,10 @@
 - 不执行任意 Python：本模块只做白名单校验，``transforms`` 的算子由
   :mod:`astock.agent.chart_render` 用 pandas 显式实现。
 
-与冻结清单的两处**显式兼容**（验收条目 plan-20261107-005 的字段串里有 ``panes``/``style``，
-而 §3.1 与 ADR-016 只有 ``layers``/``theme``）：
-
-- ``panes`` 作为 ``layers`` 的别名，``style`` 作为 ``theme`` 的别名（``style`` 允许
-  ``"dark"`` 或 ``{"theme": "dark"}``）；
-- 别名与规范字段**同时出现**即报字段级错误，避免"两个来源各写一半"的静默覆盖；
-- 归一化输出只保留 §3.1 的规范字段，别名不进入归一化结果（因此 artifact 元数据
-  里的 ``spec`` 永远是冻结字段集）。
+字段集以冻结清单 §3.1 为准。2026-11-14 ADR-016 Q4=B 裁决后，``panes`` / ``style`` /
+``adj="raw"`` 三个兼容别名**已删除**：schema、校验与归一化输出只认
+``layers`` / ``theme`` / ``adj="none"``，旧别名与任意未知键一样报字段级错误，
+不做静默归一。别名清理与渲染/审计边界（Q5=C）的后续工作见 plan-20261114-002。
 
 错误一律结构化：:class:`ChartSpecError.issues` 是 ``[{field, reason}]`` 列表，
 ``field`` 使用 ``$.`` 根记法（如 ``$.encode.y``、``$.transforms[0].op``），可直接回传模型重试。
@@ -36,7 +32,6 @@ from datetime import date
 from typing import Any, Mapping, Sequence
 
 __all__ = [
-    "ADJ_ALIASES",
     "ADJ_VALUES",
     "ANNOTATION_TYPES",
     "CMP_OPS",
@@ -82,7 +77,6 @@ PERIODS = ("day", "week", "month", "1min", "5min", "15min", "30min", "60min")
 MINUTE_PERIODS = ("1min", "5min", "15min", "30min", "60min")
 RANGES = ("1mo", "3mo", "6mo", "1y", "3y", "5y", "ytd", "max")
 ADJ_VALUES = ("qfq", "hfq", "none")
-ADJ_ALIASES: dict[str, str] = {"raw": "none"}
 THEMES = ("light", "dark")
 TRANSFORM_OPS = ("filter", "groupby", "agg", "sort", "limit")
 LAYER_TYPES = ("ma", "boll", "volume", "macd", "rsi", "kdj")
@@ -115,9 +109,6 @@ TOP_LEVEL_FIELDS = (
 )
 DATA_FIELDS = ("source", "ref", "rows", "fields", "period", "range", "adj")
 ENCODE_FIELDS = ("x", "y", "color")
-
-#: 验收条目使用的别名 → 冻结字段名。
-FIELD_ALIASES: dict[str, str] = {"panes": "layers", "style": "theme"}
 
 FIELD_RE = re.compile(r"^[a-z_][a-z0-9_]{0,31}$")
 STOCK_REF_RE = re.compile(r"^[0-9]{6}\.(SH|SZ|BJ)$")
@@ -523,12 +514,10 @@ def _validate_data(data: Any, path: str, issues: _Issues) -> dict[str, Any]:
                     issues.add(f"{path}.range", f"窗口跨度超过 {MAX_RANGE_YEARS} 年")
 
     adj = data.get("adj", "qfq" if source == "market" else "none")
-    if isinstance(adj, str) and adj in ADJ_ALIASES:
-        adj = ADJ_ALIASES[adj]
     if adj not in ADJ_VALUES:
         issues.add(
             f"{path}.adj",
-            f"取值 {adj!r} 不在枚举 {list(ADJ_VALUES)} 中（raw 是 none 的别名）",
+            f"取值 {adj!r} 不在枚举 {list(ADJ_VALUES)} 中（Q4=B 后 raw 不再是 none 的别名）",
         )
         adj = "none"
 
@@ -772,17 +761,7 @@ def validate_chart_spec(spec: Any) -> dict[str, Any]:
     issues = _Issues()
 
     raw = dict(spec)
-    aliased: dict[str, Any] = {}
-    for alias, canonical in FIELD_ALIASES.items():
-        if alias in raw:
-            if canonical in raw:
-                issues.add(
-                    f"$.{alias}",
-                    f"{alias} 与 {canonical} 同时出现：请只使用冻结字段 {canonical}",
-                )
-            else:
-                aliased[canonical] = raw[alias]
-    _check_unknown_keys(raw, TOP_LEVEL_FIELDS, "$", issues, extra=tuple(FIELD_ALIASES))
+    _check_unknown_keys(raw, TOP_LEVEL_FIELDS, "$", issues)
 
     version = raw.get("version")
     if "version" not in raw:
@@ -814,30 +793,25 @@ def validate_chart_spec(spec: Any) -> dict[str, Any]:
 
     transforms_norm = _validate_transforms(raw.get("transforms", []), "$.transforms", issues)
 
-    layers_raw = aliased["layers"] if "layers" in aliased else raw.get("layers", [])
-    layers_norm = _validate_layers(layers_raw, kind, "$.layers", issues)
+    layers_norm = _validate_layers(raw.get("layers", []), kind, "$.layers", issues)
 
     annotations_norm = _validate_annotations(
         raw.get("annotations", []), "$.annotations", issues
     )
 
-    style = aliased["theme"] if "theme" in aliased else raw.get("theme", "light")
-    if isinstance(style, Mapping):
-        if set(style) != {"theme"}:
-            issues.add("$.style", f"style 只支持 {{\"theme\": ...}}，实际字段 {sorted(style)}")
-        style = style.get("theme")
-    if style is None:
-        style = "light"
-    if style not in THEMES:
-        issues.add("$.theme", f"取值 {style!r} 不在枚举 {list(THEMES)} 中")
-        style = "light"
+    theme = raw.get("theme", "light")
+    if theme is None:
+        theme = "light"
+    if theme not in THEMES:
+        issues.add("$.theme", f"取值 {theme!r} 不在枚举 {list(THEMES)} 中")
+        theme = "light"
 
     meta_norm = _validate_meta(raw.get("meta", {}), "$.meta", issues)
 
     if issues.items:
         raise ChartSpecError(issues.items)
 
-    # 归一化：只保留冻结字段（别名已折叠），顺序稳定，供 artifact 元数据原样复现。
+    # 归一化：只保留冻结字段，顺序稳定，供 artifact 元数据原样复现。
     return {
         "version": SPEC_VERSION,
         "kind": str(kind),
@@ -846,7 +820,7 @@ def validate_chart_spec(spec: Any) -> dict[str, Any]:
         "encode": encode_norm,
         "transforms": transforms_norm,
         "layers": layers_norm,
-        "theme": style,
+        "theme": theme,
         "annotations": annotations_norm,
         "meta": meta_norm,
     }
@@ -932,9 +906,9 @@ _JSON_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
     "required": ["version", "kind", "data", "encode"],
     "description": (
-        "ChartSpec v1（冻结清单 §3）。规范字段为 layers/theme/adj=none；"
-        "兼容别名 panes≡layers、style≡theme、adj=\"raw\"≡none，"
-        "别名不得与规范名同时出现。未知字段与未知算子一律报字段级错误。"
+        "ChartSpec v1（冻结清单 §3）。字段只认 layers/theme/adj=none；"
+        "2026-11-14 ADR-016 Q4=B 后 panes/style/adj=\"raw\" 别名已删除，"
+        "旧别名与任意未知字段一样报字段级错误。未知算子同样报错。"
     ),
     "properties": {
         "version": {"type": "integer", "enum": [SPEC_VERSION], "default": SPEC_VERSION},
@@ -949,7 +923,7 @@ _JSON_SCHEMA: dict[str, Any] = {
                 "ref": {
                     "type": "string",
                     "description": "market: 个股或指数代码；artifact: art_<16 hex>",
-                    "oneOf": [
+                    "anyOf": [
                         {"pattern": STOCK_REF_RE.pattern},
                         {"pattern": INDEX_REF_RE.pattern},
                         {"pattern": ARTIFACT_REF_RE.pattern},
@@ -983,9 +957,9 @@ _JSON_SCHEMA: dict[str, Any] = {
                 },
                 "adj": {
                     "type": "string",
-                    "enum": list(ADJ_VALUES) + sorted(ADJ_ALIASES),
+                    "enum": list(ADJ_VALUES),
                     "default": "qfq",
-                    "description": "规范值为 qfq/hfq/none；raw 是 none 的兼容别名",
+                    "description": "价格口径：qfq/hfq/none；raw 已不是别名（Q4=B）",
                 },
             },
         },
@@ -1019,29 +993,12 @@ _JSON_SCHEMA: dict[str, Any] = {
             "maxItems": MAX_LAYERS,
             "items": _LAYER_ITEM,
         },
-        "panes": {
-            "type": "array",
-            "maxItems": MAX_LAYERS,
-            "items": _LAYER_ITEM,
-            "description": "layers 的兼容别名；不得与 layers 同时出现",
-        },
         "annotations": {
             "type": "array",
             "maxItems": MAX_ANNOTATIONS,
             "items": _ANNOTATION_ITEM,
         },
         "theme": {"type": "string", "enum": list(THEMES), "default": "light"},
-        "style": {
-            "description": "theme 的兼容别名；字符串等于 theme，或 {\"theme\": ...}；不得与 theme 同时出现",
-            "oneOf": [
-                {"type": "string", "enum": list(THEMES)},
-                {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {"theme": {"type": "string", "enum": list(THEMES)}},
-                },
-            ],
-        },
         "meta": {"type": "object"},
     },
 }
