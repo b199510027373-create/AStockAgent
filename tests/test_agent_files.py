@@ -488,6 +488,29 @@ def test_xlsx_sheet_slug_collision_gets_suffix(tmp_path: Path) -> None:
     assert [sheet["slug"] for sheet in result.meta["sheets"]] == ["a_b", "a_b_2"]
 
 
+def test_xlsx_mixed_code_column_stays_text(tmp_path: Path) -> None:
+    """文本代码与数值单元格混排时整列归一化为文本，parquet 列类型稳定。"""
+    source = _make_xlsx(
+        tmp_path / "持仓.xlsx",
+        {"持仓": [["代码", "市值", "备注"], ["000001", 12.5, "A"], [600000, 13.0, 1]]},
+    )
+    result = F.ingest_file(source, root=tmp_path / "store")
+
+    assert result.status == F.STATUS_OK
+    meta = _assert_layout(result, tmp_path / "store", "xlsx")
+    slug = meta["sheets"][0]["slug"]
+    frame = F.load_table(result.doc.file_id, slug, root=tmp_path / "store")  # type: ignore[union-attr]
+    # 混合列（str + int）若保留 object，pyarrow 会抛 ArrowTypeError 让整份导入失败。
+    assert frame["代码"].tolist() == ["000001", "600000"]
+    assert str(frame["代码"].dtype) == "string"
+    assert frame["备注"].tolist() == ["A", "1"]
+    assert frame["市值"].tolist() == [12.5, 13.0]
+    assert any(
+        warning.startswith(F.EXTRACTION_WARNING_PREFIX) and "前导零" in warning
+        for warning in result.warnings
+    )
+
+
 def test_legacy_xls_is_parsed_with_coordinates(tmp_path: Path) -> None:
     """真实 .xls（BIFF8 两 sheet 夹具，见 tests/fixtures/build_legacy_xls.py）走 xlrd。"""
     source = tmp_path / "legacy.xls"

@@ -926,27 +926,51 @@ def _columns_from(header: Sequence[Any]) -> list[str]:
 def _coerce_column(
     values: Sequence[Any], column: str
 ) -> tuple[pd.Series, str | None]:
-    """数值列尽量转 float；含前导零标识符的列保持文本并返回告警。"""
+    """数值列尽量转 float；文本列与混合列统一转 string，含前导零时额外告警。"""
     series = pd.Series(list(values), dtype=object)
     non_null = series.dropna()
     if non_null.empty:
-        return series, None
+        return _as_text_column(series), None
     # “000001”“007”这类代码/编号一旦转成 float 就丢失前导零，与 extracted.jsonl
     # 的文本块不一致，因此整列保留字符串（AGENT-05：不得静默改写文件内容）。
     leading_zero = any(
         isinstance(value, str) and _LEADING_ZERO_RE.match(value.strip())
         for value in non_null
     )
+    if not leading_zero:
+        numeric = pd.to_numeric(non_null, errors="coerce")
+        if numeric.notna().all():
+            converted = pd.to_numeric(series, errors="coerce")
+            return converted.astype(float), None
+    warning = None
     if leading_zero:
-        return series, (
+        warning = (
             f"{EXTRACTION_WARNING_PREFIX} 列「{column}」含前导零标识符，已按文本保留，"
             "避免代码/编号被改写成数值。"
         )
-    numeric = pd.to_numeric(non_null, errors="coerce")
-    if numeric.notna().all():
-        converted = pd.to_numeric(series, errors="coerce")
-        return converted.astype(float), None
-    return series, None
+    return _as_text_column(series), warning
+
+
+def _as_text_column(series: pd.Series) -> pd.Series:
+    """把列归一化为 string（缺失值保留 NA），保证 parquet 列类型稳定。
+
+    object 列里同时含 int 与 str 时 pyarrow 无法推断类型（ArrowTypeError），
+    会导致整份文件导入失败；统一成 string 后列 dtype 固定，且与 extracted.jsonl
+    的文本块口径一致。
+    """
+    return pd.Series(
+        [None if _is_missing(value) else str(value) for value in series],
+        dtype="string",
+    )
+
+
+def _is_missing(value: Any) -> bool:
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):  # pragma: no cover - 非标量单元格
+        return False
 
 
 def _sheet_slug(name: str, used: set[str]) -> str:
