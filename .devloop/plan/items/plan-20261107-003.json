@@ -2,7 +2,7 @@
   "id": "plan-20261107-003",
   "title": "文件导入解析：PDF / Excel / CSV / DOCX",
   "description": "依据 ADR-015 实现 astock/agent/files.py：PDF（pdfplumber 文本+表格，保留页码）、Excel（openpyxl/pandas，多 sheet、行列坐标）、CSV（编码/分隔符探测）、DOCX（python-docx）、TXT/MD。统一 ExtractedDoc {file_id, pages[], tables[]}；按 sha256 落 data/agent/files/<hash>/（original/extracted.jsonl/tables/*.parquet/meta.json）。明确拒绝扫描件 OCR、加密 PDF、宏文件，并提示原因。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
@@ -34,24 +34,24 @@
       "ADR-015"
     ],
     "branch": "feat/agent-file-ingest",
-    "commit": "2531119",
+    "commit": "21dddaa",
     "mergedFrom": [
       "plan-20261110-004"
     ],
     "module": "file_ingest",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10",
     "test": [
-      "pytest tests/test_agent_files.py -q -p no:cacheprovider => 48 passed, 1 warning in 4.21s（评审 P1/P2 修复后）",
-      "C:\\Anaconda\\python.exe -m pytest tests/test_agent_files.py -q -p no:cacheprovider（python-docx 1.2.0 分支）=> 48 passed in 4.69s",
-      "pytest tests -q -p no:cacheprovider => 368 passed, 1 skipped, 1 warning, 2 subtests passed in 20.51s",
+      "pytest tests/test_agent_files.py -q -p no:cacheprovider => 49 passed, 1 warning in 4.43s",
+      "C:\\Anaconda\\python.exe -m pytest tests/test_agent_files.py -q -p no:cacheprovider => 49 passed in 6.20s",
+      "pytest tests -q -p no:cacheprovider => 369 passed, 1 skipped, 1 warning, 2 subtests passed in 20.90s",
       "ruff check astock app.py tests --select E9,F63,F7,F82 => All checks passed!",
       "mypy astock app.py => Success: no issues found in 32 source files",
       "coverage run -m pytest tests + coverage report => TOTAL 73%（CI 门槛 50%）",
-      "CI run 43391713138（499f60b）与 43391962183（c400343）均 success，1m20s / 1m10s，lint/type-check 与 coverage 50% 门槛全过",
-      "上一轮 34 passed / 354 passed 已被本轮 48 / 368 覆盖；旧 CI run 43388513193 pass"
+      "CI run 43393535403（bd8d2da）success；此前 43391713138、43391962183、43392219941 success",
+      "评审第 2 轮 approve（ho-20261113-015，openP0=0/openP1=0）；新增 P2 iss-mweply8i-fc899f 已修并合并"
     ]
   },
   "createdAt": "2026-11-07T14:12:00.858Z",
-  "updatedAt": "2026-11-13T08:18:21.579Z",
+  "updatedAt": "2026-11-13T08:32:17.782Z",
   "devSessionId": "session-3100e9bd-3b63-4022-9649-c18a3f5278f8"
 }
