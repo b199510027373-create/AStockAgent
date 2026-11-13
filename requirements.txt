@@ -7,4 +7,10 @@ httpx>=0.27
 requests>=2.31
 python-dotenv>=1.0
 pyarrow>=15.0
+# 文件导入解析（ADR-015）：PDF 文本层/表格、DOCX、表格查询
+pdfplumber>=0.11
+python-docx>=1.1
+openpyxl>=3.1
+xlrd>=2.0
+duckdb>=1.0
 tushare>=1.4

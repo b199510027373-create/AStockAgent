@@ -1,0 +1,129 @@
+{
+  "id": "ho-20261113-012",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "文件导入解析：PDF / Excel / CSV / DOCX",
+  "summary": "按评审 rev-20261113-002 修复三条 P1 与三条 P2：①_coerce_column 对含前导零标识符的整列保留文本，并通过 extraction_warning 告警（CSV/XLS 均验证 \"000001\" 不被改写）；②load_table 增加 [a-z0-9_]{1,48} 白名单与 resolve 后 tables/ 归属校验，拒绝 ../、绝对路径与混合穿越；③新增真实 BIFF8 两 sheet .xls 夹具（5632 字节，利润表/现金流，含前导零代码列）及生成脚本，XLS 通过性测试覆盖 status/parser/slug/bbox/parquet；④_atomic_write_bytes tmp 名加 uuid，失败时 unlink(missing_ok=True)，测试确认无 .meta.json.tmp-* 残留、无半截 meta.json；⑤测试改用 ADR-015 锚点名 test_layout_matches_frozen_spec / test_scan_like_pdf_is_flagged；⑥补 FTS 索引降级测试，status 保持 ok、meta 15 键完整、chunks_count 一致。顺带将 _parse_excel 显式指定 openpyxl/xlrd 引擎，修复裸 BIFF 旧工作簿被 pandas 嗅探拒绝的问题。测试：目标 48 passed、全量 368 passed、ruff/mypy 绿、coverage 73%。",
+  "requirements": [
+    {
+      "id": "iss-mweouh8f-6c3d2e",
+      "text": "CSV 代码列 000001 被 _coerce_column 转成 1.0，与 extracted.jsonl 文本不一致且无告警；要求加前导零/标识符保护并补 frame[\"代码\"]==[\"600000\",\"000001\"] 断言",
+      "source": "review rev-20261113-002 P1-1"
+    },
+    {
+      "id": "iss-mweoulp2-c72028",
+      "text": "load_table 直接用 sheet_slug 拼路径可 ../ 或绝对路径逃逸；要求 [a-z0-9_]{1,48} 白名单 + resolve 后 is_relative_to(tables_dir)，并补越界用例",
+      "source": "review rev-20261113-002 P1-2"
+    },
+    {
+      "id": "iss-mweov3d3-db2784",
+      "text": "XLS 缺真实通过性证据；要求真实 .xls 夹具（<20KB，可两 sheet）断言 status ok、parser==xlrd、sheet name/slug、load_table shape、行 chunk bbox，保留原 ImportError 用例",
+      "source": "review rev-20261113-002 P1-3"
+    },
+    {
+      "id": "iss-mweov5r6-6cc726",
+      "text": "原子写 tmp 名只用 pid，同进程并发同 sha256 共用 tmp；要求加 uuid 后缀、try/finally unlink(missing_ok=True)，补 write_bytes 抛 OSError 时无 .tmp-* 残留且 meta.json 不存在的用例",
+      "source": "review rev-20261113-002 P2-1"
+    },
+    {
+      "id": "iss-mweoveax-3cb396",
+      "text": "ADR-015 锚点 test_layout_matches_frozen_spec/test_scan_like_pdf_is_flagged 不存在；测试应改用锚点名；ADR 字段数与 §4 bbox 语义订正由架构在 plan-20261107-004 前完成",
+      "source": "review rev-20261113-002 P2-2"
+    },
+    {
+      "id": "iss-mweovi84-c000f9",
+      "text": "索引降级路径无测试；要求 monkeypatch index_chunks 抛 OperationalError，断言 warnings 提示、meta 15 字段完整、chunks 数一致、status 不退化为 unsupported",
+      "source": "review rev-20261113-002 P2-3"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/files.py",
+      "summary": "_coerce_column 增加前导零保护并返回告警；_add_sheet 逐列收集告警（带工作表名）；_parse_excel 显式指定 openpyxl/xlrd 引擎；_atomic_write_bytes tmp 名加 uuid 且失败 unlink；load_table 增加 sheet_slug 白名单与 tables/ 归属校验；新增 _LEADING_ZERO_RE/_SHEET_SLUG_RE；import uuid",
+      "commit": "2531119"
+    },
+    {
+      "path": "tests/test_agent_files.py",
+      "summary": "新增 test_layout_matches_frozen_spec（6 格式 ADR 锚点）、test_legacy_xls_is_parsed_with_coordinates、test_load_table_rejects_traversal（5 例）、test_atomic_write_failure_leaves_no_tmp_file、test_index_failure_does_not_block_ingest；CSV 用例补代码列文本断言与告警断言；扫描件用例改名 test_scan_like_pdf_is_flagged；模块 docstring 更新覆盖范围",
+      "commit": "2531119"
+    },
+    {
+      "path": "tests/fixtures/build_legacy_xls.py",
+      "summary": "用 xlwt 生成真实 BIFF8 两 sheet .xls 的一次性脚本（CI 不依赖 xlwt）",
+      "commit": "2531119"
+    },
+    {
+      "path": "tests/fixtures/legacy_two_sheets.xls",
+      "summary": "5632 字节真实 BIFF8 夹具：利润表/现金流两 sheet，含前导零代码列 000001",
+      "commit": "2531119"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests\\test_agent_files.py -q -p no:cacheprovider",
+      "result": "48 passed",
+      "passed": true,
+      "evidence": "48 passed, 1 warning in 4.21s（warning 为第三方 anyio 的 PytestRemovedIn10Warning）"
+    },
+    {
+      "command": "C:\\Anaconda\\python.exe -m pytest tests\\test_agent_files.py -q -p no:cacheprovider",
+      "result": "48 passed",
+      "passed": true,
+      "evidence": "python-docx 1.2.0 分支，48 passed in 4.69s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -u -m pytest tests -q -p no:cacheprovider",
+      "result": "368 passed, 1 skipped",
+      "passed": true,
+      "evidence": "368 passed, 1 skipped, 1 warning, 2 subtests passed in 20.51s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success",
+      "passed": true,
+      "evidence": "Success: no issues found in 32 source files"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -p no:cacheprovider && .venv\\Scripts\\python.exe -m coverage report",
+      "result": "TOTAL 73%",
+      "passed": true,
+      "evidence": "TOTAL 73%（CI --fail-under=50）"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "网络安装 pdfplumber/duckdb/xlwt",
+      "reason": "本地网络阻断，pip 下载超时；PDF 用 pdfplumber 桩测试，XLS 夹具用本地已有 wheel 生成后卸载，CI 安装 requirements.txt 真依赖",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-file-ingest",
+    "commit": "2531119",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10",
+    "ci": "pending：本轮修复提交后重新触发，等待结果",
+    "merge": "未合并，等评审复核",
+    "status": "pr-open"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-009",
+  "next": "请评审按 rev-20261113-002 关闭条件复核三条 P1；ADR-015 中“13 个必填字段”应为 15、§4 需补记 Excel 行 chunk bbox=[row_start,col_start,row_end,col_end]（1 基）语义，按评审意见转架构在 plan-20261107-004 开工前订正（本轮不改架构文档）。CI 通过后补 update handoff。",
+  "createdAt": "2026-11-13T08:14:19.343Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-012.md"
+}

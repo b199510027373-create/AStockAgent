@@ -2,14 +2,14 @@
   "id": "plan-20261107-003",
   "title": "文件导入解析：PDF / Excel / CSV / DOCX",
   "description": "依据 ADR-015 实现 astock/agent/files.py：PDF（pdfplumber 文本+表格，保留页码）、Excel（openpyxl/pandas，多 sheet、行列坐标）、CSV（编码/分隔符探测）、DOCX（python-docx）、TXT/MD。统一 ExtractedDoc {file_id, pages[], tables[]}；按 sha256 落 data/agent/files/<hash>/（original/extracted.jsonl/tables/*.parquet/meta.json）。明确拒绝扫描件 OCR、加密 PDF、宏文件，并提示原因。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-15",
   "due": "2026-11-22",
   "estimateH": 22,
-  "progress": 0,
+  "progress": 100,
   "acceptance": [
     "PDF（文本层）、XLSX/XLS、CSV、DOCX、TXT/MD 均可解析",
     "文件按 sha256 内容寻址存储，原始文件不可变",
@@ -33,10 +33,25 @@
     "adr": [
       "ADR-015"
     ],
+    "branch": "feat/agent-file-ingest",
+    "commit": "2531119",
     "mergedFrom": [
       "plan-20261110-004"
+    ],
+    "module": "file_ingest",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10",
+    "test": [
+      "pytest tests/test_agent_files.py -q -p no:cacheprovider => 48 passed, 1 warning in 4.21s（评审 P1/P2 修复后）",
+      "C:\\Anaconda\\python.exe -m pytest tests/test_agent_files.py -q -p no:cacheprovider（python-docx 1.2.0 分支）=> 48 passed in 4.69s",
+      "pytest tests -q -p no:cacheprovider => 368 passed, 1 skipped, 1 warning, 2 subtests passed in 20.51s",
+      "ruff check astock app.py tests --select E9,F63,F7,F82 => All checks passed!",
+      "mypy astock app.py => Success: no issues found in 32 source files",
+      "coverage run -m pytest tests + coverage report => TOTAL 73%（CI 门槛 50%）",
+      "CI run 43391713138（499f60b）与 43391962183（c400343）均 success，1m20s / 1m10s，lint/type-check 与 coverage 50% 门槛全过",
+      "上一轮 34 passed / 354 passed 已被本轮 48 / 368 覆盖；旧 CI run 43388513193 pass"
     ]
   },
   "createdAt": "2026-11-07T14:12:00.858Z",
-  "updatedAt": "2026-11-10T08:34:48.501Z"
+  "updatedAt": "2026-11-13T08:18:21.579Z",
+  "devSessionId": "session-3100e9bd-3b63-4022-9649-c18a3f5278f8"
 }
