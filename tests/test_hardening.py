@@ -91,9 +91,11 @@ class SchedulerIdempotencyTests(unittest.TestCase):
         root = Path(self.tmp.name)
         self.refresh_mock = MagicMock(return_value=(0, "skip"))
         self.patches = [
+            patch.object(ledger, "DB_PATH", root / "ledger.db"),
             patch.object(scheduler, "STATE_PATH", root / "state.json"),
             patch.object(scheduler, "LOG_PATH", root / "scheduler.log"),
             patch.object(scheduler, "LOCK_PATH", root / "scheduler.lock"),
+            patch.object(scheduler, "ALERTS_PATH", root / "scheduler_alerts.jsonl"),
             patch.object(scheduler, "refresh_tracking", new=self.refresh_mock),
         ]
         for p in self.patches:
@@ -104,24 +106,29 @@ class SchedulerIdempotencyTests(unittest.TestCase):
             p.stop()
         self.tmp.cleanup()
 
+    def job(self, key: str) -> dict:
+        job = ledger.get_job(key)
+        self.assertIsNotNone(job, f"jobs 表缺少 {key}")
+        return job
+
     def test_premarket_and_close_have_distinct_keys(self):
         fake = make_result("2026-10-30", run_id="pre")
         with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-10-30")):
             with patch.object(scheduler, "run_recommendation", return_value=fake) as fn:
                 scheduler.run_once(slot="premarket", now=datetime(2026, 11, 2, 8, 31))
                 self.assertEqual(fn.call_count, 1)
-        state = json.loads(scheduler.STATE_PATH.read_text(encoding="utf-8"))
-        self.assertEqual(state["jobs"]["2026-10-30:premarket"]["status"], "success")
+        self.assertEqual(self.job("2026-10-30:premarket")["status"], "success")
 
         fake2 = make_result("2026-11-02", run_id="close")
         with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
             with patch.object(scheduler, "run_recommendation", return_value=fake2) as fn:
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
                 self.assertEqual(fn.call_count, 1)
-        state = json.loads(scheduler.STATE_PATH.read_text(encoding="utf-8"))
-        self.assertIn("2026-11-02:close", state["jobs"])
-        self.assertEqual(state["jobs"]["2026-11-02:close"]["status"], "success")
-        self.assertEqual(state["last_run_date"], "2026-11-02")
+        close_job = self.job("2026-11-02:close")
+        self.assertEqual(close_job["status"], "success")
+        self.assertEqual(close_job["run_id"], "close")
+        self.assertEqual(close_job["as_of"], "2026-11-02")
+        self.assertEqual(close_job["attempts"], 1)
 
     def test_success_settles_tracking_for_the_banner(self):
         fake = make_result("2026-11-02", run_id="close")
@@ -132,6 +139,7 @@ class SchedulerIdempotencyTests(unittest.TestCase):
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         # 调度成功后必须顺手结算 tracking，否则横幅只能等用户打开跟踪页
         self.refresh_mock.assert_called_once_with()
+        self.assertEqual(self.job("2026-11-02:close")["status"], "success")
 
     def test_stale_result_does_not_settle_tracking(self):
         stale = make_result(
@@ -143,6 +151,7 @@ class SchedulerIdempotencyTests(unittest.TestCase):
             with patch.object(scheduler, "run_recommendation", return_value=stale):
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         self.refresh_mock.assert_not_called()
+        self.assertEqual(self.job("2026-11-02:close")["status"], "stale")
 
     def test_stale_as_of_does_not_mark_success(self):
         fake = make_result(
@@ -154,9 +163,9 @@ class SchedulerIdempotencyTests(unittest.TestCase):
             with patch.object(scheduler, "run_recommendation", return_value=fake):
                 result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         self.assertIsNone(result)
-        state = json.loads(scheduler.STATE_PATH.read_text(encoding="utf-8"))
-        self.assertEqual(state["jobs"]["2026-11-02:close"]["status"], "stale")
-        self.assertNotIn("last_run_date", state)
+        job = self.job("2026-11-02:close")
+        self.assertEqual(job["status"], "stale")
+        self.assertEqual(job["as_of"], "2026-10-30")
 
     def test_success_is_skipped_on_second_call(self):
         fake = make_result("2026-11-02")
@@ -178,10 +187,9 @@ class SchedulerIdempotencyTests(unittest.TestCase):
             ):
                 result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         self.assertIsNone(result)
-        state = json.loads(scheduler.STATE_PATH.read_text(encoding="utf-8"))
-        self.assertEqual(state["jobs"]["2026-11-02:close"]["status"], "stale")
-        self.assertIn("数据未更新", state["last_error"])
-        self.assertNotIn("last_run_date", state)
+        job = self.job("2026-11-02:close")
+        self.assertEqual(job["status"], "stale")
+        self.assertIn("数据未更新", job["error"])
 
     def test_failed_result_increments_attempts(self):
         failed = make_result(status="failed", message="boom")
@@ -193,12 +201,10 @@ class SchedulerIdempotencyTests(unittest.TestCase):
             ):
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45))
-        state = json.loads(scheduler.STATE_PATH.read_text(encoding="utf-8"))
-        job = state["jobs"]["2026-11-02:close"]
+        job = self.job("2026-11-02:close")
         self.assertEqual(job["status"], "failed")
         self.assertEqual(job["attempts"], 2)
-        self.assertIn("RuntimeError: boom", state["last_error"])
-        self.assertNotIn("last_run_date", state)
+        self.assertIn("RuntimeError: boom", job["error"])
 
     def test_force_reruns_success(self):
         fake = make_result("2026-11-02")
@@ -207,6 +213,7 @@ class SchedulerIdempotencyTests(unittest.TestCase):
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
                 scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45), force=True)
                 self.assertEqual(fn.call_count, 2)
+        self.assertEqual(self.job("2026-11-02:close")["attempts"], 2)
 
     def test_no_trade_date_returns_none(self):
         with patch.object(scheduler, "last_completed_trade_date", return_value=None):

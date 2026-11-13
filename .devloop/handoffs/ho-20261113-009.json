@@ -1,0 +1,85 @@
+{
+  "id": "ho-20261113-009",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "文件导入解析：CI 通过（update）",
+  "summary": "相对首次交付 ho-20261113-008 的增量：提交交付记录与 DevLoop 文档（commit 0ddd0e5），最新提交触发的新一轮 GitHub Actions 已通过（run 43388778198，test 1m0s）。代码与测试无改动，交付状态由「CI 通过（0605d3d）」推进为「CI 通过（0ddd0e5），等待评审」。测试证据沿用：目标测试 34 passed（.venv 与装有 python-docx 的 Anaconda 解释器各一次）、全量 354 passed / 1 skipped、ruff 与 mypy 通过、CI pass。",
+  "requirements": [],
+  "changes": [
+    {
+      "path": ".devloop/handoffs/ho-20261113-008.json",
+      "summary": "提交首次交付 handoff（JSON 与 Markdown 两份）。",
+      "commit": "0ddd0e5"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-003.json",
+      "summary": "links.test 补充 Anaconda python-docx 分支与 GitHub Actions 运行记录，补 module/branch/pr 链接。",
+      "commit": "0ddd0e5"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "实现工作单元日志入库。",
+      "commit": "0ddd0e5"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "追加实现记录。",
+      "commit": "0ddd0e5"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 10 --watch",
+      "result": "test pass 1m0s（commit 0ddd0e5）",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43388778198/job/131763435591"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests\\test_agent_files.py -q -p no:cacheprovider",
+      "result": "34 passed",
+      "passed": true,
+      "evidence": "目标测试（代码未变，结果沿用）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "354 passed, 1 skipped, 2 subtests passed",
+      "passed": true,
+      "evidence": "全量测试（代码未变，结果沿用）"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "pip install pdfplumber/python-docx/duckdb",
+      "reason": "本地网络阻断，PDF 真依赖分支未在本机执行；python-docx 分支已用 Anaconda 解释器实测；CI 已安装全部依赖并通过",
+      "status": "blocked"
+    },
+    {
+      "name": "GitHub push / PR / Actions",
+      "reason": "gh 已登录账号 b199510027373-create",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-file-ingest",
+    "commit": "0ddd0e5",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10",
+    "ci": "pass（run 43388778198，test 1m0s，最新提交 0ddd0e5）",
+    "merge": "未合并，等待评审通过",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-008",
+  "next": "1) 评审 PR #10；2) 通过后合并并补 update handoff；3) plan-20261107-004 工具层接入 files API；4) 有网络环境时补一次真实 PDF 端到端回归。",
+  "createdAt": "2026-11-13T07:53:01.575Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-009.md"
+}

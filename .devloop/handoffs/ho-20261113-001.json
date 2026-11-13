@@ -1,0 +1,148 @@
+{
+  "id": "ho-20261113-001",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261103-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "调度状态机迁移 jobs 表 + 心跳告警（initial 交付）",
+  "summary": "完成 plan-20261103-007：调度状态从 scheduler_state.json 迁移到 SQLite jobs 表，jobs 表成为唯一权威；旧 JSON 仅由启动迁移读取，只补缺失行、不改写。实现 pending/running/success/stale/failed 全状态、attempts/late_by_min/as_of/run_id/error 落库，running 超 180 分钟或无 started_at 自动恢复 failed，交易日过 run_time 无 close 行时登记 pending（表达“该跑但没跑”）。心跳以最近收盘交易日为参照，连续未 success 达阈值（默认 2，ASTOCK_HEARTBEAT_THRESHOLD_DAYS 可配）写 scheduler_alerts.jsonl 并记日志，同签名去重。新增 --heartbeat/--report/--maintenance CLI，acceptance_report 可复现连续 5 个交易日全 success。补充测试并更新 README/ADR-004；本地全量 309 passed，mypy/ruff/compileall 通过。代码提交 1226f6c，计划项已置 in_review；未创建 PR/未跑远端 CI，合并状态未变。",
+  "requirements": [
+    {
+      "id": "REQ-007-DESC",
+      "text": "状态机与 attempts/late_by_min 完整落 jobs 表，启动时从表判断“该跑但没跑”，并加心跳检查（超时告警）；作为评审 §4.6 P0「连续 5 个交易日 job 全 success」的基础。",
+      "source": "plan-20261103-007 描述"
+    },
+    {
+      "id": "REQ-007-01",
+      "text": "jobs 表能完整表达 pending/running/success/stale/failed 与 attempts。",
+      "source": "plan-20261103-007 验收标准 1"
+    },
+    {
+      "id": "REQ-007-02",
+      "text": "scheduler_state.json 可停用或降级为只读迁移源。",
+      "source": "plan-20261103-007 验收标准 2"
+    },
+    {
+      "id": "REQ-007-03",
+      "text": "心跳超过阈值（如 2 个交易日未运行）触发告警。",
+      "source": "plan-20261103-007 验收标准 3"
+    },
+    {
+      "id": "REQ-007-04",
+      "text": "连续 5 个交易日 job 全 success 的验收可复现。",
+      "source": "plan-20261103-007 验收标准 4"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/ledger.py",
+      "summary": "jobs 表新增 as_of 列与旧库 ALTER 迁移；JOB_STATUSES 状态校验；save_job 支持 as_of；新增 update_job 部分更新、list_jobs、latest_success_job。",
+      "commit": "1226f6c"
+    },
+    {
+      "path": "astock/scheduler.py",
+      "summary": "jobs 表成为调度状态唯一权威：run_once 写 running→success/stale/failed（attempts/late_by_min/as_of/run_id/error）；migrate_legacy_state 只读迁移；recover_interrupted_jobs；sync_due_job 登记 pending；heartbeat_check 阈值告警 JSONL；acceptance_report；startup_maintenance；loop 改用 ledger 状态。",
+      "commit": "1226f6c"
+    },
+    {
+      "path": "astock/jobs.py",
+      "summary": "新增 --heartbeat（退出码 0/2）、--report N（all_success 0/2）、--maintenance；保留 --once/--slot/--force 与单实例锁。",
+      "commit": "1226f6c"
+    },
+    {
+      "path": "tests/test_scheduler_ledger.py",
+      "summary": "新增 13 个测试：jobs 状态机与迁移、legacy JSON 只读且不覆盖、running 恢复、due pending、心跳阈值/去重/可配置、5 日验收与 run_once 复现、CLI 退出码。",
+      "commit": "1226f6c"
+    },
+    {
+      "path": "tests/test_hardening.py",
+      "summary": "SchedulerIdempotencyTests 断言从 scheduler_state.json 改为 ledger.get_job；补充 attempts/as_of/run_id 与告警路径隔离。",
+      "commit": "1226f6c"
+    },
+    {
+      "path": "README.md",
+      "summary": "更新调度状态说明：jobs 表权威、scheduler_state.json 只读迁移、心跳告警。",
+      "commit": "1226f6c"
+    },
+    {
+      "path": "tools/build_product_doc.py",
+      "summary": "产品文档生成脚本中的调度数据流、JobRun 存储与运行说明同步为 jobs 表/告警。",
+      "commit": "1226f6c"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-004-scheduler-idempotent-jobs.md",
+      "summary": "ADR-004 决策补充 jobs 表权威、启动自检、心跳与 --report 验收；当前状态更新为已实现。",
+      "commit": "1226f6c"
+    },
+    {
+      "path": ".devloop/architecture/adrs.json",
+      "summary": "ADR-004 summary 更新；清理误建的重复 adr-0004 条目（保持单一条目与旧文件路径）。",
+      "commit": "1226f6c"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_scheduler_ledger.py tests/test_hardening.py -q",
+      "result": "39 passed, 1 warning in 5.36s",
+      "passed": true,
+      "evidence": "目标测试：新增 13 个 scheduler/ledger 测试 + 26 个 hardening 测试全部通过；warning 为 anyio pytest 插件弃用提示，与本次改动无关。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "309 passed, 1 skipped, 1 warning, 2 subtests passed in 17.16s",
+      "passed": true,
+      "evidence": "全量回归通过；skip 为仓库既有跳过项。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 31 source files",
+      "passed": true,
+      "evidence": "与 CI 同命令的类型检查通过。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "与 CI 同规则的静态检查通过。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m compileall -q astock app.py",
+      "result": "exit 0（无输出）",
+      "passed": true,
+      "evidence": "与 CI 同命令的字节码编译通过。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write",
+      "reason": "修改 astock/tests/.devloop 文件并运行本地测试；当前 DSH 会话已授予 danger-full-access。",
+      "status": "granted"
+    },
+    {
+      "name": "local-test-run",
+      "reason": "使用项目 .venv 运行 pytest/mypy/ruff/compileall。",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-007-scheduler-ledger",
+    "commit": "1226f6c",
+    "pr": "未创建（本地分支交付，等待评审）",
+    "ci": "未运行远端 CI；本地已执行 pytest/mypy/ruff/compileall，计划项 links.test 已记录",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "请 reviewer 按 plan-20261103-007 验收标准评审 commit 1226f6c。评审通过后：1) 合并分支并触发 CI；2) 在真实交易日连续运行后执行 python -m astock.jobs --report 5 复核 all_success 与退出码；3) 观察 data/recommendations/scheduler_alerts.jsonl 的心跳告警是否符合阈值；4) 如需对外发布产品文档，重新运行 tools/build_product_doc.py 生成产物。残余风险：scheduler_state.json 冻结为历史快照，外部若直接读该文件会看到旧状态（ADR-004 已注明）；tools/build_product_doc.py 仅改生成脚本，未重新生成文档产物。",
+  "createdAt": "2026-11-12T16:22:49.527Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-001.md"
+}

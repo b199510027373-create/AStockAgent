@@ -1,0 +1,143 @@
+{
+  "id": "ho-20261113-004",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-007",
+  "threadId": "rev-20261113-001",
+  "sessionId": "",
+  "title": "plan-20261103-007 评审修复交付（第 2 轮）",
+  "summary": "按 reviewer 交付 ho-20261113-003 的 5 条问题（2×P1、3×P2）逐条修复，新增/调整 10 个测试，目标测试 49 passed、全量 319 passed，mypy/ruff/compileall 通过，提交 aabc2cb，计划项回到 in_review。相对上一份交付 ho-20261113-001 的修改痕迹全部在本 handoff 中列出。",
+  "requirements": [
+    {
+      "id": "REQ-007-DESC",
+      "text": "调度状态机与 attempts/late_by_min 完整落 jobs 表，启动时从表判断“该跑但没跑”，并加心跳检查（超时告警）。",
+      "source": "plan-20261103-007 描述"
+    },
+    {
+      "id": "REQ-007-01",
+      "text": "jobs 表能完整表达 pending/running/success/stale/failed 与 attempts。",
+      "source": "plan-20261103-007 验收标准 1"
+    },
+    {
+      "id": "REQ-007-02",
+      "text": "scheduler_state.json 可停用或降级为只读迁移源。",
+      "source": "plan-20261103-007 验收标准 2"
+    },
+    {
+      "id": "REQ-007-03",
+      "text": "心跳超过阈值（如 2 个交易日未运行）触发告警。",
+      "source": "plan-20261103-007 验收标准 3"
+    },
+    {
+      "id": "REQ-007-04",
+      "text": "连续 5 个交易日 job 全 success 的验收可复现。",
+      "source": "plan-20261103-007 验收标准 4"
+    },
+    {
+      "id": "REQ-REV-01",
+      "text": "15:00–16:40 心跳/验收不得把当天未到期 close 算作漏跑；统一使用 _due_reference(now)，并补 15:30 report/heartbeat 用例。",
+      "source": "评审 P1 iss-mwdsn7s3-6954f5 / ho-20261113-003"
+    },
+    {
+      "id": "REQ-REV-02",
+      "text": "run_once 的台账读写纳入异常处理；loop 捕获 startup_maintenance/run_once 异常并 stop.wait(600) 重试，避免线程静默退出。",
+      "source": "评审 P1 iss-mwdsn7t0-8b6b2b / ho-20261113-003"
+    },
+    {
+      "id": "REQ-REV-03",
+      "text": "心跳告警去重需持久化，读取 ALERTS_PATH 末行签名，重启后不重复落盘。",
+      "source": "评审 P2 iss-mwdsns2o-7c2e72 / ho-20261113-003"
+    },
+    {
+      "id": "REQ-REV-04",
+      "text": "空台账首次启动仅有当天 pending 时不得告警；返回 initialized=false，streak 以窗口内最早 job 日期截断。",
+      "source": "评审 P2 iss-mwdsnve8-4643e3 / ho-20261113-003"
+    },
+    {
+      "id": "REQ-REV-05",
+      "text": "loop() 需有成功运行与 stale 后 wait(600) 的测试覆盖。",
+      "source": "评审 P2 iss-mwdsnvf7-7056ec / ho-20261113-003"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/scheduler.py",
+      "summary": "新增 _due_reference：run_time 前以当天 00:00 为参考，heartbeat/acceptance/_recent_trading_days 统一使用；删除全局告警签名缓存，改为 _alert_signature + 读取 ALERTS_PATH 末行持久化去重；heartbeat 空台账返回 initialized=false 且不告警，streak 按最早 job 截断；startup_maintenance 各步骤独立 try/except；run_once 台账读写失败返回 None；loop 启动与单轮异常均记日志并 wait(600) 重试。",
+      "commit": "aabc2cb"
+    },
+    {
+      "path": "tests/test_scheduler_ledger.py",
+      "summary": "新增 FrozenDateTime/last_completed_by_clock；覆盖 15:30 report 与 heartbeat、持久化告警去重、空台账不告警、run_once/startup 台账写失败兜底、loop 成功/stale/启动失败，以及 --report/--heartbeat 15:30 CLI 退出码。",
+      "commit": "aabc2cb"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-004-scheduler-idempotent-jobs.md",
+      "summary": "补充到期参考日、空台账不告警、持久化签名去重与自检步骤独立容错语义。",
+      "commit": "aabc2cb"
+    }
+  ],
+  "tests": [
+    {
+      "command": "python -m pytest tests/test_scheduler_ledger.py tests/test_hardening.py -q",
+      "result": "49 passed, 1 warning in 6.75s",
+      "passed": true,
+      "evidence": "包含本轮新增 10 个用例与既有 OPS-01 幂等/锁/stale 用例"
+    },
+    {
+      "command": "python -m pytest tests -q",
+      "result": "319 passed, 1 skipped, 1 warning, 2 subtests passed in 19.04s",
+      "passed": true,
+      "evidence": "全量回归无失败"
+    },
+    {
+      "command": "python -m mypy astock app.py",
+      "result": "Success: no issues found in 31 source files",
+      "passed": true,
+      "evidence": "类型检查通过"
+    },
+    {
+      "command": "python -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同款 ruff 规则通过"
+    },
+    {
+      "command": "python -m compileall -q astock app.py",
+      "result": "exit 0",
+      "passed": true,
+      "evidence": "CI 同款编译检查通过"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write",
+      "reason": "修改 astock/tests/.devloop 文件",
+      "status": "granted"
+    },
+    {
+      "name": "local-test-run",
+      "reason": "本地运行 pytest/mypy/ruff/compileall",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-007-scheduler-ledger",
+    "commit": "aabc2cb",
+    "pr": "未创建",
+    "ci": "未运行远端 CI；本地 pytest/mypy/ruff/compileall 全部通过",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-001",
+  "next": "请 reviewer 按 diff 复审 rev-20261113-001 的 5 条问题（重点：_due_reference 边界、loop 容错、ALERTS_PATH 持久化签名、空台账语义、loop 测试）；通过后创建 PR 跑 CI。合并后建议真实运行 python -m astock.jobs --report 5 并连续观察 5 个交易日 scheduler_alerts.jsonl。",
+  "createdAt": "2026-11-12T17:43:22.054Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-004.md"
+}

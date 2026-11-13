@@ -308,6 +308,66 @@
       "notes": "第 1 轮 · request_changes"
     },
     {
+      "id": "cal-rev-20261111-003-r2",
+      "type": "review",
+      "title": "评审：评审：推荐 UI 生成/历史读取统一到 ledger",
+      "start": "2026-11-11T05:55:54.717Z",
+      "end": "2026-11-11T06:01:06.851Z",
+      "planItemId": "plan-20261103-003",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · comment"
+    },
+    {
+      "id": "cal-rev-20261111-003-r3",
+      "type": "review",
+      "title": "评审：评审：推荐 UI 生成/历史读取统一到 ledger",
+      "start": "2026-11-12T16:37:04.806Z",
+      "end": "2026-11-12T16:38:07.268Z",
+      "planItemId": "plan-20261103-003",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261113-001-r1",
+      "type": "review",
+      "title": "评审：评审：调度状态机迁移 jobs 表 + 心跳告警",
+      "start": "2026-11-12T16:57:32.848Z",
+      "end": "2026-11-12T17:00:54.227Z",
+      "planItemId": "plan-20261103-007",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261113-001-r2",
+      "type": "review",
+      "title": "评审：评审：调度状态机迁移 jobs 表 + 心跳告警",
+      "start": "2026-11-12T18:26:47.807Z",
+      "end": "2026-11-12T18:52:48.400Z",
+      "planItemId": "plan-20261103-007",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261113-002-r1",
+      "type": "review",
+      "title": "评审：评审：文件导入解析：PDF / Excel / CSV / DOCX",
+      "start": "2026-11-13T07:59:11.123Z",
+      "end": "2026-11-13T08:02:40.235Z",
+      "planItemId": "plan-20261107-003",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261113-002-r2",
+      "type": "review",
+      "title": "评审：评审：文件导入解析：PDF / Excel / CSV / DOCX",
+      "start": "2026-11-13T08:21:20.365Z",
+      "end": "2026-11-13T08:23:13.673Z",
+      "planItemId": "plan-20261107-003",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-005-planned",
       "type": "planned",
       "title": "「无显著 alpha」实时横幅（ledger 驱动）",
@@ -319,17 +379,6 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261107-003-planned",
-      "type": "planned",
-      "title": "文件导入解析：PDF / Excel / CSV / DOCX",
-      "start": "2026-11-15T00:00:00+08:00",
-      "end": "2026-11-22T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261107-003",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
       "id": "cal-plan-20261107-005-planned",
       "type": "planned",
       "title": "图表 spec 与渲染管线",
@@ -337,6 +386,17 @@
       "end": "2026-11-22T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261107-005",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261107-003-planned",
+      "type": "planned",
+      "title": "文件导入解析：PDF / Excel / CSV / DOCX",
+      "start": "2026-11-15T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261107-003",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
@@ -359,17 +419,6 @@
       "end": "2026-11-22T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261110-005",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
-      "id": "cal-plan-20261103-007-planned",
-      "type": "planned",
-      "title": "调度状态机迁移 jobs 表 + 心跳告警",
-      "start": "2026-11-18T00:00:00+08:00",
-      "end": "2026-11-22T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261103-007",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
@@ -403,6 +452,17 @@
       "end": "2026-11-21T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261103-003",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261103-007-planned",
+      "type": "planned",
+      "title": "调度状态机迁移 jobs 表 + 心跳告警",
+      "start": "2026-11-18T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-007",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },

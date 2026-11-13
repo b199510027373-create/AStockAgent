@@ -1,0 +1,133 @@
+{
+  "id": "ho-20261113-007",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-007",
+  "threadId": "rev-20261113-001",
+  "sessionId": "",
+  "title": "plan-20261103-007 合并 main 与 CI 验证",
+  "summary": "PR #9 已创建（base main），PR CI test 1m14s 通过（run 43291879416）；squash 合并为 a9c1248，远端特性分支已删除，main push CI run 43292151867 成功。计划项状态 done、progress 100。相对上一份交付 ho-20261113-006 无代码改动，变化仅为 PR/CI/merge/main 状态；真实交易日连续 5 天运行验收仍需在生产环境执行。",
+  "requirements": [
+    {
+      "id": "REQ-007-DESC",
+      "text": "调度状态机与 attempts/late_by_min 完整落 jobs 表，启动时从表判断“该跑但没跑”，并加心跳检查（超时告警）。",
+      "source": "plan-20261103-007 描述"
+    },
+    {
+      "id": "REQ-007-01",
+      "text": "jobs 表能完整表达 pending/running/success/stale/failed 与 attempts。",
+      "source": "plan-20261103-007 验收标准 1"
+    },
+    {
+      "id": "REQ-007-02",
+      "text": "scheduler_state.json 可停用或降级为只读迁移源。",
+      "source": "plan-20261103-007 验收标准 2"
+    },
+    {
+      "id": "REQ-007-03",
+      "text": "心跳超过阈值（如 2 个交易日未运行）触发告警。",
+      "source": "plan-20261103-007 验收标准 3"
+    },
+    {
+      "id": "REQ-007-04",
+      "text": "连续 5 个交易日 job 全 success 的验收可复现。",
+      "source": "plan-20261103-007 验收标准 4"
+    },
+    {
+      "id": "REQ-REV2-01",
+      "text": "长期停摆超过回看窗口时不得被判为无历史，应 initialized=true、streak 取窗口长度并告警。",
+      "source": "评审 P2 iss-mwdwnlvb-1e70b4 / ho-20261113-005"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/scheduler.py",
+      "summary": "本轮无新增代码改动；上轮 8ab44b4 的长期停摆修复随 PR #9 合并进入 main。",
+      "commit": "8ab44b4"
+    },
+    {
+      "path": "tests/test_scheduler_ledger.py",
+      "summary": "本轮无新增测试；50 目标测试在 PR CI 与 main CI 中通过。",
+      "commit": "8ab44b4"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-004-scheduler-idempotent-jobs.md",
+      "summary": "ADR-004 全表历史语义随 PR #9 合并进入 main。",
+      "commit": "8ab44b4"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions PR #9 checks（run 43291879416）",
+      "result": "test pass, 1m14s",
+      "passed": true,
+      "evidence": "PR head 8ab44b4 + ea34930，CI 全部步骤成功"
+    },
+    {
+      "command": "GitHub Actions main push（run 43292151867）",
+      "result": "success",
+      "passed": true,
+      "evidence": "合并提交 a9c1248 在 main 上编译、lint/type-check、pytest + coverage gate 全部通过"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "320 passed, 1 skipped, 1 warning, 2 subtests passed in 24.71s",
+      "passed": true,
+      "evidence": "合并前本地全量回归"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 31 source files",
+      "passed": true,
+      "evidence": "合并前本地类型检查"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "合并前本地静态检查"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write",
+      "reason": "修改 astock/tests/.devloop 并提交",
+      "status": "granted"
+    },
+    {
+      "name": "local-test-run",
+      "reason": "本地 pytest/mypy/ruff/compileall",
+      "status": "granted"
+    },
+    {
+      "name": "git-push",
+      "reason": "推送特性分支与 main 元数据提交",
+      "status": "granted"
+    },
+    {
+      "name": "github-cli",
+      "reason": "使用 C:\\Program Files\\GitHub CLI\\gh.exe 创建/合并 PR 并查看 CI",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "a9c1248",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/9",
+    "ci": "PR run 43291879416 test pass；main run 43292151867 success",
+    "merge": "已 squash 合并到 main（a9c1248），远端特性分支已删除",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-006",
+  "next": "代码与 PR 流程已完成。剩余生产验收：在真实交易日连续运行 5 天，执行 .\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --report 5 确认 all_success 与退出码 0，同时观察 data/recommendations/scheduler_alerts.jsonl 是否有误告警；若 5 日中出现 stale/failed，按 jobs 表 attempts/error 定位并重跑。",
+  "createdAt": "2026-11-12T19:39:37.143Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-007.md"
+}

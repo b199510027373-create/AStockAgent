@@ -1,0 +1,102 @@
+{
+  "id": "ho-20261113-017",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "文件导入解析：PDF / Excel / CSV / DOCX",
+  "summary": "最终状态确认：PR #10 已由仓库 API squash 合并到 main（21dddaa，state=MERGED，mergedAt 2026-11-13T08:30:35Z），devloop 记录提交 f11fa8e 已推送；main 分支 CI run 43394027292（f11fa8e）success。计划项 plan-20261107-003 已 done、progress=100，links 记录合并提交与两轮 CI。评审 rev-20261113-002 第 2 轮 approve（openP0=0/openP1=0），唯一新增 P2 iss-mweply8i-fc899f 已在 bd8d2da 修复；仅剩 ADR-015 文档订正由架构在 plan-20261107-004 前处理。",
+  "requirements": [
+    {
+      "id": "iss-mweply8i-fc899f",
+      "text": "混合类型列归一化为文本，补混合单元格用例",
+      "source": "review rev-20261113-002 第 2 轮 P2"
+    },
+    {
+      "id": "iss-mweoveax-3cb396",
+      "text": "ADR-015 13→15、§4 bbox 语义订正，由架构在 plan-20261107-004 开工前完成",
+      "source": "review rev-20261113-002 第 1 轮 P2（文档部分）"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/files.py",
+      "summary": "混合/文本列统一归一化为 pandas string，修复 ArrowTypeError",
+      "commit": "bd8d2da"
+    },
+    {
+      "path": "tests/test_agent_files.py",
+      "summary": "新增 test_xlsx_mixed_code_column_stays_text（49 用例）",
+      "commit": "bd8d2da"
+    },
+    {
+      "path": "astock/agent/files.py",
+      "summary": "PR #10 squash 合并到 main",
+      "commit": "21dddaa"
+    },
+    {
+      "path": "tests/test_agent_files.py",
+      "summary": "PR #10 合并到 main",
+      "commit": "21dddaa"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-003.json",
+      "summary": "status=done、links 记录合并提交与 main CI run",
+      "commit": "f11fa8e"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 43394027292 --json status,conclusion",
+      "result": "CI success",
+      "passed": true,
+      "evidence": "status completed, conclusion success（main，f11fa8e）"
+    },
+    {
+      "command": "gh pr view 10 --json state,mergeCommit,mergedAt",
+      "result": "merged",
+      "passed": true,
+      "evidence": "state MERGED, mergeCommit 21dddaa95e72c338e0d8d950f23ce5735c4e4aaf"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests\\test_agent_files.py -q -p no:cacheprovider",
+      "result": "49 passed",
+      "passed": true,
+      "evidence": "49 passed"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -u -m pytest tests -q -p no:cacheprovider",
+      "result": "369 passed, 1 skipped",
+      "passed": true,
+      "evidence": "369 passed, 1 skipped"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "网络安装 pdfplumber/duckdb",
+      "reason": "本地网络阻断；PDF 桩测试 + CI 真依赖安装",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "21dddaa（合并）；f11fa8e（devloop 记录）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10",
+    "ci": "success：合并前 43393535403（bd8d2da）；main 合并后 43394027292（f11fa8e）",
+    "merge": "已 squash 合并到 main，PR #10 MERGED（mergedAt 2026-11-13T08:30:35Z）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-016",
+  "next": "本项已 done 并合入 main。仅剩非阻断 P2：架构在 plan-20261107-004 开工前订正 ADR-015「13→15」与《接口冻结清单》§4 Excel bbox 语义。plan-20261107-004（table_query/检索）可直接基于 main 的 files.py 开工。",
+  "createdAt": "2026-11-13T08:33:51.950Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-017.md"
+}

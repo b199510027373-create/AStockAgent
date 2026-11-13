@@ -1,0 +1,110 @@
+{
+  "id": "ho-20261113-014",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "文件导入解析：PDF / Excel / CSV / DOCX",
+  "summary": "CI 状态更新：PR #10 上 commit 499f60b 与 c400343 的 CI 均 success（run 43391713138 / 43391962183），代码自 2531119 起未再改动，计划项保持 in_review、progress=100，links.test 已记录两轮 CI 结果。当前交付：feat/agent-file-ingest → PR #10，mergeStateStatus CLEAN，等待评审复核。",
+  "requirements": [
+    {
+      "id": "iss-mweouh8f-6c3d2e",
+      "text": "前导零代码列保留文本并告警",
+      "source": "review rev-20261113-002 P1-1"
+    },
+    {
+      "id": "iss-mweoulp2-c72028",
+      "text": "load_table sheet_slug 白名单 + tables/ 归属校验",
+      "source": "review rev-20261113-002 P1-2"
+    },
+    {
+      "id": "iss-mweov3d3-db2784",
+      "text": "真实 .xls 通过性证据",
+      "source": "review rev-20261113-002 P1-3"
+    },
+    {
+      "id": "iss-mweov5r6-6cc726",
+      "text": "原子写 tmp 加 uuid 且失败清理",
+      "source": "review rev-20261113-002 P2-1"
+    },
+    {
+      "id": "iss-mweoveax-3cb396",
+      "text": "测试改用 ADR 锚点名，文档订正转架构",
+      "source": "review rev-20261113-002 P2-2"
+    },
+    {
+      "id": "iss-mweovi84-c000f9",
+      "text": "FTS 索引降级不阻断导入",
+      "source": "review rev-20261113-002 P2-3"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/files.py",
+      "summary": "代码修复本体（前导零保护、sheet_slug 越界防护、原子写清理、显式 Excel 引擎）",
+      "commit": "2531119"
+    },
+    {
+      "path": "tests/test_agent_files.py",
+      "summary": "48 个用例，含 6 条评审问题的回归测试",
+      "commit": "2531119"
+    },
+    {
+      "path": "tests/fixtures/legacy_two_sheets.xls",
+      "summary": "真实 BIFF8 两 sheet 夹具",
+      "commit": "2531119"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-003.json",
+      "summary": "links.test 记录两轮 CI run；status=in_review",
+      "commit": "c400343"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261113-013.md",
+      "summary": "CI 通过 update handoff",
+      "commit": "c400343"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run watch 43391962183 --exit-status",
+      "result": "CI success",
+      "passed": true,
+      "evidence": "Reject secrets ✓ / Compile ✓ / Lint and type-check ✓ / Run tests with coverage gate (50%) ✓，success 1m10s"
+    },
+    {
+      "command": "gh run watch 43391713138 --exit-status",
+      "result": "CI success",
+      "passed": true,
+      "evidence": "同上，success 1m20s"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "网络安装 pdfplumber/duckdb/xlwt",
+      "reason": "本地网络阻断，真依赖由 CI 安装 requirements.txt 验证；本地 PDF 用桩、XLS 夹具已生成并提交",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-file-ingest",
+    "commit": "2531119（代码）；499f60b、c400343 仅记录变更",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10",
+    "ci": "success：43391713138（499f60b，1m20s）与 43391962183（c400343，1m10s）均通过 lint/type-check 与 coverage 50% 门槛",
+    "merge": "未合并，等待评审复核后合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-013",
+  "next": "评审复核三条 P1/P2；通过后合并 PR #10 并关闭本项。ADR-015 字段数（13→15）与 §4 Excel bbox 语义由架构在 plan-20261107-004 开工前订正。",
+  "createdAt": "2026-11-13T08:18:27.424Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-014.md"
+}
