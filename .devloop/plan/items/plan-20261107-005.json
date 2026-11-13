@@ -38,15 +38,16 @@
       "ADR-008"
     ],
     "branch": "feat/agent-chart-pipeline",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43473738669",
     "module": "chart_spec",
     "mergedFrom": [
       "plan-20261110-005"
     ],
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
     "review": "rev-20261113-003",
-    "test": "目标：pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py tests/test_data_pit_events.py -q -> 121 passed；全量：pytest tests -q -> 478 passed, 2 skipped, 2 subtests；mypy astock -> Success 34 files；test_architecture_gate.py -> 32 passed, 1 skipped。本轮：div_id 由 spec+快照派生、params 记 plotly/python 版本、time_point_scope、latest_bar_time strict/notes、prune_artifacts、看板边补齐、冻结清单同步；Q4/Q5/Q6 裁决落地转 plan-20261114-001/002。"
+    "test": "目标：pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py tests/test_data_pit_events.py -q -> 121 passed；全量：pytest tests -q -> 478 passed, 2 skipped, 2 subtests；mypy astock -> Success 34 files；test_architecture_gate.py -> 32 passed, 1 skipped；CI run 43473738669 pass（head 75b5d64）。本轮：div_id 由 spec+快照派生、params 记 plotly/python 版本、time_point_scope、latest_bar_time strict/notes、prune_artifacts、看板边补齐、冻结清单同步；Q4/Q5/Q6 裁决落地转 plan-20261114-001/002。"
   },
   "createdAt": "2026-11-07T14:12:07.117Z",
-  "updatedAt": "2026-11-13T17:31:46.228Z",
+  "updatedAt": "2026-11-13T17:33:30.041Z",
   "devSessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063"
 }
