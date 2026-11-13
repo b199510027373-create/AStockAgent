@@ -2,14 +2,14 @@
   "id": "plan-20261107-005",
   "title": "图表 spec 与渲染管线",
   "description": "依据 ADR-016 实现 astock/agent/chart_spec.py + chart_render.py：声明式 ChartSpec（kind/title/data/encode/transforms/layers/annotations），手写校验（枚举、长度、白名单算子），渲染为 Plotly Figure → 自包含 HTML（gr.HTML）；PNG 为 v1 支持功能（Kaleido/Chrome/字体见 plan-20261114-001）。统计图复用 backtest/factors/stats/track 的既有输出，不重新发明计算。v1 不执行任意 Python，transforms 仅支持 filter/groupby/agg/sort/limit。 2026-11-14 补充裁决：Q4=B 删除 panes/style/raw 别名；Q5=C 完整版（chart_render 不写审计、chart_service 唯一审计入口）；Q6=A PNG 导出纳入 v1，基础设施见 plan-20261114-001，落地项 plan-20261114-002。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-15",
   "due": "2026-11-22",
   "estimateH": 20,
-  "progress": 95,
+  "progress": 100,
   "acceptance": [
     "ChartSpec 支持 candlestick/line/bar/scatter/heatmap/histogram",
     "非法 spec 返回结构化错误（字段 + 原因），可回传模型重试",
@@ -45,9 +45,10 @@
     ],
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
     "review": "rev-20261113-003",
-    "test": "目标 125 passed；全量 pytest tests -q -> 482 passed, 2 skipped；mypy 34 files；门禁 32 passed, 1 skipped；ruff 通过；CI 43484888881 pass（head b8736a8）。修第 3 轮 4 P1 + 3 P2：删 panes/style/raw 别名、ref anyOf + jsonschema、空 transforms 时点为空、meta upsert、params 记 include_plotlyjs、prune 扫孤儿目录、验收 #9 记 002 迁移。"
+    "test": "目标 125 passed；全量 pytest tests -q -> 482 passed, 2 skipped；mypy 34 files；门禁 32 passed, 1 skipped；ruff 通过；CI 43484888881 pass（head b8736a8）。修第 3 轮 4 P1 + 3 P2：删 panes/style/raw 别名、ref anyOf + jsonschema、空 transforms 时点为空、meta upsert、params 记 include_plotlyjs、prune 扫孤儿目录、验收 #9 记 002 迁移。",
+    "mergeCommit": "351c66b"
   },
   "createdAt": "2026-11-07T14:12:07.117Z",
-  "updatedAt": "2026-11-13T18:41:50.154Z",
+  "updatedAt": "2026-11-13T19:07:16.997Z",
   "devSessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063"
 }
