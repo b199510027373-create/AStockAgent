@@ -17,10 +17,13 @@ import pytest
 
 from astock.agent import chart_render, store
 
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("kaleido") is None,
-    reason="未安装 kaleido：PNG 导出按契约降级为 HTML artifact（CI 必须安装，见 requirements.txt）",
-)
+pytestmark = [
+    pytest.mark.png,
+    pytest.mark.skipif(
+        importlib.util.find_spec("kaleido") is None,
+        reason="未安装 kaleido：PNG 导出按契约降级为 HTML artifact（CI 必须安装，见 requirements.txt）",
+    ),
+]
 
 
 def _spec() -> dict[str, Any]:

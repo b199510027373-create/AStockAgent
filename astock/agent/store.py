@@ -43,6 +43,7 @@ __all__ = [
     "artifact_rel_path",
     "connect",
     "ensure_run",
+    "fail_run",
     "find_artifacts_by_digest",
     "get_artifact",
     "put_content",
@@ -197,6 +198,29 @@ def ensure_run(
     return run_id
 
 
+def fail_run(
+    conn: sqlite3.Connection,
+    run_id: str,
+    *,
+    error: str | None = None,
+    finished_at: str | None = None,
+) -> str:
+    """把 run 显式置为 ``failed``，返回 run_id。
+
+    ``ensure_run`` 对已存在的 run 是 ``ON CONFLICT DO NOTHING``（不覆盖既有生命周期），
+    因此「硬失败」语义（例如 ``png_mode='require'`` 导出失败）必须单独落状态：已预建
+    的 ``running``/``success`` run 也要被改成 ``failed``，否则 meta 与 ops 文档的表述
+    互相矛盾。
+    """
+    now = finished_at or utc_now()
+    conn.execute(
+        "UPDATE agent_runs SET status = 'failed', finished_at = ?, error = ? WHERE run_id = ?",
+        (now, error, run_id),
+    )
+    conn.commit()
+    return run_id
+
+
 def put_content(
     payload: bytes | str,
     filename: str,
@@ -255,6 +279,10 @@ def _merge_artifact_meta(
     HTML 内容寻址，``artifact_id`` 相同即 HTML 字节相同，此前导出的 PNG 仍描述同一张图；
     因此最新一次写入若没能出 PNG（``png_path=None``/``degraded=True``），不得把已有
     ``png_path`` 与 ``degraded=False`` 覆盖掉（§3.4 的「升级」语义，评审 P1）。
+
+    复用旧 PNG 时同时修正 provenance（评审 P2）：``png_reused=True``、``png_source_mode``
+    记录产出该 PNG 的模式、本次失败原因移到 ``png_last_attempt_error`` 且 ``png_error``
+    归 None——否则 ``png_path`` 与 ``png_error`` 会同时声称「有 PNG」和「本次导出失败」。
     """
     merged = dict(newest)
     previous_png = existing.get("png_path")
@@ -277,6 +305,12 @@ def _merge_artifact_meta(
         ):
             if existing.get(key) is not None and merged.get(key) is None:
                 merged[key] = existing[key]
+        merged["png_reused"] = True
+        merged["png_source_mode"] = existing.get("png_source_mode") or existing.get("png_mode")
+        attempt_error = merged.get("png_error")
+        if attempt_error:
+            merged["png_last_attempt_error"] = attempt_error
+        merged["png_error"] = None
         warnings = merged.get("warnings")
         if isinstance(warnings, list):
             # 沿用了旧 PNG，就不能再留「本次 PNG 降级」的告警，否则 meta 自相矛盾。

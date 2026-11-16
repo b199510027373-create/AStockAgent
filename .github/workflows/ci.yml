@@ -26,12 +26,6 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Install CJK fonts for PNG export
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
-          fc-list :lang=zh | head -n 3
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -59,7 +53,9 @@ jobs:
         run: |
           python -m pip install -r requirements-dev.txt
           # 固定用 pytest 并显式传 tests：直接 pytest 会连同 release/AStockAgent/tests 重复收集。
-          coverage run -m pytest tests -q
+          # 真实 PNG 导出（marker=png）需要 Chrome/字体，只在独立 png-export job 里跑，
+          # 不让宿主环境抖动拖红主流水线（评审 P1）。
+          coverage run -m pytest tests -q -m "not png"
           coverage report -m --fail-under=50
 
   # 真实 PNG 导出（非 monkeypatch）：独立 job，失败/超时单独可见，不拖垮主测试流水线。
@@ -123,7 +119,7 @@ jobs:
           ASTOCK_PNG_SAMPLE_DIR: ${{ github.workspace }}/png-artifacts
         run: |
           mkdir -p png-artifacts
-          python -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q --timeout=180
+          python -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png --timeout=180
 
       - name: Upload PNG artifacts
         if: always()

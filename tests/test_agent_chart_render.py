@@ -419,6 +419,44 @@ def test_png_mode_require_raises_and_marks_run_failed(
     assert artifacts == 0
 
 
+def test_png_mode_require_fails_precreated_run(
+    paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Agent 循环预建的 running run 遇到 require 失败也要落 failed（评审 P2）。
+
+    ``ensure_run`` 是 ``ON CONFLICT DO NOTHING``，只有显式 ``fail_run`` 才能把既有行改成
+    failed；否则 ops 文档宣称的 ``agent_runs.status=failed`` 只对新建 run 成立。
+    """
+    conn = store.connect(paths["db_path"])
+    try:
+        store.ensure_run(conn, "run_precreated", status="running")
+    finally:
+        conn.close()
+
+    monkeypatch.setattr(
+        chart_render,
+        "_try_png",
+        lambda figure, *, width, height: (None, "Chrome executable not found"),
+    )
+    with pytest.raises(chart_render.PNGExportError, match="Chrome executable not found"):
+        _render(inline_line_spec(), paths, png_mode="require", run_id="run_precreated")
+
+    conn = store.connect(paths["db_path"])
+    try:
+        run = conn.execute(
+            "SELECT status, error, finished_at FROM agent_runs WHERE run_id = ?",
+            ("run_precreated",),
+        ).fetchone()
+        artifacts = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+    finally:
+        conn.close()
+    assert run is not None
+    assert run["status"] == "failed"
+    assert run["finished_at"] is not None
+    assert "Chrome executable not found" in (run["error"] or "")
+    assert artifacts == 0
+
+
 def test_png_mode_auto_caches_env_failure_and_warns_once(
     paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

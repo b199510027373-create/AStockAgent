@@ -485,3 +485,73 @@ def test_record_artifact_never_downgrades_success_meta(tmp_path: Path) -> None:
         assert count == 1
     finally:
         conn.close()
+
+
+def test_reused_png_records_provenance_without_contradiction(tmp_path: Path) -> None:
+    """复用旧 PNG 时 provenance 指向产出它的那次导出，本次失败原因另存（评审 P2）。
+
+    反例是修复前的 meta：``png_path=<旧>`` + ``degraded=False`` + ``png_error=<本次失败>``，
+    同一份记录既声称「有 PNG」又声称「导出失败」；``png_mode=off`` 重写时还会出现
+    「off 模式却有 png_path」的误导。
+    """
+    root = tmp_path / "agent"
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1")
+        digest, path, _ = store.put_content(
+            b"<html>same bytes</html>", filename="chart.html", root=str(root)
+        )
+        _, _, png_absolute = store.put_content(
+            b"\x89PNG\r\nok", filename="chart_art_0123456789abcdef.png", root=str(root)
+        )
+        artifact_id = store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            meta={
+                "degraded": False,
+                "png_path": str(png_absolute),
+                "png_mode": "auto",
+                "png_source_mode": "auto",
+                "png_reused": False,
+                "png_error": None,
+                "warnings": [],
+            },
+        )
+
+        # 第二次：同 HTML 重渲染，Chrome 坏了 → 沿用旧 PNG，但本次 auto 尝试失败。
+        store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            meta={
+                "degraded": True,
+                "png_path": None,
+                "png_mode": "auto",
+                "png_source_mode": None,
+                "png_reused": False,
+                "png_error": "Chrome executable not found",
+                "warnings": [
+                    f"{store.PNG_DEGRADED_WARNING_PREFIX}：Chrome executable not found"
+                    "（仅 HTML artifact）"
+                ],
+            },
+        )
+
+        record = store.get_artifact(conn, artifact_id)
+        assert record is not None
+        meta = record.meta
+        assert meta["png_path"] == str(png_absolute)
+        assert meta["degraded"] is False
+        assert meta["png_reused"] is True
+        assert meta["png_source_mode"] == "auto"
+        assert meta["png_last_attempt_error"] == "Chrome executable not found"
+        assert meta["png_error"] is None
+        assert meta["png_mode"] == "auto"
+        assert meta["warnings"] == []
+    finally:
+        conn.close()

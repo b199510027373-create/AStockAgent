@@ -53,6 +53,7 @@ from astock.agent.store import (
     artifact_id_for,
     connect,
     ensure_run,
+    fail_run,
     get_artifact,
     put_content,
     record_artifact,
@@ -1445,6 +1446,13 @@ def render(
                     code_version=version,
                     status="failed",
                 )
+                # ensure_run 对已存在的 run 不覆盖状态（Agent 循环可能已预建 running），
+                # 这里再显式落 failed，保证 meta 与 ops 文档语义一致（评审 P2）。
+                fail_run(
+                    connection,
+                    run_key,
+                    error=f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}",
+                )
                 raise PNGExportError(
                     f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}"
                 )
@@ -1513,6 +1521,12 @@ def render(
             "png_path": png_path,
             "png_mode": mode,
             "png_error": png_error,
+            # 本次渲染是否复用了旧 PNG（store._merge_artifact_meta 在重写同一 artifact 时置 True）。
+            "png_reused": False,
+            # 产出当前 png_path 的那次导出模式；本次没出 PNG 时由 store 从旧 meta 回填。
+            "png_source_mode": mode if png_path else None,
+            # 复用旧 PNG 时保留本次失败原因，png_error 归 None，避免 provenance 自相矛盾。
+            "png_last_attempt_error": None,
             **png_meta,
             "data": snapshot,
         }

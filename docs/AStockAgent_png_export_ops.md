@@ -81,7 +81,7 @@ CI 的 `png-export` job 会设 `ASTOCK_REQUIRE_CJK=1`：缺中文字体时测试
 | --- | --- | --- |
 | `off` | 不尝试导出，只出 HTML | — |
 | `auto`（默认） | 尝试导出 | `degraded=True` + 告警；缺 kaleido/Chrome 等环境失败会缓存探测结果，后续图不再重复起浏览器，只标注缓存原因 |
-| `require` | 显式请求 PNG | 抛 `PNGExportError`，`agent_runs.status=failed`，不写 artifact 行（不留半成品） |
+| `require` | 显式请求 PNG | 抛 `PNGExportError`，`agent_runs.status=failed`（含 Agent 循环预建的 running run，经 `store.fail_run` 显式落状态），不写 artifact 行（不留半成品） |
 
 `export_png` 是兼容别名：`False` → `off`，`True` → `auto`；显式 `png_mode` 优先。
 环境探测可用 `chart_render.reset_png_probe_cache()` 重置（例如运行期补装了 Chrome）。
@@ -107,17 +107,21 @@ HTML artifact 行（`kind='figure'`）的 `meta_json` 同时记录 PNG 信息，
 | `png_elapsed_ms` | 本次导出耗时 |
 | `font_family` | 实际使用的字体栈 |
 | `kaleido_version` / `chrome_version` / `chrome_path` | 导出引擎版本；kaleido 0.2.x 记 `bundled`，Linux 无版本号时由 CI 的 `ASTOCK_CHROME_VERSION` 注入 |
-| `png_mode` / `png_error` / `degraded` | 本次导出模式、失败原因、是否降级 |
+| `png_mode` / `png_error` / `degraded` | 本次导出模式、本次失败原因、是否降级 |
+| `png_reused` | 本次重写同一 `artifact_id` 时是否沿用了此前导出的 PNG |
+| `png_source_mode` | 产出当前 `png_path` 的那次导出模式（复用旧图时不会写成本次的 `off`/失败模式） |
+| `png_last_attempt_error` | 复用旧 PNG 时保留的本次尝试失败原因；此时 `png_error` 为 `None`，避免「有 PNG 却报导出失败」的矛盾 |
 
 `params`（HTML 复现前提）里同时带上 `plotly_version`、`kaleido_version`、`chrome_version`、
 `chrome_path`、`font_family`、`python_version`，换环境排查时先比对这些值。
 
 ## 6. CI 结构
 
-- 主 job `test`：装 `fonts-noto-cjk` → `pip install -r requirements.txt` + `pip check` →
-  lint/type-check → 全量 `pytest tests`（PNG 用例此时也会真实执行）。
-- 独立 job `png-export`（`timeout-minutes: 10`）：只跑
-  `tests/test_agent_chart_png_export.py` 与 `tests/test_agent_chart_png_zh.py`，
+- 主 job `test`：`pip install -r requirements.txt` + `pip check` → lint/type-check →
+  全量 `pytest tests -m "not png"`。主 job 不装中文字体、不依赖 Chrome/kaleido 运行时，
+  真实导出用例由 marker 排除，宿主环境抖动不会拖红主流水线（评审 P1）。
+- 独立 job `png-export`（`timeout-minutes: 10`）：装 `fonts-noto-cjk` 并定位 Chrome，只跑
+  `tests/test_agent_chart_png_export.py` 与 `tests/test_agent_chart_png_zh.py`（`-m png`），
   每用例 `--timeout=180`；失败/超时在 PR 上单独可见，不拖垮主流水线；
   `if: always()` 上传 `png-artifacts/**/*.png`，PR 里可直接下载中文样张。
 - 首次在新环境跑通前可先把该 job 设为非阻塞，确认稳定后必须保持必过（当前为必过）。
