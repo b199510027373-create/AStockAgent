@@ -261,6 +261,22 @@ def _merge_artifact_meta(
     if previous_png and not merged.get("png_path"):
         merged["png_path"] = previous_png
         merged["degraded"] = False
+        # PNG 追溯字段一起沿用，否则 meta 会出现「有 png_path 却无 digest/字体/版本」的半截记录。
+        for key in (
+            "png_rel_path",
+            "png_digest",
+            "png_bytes",
+            "png_width",
+            "png_height",
+            "png_scale",
+            "png_elapsed_ms",
+            "font_family",
+            "kaleido_version",
+            "chrome_version",
+            "chrome_path",
+        ):
+            if existing.get(key) is not None and merged.get(key) is None:
+                merged[key] = existing[key]
         warnings = merged.get("warnings")
         if isinstance(warnings, list):
             # 沿用了旧 PNG，就不能再留「本次 PNG 降级」的告警，否则 meta 自相矛盾。
@@ -432,9 +448,11 @@ def _protected_digests(conn: sqlite3.Connection, keep: set[str]) -> set[str]:
         for row in conn.execute("SELECT DISTINCT digest FROM agent_artifacts")
     }
     for row in conn.execute("SELECT meta_json FROM agent_artifacts"):
-        digest = _path_digest(_load_meta(row["meta_json"]).get("png_path"))
-        if digest:
-            protected.add(digest)
+        meta = _load_meta(row["meta_json"])
+        # png_path 是绝对路径，取内容寻址目录名；png_digest 本身就是 digest。
+        for value in (_path_digest(meta.get("png_path")), meta.get("png_digest")):
+            if isinstance(value, str) and value:
+                protected.add(value)
     return protected
 
 

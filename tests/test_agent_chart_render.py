@@ -197,6 +197,7 @@ def test_rerender_upgrades_stale_degraded_meta(paths: dict[str, str], monkeypatc
     monkeypatch.setattr(
         chart_render, "_try_png", lambda figure, *, width, height: (b"\x89PNG\r\n", None)
     )
+    chart_render.reset_png_probe_cache()  # 上一轮环境失败已被 auto 缓存，清掉才能升级
     second = _render(inline_line_spec(), paths, export_png=True)
     assert second.artifact_id == first.artifact_id
     assert second.degraded is False
@@ -389,6 +390,73 @@ def test_png_is_recorded_when_exporter_available(
     assert rendered.degraded is False
     assert rendered.png_path is not None
     assert Path(rendered.png_path).read_bytes() == b"png-bytes"
+
+
+# ---------------------------------------------------------------- png_mode 三态（评审 P2）
+
+
+def test_png_mode_require_raises_and_marks_run_failed(
+    paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """显式请求 PNG 失败必须报错：不静默降级、不落半成品 artifact 行。"""
+
+    def failing(figure, *, width: int, height: int):  # noqa: ANN001 - 测试替身
+        return None, "kaleido not installed"
+
+    monkeypatch.setattr(chart_render, "_try_png", failing)
+    with pytest.raises(chart_render.PNGExportError, match="kaleido not installed"):
+        _render(inline_line_spec(), paths, png_mode="require", run_id="run_require")
+
+    conn = store.connect(paths["db_path"])
+    try:
+        run = conn.execute(
+            "SELECT status FROM agent_runs WHERE run_id = ?", ("run_require",)
+        ).fetchone()
+        artifacts = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+    finally:
+        conn.close()
+    assert run is not None and run["status"] == "failed"
+    assert artifacts == 0
+
+
+def test_png_mode_auto_caches_env_failure_and_warns_once(
+    paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """auto 首次环境失败后不再逐图起 Chrome：只探测一次，后续标注缓存原因。"""
+    calls: list[str] = []
+
+    def failing(figure, *, width: int, height: int):  # noqa: ANN001 - 测试替身
+        calls.append("export")
+        return None, "Chrome executable not found"
+
+    monkeypatch.setattr(chart_render, "_try_png", failing)
+    first = _render(inline_line_spec(), paths, png_mode="auto")
+    second = _render(inline_line_spec(), paths, png_mode="auto")
+
+    assert calls == ["export"]
+    assert first.degraded is True and second.degraded is True
+    assert any("跳过重试" in warning for warning in second.warnings)
+    assert _artifact_row(second, paths).meta["png_error"] == "Chrome executable not found"
+
+
+def test_png_mode_off_never_calls_exporter(
+    paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected(*args: object, **kwargs: object):
+        raise AssertionError("png_mode=off 不应尝试导出")
+
+    monkeypatch.setattr(chart_render, "_try_png", unexpected)
+    rendered = _render(inline_line_spec(), paths, png_mode="off")
+
+    assert rendered.png_path is None
+    assert rendered.degraded is False
+    meta = _artifact_row(rendered, paths).meta
+    assert meta["png_mode"] == "off" and meta["png_digest"] is None
+
+
+def test_png_mode_rejects_unknown_value(paths: dict[str, str]) -> None:
+    with pytest.raises(ValueError, match="png_mode"):
+        _render(inline_line_spec(), paths, png_mode="sometimes")
 
 
 # ---------------------------------------------------------------- ToolResult 同屏
@@ -686,3 +754,39 @@ def test_invalid_spec_fails_before_touching_store(paths: dict[str, str]) -> None
         assert conn.execute("SELECT COUNT(*) AS n FROM agent_runs").fetchone()["n"] == 0
     finally:
         conn.close()
+
+
+class _FlakyImageFigure:
+    """``to_image`` 按预设顺序抛错，用来验证重试边界（不依赖真实 kaleido/Chrome）。"""
+
+    def __init__(self, errors: list[str]) -> None:
+        self._errors = list(errors)
+        self.calls = 0
+
+    def to_image(self, **_kwargs: object) -> bytes:  # noqa: ANN401 - 测试替身
+        self.calls += 1
+        if self._errors:
+            raise RuntimeError(self._errors.pop(0))
+        return b"\x89PNG\r\n\x1a\npayload"
+
+
+def test_png_export_retries_transient_kaleido_race() -> None:
+    """kaleido 1.5.1 首帧 ``kaleido_scopes`` 竞态应重试一次，不得直接降级。"""
+    figure = _FlakyImageFigure(["ReferenceError: kaleido_scopes is not defined"])
+    payload, reason = chart_render._try_png(figure, width=800, height=400)  # type: ignore[arg-type]
+
+    assert reason is None
+    assert payload is not None and payload.startswith(b"\x89PNG")
+    assert figure.calls == 2
+
+
+def test_png_export_does_not_retry_missing_dependency() -> None:
+    """真正缺依赖时不重试，保持快速失败与明确原因。"""
+    figure = _FlakyImageFigure(
+        ['Image export using the "kaleido" engine requires the Kaleido package']
+    )
+    payload, reason = chart_render._try_png(figure, width=800, height=400)  # type: ignore[arg-type]
+
+    assert payload is None
+    assert reason is not None and "Kaleido package" in reason
+    assert figure.calls == 1
