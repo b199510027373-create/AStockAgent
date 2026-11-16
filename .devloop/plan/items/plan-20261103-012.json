@@ -1,27 +1,31 @@
 {
   "id": "plan-20261103-012",
-  "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定",
-  "description": "旧基线（22 源文件 / 57 tests / coverage 57% / 门槛 50%）已过时。最新合并树实测：pytest 378 passed + 1 skipped（PR #12 合并后预计 471），mypy astock 31 files Success。目标改为：mypy 扩到全部非 UI 模块并全库通过；用最新实测覆盖率重设门槛（不得低于当前实测，分阶段提升）；requirements/requirements-dev 全部锁版本（当前多为 >=）；CI 在 PR 与 main 都跑并连续两次通过。不再写死 65% 作为未测量的假设。",
+  "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
+  "description": "旧基线（22 源文件 / 57 tests / coverage 57% / 门槛 50%）已过时。以执行时最新 main 实测为准（当前 pytest 513 passed + 1 skipped，mypy 35 files Success），不写死未测量的数字。目标：mypy 扩到全部非 UI 模块并全库通过；用最新实测覆盖率重设门槛（不得低于当前实测，分阶段提升）；requirements/requirements-dev 全部锁精确版本（含 ruff/mypy/plotly/kaleido）；CI 在 PR 与 main 都跑并连续两次通过。新增全仓 Ruff 基线：当前 `ruff check astock tests` 320 条（astock 264、tests 56；96 条可安全 --fix），先固定配置与工具版本，再分阶段清理，最终全仓 0 并纳入 CI blocking。PR #9 五日观察结束（11/21）前，Ruff 清理排除 astock/scheduler.py 与 astock/jobs.py，避免改动调度运行时代码使观察样本失效。",
   "status": "todo",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-27",
-  "estimateH": 8,
+  "estimateH": 12,
   "progress": 0,
   "acceptance": [
-    "mypy 覆盖全部非 UI 模块，最新 main 全库通过（当前 31 files Success）",
+    "mypy 覆盖全部非 UI 模块，最新 main 全库通过（当前 35 files Success，以执行时实测为准）",
     "记录最新 coverage 实测值，门槛按实测重设且不低于当前；分阶段提升目标写入 CI 注释",
-    "requirements/requirements-dev 锁定精确版本，可复现安装；含 plotly/kaleido 等图表依赖",
-    "CI 在 PR 与 main 均运行 pytest+mypy+ruff，连续两次通过",
-    "清理旧文档中的 22 文件/57 tests/50% 门槛表述，避免与现状冲突"
+    "requirements/requirements-dev 锁定精确版本，可复现安装；含 ruff/mypy/plotly/kaleido 等工具与图表依赖",
+    "新增显式 Ruff 配置（select/ignore），不依赖 Ruff 默认规则集；CI 从 requirements-dev 安装固定版本，不再裸 pip install",
+    "Ruff 分阶段清理：先安全自动修复 96 条；C408/ISC004 手工；BLE001 逐条审计，能收窄则收窄、边界兜底加注释+noqa，禁止全文件级 noqa；S110/S112 按静默异常补日志或显式理由",
+    "最终 `ruff check astock tests` 为 0，CI 全仓 blocking；PR 与 main 均跑 pytest+mypy+ruff，连续两次通过",
+    "PR #9 五日观察结束前，Ruff 改动排除 astock/scheduler.py 与 astock/jobs.py；清理旧文档中的 22 文件/57 tests/50% 门槛表述"
   ],
   "tags": [
     "ci",
     "mypy",
     "coverage",
-    "pinning"
+    "pinning",
+    "ruff",
+    "style"
   ],
   "links": {
     "module": [
@@ -32,5 +36,5 @@
     ]
   },
   "createdAt": "2026-11-03T12:10:57.134Z",
-  "updatedAt": "2026-11-13T19:09:21.384Z"
+  "updatedAt": "2026-11-16T06:38:18.336Z"
 }

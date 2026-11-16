@@ -2,14 +2,14 @@
   "id": "plan-20261114-003",
   "title": "复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
   "description": "2026-11-14 用户裁决 D1。明确 hfq 为“标准后复权，基准 1.0”：以该证券最早可用交易日的 adj_factor 为 1.0，价格 = raw * adj_factor / base_factor；不得把最新因子当 1.0（那是 qfq）。adj_factor 缺失/空/<=0/非有限一律抛 DataContractError，禁止静默回退 qfq 或用 1.0 填充。分钟线按交易日日线 adj_factor 复权，metadata 单独标注 adj=hfq、adj_base、adj_source=daily；分钟 hfq 不与日线 hfq 连续序列混用，缺因子报错。涨跌停/成交额/绝对价位仍用 raw。同步 ADR-008 与 data.py 测试。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-18",
   "due": "2026-11-22",
   "estimateH": 8,
-  "progress": 0,
+  "progress": 99,
   "acceptance": [
     "hfq 基准 1.0 公式与最早可用交易日 base_factor 写入 ADR-008 和 data.py 注释",
     "构造已知因子序列验证 hfq 价格与收益率；qfq 仍以最新因子为基准，二者不混用",
@@ -30,10 +30,30 @@
     "adr": [
       "ADR-008"
     ],
+    "branch": "fix/data-adj-caliber",
+    "handoff": [
+      "ho-20261116-018",
+      "ho-20261116-020",
+      "ho-20261116-021"
+    ],
     "module": [
       "data"
+    ],
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/15",
+    "review": [
+      "rev-20261116-002"
+    ],
+    "test": [
+      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py -q -> 25 passed, 10 subtests passed (0.90s) [第 3 轮清扫后复跑，删不可达断言未减覆盖]",
+      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py tests/test_data_pit_events.py tests/test_quant.py tests/test_contracts.py -q -> 99 passed, 10 subtests passed (8.29s)",
+      ".venv\\Scripts\\python.exe -m pytest tests -q -> 538 passed, 1 skipped, 12 subtests passed (52.51s)",
+      ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q -> 32 passed, 1 skipped",
+      ".venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed!",
+      ".venv\\Scripts\\python.exe -m mypy astock app.py -> Success: no issues found in 35 source files",
+      "客户端实测 adj_factor 000001.SZ 19900101-20261116：query 6000 行/最早 20020304 vs query_all 8692 行/最早 19910403（证明截断）",
+      "GitHub Actions：43819638467 / 43819897831 / 43820096432 / 43820339795 / 43820545497 / 43820816497 / 43822962615 / 43823253779 / 43823507466 / 43824704960（761e9fa 第 3 轮清扫）-> test pass"
     ]
   },
   "createdAt": "2026-11-13T19:08:42.756Z",
-  "updatedAt": "2026-11-13T19:09:27.318Z"
+  "updatedAt": "2026-11-16T07:33:32.437Z"
 }

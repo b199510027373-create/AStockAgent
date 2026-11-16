@@ -13,12 +13,17 @@ import pandas as pd
 
 from . import indicators as ta
 from .config import CACHE_DIR, DEFAULT_START
-from .contracts import validate_bars
+from .contracts import DataContractError, validate_bars
 from .tushare_client import TushareClient, TushareError, get_client
 
 DAILY_DIR = CACHE_DIR / "daily"
 DAILY_DIR.mkdir(parents=True, exist_ok=True)
 CAL_PATH = CACHE_DIR / "trade_cal.parquet"
+
+# 复权因子必须从该证券上市起取，不能用请求区间推断基准（ADR-008 D1）：
+# 供应商会回溯调整整条因子序列，拿区间首日当基准会让同一只股票在不同区间里
+# 得到不同的后复权价格。19900101 用于覆盖 A 股最早上市日。
+ADJ_HISTORY_START = "19900101"
 
 PRICE_COLS = ["open", "high", "low", "close", "pre_close"]
 RAW_COLS = [
@@ -216,6 +221,171 @@ def _read_meta(path: Path) -> dict:
         return {}
 
 
+def _clean_adj_factors(
+    fct: pd.DataFrame | None, *, ts_code: str, source: str
+) -> pd.DataFrame:
+    """校验并归一化复权因子（ADR-008 D1）。
+
+    空表、缺列、NaN、inf、``<= 0`` 一律抛 :class:`DataContractError`；
+    不 ffill/bfill、不填充 1.0、不回退 qfq——因子异常时宁可报错，也不给出错误口径。
+    """
+    if fct is None or fct.empty:
+        raise DataContractError(
+            "AdjFactor",
+            f"{ts_code} adj_factor 复权因子为空（{source}）",
+            invalid=["adj_factor"],
+        )
+    missing = [c for c in ("trade_date", "adj_factor") if c not in fct.columns]
+    if missing:
+        raise DataContractError(
+            "AdjFactor",
+            f"{ts_code} 复权因子缺少列 {missing}（{source}）；实际列: {list(fct.columns)}",
+            missing=missing,
+        )
+    out = fct[["trade_date", "adj_factor"]].copy()
+    out["trade_date"] = pd.to_datetime(out["trade_date"])
+    out["adj_factor"] = pd.to_numeric(out["adj_factor"], errors="coerce")
+    bad = (
+        out["adj_factor"].isna()
+        | ~np.isfinite(out["adj_factor"])
+        | (out["adj_factor"] <= 0)
+    )
+    if bad.any():
+        sample = [
+            {"trade_date": str(pd.Timestamp(r["trade_date"]).date()), "adj_factor": r["adj_factor"]}
+            for r in out.loc[bad].head(3).to_dict("records")
+        ]
+        raise DataContractError(
+            "AdjFactor",
+            f"{ts_code} 复权因子存在 {int(bad.sum())} 行非法值"
+            f"（缺失/NaN/inf/<=0，{source}）：{sample}",
+            invalid=["adj_factor"],
+        )
+    return (
+        out.drop_duplicates("trade_date")
+        .sort_values("trade_date")
+        .reset_index(drop=True)
+    )
+
+
+def _query_adj_history(
+    client: TushareClient, ts_code: str, end: str
+) -> pd.DataFrame:
+    """拉取自 ``ADJ_HISTORY_START`` 起的全部 adj_factor（ADR-008 D1）。
+
+    单次 ``query`` 会被服务端行数上限截断：实测 000001.SZ 从 19900101 起
+    单次查询只返回 6000 行（最早 20020304），而该股票 19910403 就上市；
+    换成 ``query_all`` 分页后为 8692 行、最早 19910403。截断落在最早一端时
+    hfq 基准会静默取错，因此这里优先分页，并把覆盖校验交给调用方。
+    """
+    params = {"ts_code": ts_code, "start_date": ADJ_HISTORY_START, "end_date": end}
+    query_all = getattr(client, "query_all", None)
+    if callable(query_all):
+        df = query_all("adj_factor", **params)
+        if isinstance(df, pd.DataFrame):
+            return df
+    return client.query("adj_factor", **params)
+
+
+def _check_factor_coverage(
+    fct: pd.DataFrame, raw: pd.DataFrame, adj: str, *, ts_code: str
+) -> None:
+    """因子表必须覆盖行情区间两端（ADR-008 D1）。
+
+    服务端对单次查询有行数上限，截断若落在最早一段，``_adj_base`` 会拿到
+    错误的"最早因子"且全序列整体缩放错误、没有任何异常——这里显式报错。
+    """
+    first_raw = pd.Timestamp(raw["trade_date"].min())
+    last_raw = pd.Timestamp(raw["trade_date"].max())
+    first_fct = pd.Timestamp(fct["trade_date"].min())
+    last_fct = pd.Timestamp(fct["trade_date"].max())
+    if adj == "hfq" and first_fct > first_raw:
+        raise DataContractError(
+            "AdjFactor",
+            f"{ts_code} 复权因子最早 {first_fct:%Y-%m-%d} 晚于行情最早 "
+            f"{first_raw:%Y-%m-%d}（{adj}）：因子历史疑似被截断，"
+            "hfq 基准必须是该证券最早可用交易日的因子",
+            invalid=["adj_factor"],
+        )
+    if adj == "qfq" and last_fct < last_raw:
+        raise DataContractError(
+            "AdjFactor",
+            f"{ts_code} 复权因子最新 {last_fct:%Y-%m-%d} 早于行情最新 "
+            f"{last_raw:%Y-%m-%d}（{adj}）：因子历史疑似被截断",
+            invalid=["adj_factor"],
+        )
+
+
+def _adj_base(factors: pd.DataFrame, adj: str) -> tuple[float, pd.Timestamp]:
+    """复权基准因子与基准日（ADR-008 D1）。
+
+    - ``qfq``：区间最新复权因子为基准（等价于最新收盘价）；
+    - ``hfq``：该证券**最早可用交易日**的因子为基准，令其为 1.0；
+      不得把最新因子当 1.0（那是 qfq），也不得假设最早因子恰好等于 1.0
+      （供应商会回溯调整整条因子序列）。
+    """
+    row = factors.iloc[-1] if adj == "qfq" else factors.iloc[0]
+    return float(row["adj_factor"]), pd.Timestamp(row["trade_date"])
+
+
+def _adjustment_meta(
+    adj: str | None, base_factor: float | None, base_date: Any
+) -> dict[str, Any]:
+    """复权标注（ADR-008 D1）：``adj``/``adj_base``/``base_factor``/``adj_source``。"""
+    return {
+        "adj": adj or "none",
+        "adj_base": (
+            None if base_date is None else pd.Timestamp(base_date).strftime("%Y-%m-%d")
+        ),
+        "base_factor": None if base_factor is None else float(base_factor),
+        "adj_source": "daily",
+    }
+
+
+def _cache_base_valid(
+    meta: dict, cached: pd.DataFrame, adj: str | None, end_eff: Any = None
+) -> bool:
+    """缓存 meta 的 ``base_factor`` 与缓存数据不一致时视为失效（ADR-008 §5）。
+
+    只做可自证的内部一致性检查，不联网：
+
+    - 任何复权口径都必须带 ``adj_base``：旧版 meta 缺它说明基准口径不可考
+      （历史 qfq 缓存曾以"缓存末行因子"为基准、hfq 曾以 1.0 为基准），
+      一律失效重拉，避免命中缓存后返回 ``adj_base=None`` 的标注；
+    - qfq：基准必须等于缓存中 ``trade_date <= end_eff`` 的最后一行因子。
+      ``_fetch_daily`` 用请求 ``end`` 的最新因子做基准，若命中缓存时改用
+      缓存末行（可能更晚）的因子，同一个请求会随缓存状态漂移；
+    - hfq：缓存必须覆盖基准日且该日因子等于 ``base_factor``。缓存按请求区间
+      切片，通常不含上市首日，无法自证时按失效处理（CACHE-01：基准不可证即失效）。
+    """
+    if not adj:
+        return True
+    stored = meta.get("base_factor")
+    try:
+        stored = float(stored)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    if not np.isfinite(stored) or stored <= 0:
+        return False
+    if not meta.get("adj_base"):
+        return False
+    if "adj_factor" not in cached.columns or cached.empty:
+        return False
+    ordered = cached.sort_values("trade_date").reset_index(drop=True)
+    horizon = (
+        pd.Timestamp(end_eff) if end_eff is not None else ordered["trade_date"].max()
+    )
+    if adj == "qfq":
+        window = ordered[ordered["trade_date"] <= horizon]
+        if window.empty:
+            return False
+        return bool(np.isclose(float(window["adj_factor"].iloc[-1]), stored))
+    row = ordered[ordered["trade_date"] == pd.Timestamp(meta["adj_base"])]
+    if row.empty:
+        return False  # 基准日不在缓存窗口内，无法自证 → 失效重拉
+    return bool(np.isclose(float(row["adj_factor"].iloc[0]), stored))
+
+
 def _fetch_daily(
     client: TushareClient,
     ts_code: str,
@@ -233,47 +403,62 @@ def _fetch_daily(
     raw = validate_bars(raw, source=f"{ts_code} daily")
     raw = raw.sort_values("trade_date").reset_index(drop=True)
 
+    adjust_meta = _adjustment_meta(adj, None, None)
     if adj:
-        fct = client.query(
-            "adj_factor", ts_code=ts_code, start_date=start, end_date=end
+        # 因子必须取全历史：hfq 的基准是"最早可用交易日"，不能用请求区间首日。
+        # 用分页 query_all 拉取，并校验因子表两端覆盖行情（服务端截断会让
+        # hfq 基准静默取错）。
+        fct = _clean_adj_factors(
+            _query_adj_history(client, ts_code, end),
+            ts_code=ts_code,
+            source=f"{adj} 日线复权因子",
         )
-        if fct.empty:
-            raise TushareError(f"{ts_code} 复权因子为空，无法计算 {adj}")
-        fct["trade_date"] = pd.to_datetime(fct["trade_date"])
-        fct = (
-            fct.sort_values("trade_date")
-            .drop_duplicates("trade_date")
-            .reset_index(drop=True)
-        )
-        merged = raw.merge(
-            fct[["trade_date", "adj_factor"]], on="trade_date", how="left"
-        )
-        merged["adj_factor"] = merged["adj_factor"].ffill().bfill()
+        _check_factor_coverage(fct, raw, adj, ts_code=ts_code)
+        merged = raw.merge(fct, on="trade_date", how="left")
+        missing = merged["adj_factor"].isna()
+        if missing.any():
+            dates = (
+                merged.loc[missing, "trade_date"]
+                .head(3)
+                .dt.strftime("%Y-%m-%d")
+                .tolist()
+            )
+            raise DataContractError(
+                "AdjFactor",
+                f"{ts_code} 以下交易日缺少 adj_factor（{adj}）：{dates}；"
+                "禁止用 1.0 填充或回退 qfq",
+                invalid=["adj_factor"],
+            )
         # 保留原始价：涨跌停/ST/新股规则必须用交易所原始价判断
         for col in PRICE_COLS:
             if col in merged.columns:
                 merged[f"raw_{col}"] = merged[col].astype(float)
-        # 口径基准（ADR-008）：
-        # - qfq：以区间内最新复权因子为基准（可能对应今天，即使今天日线尚未更新）
-        # - hfq：以原始因子 1.0 为基准，价格随因子累乘放大
-        base = float(fct["adj_factor"].iloc[-1]) if adj == "qfq" else 1.0
-        ratio = merged["adj_factor"] / base if base else 1.0
+        # 口径基准（ADR-008 D1）：
+        # - qfq：以最新复权因子为基准（可能对应今天，即使今天日线尚未更新）
+        # - hfq：以该证券最早可用交易日的因子为基准并令其为 1.0，
+        #   价格 = raw * adj_factor / base_factor；不得把最新因子当 1.0（那是 qfq），
+        #   也不得全市场共用一个基准日。
+        base_factor, base_date = _adj_base(fct, adj)
+        ratio = merged["adj_factor"] / base_factor
         for col in PRICE_COLS:
             if col in merged.columns:
                 merged[col] = merged[col].astype(float) * ratio
         merged["change"] = merged["close"] - merged["pre_close"]
         merged["pct_chg"] = merged["close"] / merged["pre_close"].replace(0, np.nan) * 100 - 100
         raw = merged
+        adjust_meta = _adjustment_meta(adj, base_factor, base_date)
 
     keep = [c for c in RAW_COLS if c in raw.columns]
     keep += [f"raw_{c}" for c in PRICE_COLS if f"raw_{c}" in raw.columns]
     if adj and "adj_factor" in raw.columns:
         keep.append("adj_factor")
-    return validate_bars(
+    out = validate_bars(
         raw[keep].reset_index(drop=True),
         require_adj=bool(adj),
         source=f"{ts_code} daily",
     )
+    out.attrs["adjustment"] = adjust_meta
+    return out
 
 
 def load_daily(
@@ -286,9 +471,11 @@ def load_daily(
 ) -> pd.DataFrame:
     """加载日线，默认前复权。
 
-    - ``adj="qfq"``（默认）：以区间最新复权因子为基准做前复权；
-    - ``adj="hfq"``：以原始因子 1.0 为基准做后复权；
+    - ``adj="qfq"``（默认）：以最新复权因子为基准做前复权；
+    - ``adj="hfq"``：标准后复权，以该证券最早可用交易日的因子为基准（令其为 1.0）；
+      因子=raw*adj_factor/base_factor，最早交易日价格与 raw 相同但量级可跨区间比较；
     - ``adj=None``：不复权（原始成交价），涨跌停/成交异常判断用。
+    - 复权因子的 metadata 写在 ``df.attrs["adjustment"]``（adj/adj_base/adj_source）。
     - 本地 parquet 缓存，按代码/复权方式分文件
     - 当天已更新过则直接用缓存；否则增量重拉
     - 返回按 trade_date 升序、DatetimeIndex 之外的普通列
@@ -333,30 +520,38 @@ def load_daily(
                 cached["trade_date"].min() <= start_eff
                 and cached["trade_date"].max() >= end_eff
             )
-            cache_ok = fetched_today and covers
+            # 缓存 meta 的 base_factor 与数据不一致即失效（ADR-008 §5），
+            # 否则会把按旧基准计算的价格继续当作 qfq/hfq 返回。
+            # qfq 还要按请求 end_eff 取基准行，避免命中缓存后基准随缓存窗口漂移。
+            cache_ok = (
+                fetched_today
+                and covers
+                and _cache_base_valid(meta, cached, adj, end_eff=end_eff)
+            )
 
     if cache_ok and cached is not None:
         result = cached[
             (cached["trade_date"] >= start_eff)
             & (cached["trade_date"] <= pd.Timestamp(end))
         ].copy()
+        adjust_meta = _adjustment_meta(adj, meta.get("base_factor"), meta.get("adj_base"))
     else:
         result = _fetch_daily(client, ts_code, _fmt(start_eff), _fmt(end_eff), adj)
         if result.empty:
             raise TushareError(f"{ts_code} 无行情数据（区间 {_fmt(start_eff)}-{_fmt(end_eff)}）")
         _atomic_parquet(result, path)
-        base_factor = None
-        if "adj_factor" in result.columns and len(result):
-            try:
-                base_factor = float(result["adj_factor"].iloc[-1])
-            except Exception:
-                base_factor = None
+        fresh = dict(result.attrs.get("adjustment") or {})
+        adjust_meta = _adjustment_meta(
+            adj, fresh.get("base_factor"), fresh.get("adj_base")
+        )
         _atomic_text(
             json.dumps(
                 {
                     "ts_code": ts_code,
                     "adj": adj,
-                    "base_factor": base_factor,
+                    "base_factor": adjust_meta["base_factor"],
+                    "adj_base": adjust_meta["adj_base"],
+                    "adj_source": "daily",
                     "start": _fmt(start_eff),
                     "end": _fmt(end_eff),
                     "rows": int(len(result)),
@@ -379,6 +574,7 @@ def load_daily(
         allow_empty=True,
         source=f"load_daily({ts_code})",
     )
+    result.attrs["adjustment"] = adjust_meta
     _cache_put(_DAILY_MEM, mem_key, result)
     return result.copy()
 
@@ -530,7 +726,11 @@ def load_adj_factors(
     end: str | None = None,
     client: TushareClient | None = None,
 ) -> pd.DataFrame:
-    """复权因子（含最新一日），供分钟线前复权使用。内存缓存 1 小时。"""
+    """复权因子全历史（自上市起，含最新一日），供分钟线复权使用。内存缓存 1 小时。
+
+    必须从 ``ADJ_HISTORY_START`` 起取：hfq 的基准是该证券最早可用交易日的因子，
+    只取近几月会得到错误的基准（ADR-008 D1）。因子异常抛 :class:`DataContractError`。
+    """
     code = ts_code.strip().upper()
     end = end or _fmt(_today())
     key = (code, end)
@@ -540,38 +740,78 @@ def load_adj_factors(
             return cached.copy()
 
     client = client or get_client()
-    df = client.query(
-        "adj_factor", ts_code=code, start_date="20150101", end_date=end
+    df = _clean_adj_factors(
+        _query_adj_history(client, code, end),
+        ts_code=code,
+        source=f"分钟线复权因子(end={end})",
     )
-    if df.empty:
-        raise TushareError(f"{code} 复权因子为空")
-    df["trade_date"] = pd.to_datetime(df["trade_date"])
-    df = (
-        df.sort_values("trade_date")
-        .drop_duplicates("trade_date")
-        .reset_index(drop=True)
-    )
-    df["adj_factor"] = pd.to_numeric(df["adj_factor"], errors="coerce")
     _cache_put(_ADJ_MEM, key, (time.time(), df), maxsize=512)
     return df.copy()
 
 
 def _apply_minute_adj(
-    df: pd.DataFrame, factors: pd.DataFrame, adj: str = "qfq"
+    df: pd.DataFrame,
+    factors: pd.DataFrame,
+    adj: str = "qfq",
+    *,
+    ts_code: str = "",
 ) -> pd.DataFrame:
-    """按日复权因子调整分钟 OHLC：qfq 以最新因子为基准，hfq 以原始因子 1.0 为基准；量/额不变。"""
+    """按交易日日线复权因子调整分钟 OHLC（ADR-008 D1）。
+
+    - qfq：以最新已发布因子为基准；
+    - hfq：以该证券最早可用交易日因子为基准（令其为 1.0）；
+    - 缺因子/NaN/inf/``<=0`` 一律抛 :class:`DataContractError`，不 ffill/bfill；
+    - 盘中当日 bar 例外：Tushare 当日 adj_factor 收盘后才发布，而 ``rt_min``
+      的当日 bar 盘中就存在。仅当"缺因子的行都是今天、且因子表末行早于今天"
+      时，用最近已发布因子复权，并在 metadata 标 ``partial=true`` /
+      ``factor_as_of``（下游图注可提示"盘中近似"）；其它任何缺因子仍硬失败；
+    - 分钟路径不另设覆盖断言：因子历史由 ``_query_adj_history`` 分页拉取，
+      截断若落在行情窗口之内，会表现为窗口内某些交易日缺因子，由上面的
+      缺因子硬失败（盘中当日例外）直接拦下——此时再做首末覆盖比较恒为真，
+      属不可达代码，故不保留（评审 iss-mwixznmz-2f393e）；截断恰好早于窗口
+      起点、且窗口内每天都有因子的情形无法在分钟内自证，只能靠分页完整性，
+      边界见 ADR-008 第 8 条；
+    - vol/amount 保持原始值（复权只作用于价格）；
+    - metadata 写 ``out.attrs["adjustment"]``：adj/adj_base/adj_source=daily，
+      分钟 hfq 不与日线 hfq 拼连续序列。
+    """
     if adj not in ("qfq", "hfq"):
         return df
-    if df is None or df.empty or factors is None or factors.empty:
+    if df is None or df.empty:
         return df
-    base = float(factors["adj_factor"].iloc[-1]) if adj == "qfq" else 1.0
-    if not base:
-        return df
-    merged = df.merge(
-        factors[["trade_date", "adj_factor"]], on="trade_date", how="left"
+    fct = _clean_adj_factors(
+        factors, ts_code=ts_code or "?", source=f"分钟线({ts_code or '?'})"
     )
-    merged["adj_factor"] = merged["adj_factor"].ffill().bfill()
-    ratio = merged["adj_factor"] / base
+    base_factor, base_date = _adj_base(fct, adj)
+    merged = df.merge(fct, on="trade_date", how="left")
+    missing = merged["adj_factor"].isna()
+    intraday = pd.Series(False, index=merged.index)
+    partial = False
+    factor_as_of: str | None = None
+    if missing.any():
+        today = pd.Timestamp(_today()).normalize()
+        last_factor_day = pd.Timestamp(fct["trade_date"].max()).normalize()
+        days = pd.to_datetime(merged["trade_date"]).dt.normalize()
+        # 只放行"当日盘中且因子还没发布"这一种缺因子情形
+        intraday = missing & (days == today) & (last_factor_day < today)
+        unexpected = missing & ~intraday
+        if unexpected.any():
+            dates = (
+                merged.loc[unexpected, "trade_date"]
+                .head(3)
+                .dt.strftime("%Y-%m-%d")
+                .tolist()
+            )
+            raise DataContractError(
+                "AdjFactor",
+                f"{ts_code or '?'} 分钟线以下交易日缺少 adj_factor（{adj}）：{dates}；"
+                "禁止用 1.0 填充或回退 qfq",
+                invalid=["adj_factor"],
+            )
+        merged.loc[intraday, "adj_factor"] = float(fct["adj_factor"].iloc[-1])
+        partial = True
+        factor_as_of = last_factor_day.strftime("%Y-%m-%d")
+    ratio = merged["adj_factor"] / base_factor
     for col in ("open", "high", "low", "close", "pre_close"):
         if col in merged.columns:
             merged[col] = pd.to_numeric(merged[col], errors="coerce") * ratio
@@ -579,7 +819,14 @@ def _apply_minute_adj(
     merged["pct_chg"] = (
         merged["close"] / merged["pre_close"].replace(0, np.nan) * 100 - 100
     )
-    return merged.drop(columns=["adj_factor"])
+    out = merged.drop(columns=["adj_factor"])
+    meta = _adjustment_meta(adj, base_factor, base_date)
+    if partial:
+        # 盘中当日 bar 用前一交易日因子近似：图注/下游必须能看到这一点。
+        meta["partial"] = True
+        meta["factor_as_of"] = factor_as_of
+    out.attrs["adjustment"] = meta
+    return out
 
 
 def load_minute(
@@ -595,8 +842,10 @@ def load_minute(
     - ``days <= 1``：走 ``rt_min`` 实时接口，取当日（或最近交易日）
     - ``days > 1``：走 ``stk_mins`` 历史接口，按块拉取，再补当日 ``rt_min``
     - ``adj="qfq"``：按每日复权因子、以最新因子为基准做前复权（默认）
-    - ``adj="hfq"``：以原始因子 1.0 为基准做后复权
+    - ``adj="hfq"``：按每日复权因子、以最早可用交易日因子为基准做后复权
     - ``adj=None``：不复权（原始成交价）
+    - 复权标注写在 ``df.attrs["adjustment"]``（adj/adj_base/adj_source=daily），
+      分钟 hfq 是"逐日独立"序列，不与日线 hfq 拼连续序列（ADR-008 D1）
     - vol 统一为手、amount 统一为千元
     - 当日缓存 30 秒，历史缓存 5 分钟
     """
@@ -666,13 +915,17 @@ def load_minute(
     df = df.copy()
     df["ts_code"] = code
 
+    adjust_meta: dict[str, Any] = {}
     if adj and not df.empty:
         factors = load_adj_factors(code, end=_fmt(_today()), client=client)
-        df = _apply_minute_adj(df, factors, adj)
+        df = _apply_minute_adj(df, factors, adj, ts_code=code)
+        adjust_meta = dict(df.attrs.get("adjustment") or {})
 
     df = validate_bars(
         df, allow_empty=True, source=f"load_minute({code},{freq})"
     )
+    if adjust_meta:
+        df.attrs["adjustment"] = adjust_meta
     _cache_put(_MINUTE_MEM, key, (now, df), maxsize=128)
     return df.copy()
 
