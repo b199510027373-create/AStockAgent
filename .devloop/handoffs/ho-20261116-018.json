@@ -1,0 +1,165 @@
+{
+  "id": "ho-20261116-018",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "复权口径收口：评审 5 条已修（5b10af8），收尾 CI 全绿，PR #15 待第 2 轮复核",
+  "summary": "相对 ho-20261116-017 的状态更新（无代码改动）：交付收尾提交 0a74161（handoff ho-20261116-017）CI run 43820339795 success；计划链接提交 40de90c CI run 43820545497 success；PR #15 当前 OPEN / mergeStateStatus=CLEAN，head 40de90c，检查项 test 与 png-export 均 SUCCESS。评审修复内容与 5 个提交（5b10af8 实现、aade7ea/d0999f9/0a74161/40de90c 计划与交付文档）见 ho-20261116-016；plan-20261114-003 维持 in_review / progress 99，links.test 已收录 10 个 CI run、目标与全量测试、门禁、ruff、mypy 及 000001.SZ 分页实测。",
+  "requirements": [
+    {
+      "id": "P1-1",
+      "text": "分钟盘中当日 bar 因子未发布导致硬失败 → 仅当日缺行用最近已发布因子并标 partial/factor_as_of，非当日缺行仍抛 DataContractError（5b10af8，ADR-008 第 7 条）",
+      "source": "devloop_review rev-20261116-002 / iss-mwiwbdhs-638fac"
+    },
+    {
+      "id": "P1-2",
+      "text": "全历史因子被服务端截断 → query_all 分页 + 首末覆盖断言，实测 6000 vs 8692 行（5b10af8，ADR-008 第 8 条）",
+      "source": "devloop_review rev-20261116-002 / iss-mwiwbdit-0bdd57"
+    },
+    {
+      "id": "P2-3",
+      "text": "hfq 缓存基准不可自证时不采信（row.empty→失效重拉）+ 用例",
+      "source": "devloop_review rev-20261116-002 / iss-mwiwbu35-8b0929"
+    },
+    {
+      "id": "P2-4",
+      "text": "qfq 缓存基准按请求 end（end_eff）比较 + 用例，消除价位随缓存状态漂移",
+      "source": "devloop_review rev-20261116-002 / iss-mwiwc03t-79b597"
+    },
+    {
+      "id": "P2-5",
+      "text": "删重复 ADJ_HISTORY_START 断言，补分钟因子查询 spy",
+      "source": "devloop_review rev-20261116-002 / iss-mwiwc5hr-39603a"
+    },
+    {
+      "id": "P2-extra",
+      "text": "旧 qfq meta 缺 adj_base 一律失效 + 用例",
+      "source": "devloop_review rev-20261116-002 配额说明"
+    },
+    {
+      "id": "R6",
+      "text": "验收⑥展示侧仍归 plan-20261107-006 / plan-20261114-002；本项只提供 attrs[\"adjustment\"] 接口",
+      "source": "plan-20261114-003 acceptance[5]"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/data.py",
+      "summary": "_query_adj_history 分页、_check_factor_coverage、_cache_base_valid(end_eff)、_apply_minute_adj partial",
+      "commit": "5b10af8"
+    },
+    {
+      "path": "tests/test_data_adj_caliber.py",
+      "summary": "FakeClient query_all/日期过滤；新增 8 例（23 例）",
+      "commit": "5b10af8"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-008-price-adjustment-limits.md",
+      "summary": "D1 第 7/8/9 条与落地更新",
+      "commit": "5b10af8"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-003.json",
+      "summary": "in_review / progress 99 / links.test",
+      "commit": "aade7ea"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261116-016.md",
+      "summary": "评审逐条修复说明",
+      "commit": "aade7ea"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-003.json",
+      "summary": "补分页实测与 CI run",
+      "commit": "d0999f9"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261116-017.md",
+      "summary": "阶段状态更新 handoff",
+      "commit": "0a74161"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-003.json",
+      "summary": "handoff 链接与 10 个 CI run 记录",
+      "commit": "40de90c"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py tests/test_data_pit_events.py tests/test_quant.py tests/test_contracts.py -q -p no:cacheprovider",
+      "result": "97 passed, 10 subtests passed in 14.63s",
+      "passed": true,
+      "evidence": "目标 + 相关回归"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py -q",
+      "result": "23 passed in 1.38s",
+      "passed": true,
+      "evidence": "新增 8 例全绿"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "536 passed, 1 skipped, 12 subtests passed in 65.74s",
+      "passed": true,
+      "evidence": "全量无倒退（528→536）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "32 passed, 1 skipped",
+      "passed": true,
+      "evidence": "门禁"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同款规则"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 35 source files",
+      "passed": true,
+      "evidence": "类型检查"
+    },
+    {
+      "command": "gh pr view 15 --json state,mergeStateStatus,headRefOid,statusCheckRollup",
+      "result": "OPEN CLEAN head 40de90c；test SUCCESS；png-export SUCCESS",
+      "passed": true,
+      "evidence": "PR 全绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub push / PR 更新 / CI 查询",
+      "reason": "推送修复与交付文档、读取 PR #15 检查状态",
+      "status": "granted"
+    },
+    {
+      "name": "全仓 ruff 风格规则收敛",
+      "reason": "312 条为既有告警（main 同样存在），CI 仅跑 E9/F63/F7/F82；如需收敛应单独立项",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "fix/data-adj-caliber",
+    "commit": "40de90c（实现 5b10af8；计划与交付文档 aade7ea/d0999f9/0a74161/40de90c）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/15",
+    "ci": "43819638467 (5b10af8) / 43819897831 (aade7ea) / 43820096432 (d0999f9) / 43820339795 (0a74161) / 43820545497 (40de90c) 均 success；PR 检查 test、png-export SUCCESS",
+    "merge": "未合并；PR #15 OPEN，mergeStateStatus=CLEAN，等待第 2 轮复核",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261116-017",
+  "next": "1) 第 2 轮 diff 复核：5b10af8（实现/测试/ADR）+ aade7ea/d0999f9/0a74161/40de90c（计划与交付文档），共 5 个提交；重点看 P1-1 intraday 判定不会放行历史缺行、P1-2 覆盖校验在\"因子末日==行情末日\"边界不误报。2) 复核通过即可合并；合并后复跑 main CI，并把 attrs[\"adjustment\"]（含分钟 partial/factor_as_of）接到 plan-20261107-006 行情工具与 plan-20261114-002 图注（验收⑥，本项不含）。3) 语义提醒：pct_chg/change 保持交易所 raw 口径，复权收益率用 close.pct_change()；盘中分钟为近似复权，展示层应标\"盘中近似（因子截至 factor_as_of）\"。4) 全仓 ruff 312 条既有风格告警不在本任务范围。",
+  "createdAt": "2026-11-16T07:00:57.359Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-018.md"
+}
