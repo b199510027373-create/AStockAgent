@@ -25,9 +25,12 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import sqlite3
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -50,6 +53,7 @@ from astock.agent.store import (
     artifact_id_for,
     connect,
     ensure_run,
+    fail_run,
     get_artifact,
     put_content,
     record_artifact,
@@ -59,14 +63,18 @@ from astock.agent.types import ToolResult
 
 __all__ = [
     "CODE_VERSION",
+    "DEFAULT_FONT_FAMILY",
     "FIGURE_DIV_PREFIX",
+    "PNGExportError",
     "PRICE_DOWN",
     "PRICE_UP",
     "RenderedFigure",
     "apply_transforms",
     "figure_div_id",
     "figure_tool_result",
+    "font_family",
     "render",
+    "reset_png_probe_cache",
 ]
 
 #: 记录进 artifact 元数据的代码版本（``ASTOCK_CODE_VERSION`` 可覆盖，默认取包版本）。
@@ -93,6 +101,91 @@ _TIME_COLUMN_NAMES = frozenset(
 )
 _TIME_COLUMN_HINTS = ("date", "time")
 
+#: 中文字体栈（CSS ``font-family``，从左到右取第一个已安装字体）。
+#: Linux CI 装 fonts-noto-cjk，Windows 开发机用雅黑/黑体；可用 ``ASTOCK_CHART_FONT`` 覆盖。
+#: 只设 ``font.size`` 不设 family 时，浏览器会回退到无 CJK 字形的字体 → 中文变方块（评审 P1）。
+DEFAULT_FONT_FAMILY = "Noto Sans CJK SC, Microsoft YaHei, SimHei, sans-serif"
+
+#: PNG 导出模式：``off`` 不尝试、``auto`` 失败降级、``require`` 失败抛 :class:`PNGExportError`。
+PNG_MODES = ("off", "auto", "require")
+
+#: 运行期环境类失败（缺 kaleido / 找不到 Chrome / 超时）：``auto`` 模式缓存后不再逐图重试。
+_PNG_ENV_FAILURE_HINTS = (
+    "kaleido",
+    "chrome",
+    "chromium",
+    "browser",
+    "executable",
+    "not found",
+    "no such file",
+    "timed out",
+    "timeout",
+    "cannot connect",
+)
+
+#: 进程级探测缓存：首次环境类失败的原因；``reset_png_probe_cache()`` 清空。
+_PNG_PROBE_FAILURE: str | None = None
+
+
+class PNGExportError(RuntimeError):
+    """``png_mode="require"`` 下 PNG 导出失败（显式请求不得静默降级）。"""
+
+
+def font_family() -> str:
+    """返回图表字体栈；``ASTOCK_CHART_FONT`` 可覆盖（例如只装了思源黑体的环境）。"""
+    return (os.getenv("ASTOCK_CHART_FONT") or "").strip() or DEFAULT_FONT_FAMILY
+
+
+def reset_png_probe_cache() -> None:
+    """清空 PNG 环境探测缓存（测试或运行期更换 Chrome/字体后调用）。"""
+    global _PNG_PROBE_FAILURE
+    _PNG_PROBE_FAILURE = None
+    _chrome_identity.cache_clear()
+
+
+def _is_env_failure(reason: str | None) -> bool:
+    text = (reason or "").lower()
+    return any(hint in text for hint in _PNG_ENV_FAILURE_HINTS)
+
+
+def _kaleido_version() -> str:
+    try:
+        return _pkg_version("kaleido")
+    except PackageNotFoundError:
+        return "unavailable"
+
+
+@lru_cache(maxsize=1)
+def _chrome_identity() -> tuple[str | None, str]:
+    """返回 ``(chrome_path, chrome_version)``，用于 PNG artifact 追溯。
+
+    kaleido 0.2.x 自带浏览器 → ``("bundled", "bundled")``；1.x 由 choreographer 发现系统
+    Chrome / CI 预装 Chrome。仓库禁子进程调用（架构门禁），故不执行 ``chrome --version``：
+    Windows 安装路径里带版本目录（``...\\Chrome\\Application\\126.0.6478.127\\chrome.exe``）时
+    解析出 ``126.0.6478.127``，否则记 ``unknown`` 并保留路径。
+    """
+    version = _kaleido_version()
+    if version.startswith("0."):
+        return "bundled", "bundled"
+    if version == "unavailable":
+        return None, "unavailable"
+    path: str | None = None
+    try:  # pragma: no cover - 依赖 kaleido 1.x 的私有布局
+        from choreographer.browsers import Chromium
+
+        path = Chromium.find_browser(skip_local=False)
+    except Exception:  # noqa: BLE001 - 探测失败不能影响渲染
+        path = None
+    path = path or os.environ.get("BROWSER_PATH")
+    # Linux 的 chrome 路径不带版本号；CI 用 ``google-chrome --version`` 显式传入。
+    override = (os.environ.get("ASTOCK_CHROME_VERSION") or "").strip()
+    if override:
+        return str(path) if path else None, override
+    if not path:
+        return None, "unknown"
+    match = re.search(r"(\d+\.\d+\.\d+\.\d+)", str(path))
+    return str(path), match.group(1) if match else "unknown"
+
 
 def figure_div_id(spec: Mapping[str, Any], snapshot: Mapping[str, Any]) -> str:
     """确定性 div id：``astock-chart-<8 hex>``，输入 = 规范化 spec + 数据快照行。"""
@@ -106,14 +199,23 @@ def figure_div_id(spec: Mapping[str, Any], snapshot: Mapping[str, Any]) -> str:
 
 
 def _runtime_versions() -> dict[str, str]:
-    """记录复现所需的运行环境版本（plotly 6.x 与 7.x 输出的 HTML 字节不同）。"""
+    """记录复现所需的运行环境版本（plotly/kaleido 输出字节随版本漂移）。
+
+    PNG 追溯要求「字体 + 版本」可查（评审 P1）：HTML 复现看 plotly，PNG 复现看
+    plotly + kaleido + Chrome + font.family，缺一项换环境就可能得到不同像素。
+    """
     try:
         plotly_version = _pkg_version("plotly")
     except PackageNotFoundError:  # pragma: no cover - plotly 是硬依赖
         plotly_version = "unknown"
+    chrome_path, chrome_version = _chrome_identity()
     return {
         "plotly_version": plotly_version,
         "python_version": platform.python_version(),
+        "kaleido_version": _kaleido_version(),
+        "chrome_version": chrome_version,
+        "chrome_path": chrome_path or "",
+        "font_family": font_family(),
     }
 
 #: 数据方来源解析器：签名 ``(data_section) -> DataFrame``，供工具层注入自定义取数。
@@ -701,7 +803,8 @@ def _build_candlestick(
             increasing_fillcolor=PRICE_UP,
             decreasing_line_color=PRICE_DOWN,
             decreasing_fillcolor=PRICE_DOWN,
-            showlegend=False,
+            # 图例保留中文「K 线」条目：ADR-016 Q6=A 要求中文图例在 PNG 中可读，
+            # 不设 showlegend=False，图例位置见下方 update_layout。
         ),
         row=1,
         col=1,
@@ -874,7 +977,7 @@ def _build_candlestick(
         height=420 + 120 * (rows - 1),
         margin={"l": 52, "r": 18, "t": 78, "b": 36},
         hovermode="x unified",
-        legend={"orientation": "h", "y": 1.02, "x": 0},
+        legend={"orientation": "h", "y": 1.02, "x": 1, "xanchor": "right"},
         bargap=0.1,
     )
     figure.update_xaxes(showgrid=True, gridcolor=GRID, rangeslider_visible=False)
@@ -1005,12 +1108,17 @@ def _build_figure(
 ) -> go.Figure:
     kind = str(spec["kind"])
     if kind == "candlestick":
-        return _build_candlestick(frame, spec, caption=caption, period=period)
-    if kind == "heatmap":
-        return _build_heatmap(frame, spec, caption)
-    if kind == "histogram":
-        return _build_histogram(frame, spec, caption)
-    return _build_xy(kind, frame, spec, caption)
+        figure = _build_candlestick(frame, spec, caption=caption, period=period)
+    elif kind == "heatmap":
+        figure = _build_heatmap(frame, spec, caption)
+    elif kind == "histogram":
+        figure = _build_histogram(frame, spec, caption)
+    else:
+        figure = _build_xy(kind, frame, spec, caption)
+    # 统一注入字体栈（标题/坐标轴/图例/annotation 都继承 layout.font）：
+    # 中文必须命中 CJK 字体，否则浏览器回退成方块（评审 P1；只设 size 不够）。
+    figure.update_layout(font={"family": font_family(), "size": 14})
+    return figure
 
 
 def _add_annotations(
@@ -1141,13 +1249,72 @@ def _params(
     }
 
 
+#: kaleido 1.5.1 + Chrome 首次渲染偶发的页面竞态（``ReferenceError: kaleido_scopes is not defined``）；
+#: 重试一次即可恢复，属引擎噪音而非环境缺失，不能直接判 degraded（Windows/CI 均有观测）。
+_TRANSIENT_PNG_ERROR_HINTS = ("kaleido_scopes is not defined", "timed out")
+
+
+def _is_transient_png_error(reason: str) -> bool:
+    lowered = reason.lower()
+    return any(hint in lowered for hint in _TRANSIENT_PNG_ERROR_HINTS)
+
+
 def _try_png(figure: go.Figure, *, width: int, height: int) -> tuple[bytes | None, str | None]:
-    """导出 PNG；kaleido 缺失时返回 ``(None, 原因)``，绝不抛异常。"""
-    try:
-        payload = figure.to_image(format="png", width=width, height=height, scale=1)
-    except (ValueError, RuntimeError, ImportError, ModuleNotFoundError) as exc:
-        return None, str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
-    return bytes(payload), None
+    """导出 PNG；kaleido 缺失时返回 ``(None, 原因)``，绝不抛异常。
+
+    kaleido 1.x 偶发首帧竞态（见 ``_TRANSIENT_PNG_ERROR_HINTS``）时重试一次：
+    这类失败与「没装 kaleido / 没 Chrome」不同，重试成功就不该降级。
+    """
+    reason = ""
+    for attempt in range(2):
+        try:
+            payload = figure.to_image(format="png", width=width, height=height, scale=1)
+        except (ValueError, RuntimeError, ImportError, ModuleNotFoundError) as exc:
+            reason = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+            if attempt == 0 and _is_transient_png_error(reason):
+                continue
+            return None, reason
+        return bytes(payload), None
+    return None, reason
+
+
+def _remember_png_failure(reason: str | None) -> None:
+    """``auto`` 模式记住环境类失败，避免每张图重复起 Chrome（评审 P2）。"""
+    global _PNG_PROBE_FAILURE
+    _PNG_PROBE_FAILURE = reason or "unknown"
+
+
+def _png_artifact(
+    payload: bytes,
+    *,
+    artifact_id: str,
+    artifact_root: str | None,
+    width: int,
+    height: int,
+    elapsed_ms: int,
+) -> tuple[str, dict[str, Any]]:
+    """落盘 PNG 并返回 ``(绝对路径, 追溯元数据)``。
+
+    PNG 与 HTML 各自内容寻址、分属不同 digest 目录；meta 里同时记
+    ``png_rel_path``/``png_digest``/尺寸/字体/版本，HTML artifact 行即可反查 PNG（评审 P1）。
+    """
+    digest, rel_path, absolute = put_content(
+        payload, filename=f"chart_{artifact_id}.png", root=artifact_root
+    )
+    chrome_path, chrome_version = _chrome_identity()
+    return str(absolute), {
+        "png_rel_path": rel_path,
+        "png_digest": digest,
+        "png_bytes": len(payload),
+        "png_width": width,
+        "png_height": height,
+        "png_scale": 1,
+        "png_elapsed_ms": elapsed_ms,
+        "font_family": font_family(),
+        "kaleido_version": _kaleido_version(),
+        "chrome_version": chrome_version,
+        "chrome_path": chrome_path or "",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1171,12 +1338,25 @@ def render(
     data_time: str | None = None,
     include_plotlyjs: str | bool = "inline",
     export_png: bool = True,
+    png_mode: str | None = None,
 ) -> RenderedFigure:
-    """``spec`` → Plotly Figure → 自包含 HTML（+ 可选 PNG）→ ``agent_artifacts``。
+    """``spec`` → Plotly Figure → 自包含 HTML（+ PNG）→ ``agent_artifacts``。
+
+    ``png_mode`` 三态（评审 P2，ADR-016 Q6=A）：
+
+    * ``"auto"``（默认）：尝试导出；失败降级为仅 HTML，``degraded=True`` 并告警一次；
+      缺 kaleido / Chrome 这类环境失败会缓存探测结果，避免每张图重复起浏览器。
+    * ``"require"``：显式请求 PNG，失败抛 :class:`PNGExportError`（不落半成品 artifact）。
+    * ``"off"``：不尝试 PNG，只产出 HTML。
+
+    ``export_png`` 是兼容别名：``False`` → ``off``，``True`` → ``auto``；显式 ``png_mode`` 优先。
 
     非法 spec 抛 :class:`astock.agent.chart_spec.ChartSpecError`（字段 + 原因），
     调用方把 ``exc.to_dict()`` 原样回传模型即可重试。
     """
+    mode = (png_mode or ("auto" if export_png else "off")).strip().lower()
+    if mode not in PNG_MODES:
+        raise ValueError(f"png_mode 必须是 {PNG_MODES} 之一，实际 {png_mode!r}")
     normalized = validate_chart_spec(spec)
     warnings: list[str] = []
     owned = conn is None
@@ -1232,23 +1412,88 @@ def render(
         artifact_id = artifact_id_for(digest, "chart.html")
 
         png_path: str | None = None
+        png_meta: dict[str, Any] = {
+            "png_rel_path": None,
+            "png_digest": None,
+            "png_bytes": None,
+            "png_width": None,
+            "png_height": None,
+            "png_scale": None,
+            "png_elapsed_ms": None,
+            "font_family": font_family(),
+            "kaleido_version": _kaleido_version(),
+            "chrome_version": _chrome_identity()[1],
+            "chrome_path": _chrome_identity()[0] or "",
+        }
         degraded = False
-        if export_png:
-            payload, reason = _try_png(
-                figure, width=int(figure.layout.width or 960), height=int(figure.layout.height or 520)
-            )
+        png_error: str | None = None
+        run_key = run_id or f"run_chart_{artifact_id}"
+        width = int(figure.layout.width or 960)
+        height = int(figure.layout.height or 520)
+
+        if mode == "require":
+            started = time.perf_counter()
+            payload, reason = _try_png(figure, width=width, height=height)
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
             if payload is None:
+                # 显式请求不得静默降级：run 记 failed，且不落 artifact 行（不留半成品）。
+                ensure_run(
+                    connection,
+                    run_key,
+                    session_id=session_id,
+                    provider="local",
+                    model="chart_render",
+                    code_version=version,
+                    status="failed",
+                )
+                # ensure_run 对已存在的 run 不覆盖状态（Agent 循环可能已预建 running），
+                # 这里再显式落 failed，保证 meta 与 ops 文档语义一致（评审 P2）。
+                fail_run(
+                    connection,
+                    run_key,
+                    error=f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}",
+                )
+                raise PNGExportError(
+                    f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}"
+                )
+            png_path, png_meta = _png_artifact(
+                payload,
+                artifact_id=artifact_id,
+                artifact_root=artifact_root,
+                width=width,
+                height=height,
+                elapsed_ms=elapsed_ms,
+            )
+        elif mode == "auto":
+            if _PNG_PROBE_FAILURE:
                 degraded = True
+                png_error = _PNG_PROBE_FAILURE
                 warnings.append(
-                    f"{PNG_DEGRADED_WARNING_PREFIX}：{reason}（仅 HTML artifact）"
+                    f"{PNG_DEGRADED_WARNING_PREFIX}：{_PNG_PROBE_FAILURE}"
+                    "（进程内已探测失败，跳过重试；png_mode='require' 可强制重试）"
                 )
             else:
-                _, _, absolute_png = put_content(
-                    payload, filename=f"chart_{artifact_id}.png", root=artifact_root
-                )
-                png_path = str(absolute_png)
+                started = time.perf_counter()
+                payload, reason = _try_png(figure, width=width, height=height)
+                elapsed_ms = int((time.perf_counter() - started) * 1000)
+                if payload is None:
+                    degraded = True
+                    png_error = reason
+                    warnings.append(
+                        f"{PNG_DEGRADED_WARNING_PREFIX}：{reason or '未知原因'}（仅 HTML artifact）"
+                    )
+                    if _is_env_failure(reason):
+                        _remember_png_failure(reason)
+                else:
+                    png_path, png_meta = _png_artifact(
+                        payload,
+                        artifact_id=artifact_id,
+                        artifact_root=artifact_root,
+                        width=width,
+                        height=height,
+                        elapsed_ms=elapsed_ms,
+                    )
 
-        run_key = run_id or f"run_chart_{artifact_id}"
         ensure_run(
             connection,
             run_key,
@@ -1274,6 +1519,15 @@ def render(
             "degraded": degraded,
             "warnings": list(warnings),
             "png_path": png_path,
+            "png_mode": mode,
+            "png_error": png_error,
+            # 本次渲染是否复用了旧 PNG（store._merge_artifact_meta 在重写同一 artifact 时置 True）。
+            "png_reused": False,
+            # 产出当前 png_path 的那次导出模式；本次没出 PNG 时由 store 从旧 meta 回填。
+            "png_source_mode": mode if png_path else None,
+            # 复用旧 PNG 时保留本次失败原因，png_error 归 None，避免 provenance 自相矛盾。
+            "png_last_attempt_error": None,
+            **png_meta,
             "data": snapshot,
         }
         artifact_id = record_artifact(

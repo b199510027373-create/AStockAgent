@@ -224,7 +224,7 @@ hline     {y: number, label?: str ≤ 60}   vline {x: str|number, label?}   text
 - `time_point_scope` ∈ `market`（未被 `transforms` 裁剪的行情时点）/`view`（图上前端视图时点）/`unknown`（取不到时点）；
 - 复现前提：同一 `spec`、同一份数据快照、**同一 plotly 版本与 `include_plotlyjs` 设置**。`params` 里记录 `plotly_version`/`python_version`/`include_plotlyjs`，HTML 的 div id 由 `spec + 数据快照` 派生（`astock-chart-<8 hex>`），因此同输入字节稳定、不同图不共享 id；
 - 同一 `artifact_id` 重复渲染时 `meta_json` 以**最新一次写入为准**（例如先降级出 HTML、后补齐 PNG，`degraded`/`png_path` 必须升级），行数仍为 1；
-- 无 `kaleido` 时只出 HTML（`png_path=None`），不抛异常，并在 `ToolResult.metadata` 标 `degraded=true`；PNG 在 ADR-016 补充裁决（2026-11-14 Q6=A）后升为 v1 支持功能，版本锁定/Chrome/字体/CI 真实导出由 plan-20261114-001 落地；
+- 无 `kaleido` 时只出 HTML（`png_path=None`），不抛异常，并在 `ToolResult.metadata` 标 `degraded=true`；PNG 在 ADR-016 补充裁决（2026-11-14 Q6=A）后升为 v1 支持功能，版本锁定/Chrome/字体/CI 真实导出由 plan-20261114-001 落地，见 [docs/AStockAgent_png_export_ops.md](AStockAgent_png_export_ops.md)；`render(..., png_mode=...)` 三态：`off` 不尝试、`auto`（默认）失败降级并缓存环境探测、`require` 失败抛 `PNGExportError`；
 - 渲染器**不得**执行 spec 之外的任何代码；`transforms` 只走白名单算子。
 - 审计边界（Q5=C）：目标形态是 `chart_service` 作为唯一审计入口、artifact 数据源走 `ArtifactReader` 只读协议；v1 暂由 `chart_render.render()` 直接写 `agent_artifacts`，迁移与拆分见 plan-20261114-002。
 
