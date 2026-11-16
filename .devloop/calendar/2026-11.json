@@ -504,6 +504,16 @@
       "notes": "第 1 轮 · request_changes"
     },
     {
+      "id": "cal-rev-20261116-002-r2",
+      "type": "review",
+      "title": "评审：评审：复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
+      "start": "2026-11-16T07:08:25.726Z",
+      "end": "2026-11-16T07:10:02.787Z",
+      "planItemId": "plan-20261114-003",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261110-005-planned",
       "type": "planned",
       "title": "ADR-016 图表：ChartSpec v1 校验与渲染（不执行任意 Python）",

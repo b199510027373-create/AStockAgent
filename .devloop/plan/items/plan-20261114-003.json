@@ -33,23 +33,27 @@
     "branch": "fix/data-adj-caliber",
     "handoff": [
       "ho-20261116-016",
-      "ho-20261116-017"
+      "ho-20261116-018",
+      "ho-20261116-020"
     ],
     "module": [
       "data"
     ],
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/15",
+    "review": [
+      "rev-20261116-002"
+    ],
     "test": [
-      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py tests/test_data_pit_events.py tests/test_quant.py tests/test_contracts.py -q -> 97 passed, 10 subtests passed (14.63s)",
-      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py -q -> 23 passed (1.38s) [评审 rev-20261116-002 后新增 8 例]",
-      ".venv\\Scripts\\python.exe -m pytest tests -q -> 536 passed, 1 skipped, 12 subtests passed (65.74s)",
+      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py -q -> 25 passed, 10 subtests passed (1.12s) [含评审第 2 轮新增 2 例分钟截断]",
+      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py tests/test_data_pit_events.py tests/test_quant.py tests/test_contracts.py -q -> 99 passed, 10 subtests passed (9.17s)",
+      ".venv\\Scripts\\python.exe -m pytest tests -q -> 538 passed, 1 skipped, 12 subtests passed (58.05s)",
       ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q -> 32 passed, 1 skipped",
       ".venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed!",
       ".venv\\Scripts\\python.exe -m mypy astock app.py -> Success: no issues found in 35 source files",
       "客户端实测 adj_factor 000001.SZ 19900101-20261116：query 6000 行/最早 20020304 vs query_all 8692 行/最早 19910403（证明截断）",
-      "GitHub Actions runs 43782366648 / 43782567956 / 43794324481 / 43795063293 / 43795349946 / 43795764674 / 43819638467 / 43819897831 / 43820096432 / 43820339795 (0a74161) -> test pass"
+      "GitHub Actions runs 43794324481 / 43795063293 / 43795349946 / 43795764674 / 43819638467 / 43819897831 / 43820096432 / 43820339795 / 43820545497 / 43820816497 / 43822962615 (ac23253) -> test pass"
     ]
   },
   "createdAt": "2026-11-13T19:08:42.756Z",
-  "updatedAt": "2026-11-16T06:58:54.121Z"
+  "updatedAt": "2026-11-16T07:21:07.626Z"
 }
