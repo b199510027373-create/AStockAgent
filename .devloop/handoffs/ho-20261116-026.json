@@ -1,0 +1,53 @@
+{
+  "id": "ho-20261116-026",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-003",
+  "threadId": "rev-20261116-002",
+  "sessionId": "",
+  "title": "PR #15 已合并（196cfb2），main CI 全绿；验收⑥仍待下游计划项",
+  "summary": "按用户指令（m00768「请合并，我后续会复跑」）合并 PR #15：merge commit 196cfb2 进入 main（22 个提交，含第 3 轮清扫 761e9fa 与计划/交付文档 a5fbcf6/0012fed）。合并后 main CI run 43825652380 全绿。计划项 plan-20261114-003 进度 100、状态保持 in_review——验收⑥（行情工具与图表图注展示复权口径）属 plan-20261107-006 / plan-20261114-002，按评审判定在两者完成前不标完全解决。相对 ho-20261116-024 的修改痕迹只有状态字段：PR OPEN→MERGED、CI 由 branch runs 变为 main run 43825652380，代码与测试无任何改动。",
+  "requirements": [],
+  "changes": [],
+  "tests": [
+    {
+      "command": "gh pr merge 15 --merge（合并动作本身）",
+      "result": "196cfb2 Merge pull request #15",
+      "passed": true,
+      "evidence": "git log origin/main -2：196cfb2 / 0012fed"
+    },
+    {
+      "command": "gh run view 43825652380 --json status,conclusion,headSha",
+      "result": "completed / success / 196cfb2",
+      "passed": true,
+      "evidence": "main 合并提交的 CI 全绿"
+    },
+    {
+      "command": "gh run view 43825102013 --json status,conclusion",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "合并前 PR head 0012fed 的 CI"
+    }
+  ],
+  "permissions": [],
+  "delivery": {
+    "branch": "main",
+    "commit": "196cfb2",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/15",
+    "ci": "main CI run 43825652380（196cfb2）success；PR #15 合并前 head 0012fed 的 run 43825102013 success",
+    "merge": "已合并：PR #15 merge commit 196cfb2（22 个提交），分支 fix/data-adj-caliber 保留",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261116-024",
+  "next": "1) 用户复跑时若发现口径问题，按 ADR-008 D1 补充裁决 1-9 定位（尤其分钟 partial 与 query_all 分页）；2) 验收⑥仍待 plan-20261107-006（行情窗口展示 adj/adj_base/adj_source）与 plan-20261114-002（图表图注消费 partial/factor_as_of）完成，两者完成后可把本项从 in_review 转 done；3) 全仓 ruff 312 条既有风格告警单独立项；4) 分支 fix/data-adj-caliber 已合并，可删除（保留待用户确认）。",
+  "createdAt": "2026-11-16T07:44:34.462Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-026.md"
+}
