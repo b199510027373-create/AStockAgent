@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import pandas as pd
-
 import gradio as gr
+import pandas as pd
 
 from .optimize import grid_heatmap, grid_search, load_data, oos_figure, walk_forward
 from .utils import is_code, normalize_code

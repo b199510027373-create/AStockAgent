@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import pandas as pd
-
 import gradio as gr
+import pandas as pd
 
 from .charts import (
     candlestick_figure,

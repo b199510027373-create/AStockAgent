@@ -16,6 +16,11 @@ line-length = 120
 # `ruff check astock tests` 的范围内。这里显式排除，避免本地随手 `ruff check .`
 # 与 CI 结论不一致；该文件的清理单独排期（P3），清理前不做任何行为改动。
 exclude = ["app.py"]
+#
+# 本地复核提示：Ruff 的 isort 会把仓库根下「同名顶层目录」自动当成 first-party，
+# 例如本机遗留的未跟踪 `gradio/` 目录会让 `import gradio as gr` 被判为 first-party，
+# 从而本地 I001 全绿而 CI（干净检出）报 9 条。提交前如果本地有此类残留目录，
+# 先移走/清理，或用干净 worktree 复核：`ruff check astock tests`。
 
 [lint]
 # 显式选择规则族 + 少量单条规则；不接受默认集。

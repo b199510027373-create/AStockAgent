@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import pandas as pd
-
 import gradio as gr
+import pandas as pd
 
 from .recommend import parse_universe
 from .strategy_lab import portfolio_figure, portfolio_walk_forward

@@ -237,6 +237,7 @@ class BannerCaveatDedupTests(unittest.TestCase):
 class RecommendTabBannerTests(unittest.TestCase):
     def test_tab_places_banner_above_static_warning(self):
         import gradio as gr
+
         from astock import recommend_ui
 
         demo = gr.Blocks()
@@ -260,6 +261,7 @@ class RecommendTabBannerTests(unittest.TestCase):
 
     def test_builder_returns_banner_that_is_refreshed_on_load(self):
         import gradio as gr
+
         from astock import recommend_ui
 
         demo = gr.Blocks()

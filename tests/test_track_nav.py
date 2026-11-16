@@ -542,6 +542,7 @@ class TrackUiWiringTests(unittest.TestCase):
 
     def test_build_track_tab_folds_excess_tables_below_nav(self):
         import gradio as gr
+
         from astock import track_ui
 
         demo = gr.Blocks()
