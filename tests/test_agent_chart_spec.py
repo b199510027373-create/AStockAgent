@@ -646,3 +646,35 @@ def test_freeze_doc_records_alias_removal() -> None:
     assert "别名已删除" in text
     assert "Q4=B" in text
     assert "panes" in text and "style" in text and "raw" in text
+
+
+def test_freeze_v1_doc_stays_v1_and_v2_only_lives_in_draft() -> None:
+    """冻结清单一律按 v1 口径读：v2 语义只能待在草案文件里（评审 P1）。
+
+    2026-11-14 曾把 ``agent_artifact_versions``/``view_as_of``/``data_digest`` 等 v2 口径
+    就地写进 v1 冻结清单，而 ``main`` 的实现仍是 v1，导致「文档说 v2、代码是 v1」。
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    v1 = (root / "docs" / "AStockAgent_interface_freeze_v1.md").read_text(encoding="utf-8")
+    for marker in (
+        "v2 覆盖",
+        "agent_artifact_versions",
+        "view_as_of",
+        "data_digest",
+        "已由",
+    ):
+        assert marker not in v1, marker
+    # v1 仍然记录自己那套 meta（不许随着「去 v2」一起丢）
+    assert "time_point_scope" in v1
+    assert "png_path" in v1
+
+    draft = (root / "docs" / "AStockAgent_interface_freeze_v2_draft.md").read_text(
+        encoding="utf-8"
+    )
+    assert "草案、未实现" in draft
+    assert "plan-20261114-002" in draft
+    assert "不作为当前实现依据" in draft
+    assert "agent_artifact_versions" in draft
+
