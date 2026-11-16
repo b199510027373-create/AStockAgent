@@ -141,6 +141,22 @@ class DailyAdjCaliberTests(unittest.TestCase):
         self.assertTrue(np.allclose(ratio, 4.0))
         self.assertNotEqual(float(hfq["close"].iloc[-1]), float(qfq["close"].iloc[-1]))
 
+    def test_hfq_price_and_return_follow_known_factor_series(self):
+        """已知因子序列 2→4→8：价格 = raw*f/2，收益率 = 原始收益率×(f_t/f_{t-1})。"""
+        raw = _daily_frame()
+        factors = pd.Series([2.0, 4.0, 8.0])
+        out = data._fetch_daily(
+            FakeClient(raw, _factors()), "600519.SH", "20250102", "20250106", "hfq"
+        )
+        self.assertTrue(np.allclose(out["close"], raw["close"] * factors / 2.0))
+        factor_ratio = factors / factors.shift(1)
+        expected_ret = (raw["close"].pct_change() + 1.0) * factor_ratio - 1.0
+        self.assertTrue(np.allclose(out["close"].pct_change().iloc[1:], expected_ret.iloc[1:]))
+        # 交易所原始涨跌幅字段保持 raw 口径：复权只改价格列，不改交易所收益率语义
+        self.assertTrue(
+            np.allclose(out["pct_chg"], raw["close"] / raw["pre_close"] * 100 - 100)
+        )
+
     def test_raw_columns_and_volume_are_never_adjusted(self):
         out = data._fetch_daily(FakeClient(_daily_frame(), _factors()), "600519.SH", "20250102", "20250106", "hfq")
         self.assertAlmostEqual(float(out["raw_close"].iloc[-1]), 12.2)
