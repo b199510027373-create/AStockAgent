@@ -24,24 +24,44 @@ from astock.contracts import DataContractError
 
 
 class FakeClient:
-    """最小 Tushare 替身：daily + adj_factor，记录调用参数。"""
+    """最小 Tushare 替身：daily + adj_factor，按日期区间过滤并记录调用参数。"""
 
     def __init__(self, daily: pd.DataFrame, factors: pd.DataFrame | None):
         self.daily = daily
         self.factors = factors
         self.calls: list[str] = []
         self.factor_kwargs: list[dict] = []
+        self.query_all_calls: list[tuple[str, dict]] = []
+
+    @staticmethod
+    def _window(df: pd.DataFrame | None, start, end) -> pd.DataFrame:
+        if df is None:
+            return pd.DataFrame()
+        out = df.copy()
+        if out.empty or "trade_date" not in out.columns:
+            return out
+        if start:
+            out = out[out["trade_date"] >= pd.Timestamp(start)]
+        if end:
+            out = out[out["trade_date"] <= pd.Timestamp(end)]
+        return out.copy()
 
     def query(self, api_name, **kwargs):
         self.calls.append(api_name)
         if api_name == "daily":
-            return self.daily.copy()
+            return self._window(
+                self.daily, kwargs.get("start_date"), kwargs.get("end_date")
+            )
         if api_name == "adj_factor":
             self.factor_kwargs.append(kwargs)
-            if self.factors is None:
-                return pd.DataFrame()
-            return self.factors.copy()
+            return self._window(
+                self.factors, kwargs.get("start_date"), kwargs.get("end_date")
+            )
         raise AssertionError(f"unexpected api: {api_name}")
+
+    def query_all(self, api_name, **kwargs):
+        self.query_all_calls.append((api_name, kwargs))
+        return self.query(api_name, **kwargs)
 
 
 class FakeMinuteClient(FakeClient):
@@ -81,20 +101,19 @@ def _factors(values=(2.0, 4.0, 8.0)) -> pd.DataFrame:
     )
 
 
-def _minute_frame() -> pd.DataFrame:
+def _minute_frame(*, include_today: bool = False) -> pd.DataFrame:
+    dates = ["2025-01-02", "2025-01-03"] + (["2025-01-06"] if include_today else [])
     return pd.DataFrame(
         {
-            "trade_date": pd.to_datetime(["2025-01-02", "2025-01-03"]),
-            "trade_time": pd.to_datetime(
-                ["2025-01-02 09:35:00", "2025-01-03 09:35:00"]
-            ),
-            "open": [10.0, 11.0],
-            "high": [10.5, 11.5],
-            "low": [9.8, 10.8],
-            "close": [10.0, 11.0],
-            "pre_close": [10.0, 10.0],
-            "vol": [100.0, 200.0],
-            "amount": [1000.0, 2000.0],
+            "trade_date": pd.to_datetime(dates),
+            "trade_time": pd.to_datetime([f"{d} 09:35:00" for d in dates]),
+            "open": [10.0, 11.0, 12.0][: len(dates)],
+            "high": [10.5, 11.5, 12.5][: len(dates)],
+            "low": [9.8, 10.8, 11.8][: len(dates)],
+            "close": [10.0, 11.0, 12.0][: len(dates)],
+            "pre_close": [10.0, 10.0, 11.0][: len(dates)],
+            "vol": [100.0, 200.0, 300.0][: len(dates)],
+            "amount": [1000.0, 2000.0, 3000.0][: len(dates)],
         }
     )
 
@@ -126,8 +145,10 @@ class DailyAdjCaliberTests(unittest.TestCase):
         self.assertEqual(out.attrs["adjustment"]["adj_base"], "2025-01-02")
         # 因子查询必须从上市初开始，不能用请求区间推断基准
         self.assertEqual(fake.factor_kwargs[0]["start_date"], data.ADJ_HISTORY_START)
-        # 因子查询必须从上市初开始，不能用请求区间推断基准
-        self.assertEqual(fake.factor_kwargs[0]["start_date"], data.ADJ_HISTORY_START)
+        # 走分页 query_all：单次 query 会被服务端行数上限截断（实测 000001.SZ
+        # 单次只返回 6000 行、最早 20020304，分页后 8692 行、最早 19910403）
+        self.assertEqual(fake.query_all_calls[0][0], "adj_factor")
+        self.assertEqual(fake.query_all_calls[0][1]["start_date"], data.ADJ_HISTORY_START)
 
     def test_qfq_and_hfq_are_distinct_and_unmixed(self):
         frame = _daily_frame()
@@ -205,6 +226,34 @@ class DailyAdjCaliberTests(unittest.TestCase):
                 "hfq",
             )
 
+    def test_hfq_factor_history_truncated_at_start_raises(self):
+        """因子表最早交易日晚于行情首日：hfq 基准不可证，必须报错而不是缩放全序列。"""
+        factors = _factors().iloc[1:]  # 最早 2025-01-03，行情从 2025-01-02 开始
+        with self.assertRaises(DataContractError) as ctx:
+            data._fetch_daily(
+                FakeClient(_daily_frame(), factors),
+                "600519.SH",
+                "20250102",
+                "20250106",
+                "hfq",
+            )
+        self.assertIn("疑似被截断", str(ctx.exception))
+        self.assertIn("hfq", str(ctx.exception))
+
+    def test_qfq_factor_history_truncated_at_end_raises(self):
+        """因子表最新交易日早于行情末日：qfq 基准缺失，必须报错。"""
+        factors = _factors().iloc[:2]  # 最新 2025-01-03，行情到 2025-01-06
+        with self.assertRaises(DataContractError) as ctx:
+            data._fetch_daily(
+                FakeClient(_daily_frame(), factors),
+                "600519.SH",
+                "20250102",
+                "20250106",
+                "qfq",
+            )
+        self.assertIn("疑似被截断", str(ctx.exception))
+        self.assertIn("qfq", str(ctx.exception))
+
 
 class MinuteAdjCaliberTests(unittest.TestCase):
     def test_minute_hfq_uses_daily_factor_and_labels_metadata(self):
@@ -263,6 +312,60 @@ class MinuteAdjCaliberTests(unittest.TestCase):
         self.assertEqual(out.attrs["adjustment"]["adj"], "hfq")
         self.assertEqual(out.attrs["adjustment"]["adj_base"], "2025-01-02")
         self.assertEqual(out.attrs["adjustment"]["adj_source"], "daily")
+
+    def test_minute_intraday_bar_uses_latest_published_factor(self):
+        """盘中当日 bar 已存在、当日 adj_factor 尚未发布（评审 P1-1a）。
+
+        只有"缺的都是今天且因子表末行早于今天"才用最近已发布因子复权，
+        并标 partial/factor_as_of；否则交易时段 K 线（ui 默认 qfq）整体不可用。
+        """
+        minute = _minute_frame(include_today=True)
+        factors = _factors().iloc[:2]  # 只有 01-02/01-03 的因子，01-06 未发布
+        with patch.object(data, "_today", return_value=pd.Timestamp("2025-01-06")):
+            out = data._apply_minute_adj(minute, factors, "qfq", ts_code="600519.SH")
+        # qfq 基准 = 最新已发布因子 4.0，当日 bar 用同一因子 → 价格不缩放
+        self.assertAlmostEqual(float(out["close"].iloc[-1]), 12.0)
+        meta = out.attrs["adjustment"]
+        self.assertEqual(meta["adj"], "qfq")
+        self.assertEqual(meta["adj_base"], "2025-01-03")
+        self.assertEqual(meta["base_factor"], 4.0)
+        self.assertTrue(meta["partial"])
+        self.assertEqual(meta["factor_as_of"], "2025-01-03")
+
+    def test_minute_missing_non_intraday_factor_still_raises(self):
+        """非当日缺因子不得被盘中例外吞掉：仍必须硬失败。"""
+        minute = _minute_frame(include_today=True)
+        factors = _factors().iloc[:2]  # 缺 2025-01-06
+        with patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")):
+            with self.assertRaises(DataContractError) as ctx:
+                data._apply_minute_adj(minute, factors, "qfq", ts_code="600519.SH")
+        self.assertIn("2025-01-06", str(ctx.exception))
+        self.assertIn("禁止用 1.0 填充或回退 qfq", str(ctx.exception))
+
+    def test_load_minute_requests_factor_history_from_listing(self):
+        """分钟线复权因子也必须自上市起分页拉取（评审 P2-5）。"""
+        minute = pd.DataFrame(
+            {
+                "time": ["2025-01-02 09:35:00"],
+                "open": [10.0],
+                "high": [10.1],
+                "low": [9.9],
+                "close": [10.0],
+                "vol": [1000],
+                "amount": [10000],
+            }
+        )
+        fake = FakeMinuteClient(minute, _factors())
+        with (
+            patch.object(data, "_MINUTE_MEM", {}),
+            patch.object(data, "_ADJ_MEM", {}),
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-06")),
+        ):
+            data.load_minute("600519.SH", freq="5min", days=1, adj="qfq", client=fake)
+        self.assertEqual([c[0] for c in fake.query_all_calls], ["adj_factor"])
+        params = fake.query_all_calls[0][1]
+        self.assertEqual(params["start_date"], data.ADJ_HISTORY_START)
+        self.assertEqual(params["end_date"], data._fmt(pd.Timestamp("2025-01-06")))
 
 
 class DailyCacheBaseInvalidationTests(unittest.TestCase):
@@ -331,6 +434,55 @@ class DailyCacheBaseInvalidationTests(unittest.TestCase):
             self.assertEqual(out.attrs["adjustment"]["base_factor"], 8.0)
             self.assertEqual(out.attrs["adjustment"]["adj_base"], "2025-01-06")
             self.assertEqual(out.attrs["adjustment"]["adj"], "qfq")
+
+    def test_hfq_cache_without_base_day_in_window_is_invalidated(self):
+        """缓存按请求区间切片，通常不含上市首日 → 基准不可证即失效重拉（评审 P2-3）。"""
+        p1, p2, p3, p4 = self._patch()
+        with p1, p2, p3, p4:
+            data.load_daily(
+                "600519.SH", start="2025-01-03", end="2025-01-06", adj="hfq",
+                client=FakeClient(_daily_frame(), _factors()),
+            )
+            _, meta_path = data._cache_paths("600519.SH", "hfq")
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertEqual(meta["adj_base"], "2025-01-02")  # 基准日不在缓存窗口内
+            data._DAILY_MEM.clear()
+
+            fake2 = FakeClient(_daily_frame(), _factors())
+            out = data.load_daily(
+                "600519.SH", start="2025-01-03", end="2025-01-06", adj="hfq", client=fake2
+            )
+            self.assertIn("daily", fake2.calls)  # 无法自证 → 必须重拉
+            self.assertEqual(out.attrs["adjustment"]["base_factor"], 2.0)
+
+    def test_qfq_cache_base_follows_requested_end(self):
+        """同一缓存窗口、不同 end：qfq 基准必须按请求 end 取最新因子（评审 P2-4）。"""
+        p1, p2, p3, p4 = self._patch()
+        with p1, p2, p3, p4:
+            self._load(FakeClient(_daily_frame(), _factors()), adj="qfq", end="2025-01-06")
+            data._DAILY_MEM.clear()
+
+            fake2 = FakeClient(_daily_frame(), _factors())
+            out = self._load(fake2, adj="qfq", end="2025-01-03")
+            self.assertIn("daily", fake2.calls)  # 请求 end 更早 → 基准不同 → 重拉
+            self.assertEqual(out.attrs["adjustment"]["adj_base"], "2025-01-03")
+            self.assertEqual(out.attrs["adjustment"]["base_factor"], 4.0)
+
+    def test_legacy_qfq_cache_without_adj_base_is_invalidated(self):
+        """旧版 qfq meta 没有 adj_base：命中会让标注退化成 None → 必须失效（ADR-008:42）。"""
+        p1, p2, p3, p4 = self._patch()
+        with p1, p2, p3, p4:
+            self._load(FakeClient(_daily_frame(), _factors()), adj="qfq")
+            _, meta_path = data._cache_paths("600519.SH", "qfq")
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta.pop("adj_base", None)
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+            data._DAILY_MEM.clear()
+
+            fake2 = FakeClient(_daily_frame(), _factors())
+            out = self._load(fake2, adj="qfq")
+            self.assertIn("daily", fake2.calls)
+            self.assertEqual(out.attrs["adjustment"]["adj_base"], "2025-01-06")
 
 
 if __name__ == "__main__":

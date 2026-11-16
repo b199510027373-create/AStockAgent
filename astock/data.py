@@ -268,6 +268,54 @@ def _clean_adj_factors(
     )
 
 
+def _query_adj_history(
+    client: TushareClient, ts_code: str, end: str
+) -> pd.DataFrame:
+    """拉取自 ``ADJ_HISTORY_START`` 起的全部 adj_factor（ADR-008 D1）。
+
+    单次 ``query`` 会被服务端行数上限截断：实测 000001.SZ 从 19900101 起
+    单次查询只返回 6000 行（最早 20020304），而该股票 19910403 就上市；
+    换成 ``query_all`` 分页后为 8692 行、最早 19910403。截断落在最早一端时
+    hfq 基准会静默取错，因此这里优先分页，并把覆盖校验交给调用方。
+    """
+    params = {"ts_code": ts_code, "start_date": ADJ_HISTORY_START, "end_date": end}
+    query_all = getattr(client, "query_all", None)
+    if callable(query_all):
+        df = query_all("adj_factor", **params)
+        if isinstance(df, pd.DataFrame):
+            return df
+    return client.query("adj_factor", **params)
+
+
+def _check_factor_coverage(
+    fct: pd.DataFrame, raw: pd.DataFrame, adj: str, *, ts_code: str
+) -> None:
+    """因子表必须覆盖行情区间两端（ADR-008 D1）。
+
+    服务端对单次查询有行数上限，截断若落在最早一段，``_adj_base`` 会拿到
+    错误的"最早因子"且全序列整体缩放错误、没有任何异常——这里显式报错。
+    """
+    first_raw = pd.Timestamp(raw["trade_date"].min())
+    last_raw = pd.Timestamp(raw["trade_date"].max())
+    first_fct = pd.Timestamp(fct["trade_date"].min())
+    last_fct = pd.Timestamp(fct["trade_date"].max())
+    if adj == "hfq" and first_fct > first_raw:
+        raise DataContractError(
+            "AdjFactor",
+            f"{ts_code} 复权因子最早 {first_fct:%Y-%m-%d} 晚于行情最早 "
+            f"{first_raw:%Y-%m-%d}（{adj}）：因子历史疑似被截断，"
+            "hfq 基准必须是该证券最早可用交易日的因子",
+            invalid=["adj_factor"],
+        )
+    if adj == "qfq" and last_fct < last_raw:
+        raise DataContractError(
+            "AdjFactor",
+            f"{ts_code} 复权因子最新 {last_fct:%Y-%m-%d} 早于行情最新 "
+            f"{last_raw:%Y-%m-%d}（{adj}）：因子历史疑似被截断",
+            invalid=["adj_factor"],
+        )
+
+
 def _adj_base(factors: pd.DataFrame, adj: str) -> tuple[float, pd.Timestamp]:
     """复权基准因子与基准日（ADR-008 D1）。
 
@@ -294,14 +342,21 @@ def _adjustment_meta(
     }
 
 
-def _cache_base_valid(meta: dict, cached: pd.DataFrame, adj: str | None) -> bool:
+def _cache_base_valid(
+    meta: dict, cached: pd.DataFrame, adj: str | None, end_eff: Any = None
+) -> bool:
     """缓存 meta 的 ``base_factor`` 与缓存数据不一致时视为失效（ADR-008 §5）。
 
     只做可自证的内部一致性检查，不联网：
 
-    - qfq：基准必须等于缓存最后一行的因子；
-    - hfq：缓存覆盖基准日时，该日因子必须等于记录的 ``base_factor``；
-      旧版 meta 没有 ``adj_base``（hfq 曾以 1.0 为基准）一律失效重拉。
+    - 任何复权口径都必须带 ``adj_base``：旧版 meta 缺它说明基准口径不可考
+      （历史 qfq 缓存曾以"缓存末行因子"为基准、hfq 曾以 1.0 为基准），
+      一律失效重拉，避免命中缓存后返回 ``adj_base=None`` 的标注；
+    - qfq：基准必须等于缓存中 ``trade_date <= end_eff`` 的最后一行因子。
+      ``_fetch_daily`` 用请求 ``end`` 的最新因子做基准，若命中缓存时改用
+      缓存末行（可能更晚）的因子，同一个请求会随缓存状态漂移；
+    - hfq：缓存必须覆盖基准日且该日因子等于 ``base_factor``。缓存按请求区间
+      切片，通常不含上市首日，无法自证时按失效处理（CACHE-01：基准不可证即失效）。
     """
     if not adj:
         return True
@@ -312,17 +367,22 @@ def _cache_base_valid(meta: dict, cached: pd.DataFrame, adj: str | None) -> bool
         return False
     if not np.isfinite(stored) or stored <= 0:
         return False
+    if not meta.get("adj_base"):
+        return False
     if "adj_factor" not in cached.columns or cached.empty:
         return False
-    ordered = cached.sort_values("trade_date")
+    ordered = cached.sort_values("trade_date").reset_index(drop=True)
+    horizon = (
+        pd.Timestamp(end_eff) if end_eff is not None else ordered["trade_date"].max()
+    )
     if adj == "qfq":
-        return bool(np.isclose(float(ordered["adj_factor"].iloc[-1]), stored))
-    base_date = meta.get("adj_base")
-    if not base_date:
-        return False
-    row = ordered[ordered["trade_date"] == pd.Timestamp(base_date)]
+        window = ordered[ordered["trade_date"] <= horizon]
+        if window.empty:
+            return False
+        return bool(np.isclose(float(window["adj_factor"].iloc[-1]), stored))
+    row = ordered[ordered["trade_date"] == pd.Timestamp(meta["adj_base"])]
     if row.empty:
-        return True  # 缓存区间未覆盖基准日，无法自证，按 meta 采信
+        return False  # 基准日不在缓存窗口内，无法自证 → 失效重拉
     return bool(np.isclose(float(row["adj_factor"].iloc[0]), stored))
 
 
@@ -346,16 +406,14 @@ def _fetch_daily(
     adjust_meta = _adjustment_meta(adj, None, None)
     if adj:
         # 因子必须取全历史：hfq 的基准是"最早可用交易日"，不能用请求区间首日。
+        # 用分页 query_all 拉取，并校验因子表两端覆盖行情（服务端截断会让
+        # hfq 基准静默取错）。
         fct = _clean_adj_factors(
-            client.query(
-                "adj_factor",
-                ts_code=ts_code,
-                start_date=ADJ_HISTORY_START,
-                end_date=end,
-            ),
+            _query_adj_history(client, ts_code, end),
             ts_code=ts_code,
             source=f"{adj} 日线复权因子",
         )
+        _check_factor_coverage(fct, raw, adj, ts_code=ts_code)
         merged = raw.merge(fct, on="trade_date", how="left")
         missing = merged["adj_factor"].isna()
         if missing.any():
@@ -464,7 +522,12 @@ def load_daily(
             )
             # 缓存 meta 的 base_factor 与数据不一致即失效（ADR-008 §5），
             # 否则会把按旧基准计算的价格继续当作 qfq/hfq 返回。
-            cache_ok = fetched_today and covers and _cache_base_valid(meta, cached, adj)
+            # qfq 还要按请求 end_eff 取基准行，避免命中缓存后基准随缓存窗口漂移。
+            cache_ok = (
+                fetched_today
+                and covers
+                and _cache_base_valid(meta, cached, adj, end_eff=end_eff)
+            )
 
     if cache_ok and cached is not None:
         result = cached[
@@ -678,9 +741,7 @@ def load_adj_factors(
 
     client = client or get_client()
     df = _clean_adj_factors(
-        client.query(
-            "adj_factor", ts_code=code, start_date=ADJ_HISTORY_START, end_date=end
-        ),
+        _query_adj_history(client, code, end),
         ts_code=code,
         source=f"分钟线复权因子(end={end})",
     )
@@ -697,9 +758,13 @@ def _apply_minute_adj(
 ) -> pd.DataFrame:
     """按交易日日线复权因子调整分钟 OHLC（ADR-008 D1）。
 
-    - qfq：以最新因子为基准；
+    - qfq：以最新已发布因子为基准；
     - hfq：以该证券最早可用交易日因子为基准（令其为 1.0）；
     - 缺因子/NaN/inf/``<=0`` 一律抛 :class:`DataContractError`，不 ffill/bfill；
+    - 盘中当日 bar 例外：Tushare 当日 adj_factor 收盘后才发布，而 ``rt_min``
+      的当日 bar 盘中就存在。仅当"缺因子的行都是今天、且因子表末行早于今天"
+      时，用最近已发布因子复权，并在 metadata 标 ``partial=true`` /
+      ``factor_as_of``（下游图注可提示"盘中近似"）；其它任何缺因子仍硬失败；
     - vol/amount 保持原始值（复权只作用于价格）；
     - metadata 写 ``out.attrs["adjustment"]``：adj/adj_base/adj_source=daily，
       分钟 hfq 不与日线 hfq 拼连续序列。
@@ -714,16 +779,31 @@ def _apply_minute_adj(
     base_factor, base_date = _adj_base(fct, adj)
     merged = df.merge(fct, on="trade_date", how="left")
     missing = merged["adj_factor"].isna()
+    partial = False
+    factor_as_of: str | None = None
     if missing.any():
-        dates = (
-            merged.loc[missing, "trade_date"].head(3).dt.strftime("%Y-%m-%d").tolist()
-        )
-        raise DataContractError(
-            "AdjFactor",
-            f"{ts_code or '?'} 分钟线以下交易日缺少 adj_factor（{adj}）：{dates}；"
-            "禁止用 1.0 填充或回退 qfq",
-            invalid=["adj_factor"],
-        )
+        today = pd.Timestamp(_today()).normalize()
+        last_factor_day = pd.Timestamp(fct["trade_date"].max()).normalize()
+        days = pd.to_datetime(merged["trade_date"]).dt.normalize()
+        # 只放行"当日盘中且因子还没发布"这一种缺因子情形
+        intraday = missing & (days == today) & (last_factor_day < today)
+        unexpected = missing & ~intraday
+        if unexpected.any():
+            dates = (
+                merged.loc[unexpected, "trade_date"]
+                .head(3)
+                .dt.strftime("%Y-%m-%d")
+                .tolist()
+            )
+            raise DataContractError(
+                "AdjFactor",
+                f"{ts_code or '?'} 分钟线以下交易日缺少 adj_factor（{adj}）：{dates}；"
+                "禁止用 1.0 填充或回退 qfq",
+                invalid=["adj_factor"],
+            )
+        merged.loc[intraday, "adj_factor"] = float(fct["adj_factor"].iloc[-1])
+        partial = True
+        factor_as_of = last_factor_day.strftime("%Y-%m-%d")
     ratio = merged["adj_factor"] / base_factor
     for col in ("open", "high", "low", "close", "pre_close"):
         if col in merged.columns:
@@ -733,7 +813,12 @@ def _apply_minute_adj(
         merged["close"] / merged["pre_close"].replace(0, np.nan) * 100 - 100
     )
     out = merged.drop(columns=["adj_factor"])
-    out.attrs["adjustment"] = _adjustment_meta(adj, base_factor, base_date)
+    meta = _adjustment_meta(adj, base_factor, base_date)
+    if partial:
+        # 盘中当日 bar 用前一交易日因子近似：图注/下游必须能看到这一点。
+        meta["partial"] = True
+        meta["factor_as_of"] = factor_as_of
+    out.attrs["adjustment"] = meta
     return out
 
 

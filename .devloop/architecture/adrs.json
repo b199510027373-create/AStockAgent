@@ -91,7 +91,7 @@
     "title": "价格口径：qfq 信号 + raw 限价 + ST/IPO",
     "status": "accepted",
     "date": "2026-11-03",
-    "summary": "信号与展示统一 qfq，成交/涨跌停只用原始价；ST 5%；缓存记录 base_factor。2026-11-14 D1：hfq 基准=该证券最早可用交易日因子并置 1.0，因子缺失/<=0/NaN/inf 硬失败，分钟线 metadata 带 adj/adj_base/adj_source=daily；2026-11-16 plan-20261114-003 已落地。",
+    "summary": "信号与展示统一 qfq，成交/涨跌停只用原始价；ST 5%；缓存记录 base_factor。2026-11-14 D1：hfq 基准=该证券最早可用交易日因子并置 1.0，因子缺失/<=0/NaN/inf 硬失败，分钟线 metadata 带 adj/adj_base/adj_source=daily；2026-11-16 plan-20261114-003 已落地；同日评审 rev-20261116-002 补：盘中当日 bar 用最近已发布因子并标 partial/factor_as_of、全历史因子走 query_all 且校验首末覆盖、缓存 adj_base 可自证才命中（qfq 按请求 end）。",
     "tags": [
       "复权",
       "回测",
