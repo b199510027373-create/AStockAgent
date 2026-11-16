@@ -112,6 +112,19 @@ class ActiveIndustriesTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             sw.active_industries(pd.DataFrame({"code": ["A"], "industry": ["银行"]}), "2021-12-09")
 
+    def test_duplicate_active_codes_are_reported(self) -> None:
+        frame = _members(
+            [
+                ("B", "化工", "2020-01-01", None, "SW2014"),
+                ("B", "采掘", "2021-01-01", None, "SW2014"),
+            ]
+        )
+        conflicts = sw.active_industry_conflicts(frame, "2021-12-09")
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["code"], "B")
+        self.assertEqual(conflicts[0]["n_records"], 2)
+        self.assertEqual(conflicts[0]["industries"], ["化工", "采掘"])
+
 
 class PairingTests(unittest.TestCase):
     def test_paired_assignments_inner_join(self) -> None:
@@ -277,6 +290,28 @@ class SnapshotMetricsTests(unittest.TestCase):
         self.assertAlmostEqual(post["ambiguous_share_weight"], 0.0)
 
 
+class DistributionTableTests(unittest.TestCase):
+    def _snapshot(self) -> pd.DataFrame:
+        rows = [
+            ("2021-11-30", "A", "采掘", 10.0, "SW2014"),
+            ("2021-11-30", "B", "化工", 20.0, "SW2014"),
+            ("2021-11-30", "C", "银行", 30.0, "SW2014"),
+            ("2021-11-30", "D", "半导体", 40.0, "SW2014"),
+        ]
+        return pd.DataFrame(rows, columns=["date", "code", "industry", "weight", "industry_version"])
+
+    def test_fallback_rows_are_marked_and_denominators_are_explicit(self) -> None:
+        dist = sw.distribution_table(self._snapshot(), SUMMARY)
+        self.assertEqual(set(dist["is_sw"]), {True, False})
+        bank = _row(dist, industry="银行")
+        self.assertAlmostEqual(bank["weight_share"], 0.3)
+        self.assertAlmostEqual(bank["sw_weight_share"], 0.5)
+        fallback = _row(dist, industry="半导体")
+        self.assertFalse(fallback["is_sw"])
+        self.assertAlmostEqual(fallback["weight_share"], 0.4)
+        self.assertAlmostEqual(fallback["sw_weight_share"], 40 / 60, places=6)
+
+
 class BridgeDiffTests(unittest.TestCase):
     def _snapshot(self) -> pd.DataFrame:
         rows = [
@@ -333,7 +368,9 @@ class ArtifactTests(unittest.TestCase):
                 self.assertTrue((tmp / sw.EDGES_FILE).exists())
                 self.assertTrue((tmp / sw.SUMMARY_FILE).exists())
                 with patch.object(sw, "sw_l1_members", side_effect=AssertionError("cache miss")):
-                    second_edges, second_summary = sw.build_crosswalk_artifacts(refresh=False)
+                    second_edges, second_summary = sw.build_crosswalk_artifacts(
+                        refresh=False, old_members=OLD_MEMBERS, new_members=NEW_MEMBERS
+                    )
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         self.assertEqual(len(first_edges), len(second_edges))
@@ -342,6 +379,125 @@ class ArtifactTests(unittest.TestCase):
         self.assertTrue(
             any(row["sw2021_l1"] == "美容护理" and row["mapping"] == "none" for row in second_summary["backmap"])
         )
+
+    def test_threshold_change_forces_rebuild(self) -> None:
+        tmp = Path(".tmp-test") / "crosswalk_threshold_cache"
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        try:
+            with patch.object(sw, "PIT_DIR", tmp):
+                loose_edges, _ = sw.build_crosswalk_artifacts(
+                    refresh=True, old_members=OLD_MEMBERS, new_members=NEW_MEMBERS
+                )
+                strict_edges, strict_summary = sw.build_crosswalk_artifacts(
+                    refresh=False,
+                    old_members=OLD_MEMBERS,
+                    new_members=NEW_MEMBERS,
+                    old_share=0.60,
+                    new_share=0.90,
+                )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(strict_summary["thresholds"]["structural_old_share"], 0.60)
+        self.assertEqual(int(loose_edges["is_structural"].sum()), 9)
+        self.assertEqual(int(strict_edges["is_structural"].sum()), 7)
+
+    def test_bridge_date_change_forces_rebuild(self) -> None:
+        tmp = Path(".tmp-test") / "crosswalk_date_cache"
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        try:
+            with patch.object(sw, "PIT_DIR", tmp):
+                _, first = sw.build_crosswalk_artifacts(
+                    refresh=True, old_members=OLD_MEMBERS, new_members=NEW_MEMBERS
+                )
+                _, second = sw.build_crosswalk_artifacts(
+                    refresh=False,
+                    old_members=OLD_MEMBERS,
+                    new_members=NEW_MEMBERS,
+                    old_date="2021-12-01",
+                )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(first["bridge_old_date"], "2021-12-09")
+        self.assertEqual(second["bridge_old_date"], "2021-12-01")
+
+    def test_distribution_window_changes_artifact_key_and_rebuilds(self) -> None:
+        tmp = Path(".tmp-test") / "crosswalk_distribution_cache"
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        summary = {
+            "bridge_old_date": "2021-12-09",
+            "bridge_new_date": "2021-12-13",
+            "thresholds": {"structural_old_share": 0.2, "structural_new_share": 0.5},
+            "one_to_many": {},
+            "many_to_one": {},
+            "unmatched": {
+                "sw2014_l1_total": ["采掘", "化工", "银行"],
+                "sw2021_l1_total": ["煤炭", "基础化工", "银行"],
+            },
+        }
+
+        def fake_snapshot(index_code: str, start, end, refresh: bool = False) -> pd.DataFrame:
+            days = ("2021-12-01", "2021-12-13") if pd.Timestamp(start).month == 6 else ("2021-12-13",)
+            rows = []
+            for day in days:
+                rows.append(
+                    {
+                        "date": day,
+                        "code": "A",
+                        "weight": 1.0,
+                        "industry": "银行",
+                        "industry_version": "SW2014" if day.endswith("01") else "SW2021",
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        try:
+            with patch.object(sw, "PIT_DIR", tmp), patch.object(
+                sw, "build_crosswalk_artifacts", return_value=(CLASSIFY_EDGES, summary)
+            ), patch.object(sw, "snapshot_window", side_effect=fake_snapshot):
+                first_dist, first_metrics = sw.build_distribution_artifacts(
+                    "000300.SH", "2021-06-01", "2021-08-31", refresh=True
+                )
+                second_dist, second_metrics = sw.build_distribution_artifacts(
+                    "000300.SH", "2021-09-01", "2021-11-30", refresh=False
+                )
+                self.assertTrue(
+                    (tmp / "sw_crosswalk_metrics_000300.SH_20210601_20210831.parquet").exists()
+                )
+                self.assertTrue(
+                    (tmp / "sw_crosswalk_meta_000300.SH_20210901_20211130.json").exists()
+                )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(len(first_metrics), 2)
+        self.assertEqual(len(second_metrics), 1)
+
+    def test_export_audit_docs_keeps_month_ends_plus_switch_day(self) -> None:
+        tmp = Path(".tmp-test") / "crosswalk_docs_export"
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        metrics = pd.DataFrame(
+            {
+                "date": pd.to_datetime(
+                    ["2021-11-29", "2021-11-30", "2021-12-13", "2021-12-31", "2022-01-03"]
+                ),
+                "industry_version": ["SW2014"] * 2 + ["SW2021"] * 3,
+            }
+        )
+        try:
+            crosswalk_path, metrics_path = sw.export_audit_docs(CLASSIFY_EDGES, metrics, docs_dir=tmp)
+            exported = pd.read_csv(metrics_path, encoding="utf-8-sig")
+            edges = pd.read_csv(crosswalk_path, encoding="utf-8-sig")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(len(exported), 4)
+        self.assertEqual(
+            sorted(exported["date"]),
+            ["2021-11-30", "2021-12-13", "2021-12-31", "2022-01-03"],
+        )
+        self.assertEqual(len(edges), len(CLASSIFY_EDGES))
 
     def test_snapshot_window_is_chunked_and_deduplicated(self) -> None:
         calls: list[tuple[pd.Timestamp, pd.Timestamp]] = []

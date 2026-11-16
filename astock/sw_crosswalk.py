@@ -11,8 +11,15 @@ It only reads the same membership snapshots and writes separate artefacts:
 
 - ``cache/pit/sw_crosswalk_edges.parquet``        old -> new edge table
 - ``cache/pit/sw_crosswalk_summary.json``         classification + unmatched lists
-- ``cache/pit/sw_crosswalk_distribution_<index>.parquet``
-- ``cache/pit/sw_crosswalk_metrics_<index>.parquet``
+- ``cache/pit/sw_crosswalk_distribution_<index>_<start>_<end>.parquet``
+- ``cache/pit/sw_crosswalk_metrics_<index>_<start>_<end>.parquet``
+- ``cache/pit/sw_crosswalk_meta_<index>_<start>_<end>.json``  cache key
+- ``cache/pit/sw_crosswalk_bridge_<index>_<start>_<end>.json``
+
+Every artifact cache is keyed by its inputs: the edge cache checks bridge
+dates, thresholds and membership fingerprints; the distribution cache also
+checks the index and window, so changing ``--start/--end`` can never silently
+return a different window's rows.
 
 Structural edge rule (documented, testable, and reported with the data):
 an edge is *structural* when it covers >= 20% of the old industry's stocks or
@@ -25,6 +32,7 @@ versions.  Thresholds live in :data:`STRUCTURAL_OLD_SHARE` /
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -46,7 +54,13 @@ STRUCTURAL_NEW_SHARE = 0.50
 
 EDGES_FILE = "sw_crosswalk_edges.parquet"
 SUMMARY_FILE = "sw_crosswalk_summary.json"
-BRIDGE_FILE_TEMPLATE = "sw_crosswalk_bridge_{index}.json"
+BRIDGE_FILE_TEMPLATE = "sw_crosswalk_bridge_{index}_{start}_{end}.json"
+DIST_FILE_TEMPLATE = "sw_crosswalk_distribution_{index}_{start}_{end}.parquet"
+METRICS_FILE_TEMPLATE = "sw_crosswalk_metrics_{index}_{start}_{end}.parquet"
+META_FILE_TEMPLATE = "sw_crosswalk_meta_{index}_{start}_{end}.json"
+
+SW2014_MEMBERS_FILE = "sw2014_l1_members.parquet"
+SW2021_MEMBERS_FILE = "sw2021_l1_members.parquet"
 
 _EDGE_COLUMNS = [
     "sw2014_l1",
@@ -77,6 +91,108 @@ def _read_parquet(path: Path) -> pd.DataFrame | None:
         return pd.read_parquet(path) if path.exists() else None
     except Exception:
         return None
+
+
+def _members_fingerprint(members: pd.DataFrame | None) -> str | None:
+    """Stable content hash for a membership frame (used as a cache key)."""
+    if members is None or members.empty:
+        return None
+    columns = ["code", "industry", "in_date", "out_date"]
+    missing = sorted(set(columns) - set(members.columns))
+    if missing:
+        return None
+    frame = members[columns].copy()
+    frame["code"] = frame["code"].astype(str)
+    frame["industry"] = frame["industry"].astype(str)
+    for column in ("in_date", "out_date"):
+        parsed = pd.to_datetime(frame[column], errors="coerce")
+        frame[column] = parsed.dt.strftime("%Y-%m-%d").fillna("")
+    frame = frame.sort_values(columns).reset_index(drop=True)
+    payload = "\n".join("\t".join(row) for row in frame.itertuples(index=False, name=None))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _cache_members_fingerprint(members: pd.DataFrame | None, path: Path) -> str | None:
+    if members is not None:
+        return _members_fingerprint(members)
+    return _members_fingerprint(_read_parquet(path))
+
+
+def _frame_fingerprint(frame: pd.DataFrame | None) -> str | None:
+    if frame is None or frame.empty:
+        return None
+    values = pd.util.hash_pandas_object(frame, index=True).to_numpy().tobytes()
+    return hashlib.sha256(values).hexdigest()
+
+
+def _cache_matches(
+    summary: dict[str, Any],
+    *,
+    old_date: Any,
+    new_date: Any,
+    old_share: float,
+    new_share: float,
+    old_fingerprint: str | None,
+    new_fingerprint: str | None,
+) -> bool:
+    """Return True only when cached edges were built from the requested inputs."""
+    try:
+        thresholds = summary["thresholds"]
+        inputs = summary["inputs"]
+        return (
+            summary["bridge_old_date"] == pd.Timestamp(old_date).strftime("%Y-%m-%d")
+            and summary["bridge_new_date"] == pd.Timestamp(new_date).strftime("%Y-%m-%d")
+            and float(thresholds["structural_old_share"]) == float(old_share)
+            and float(thresholds["structural_new_share"]) == float(new_share)
+            and inputs["sw2014_members"] == old_fingerprint
+            and inputs["sw2021_members"] == new_fingerprint
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def active_industry_conflicts(
+    members: pd.DataFrame | None,
+    day: Any,
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """List codes with more than one active membership row on ``day``.
+
+    ``active_industries`` keeps the latest ``in_date`` and, for exact ties,
+    the last row in cache order.  Surfacing conflicts makes that tie-break
+    auditable instead of silent.
+    """
+    if members is None or members.empty:
+        return []
+    required = {"code", "industry", "in_date", "out_date"}
+    if required - set(members.columns):
+        return []
+    day_ts = pd.Timestamp(day).normalize()
+    frame = members[["code", "industry", "in_date", "out_date"]].copy()
+    frame["code"] = frame["code"].astype(str)
+    frame["industry"] = frame["industry"].astype(str)
+    frame["in_date"] = pd.to_datetime(frame["in_date"], errors="coerce")
+    frame["out_date"] = pd.to_datetime(frame["out_date"], errors="coerce")
+    frame = frame.dropna(subset=["code", "industry", "in_date"])
+    active = frame[
+        (frame["in_date"] <= day_ts)
+        & (frame["out_date"].isna() | (frame["out_date"] > day_ts))
+    ]
+    rows = []
+    for code, group in active.groupby("code", sort=True):
+        if len(group) <= 1:
+            continue
+        rows.append(
+            {
+                "code": str(code),
+                "n_records": int(len(group)),
+                "n_industries": int(group["industry"].nunique()),
+                "industries": sorted(set(group["industry"])),
+                "in_dates": sorted(group["in_date"].dt.strftime("%Y-%m-%d")),
+            }
+        )
+    return rows[:limit]
 
 
 def active_industries(members: pd.DataFrame | None, day: Any) -> pd.Series:
@@ -315,24 +431,41 @@ def build_crosswalk_artifacts(
     new_members: pd.DataFrame | None = None,
     old_date: Any = SW2014_BRIDGE_DATE,
     new_date: Any = SW2021_BRIDGE_DATE,
+    old_share: float = STRUCTURAL_OLD_SHARE,
+    new_share: float = STRUCTURAL_NEW_SHARE,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Build (or load) the edge table and its JSON audit summary."""
+    """Build (or load) the edge table and its JSON audit summary.
+
+    The cache is validated against bridge dates, both structural thresholds
+    and fingerprints of the membership inputs, so changing any of them forces
+    a rebuild even without ``refresh=True``.
+    """
     edges_path = PIT_DIR / EDGES_FILE
     summary_path = PIT_DIR / SUMMARY_FILE
-    if not refresh:
+    old_fingerprint = _cache_members_fingerprint(old_members, PIT_DIR / SW2014_MEMBERS_FILE)
+    new_fingerprint = _cache_members_fingerprint(new_members, PIT_DIR / SW2021_MEMBERS_FILE)
+    if not refresh and old_fingerprint is not None and new_fingerprint is not None:
         cached = _read_parquet(edges_path)
         if cached is not None and not cached.empty and summary_path.exists():
             try:
                 cached_summary = json.loads(summary_path.read_text(encoding="utf-8"))
             except Exception:
                 cached_summary = None
-            if cached_summary is not None:
+            if cached_summary is not None and _cache_matches(
+                cached_summary,
+                old_date=old_date,
+                new_date=new_date,
+                old_share=old_share,
+                new_share=new_share,
+                old_fingerprint=old_fingerprint,
+                new_fingerprint=new_fingerprint,
+            ):
                 return cached, cached_summary
 
     old = old_members if old_members is not None else sw_l1_members("SW2014", refresh=refresh)
     new = new_members if new_members is not None else sw_l1_members("SW2021", refresh=refresh)
     pairs = paired_assignments(old, new, old_date, new_date)
-    edges = edge_table(pairs)
+    edges = edge_table(pairs, old_share=old_share, new_share=new_share)
     old_universe = sorted(set(old["industry"].astype(str))) if old is not None and not old.empty else []
     new_universe = sorted(set(new["industry"].astype(str))) if new is not None and not new.empty else []
     classification = classify_mapping(edges, old_universe=old_universe, new_universe=new_universe)
@@ -343,14 +476,22 @@ def build_crosswalk_artifacts(
         "bridge_old_date": pd.Timestamp(old_date).strftime("%Y-%m-%d"),
         "bridge_new_date": pd.Timestamp(new_date).strftime("%Y-%m-%d"),
         "thresholds": {
-            "structural_old_share": STRUCTURAL_OLD_SHARE,
-            "structural_new_share": STRUCTURAL_NEW_SHARE,
+            "structural_old_share": float(old_share),
+            "structural_new_share": float(new_share),
+        },
+        "inputs": {
+            "sw2014_members": _members_fingerprint(old),
+            "sw2021_members": _members_fingerprint(new),
         },
         "n_sw2014_l1": len(old_universe),
         "n_sw2021_l1": len(new_universe),
         "coverage": coverage,
         "structural_pairs": _edge_summary(edges),
         "backmap": backmap_table(edges, new_universe=new_universe).to_dict(orient="records"),
+        "duplicate_active_codes": {
+            "sw2014": active_industry_conflicts(old, old_date),
+            "sw2021": active_industry_conflicts(new, new_date),
+        },
         **classification,
         "unmatched": _unmatched_lists(pairs, old, new, classification),
     }
@@ -359,27 +500,57 @@ def build_crosswalk_artifacts(
     return edges, summary
 
 
-def distribution_table(snapshot: pd.DataFrame) -> pd.DataFrame:
-    """Long table: date x industry -> stock count and weight share."""
-    columns = ["date", "industry", "industry_version", "n_stocks", "weight", "weight_share"]
+def distribution_table(snapshot: pd.DataFrame, summary: dict[str, Any]) -> pd.DataFrame:
+    """Long table: date x industry -> stock count and weight shares.
+
+    ``is_sw`` marks labels that belong to the active taxonomy; rows that fell
+    back to ``stock_basic`` names are kept but marked ``False``.
+    ``weight_share`` uses all index members as denominator (the index's own
+    distribution), while ``sw_weight_share`` uses only real SW members, which
+    matches :func:`snapshot_metrics` and is the column to use for cross-version
+    industry comparisons.
+    """
+    columns = [
+        "date",
+        "industry",
+        "industry_version",
+        "is_sw",
+        "n_stocks",
+        "weight",
+        "weight_share",
+        "sw_weight_share",
+    ]
     if snapshot is None or snapshot.empty:
         return pd.DataFrame(columns=columns)
     frame = snapshot.copy()
     frame["date"] = pd.to_datetime(frame["date"]).dt.normalize()
     frame["industry"] = frame["industry"].astype(str)
+    universes = {
+        "SW2014": _version_universe(summary, "SW2014"),
+        "SW2021": _version_universe(summary, "SW2021"),
+    }
+    versions = frame["industry_version"].astype(str) if "industry_version" in frame.columns else pd.Series("", index=frame.index)
+    frame["is_sw"] = [
+        industry in universes.get(version, set())
+        for industry, version in zip(frame["industry"], versions)
+    ]
     grouped = (
-        frame.groupby(["date", "industry"])
+        frame.groupby(["date", "industry", "is_sw"], as_index=False)
         .agg(
             industry_version=("industry_version", "first"),
             n_stocks=("code", "nunique"),
             weight=("weight", "sum"),
         )
-        .reset_index()
     )
     totals = grouped.groupby("date")["weight"].transform("sum")
-    grouped["weight_share"] = grouped["weight"] / totals.where(totals != 0)
-    grouped["weight_share"] = grouped["weight_share"].fillna(0.0)
-    return grouped[columns].sort_values(["date", "n_stocks", "industry"], ascending=[True, False, True]).reset_index(drop=True)
+    grouped["weight_share"] = (grouped["weight"] / totals.where(totals != 0)).fillna(0.0)
+    sw_totals = grouped[grouped["is_sw"]].groupby("date")["weight"].sum()
+    grouped["sw_weight_share"] = (
+        grouped["weight"] / grouped["date"].map(sw_totals)
+    ).fillna(0.0)
+    return grouped[columns].sort_values(
+        ["date", "n_stocks", "industry"], ascending=[True, False, True]
+    ).reset_index(drop=True)
 
 
 def _ambiguous_labels(summary: dict[str, Any]) -> tuple[set[str], set[str]]:
@@ -676,6 +847,42 @@ def snapshot_window(
     return out
 
 
+def _window_slug(start: Any, end: Any) -> tuple[str, str]:
+    return (
+        pd.Timestamp(start).strftime("%Y%m%d"),
+        pd.Timestamp(end).strftime("%Y%m%d"),
+    )
+
+
+def _distribution_paths(index_code: str, start: Any, end: Any) -> dict[str, Path]:
+    start_slug, end_slug = _window_slug(start, end)
+    return {
+        "distribution": PIT_DIR / DIST_FILE_TEMPLATE.format(index=index_code, start=start_slug, end=end_slug),
+        "metrics": PIT_DIR / METRICS_FILE_TEMPLATE.format(index=index_code, start=start_slug, end=end_slug),
+        "bridge": PIT_DIR / BRIDGE_FILE_TEMPLATE.format(index=index_code, start=start_slug, end=end_slug),
+        "meta": PIT_DIR / META_FILE_TEMPLATE.format(index=index_code, start=start_slug, end=end_slug),
+    }
+
+
+def _distribution_meta(
+    index_code: str,
+    start: Any,
+    end: Any,
+    summary: dict[str, Any],
+    edges: pd.DataFrame,
+) -> dict[str, Any]:
+    start_slug, end_slug = _window_slug(start, end)
+    return {
+        "index": index_code,
+        "start": start_slug,
+        "end": end_slug,
+        "bridge_old_date": summary["bridge_old_date"],
+        "bridge_new_date": summary["bridge_new_date"],
+        "thresholds": summary["thresholds"],
+        "edges_fingerprint": _frame_fingerprint(edges),
+    }
+
+
 def build_distribution_artifacts(
     index_code: str = "000300.SH",
     start: Any = "2021-06-01",
@@ -683,26 +890,93 @@ def build_distribution_artifacts(
     *,
     refresh: bool = False,
     snapshot: pd.DataFrame | None = None,
+    old_date: Any = SW2014_BRIDGE_DATE,
+    new_date: Any = SW2021_BRIDGE_DATE,
+    old_share: float = STRUCTURAL_OLD_SHARE,
+    new_share: float = STRUCTURAL_NEW_SHARE,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Build (or load) distribution and per-snapshot metric parquet files."""
-    dist_path = PIT_DIR / f"sw_crosswalk_distribution_{index_code}.parquet"
-    metrics_path = PIT_DIR / f"sw_crosswalk_metrics_{index_code}.parquet"
-    if not refresh:
-        cached_dist = _read_parquet(dist_path)
-        cached_metrics = _read_parquet(metrics_path)
-        if cached_dist is not None and not cached_dist.empty and cached_metrics is not None and not cached_metrics.empty:
+    """Build (or load) distribution and per-snapshot metric parquet files.
+
+    The parquet/JSON names include ``index``/``start``/``end`` and the cache
+    only hits when the stored meta matches the current bridge dates,
+    thresholds and edge fingerprint.  A different window therefore always
+    rebuilds instead of silently reusing another window's rows.
+    """
+    paths = _distribution_paths(index_code, start, end)
+    edges, summary = build_crosswalk_artifacts(
+        refresh=refresh,
+        old_date=old_date,
+        new_date=new_date,
+        old_share=old_share,
+        new_share=new_share,
+    )
+    meta = _distribution_meta(index_code, start, end, summary, edges)
+    if not refresh and paths["meta"].exists():
+        try:
+            cached_meta = json.loads(paths["meta"].read_text(encoding="utf-8"))
+        except Exception:
+            cached_meta = None
+        cached_dist = _read_parquet(paths["distribution"])
+        cached_metrics = _read_parquet(paths["metrics"])
+        if (
+            cached_meta == meta
+            and cached_dist is not None
+            and not cached_dist.empty
+            and cached_metrics is not None
+            and not cached_metrics.empty
+        ):
             return cached_dist, cached_metrics
 
-    edges, summary = build_crosswalk_artifacts(refresh=refresh)
     snap = snapshot if snapshot is not None else snapshot_window(index_code, start, end, refresh=refresh)
-    dist = distribution_table(snap)
+    dist = distribution_table(snap, summary)
     metrics = snapshot_metrics(snap, summary)
-    _atomic_parquet(dist, dist_path)
-    _atomic_parquet(metrics, metrics_path)
+    _atomic_parquet(dist, paths["distribution"])
+    _atomic_parquet(metrics, paths["metrics"])
     diff = switch_bridge_diff(snap, edges)
     if diff.get("available"):
-        _atomic_json(diff, PIT_DIR / BRIDGE_FILE_TEMPLATE.format(index=index_code))
+        _atomic_json(diff, paths["bridge"])
+    elif paths["bridge"].exists():
+        paths["bridge"].unlink()
+    _atomic_json(meta, paths["meta"])
     return dist, metrics
+
+
+def export_audit_docs(
+    edges: pd.DataFrame,
+    metrics: pd.DataFrame,
+    *,
+    docs_dir: Path = Path("docs"),
+) -> tuple[Path, Path]:
+    """Write the two committed audit CSVs from cached artifacts.
+
+    The metrics CSV keeps the 6 month-ends before the switch, the switch-day
+    snapshot itself, and the 6 month-ends after it; other snapshots in the
+    window (e.g. 2021-12-01) are intentionally excluded so the table stays a
+    6+1+6 comparison rather than an arbitrary sample.
+    """
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    crosswalk_path = docs_dir / "sw2014_sw2021_crosswalk.csv"
+    metrics_path = docs_dir / "sw2014_sw2021_distribution_metrics.csv"
+    audit_edges = edges.copy()
+    for column in ("share_of_sw2014", "share_of_sw2021"):
+        if column in audit_edges:
+            audit_edges[column] = audit_edges[column].astype(float).round(6)
+    audit_edges.to_csv(
+        crosswalk_path,
+        index=False,
+        encoding="utf-8-sig",
+    )
+    audit = metrics.copy()
+    audit["date"] = pd.to_datetime(audit["date"]).dt.normalize()
+    last_per_month = audit.groupby(audit["date"].dt.to_period("M"))["date"].transform("max")
+    keep = (audit["date"] == last_per_month) | (audit["date"] == SW_SWITCH_DATE)
+    audit = audit[keep].sort_values("date").reset_index(drop=True)
+    audit.to_csv(
+        metrics_path,
+        index=False,
+        encoding="utf-8-sig",
+    )
+    return crosswalk_path, metrics_path
 
 
 def main() -> None:
@@ -710,28 +984,55 @@ def main() -> None:
     parser.add_argument("--index", default="000300.SH")
     parser.add_argument("--start", default="2021-06-01")
     parser.add_argument("--end", default="2022-05-31")
+    parser.add_argument("--old-date", default=SW2014_BRIDGE_DATE.strftime("%Y-%m-%d"))
+    parser.add_argument("--new-date", default=SW2021_BRIDGE_DATE.strftime("%Y-%m-%d"))
+    parser.add_argument("--old-share", type=float, default=STRUCTURAL_OLD_SHARE)
+    parser.add_argument("--new-share", type=float, default=STRUCTURAL_NEW_SHARE)
+    parser.add_argument("--export-docs", action="store_true")
     parser.add_argument("--refresh", action="store_true")
     args = parser.parse_args()
 
-    edges, summary = build_crosswalk_artifacts(refresh=args.refresh)
+    edges, summary = build_crosswalk_artifacts(
+        refresh=args.refresh,
+        old_date=args.old_date,
+        new_date=args.new_date,
+        old_share=args.old_share,
+        new_share=args.new_share,
+    )
     dist, metrics = build_distribution_artifacts(
-        args.index, args.start, args.end, refresh=args.refresh
+        args.index,
+        args.start,
+        args.end,
+        refresh=args.refresh,
+        old_date=args.old_date,
+        new_date=args.new_date,
+        old_share=args.old_share,
+        new_share=args.new_share,
     )
     print(f"edges: {len(edges)} ({int(edges['is_structural'].sum())} structural)")
     print(f"paired codes: {summary['coverage']['paired_codes']}, label changed: {summary['coverage']['label_changed_codes']}")
     print(f"1:N: {summary['one_to_many']}")
     print(f"N:1: {summary['many_to_one']}")
     print(f"new L1 without structural source: {summary['new_without_structural_source']}")
+    print(
+        f"thresholds: old>={summary['thresholds']['structural_old_share']:.2f}, "
+        f"new>={summary['thresholds']['structural_new_share']:.2f}; "
+        f"bridge {summary['bridge_old_date']} -> {summary['bridge_new_date']}"
+    )
     print(f"distribution rows: {len(dist)}; snapshot metrics rows: {len(metrics)}")
-    bridge_path = PIT_DIR / BRIDGE_FILE_TEMPLATE.format(index=args.index)
-    if bridge_path.exists():
-        diff = json.loads(bridge_path.read_text(encoding="utf-8"))
+    paths = _distribution_paths(args.index, args.start, args.end)
+    print(f"artifacts: {paths['metrics'].name}, {paths['meta'].name}")
+    if paths["bridge"].exists():
+        diff = json.loads(paths["bridge"].read_text(encoding="utf-8"))
         if diff.get("available"):
             print(
                 f"switch bridge {diff['old_date']} -> {diff['new_date']}: "
                 f"changed {diff['changed_share']:.1%} of codes, {diff['changed_weight_share']:.1%} of weight; "
                 f"conservatively comparable {diff['comparable_weight_share']:.1%} of weight"
             )
+    if args.export_docs:
+        crosswalk_path, metrics_path = export_audit_docs(edges, metrics)
+        print(f"exported: {crosswalk_path}, {metrics_path}")
 
 
 if __name__ == "__main__":
