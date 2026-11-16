@@ -349,3 +349,209 @@ def test_prune_artifacts_sweeps_orphan_digest_dirs(tmp_path: Path) -> None:
         assert store.find_artifacts_by_digest(conn, orphan_digest) == []
     finally:
         conn.close()
+
+
+def test_prune_artifacts_keeps_png_referenced_by_live_artifact(tmp_path: Path) -> None:
+    """PNG 与 HTML 分属不同 digest 目录且 PNG 不落行：裁剪不得删掉存活 artifact 的 png_path（评审 P1）。"""
+    root = tmp_path / "agent"
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1")
+        digest, path, absolute_html = store.put_content(
+            b"<html>live</html>", filename="chart.html", root=str(root)
+        )
+        live_id = store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            meta={"degraded": False},
+            created_at="2026-06-01T00:00:00+00:00",
+        )
+        png_digest, _, png_absolute = store.put_content(
+            b"\x89PNG\r\nlive", filename=f"chart_{live_id}.png", root=str(root)
+        )
+        conn.execute(
+            "UPDATE agent_artifacts SET meta_json = ? WHERE artifact_id = ?",
+            (json.dumps({"degraded": False, "png_path": str(png_absolute)}), live_id),
+        )
+        conn.commit()
+        assert png_absolute.exists()
+
+        stats = store.prune_artifacts(
+            conn, before="2026-03-01T00:00:00+00:00", root=str(root)
+        )
+
+        assert stats == {"rows": 0, "files": 0, "pruned_digests": 0}
+        assert absolute_html.exists()
+        assert png_absolute.exists()
+        assert (root / "artifacts" / png_digest[:2] / png_digest).is_dir()
+    finally:
+        conn.close()
+
+
+def test_prune_artifacts_keeps_keep_digests_png(tmp_path: Path) -> None:
+    """``keep_digests`` 保住的行，其 png_path 目录同样必须保住（评审 P1 的 keep 分支）。"""
+    root = tmp_path / "agent"
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1")
+        digest, path, _ = store.put_content(
+            b"<html>kept</html>", filename="chart.html", root=str(root)
+        )
+        artifact_id = store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            meta={"degraded": False},
+            created_at="2026-01-01T00:00:00+00:00",
+        )
+        png_digest, _, png_absolute = store.put_content(
+            b"\x89PNG\r\nkept", filename=f"chart_{artifact_id}.png", root=str(root)
+        )
+        conn.execute(
+            "UPDATE agent_artifacts SET meta_json = ? WHERE artifact_id = ?",
+            (json.dumps({"degraded": False, "png_path": str(png_absolute)}), artifact_id),
+        )
+        conn.commit()
+
+        stats = store.prune_artifacts(
+            conn,
+            before="2026-03-01T00:00:00+00:00",
+            keep_digests=[digest],
+            root=str(root),
+        )
+
+        assert stats == {"rows": 0, "files": 0, "pruned_digests": 0}
+        assert (root / path).exists()
+        assert png_absolute.exists()
+        assert (root / "artifacts" / png_digest[:2] / png_digest).is_dir()
+    finally:
+        conn.close()
+
+
+def test_record_artifact_never_downgrades_success_meta(tmp_path: Path) -> None:
+    """先成功出 PNG、后降级重渲染：``png_path``/``degraded`` 只升不降，其他字段仍取最新（评审 P1）。"""
+    root = tmp_path / "agent"
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1")
+        digest, path, _ = store.put_content(
+            b"<html>same bytes</html>", filename="chart.html", root=str(root)
+        )
+        _, _, png_absolute = store.put_content(
+            b"\x89PNG\r\nok", filename="chart_art_0123456789abcdef.png", root=str(root)
+        )
+        artifact_id = store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            meta={
+                "degraded": False,
+                "png_path": str(png_absolute),
+                "warnings": [],
+                "data_as_of": "2024-01-04",
+            },
+        )
+
+        again = store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            meta={
+                "degraded": True,
+                "png_path": None,
+                "warnings": [f"{store.PNG_DEGRADED_WARNING_PREFIX}：kaleido missing（仅 HTML artifact）"],
+                "data_as_of": "2024-02-01",
+            },
+        )
+
+        assert again == artifact_id
+        record = store.get_artifact(conn, artifact_id)
+        assert record is not None
+        assert record.meta["png_path"] == str(png_absolute)
+        assert record.meta["degraded"] is False
+        assert record.meta["warnings"] == []
+        # 其余字段仍以最新一次写入为准
+        assert record.meta["data_as_of"] == "2024-02-01"
+        count = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+        assert count == 1
+    finally:
+        conn.close()
+
+
+def test_reused_png_records_provenance_without_contradiction(tmp_path: Path) -> None:
+    """复用旧 PNG 时 provenance 指向产出它的那次导出，本次失败原因另存（评审 P2）。
+
+    反例是修复前的 meta：``png_path=<旧>`` + ``degraded=False`` + ``png_error=<本次失败>``，
+    同一份记录既声称「有 PNG」又声称「导出失败」；``png_mode=off`` 重写时还会出现
+    「off 模式却有 png_path」的误导。
+    """
+    root = tmp_path / "agent"
+    conn = store.connect(str(tmp_path / "agent.db"))
+    try:
+        store.ensure_run(conn, "run_1")
+        digest, path, _ = store.put_content(
+            b"<html>same bytes</html>", filename="chart.html", root=str(root)
+        )
+        _, _, png_absolute = store.put_content(
+            b"\x89PNG\r\nok", filename="chart_art_0123456789abcdef.png", root=str(root)
+        )
+        artifact_id = store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            meta={
+                "degraded": False,
+                "png_path": str(png_absolute),
+                "png_mode": "auto",
+                "png_source_mode": "auto",
+                "png_reused": False,
+                "png_error": None,
+                "warnings": [],
+            },
+        )
+
+        # 第二次：同 HTML 重渲染，Chrome 坏了 → 沿用旧 PNG，但本次 auto 尝试失败。
+        store.record_artifact(
+            conn,
+            run_id="run_1",
+            kind="figure",
+            path=path,
+            digest=digest,
+            meta={
+                "degraded": True,
+                "png_path": None,
+                "png_mode": "auto",
+                "png_source_mode": None,
+                "png_reused": False,
+                "png_error": "Chrome executable not found",
+                "warnings": [
+                    f"{store.PNG_DEGRADED_WARNING_PREFIX}：Chrome executable not found"
+                    "（仅 HTML artifact）"
+                ],
+            },
+        )
+
+        record = store.get_artifact(conn, artifact_id)
+        assert record is not None
+        meta = record.meta
+        assert meta["png_path"] == str(png_absolute)
+        assert meta["degraded"] is False
+        assert meta["png_reused"] is True
+        assert meta["png_source_mode"] == "auto"
+        assert meta["png_last_attempt_error"] == "Chrome executable not found"
+        assert meta["png_error"] is None
+        assert meta["png_mode"] == "auto"
+        assert meta["warnings"] == []
+    finally:
+        conn.close()

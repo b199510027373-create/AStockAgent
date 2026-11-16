@@ -27,6 +27,7 @@ A 股智能投顾本地系统，基于 Gradio + Tushare + DeepSeek。在原有�
 - 产品快照：[docs/AStockAgent_product_snapshot_v1.3.md](docs/AStockAgent_product_snapshot_v1.3.md)
 - 架构说明：[docs/AStockAgent_architecture_v1.3.md](docs/AStockAgent_architecture_v1.3.md)
 - 研究结论：[docs/AStockAgent_research_conclusions_v1.3.md](docs/AStockAgent_research_conclusions_v1.3.md)
+- PNG 导出运维（Chrome / 中文字体 / 版本升级）：[docs/AStockAgent_png_export_ops.md](docs/AStockAgent_png_export_ops.md)
 
 
 ## 功能

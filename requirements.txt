@@ -1,7 +1,10 @@
 gradio>=6.0
 pandas>=2.0
 numpy>=1.26
-plotly>=5.0
+# 图表导出（ADR-016 Q6=A）：plotly/kaleido 锁定精确版本，PNG 字节随版本漂移（见 docs/AStockAgent_png_export_ops.md）
+plotly==6.7.0
+# kaleido 1.5.1 需系统 Chrome/Chromium；Linux CI 用预装 Chrome + fonts-noto-cjk（见 docs/AStockAgent_png_export_ops.md）
+kaleido==1.5.1
 openai>=1.0
 httpx>=0.27
 requests>=2.31
