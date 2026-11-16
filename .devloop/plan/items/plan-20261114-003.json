@@ -31,6 +31,10 @@
       "ADR-008"
     ],
     "branch": "fix/data-adj-caliber",
+    "handoff": [
+      "ho-20261116-016",
+      "ho-20261116-017"
+    ],
     "module": [
       "data"
     ],
@@ -43,9 +47,9 @@
       ".venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed!",
       ".venv\\Scripts\\python.exe -m mypy astock app.py -> Success: no issues found in 35 source files",
       "客户端实测 adj_factor 000001.SZ 19900101-20261116：query 6000 行/最早 20020304 vs query_all 8692 行/最早 19910403（证明截断）",
-      "GitHub Actions runs 43782366648 / 43782567956 / 43794324481 / 43795063293 / 43795349946 / 43795764674 / 43819638467 (5b10af8) / 43819897831 (aade7ea) -> test pass"
+      "GitHub Actions runs 43782366648 / 43782567956 / 43794324481 / 43795063293 / 43795349946 / 43795764674 / 43819638467 / 43819897831 / 43820096432 / 43820339795 (0a74161) -> test pass"
     ]
   },
   "createdAt": "2026-11-13T19:08:42.756Z",
-  "updatedAt": "2026-11-16T06:55:01.698Z"
+  "updatedAt": "2026-11-16T06:58:54.121Z"
 }
