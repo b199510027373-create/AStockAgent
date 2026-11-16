@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import threading
@@ -163,7 +162,7 @@ def migrate_legacy_state() -> int:
                 as_of=job.get("as_of"),
             )
             migrated += 1
-        except Exception:
+        except Exception:  # noqa: BLE001 - 单条脏数据不阻断整体迁移
             _log(f"旧状态迁移失败：{key} {traceback.format_exc()}")
     if migrated:
         _log(f"旧调度状态迁移完成：{migrated} 条写入 jobs 表")
@@ -358,7 +357,7 @@ def heartbeat_check(
                 with ALERTS_PATH.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(record, ensure_ascii=False) + "\n")
                 alerted = True
-            except Exception:
+            except Exception:  # noqa: BLE001 - 告警写盘失败不能拖垮调度
                 _log("心跳告警写盘失败：" + traceback.format_exc())
             _log(
                 f"ALERT 心跳异常：连续 {streak} 个交易日无成功 close 任务"
@@ -420,22 +419,22 @@ def startup_maintenance(now: datetime | None = None) -> dict[str, Any]:
     migrated = 0
     try:
         migrated = migrate_legacy_state()
-    except Exception:
+    except Exception:  # noqa: BLE001 - 启动自检不能用异常终止调度线程
         _log("启动自检-迁移失败：" + traceback.format_exc())
     recovered: list[str] = []
     try:
         recovered = recover_interrupted_jobs(now)
-    except Exception:
+    except Exception:  # noqa: BLE001
         _log("启动自检-中断恢复失败：" + traceback.format_exc())
     due: str | None = None
     try:
         due = sync_due_job(now)
-    except Exception:
+    except Exception:  # noqa: BLE001
         _log("启动自检-到期登记失败：" + traceback.format_exc())
     heartbeat: dict[str, Any] = {}
     try:
         heartbeat = heartbeat_check(now, alert=True)
-    except Exception:
+    except Exception:  # noqa: BLE001
         _log("启动自检-心跳检查失败：" + traceback.format_exc())
         heartbeat = {"ok": False, "initialized": False, "error": "heartbeat_failed"}
     _log(
@@ -499,8 +498,10 @@ def _release_lock() -> None:
             fcntl.flock(_LOCK_HANDLE.fileno(), fcntl.LOCK_UN)
     except Exception:
         pass
-    with contextlib.suppress(Exception):
+    try:
         _LOCK_HANDLE.close()
+    except Exception:
+        pass
     _LOCK_HANDLE = None
 
 
@@ -518,7 +519,7 @@ def run_once(
     now = now or datetime.now()
     try:
         _prepare_ledger(now)
-    except Exception:
+    except Exception:  # noqa: BLE001 - 台账不可用时跳过本轮，由 loop 重试
         _log("台账预检失败，本轮跳过：" + traceback.format_exc())
         return None
     hour, minute = _run_time()
@@ -532,7 +533,7 @@ def run_once(
     late_by = max(0.0, (now - scheduled).total_seconds() / 60.0)
     try:
         previous = ledger.get_job(key)
-    except Exception:
+    except Exception:  # noqa: BLE001
         _log("读取任务状态失败，本轮跳过：" + traceback.format_exc())
         return None
     if not force and previous is not None and previous.get("status") == "success":
@@ -552,7 +553,7 @@ def run_once(
             started_at=started_at,
             late_by_min=round(late_by, 1),
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - 写 running 失败时不启动推荐，避免状态失真
         _log("写入 running 状态失败，本轮跳过：" + traceback.format_exc())
         return None
     try:
@@ -610,11 +611,11 @@ def run_once(
         try:
             _settled, message = refresh_tracking()
             _log(f"跟踪结算：{message}")
-        except Exception:
+        except Exception:  # noqa: BLE001 - 结算失败不影响本次推荐状态
             _log("跟踪结算失败：" + traceback.format_exc())
         _log("完成：" + result.status)
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         try:
             ledger.update_job(
                 key,
@@ -622,7 +623,7 @@ def run_once(
                 error=f"{type(exc).__name__}: {exc}",
                 finished_at=_now_iso(),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - 失败状态也写不进去时仍要留日志
             _log("写入 failed 状态失败：" + traceback.format_exc())
         _log("失败：" + traceback.format_exc())
         return None
@@ -636,7 +637,7 @@ def loop(stop_event: threading.Event | None = None) -> None:
         return
     try:
         startup_maintenance()
-    except Exception:
+    except Exception:  # noqa: BLE001 - 启动自检异常不能让调度线程退出
         _log("启动自检异常：" + traceback.format_exc())
         stop.wait(600)
     while not stop.is_set():
@@ -665,7 +666,7 @@ def loop(stop_event: threading.Event | None = None) -> None:
                 if remaining <= 0:
                     break
                 stop.wait(min(60.0, remaining))
-        except Exception:
+        except Exception:  # noqa: BLE001 - 单轮异常后等待重试，避免线程静默死亡
             _log("调度循环异常：" + traceback.format_exc())
             stop.wait(600)
 

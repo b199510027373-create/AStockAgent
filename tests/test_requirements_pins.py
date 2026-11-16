@@ -79,10 +79,15 @@ def test_dev_requirements_reuse_runtime_requirements() -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["ruff", "mypy", "coverage", "pytest", "pytest-timeout"],
+    ["ruff", "mypy", "coverage", "pytest", "pytest-timeout", "pyyaml"],
 )
 def test_dev_toolchain_is_pinned(name: str) -> None:
-    """CI 的工具版本必须来自 requirements-dev.txt，不允许裸 pip install 最新版。"""
+    """CI 的工具版本必须来自 requirements-dev.txt，不允许裸 pip install 最新版。
+
+    pyyaml 不在「工具链」语义内，但它是 tests/test_ci_quality_gates.py 直接 import
+    的运行期依赖（仅测试用），同样必须由本清单锁定，不能依赖 gradio 的传递依赖
+    （评审 iss-mwjmhnr6-565a8f）。
+    """
     matches = [line for line in _dev_requirements() if line.startswith(f"{name}==")]
     assert len(matches) == 1, f"{name} 必须且只能在 requirements-dev.txt 出现一次：{matches}"
     assert _PINNED.fullmatch(matches[0]), f"{name} 必须锁精确版本：{matches[0]}"

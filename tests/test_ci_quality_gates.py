@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import configparser
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -20,10 +21,30 @@ ROOT = Path(__file__).resolve().parents[1]
 CI_PATH = ROOT / ".github" / "workflows" / "ci.yml"
 RUFF_PATH = ROOT / "ruff.toml"
 COVERAGE_PATH = ROOT / ".coveragerc"
+MYPY_PATH = ROOT / "mypy.ini"
 
 # 实测基线（plan-20261103-012）：CI Linux 76.47%（门禁权威值）、本地 Windows 76.70%。
-# 门槛等于 CI 实测显示值 76.47，所以这里断言「不低于 76」并且配置里写着分阶段目标。
-MIN_COVERAGE_FLOOR = 76.0
+# 门槛等于 CI 实测显示值 76.47（评审 iss-mwjmi7bw-9b664c：常量若低于实测值，
+# 门槛可被静默下调 0.47pp 而用例仍绿）。调整门槛必须同步改本断言并过评审。
+MIN_COVERAGE_FLOOR = 76.47
+
+# mypy 只排除 UI / 图表模块；这个白名单是「覆盖全部非 UI 模块」的唯一定义处。
+MYPY_UI_WHITELIST = {
+    f"astock/{name}.py"
+    for name in (
+        "ui",
+        "charts",
+        "backtest_chart",
+        "backtest_ui",
+        "optimize_ui",
+        "factor_ui",
+        "strategy_ui",
+        "track_ui",
+        "recommend_ui",
+    )
+}
+# astock 下共 44 个 .py，排除上述 9 个 → 35 个受检 + app.py = CI 日志里的 36 files。
+EXPECTED_CHECKED_MODULES = 35
 
 
 def _ci() -> dict[str, Any]:
@@ -144,6 +165,47 @@ def test_ruff_config_keeps_scheduler_observation_window_exemption() -> None:
     for path in ("astock/scheduler.py", "astock/jobs.py"):
         assert path in per_file, f"{path} 的观察期豁免丢失，等于提前改动调度样本"
         assert {"BLE001", "S110", "S112"} <= set(per_file[path])
+
+    # scheduler.py 保持 92f5e47 原文（历史 noqa + try/except pass 未清理），
+    # 因此还豁免 RUF100 / SIM105；观察期结束必须连同这一段一起删除。
+    scheduler_exempt = set(per_file["astock/scheduler.py"])
+    assert {"RUF100", "SIM105"} <= scheduler_exempt, "观察期需保留 scheduler.py 原文，缺失 RUF100/SIM105 豁免会逼人改代码"
+
+    # 14 处 BLE001 的审计结论必须可查（评审 iss-mwjmhnq7-9a1c07 的判定条件之一）。
+    ruff_text = RUFF_PATH.read_text(encoding="utf-8")
+    assert "BLE001 审计结论" in ruff_text, "ruff.toml 应集中记录 scheduler.py 的 BLE001 审计理由"
+    markers = (":165", ":360", ":422", ":427", ":432", ":437", ":522", ":536", ":556", ":614", ":618", ":626", ":640", ":669")
+    for marker in markers:
+        assert marker in ruff_text, f"ruff.toml 审计结论缺少 {marker} 站点"
+
+
+def test_mypy_exclude_matches_frozen_ui_whitelist() -> None:
+    """mypy 的 exclude 只能覆盖 9 个 UI/图表模块，新增非 UI 模块不得被静默排除。
+
+    评审 iss-mwjmi7cn-50b1b4：此前只断言 ``mypy astock app.py`` 命令字符串存在，
+    把 astock/foo.py 加进 exclude 正则后 mypy 仍 Success，覆盖率会被悄悄破坏。
+    """
+    parser = configparser.ConfigParser()
+    parser.read_string(MYPY_PATH.read_text(encoding="utf-8"))
+    pattern = parser["mypy"]["exclude"]
+    regex = re.compile(pattern)
+
+    # mypy 递归检查 astock 包（含 astock/agent/*.py），exclude 正则只作用于顶层模块：
+    # 44 个 .py - 9 个 UI 白名单 = 35 个受检模块，加 app.py 即 CI 日志的 36 files。
+    package_files = {path.relative_to(ROOT).as_posix() for path in (ROOT / "astock").rglob("*.py")}
+    excluded = {path for path in package_files if regex.fullmatch(path)}
+
+    assert excluded == MYPY_UI_WHITELIST, (
+        f"mypy exclude 白名单被改动：多排了 {excluded - MYPY_UI_WHITELIST}，"
+        f"少排了 {MYPY_UI_WHITELIST - excluded}"
+    )
+    for path in MYPY_UI_WHITELIST:
+        assert (ROOT / path).exists(), f"白名单里的 {path} 不存在，可能是改名后忘记同步"
+    checked = package_files - excluded
+    assert len(checked) == EXPECTED_CHECKED_MODULES, (
+        f"受检非 UI 模块数变为 {len(checked)}（期望 {EXPECTED_CHECKED_MODULES}）：新增模块属正常演进，"
+        "请确认它确实被 mypy 检查后同步修改本常量"
+    )
 
 
 def test_ruff_config_excludes_legacy_root_script() -> None:
