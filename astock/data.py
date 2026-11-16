@@ -765,10 +765,12 @@ def _apply_minute_adj(
       的当日 bar 盘中就存在。仅当"缺因子的行都是今天、且因子表末行早于今天"
       时，用最近已发布因子复权，并在 metadata 标 ``partial=true`` /
       ``factor_as_of``（下游图注可提示"盘中近似"）；其它任何缺因子仍硬失败；
-    - 因子表必须覆盖分钟行情区间（``_check_factor_coverage``）：hfq 要求因子
-      首日 <= 分钟首日、qfq 要求因子末日 >= 分钟末日（盘中当日 bar 除外），
-      不满足抛 :class:`DataContractError`——分钟路径与日线路径同一把尺子，
-      即使回退到单次 ``query`` 也不会静默拿到被截断的"最早因子"（ADR-008 D1）；
+    - 分钟路径不另设覆盖断言：因子历史由 ``_query_adj_history`` 分页拉取，
+      截断若落在行情窗口之内，会表现为窗口内某些交易日缺因子，由上面的
+      缺因子硬失败（盘中当日例外）直接拦下——此时再做首末覆盖比较恒为真，
+      属不可达代码，故不保留（评审 iss-mwixznmz-2f393e）；截断恰好早于窗口
+      起点、且窗口内每天都有因子的情形无法在分钟内自证，只能靠分页完整性，
+      边界见 ADR-008 第 8 条；
     - vol/amount 保持原始值（复权只作用于价格）；
     - metadata 写 ``out.attrs["adjustment"]``：adj/adj_base/adj_source=daily，
       分钟 hfq 不与日线 hfq 拼连续序列。
@@ -809,10 +811,6 @@ def _apply_minute_adj(
         merged.loc[intraday, "adj_factor"] = float(fct["adj_factor"].iloc[-1])
         partial = True
         factor_as_of = last_factor_day.strftime("%Y-%m-%d")
-    # 分钟路径同样要防"因子历史被截断"：截掉最早一段时 hfq 基准会静默取错。
-    covered = merged[~intraday]
-    if not covered.empty:
-        _check_factor_coverage(fct, covered, adj, ts_code=ts_code or "?")
     ratio = merged["adj_factor"] / base_factor
     for col in ("open", "high", "low", "close", "pre_close"):
         if col in merged.columns:

@@ -342,11 +342,13 @@ class MinuteAdjCaliberTests(unittest.TestCase):
         self.assertIn("2025-01-06", str(ctx.exception))
         self.assertIn("禁止用 1.0 填充或回退 qfq", str(ctx.exception))
 
-    def test_minute_hfq_factor_history_truncated_at_start_raises(self):
-        """分钟 hfq 的因子历史若缺早期段落，必须硬失败（评审 iss-mwixbcyf-8383d6）。
+    def test_minute_hfq_truncated_history_surfaces_as_missing_factor(self):
+        """分钟 hfq 的历史截断落在窗口内时，由"缺因子"分支拦下（不是覆盖断言）。
 
-        截断在"行情窗口之前"时表现为窗口内早期交易日缺因子；分钟路径与日线
-        路径同一把尺子，不得用最近因子顶替 hfq 基准。
+        评审 iss-mwixznmz-2f393e：截断若早于行情窗口、窗口内每天都有因子，
+        分钟内无法自证（该情形依赖 `_query_adj_history` 分页完整性，见
+        ADR-008 第 8 条）；能观测到的形态就是窗口内某天缺因子，此时必须抛
+        缺因子硬失败，异常文案要指出具体交易日，避免与覆盖断言混淆。
         """
         factors = _factors().iloc[[1, 2]]  # 只有 01-03/01-06，缺 01-02
         with patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")):
@@ -354,18 +356,23 @@ class MinuteAdjCaliberTests(unittest.TestCase):
                 data._apply_minute_adj(
                     _minute_frame(), factors, "hfq", ts_code="600519.SH"
                 )
-        self.assertIn("2025-01-02", str(ctx.exception))
+        message = str(ctx.exception)
+        self.assertIn("分钟线以下交易日缺少 adj_factor", message)
+        self.assertIn("2025-01-02", message)
         self.assertEqual(ctx.exception.contract, "AdjFactor")
 
-    def test_minute_qfq_factor_history_truncated_at_end_raises(self):
-        """分钟 qfq 的因子表若缺最新交易日，同样必须报错而不是沿用旧因子。"""
+    def test_minute_qfq_truncated_history_surfaces_as_missing_factor(self):
+        """分钟 qfq 缺最新因子时同样由缺因子分支报错，不得沿用旧因子。"""
         factors = _factors().iloc[:2]  # 只有 01-02/01-03，缺 01-06（非当日）
         with patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")):
             with self.assertRaises(DataContractError) as ctx:
                 data._apply_minute_adj(
                     _minute_frame(include_today=True), factors, "qfq", ts_code="600519.SH"
                 )
-        self.assertIn("2025-01-06", str(ctx.exception))
+        message = str(ctx.exception)
+        self.assertIn("分钟线以下交易日缺少 adj_factor", message)
+        self.assertIn("2025-01-06", message)
+        self.assertEqual(ctx.exception.contract, "AdjFactor")
 
     def test_load_minute_requests_factor_history_from_listing(self):
         """分钟线复权因子也必须自上市起分页拉取（评审 P2-5）。"""
