@@ -38,12 +38,13 @@
     ],
     "test": [
       "pytest tests/test_sw_crosswalk.py -q -> 16 passed",
+      "pytest tests -q -m \"not png\" -p no:cacheprovider --basetemp=.tmp-test/pytest3 -> 549 passed, 1 skipped, 5 deselected, 12 subtests passed in 24.00s",
       "pytest tests/test_sw_crosswalk.py tests/test_data_pit_events.py tests/test_hardening.py tests/test_contracts.py tests/test_core_paths.py -q -> 111 passed",
       "mypy astock/sw_crosswalk.py -> Success: no issues found in 1 source file",
-      "full repo pytest -q -> attempted; 38 pre-existing collection errors (repo-root pip/tmp dirs PermissionError, release/ duplicate test basenames) and unrelated integration tests hang; not caused by this change, related PIT/contract suite 111 passed"
+      "GitHub Actions run 43830495310: test pass, png-export pass"
     ]
   },
   "createdAt": "2026-11-03T12:10:44.089Z",
-  "updatedAt": "2026-11-16T08:20:50.288Z",
+  "updatedAt": "2026-11-16T08:23:47.474Z",
   "devSessionId": "session-7bc34221-e10d-4cf7-8884-b65970d84206"
 }
