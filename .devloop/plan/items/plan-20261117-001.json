@@ -1,0 +1,49 @@
+{
+  "id": "plan-20261117-001",
+  "title": "观察期后收口：Ruff 豁免移除与文档基线守护加固",
+  "description": "承接 ho-20261117-014 第 3 轮评审的 2 条 P2：① test_docs_baseline_matches_measured_numbers 列了 5 个文档但只对 3 个做正向数字断言，architecture_v1.3:107 与 product_snapshot:51 改错仍绿；② stale 标记含裸 \"50%\"，README 写「单票仓位上限 50%」会误报。PR #9 五日观察（2026-11-21）结束后，删除 ruff.toml 中 astock/scheduler.py、astock/jobs.py 的 per-file-ignores，清理这两个文件存量 22 条，并在同一提交补齐 5 个文档的正向断言、把 \"50%\" 换成「覆盖率门槛 50%」等带上下文标记。不改变运行时语义。",
+  "status": "todo",
+  "priority": "P2",
+  "milestone": "ms-quality",
+  "owner": "human",
+  "start": "2026-11-23",
+  "due": "2026-11-27",
+  "estimateH": 6,
+  "progress": 0,
+  "acceptance": [
+    "删除 ruff.toml 中 astock/scheduler.py、astock/jobs.py 的 per-file-ignores，`ruff check astock tests` 为 0，且不新增文件级豁免",
+    "清理 scheduler/jobs 存量 22 条：BLE001/S110/S112 逐条审计，能收窄则收窄，边界兜底加注释；其余按规则修复",
+    "tests/test_ci_quality_gates.py 对 DOCS_WITH_BASELINE 的 5 个文件全部做正向断言；改错 architecture_v1.3:107 或 product_snapshot:51 的数字时必须变红",
+    "stale 标记去掉裸 \"50%\"，改为「覆盖率门槛 50%」等带上下文标记；写「单票仓位上限 50%」仍绿，写「覆盖率门槛 50%」变红",
+    "全量 pytest、mypy 36 files、ruff 0 通过；CI PR 与 main 连续两次绿",
+    "更新评审线程 rev-20261117-001 与 handoff，plan-20261103-012 链接到本项"
+  ],
+  "tags": [
+    "ci",
+    "ruff",
+    "review",
+    "docs",
+    "quality"
+  ],
+  "deps": [
+    "plan-20261103-012",
+    "plan-20261114-004"
+  ],
+  "links": {
+    "module": [
+      "ci"
+    ],
+    "docs": [
+      "docs/AStockAgent_CI_work_calendar.md",
+      "tests/test_ci_quality_gates.py"
+    ],
+    "review": [
+      "rev-20261117-001"
+    ],
+    "handoff": [
+      "ho-20261117-014"
+    ]
+  },
+  "createdAt": "2026-11-16T19:45:31.506Z",
+  "updatedAt": "2026-11-16T19:45:31.506Z"
+}
