@@ -9,10 +9,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-import astock.ledger as ledger
-import astock.recommend as recommend
-import astock.track as track
-import astock.use_cases as use_cases
+from astock import ledger, recommend, track, use_cases
 from astock.data import enrich
 
 

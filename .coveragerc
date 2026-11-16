@@ -9,4 +9,18 @@ omit =
 [report]
 show_missing = True
 skip_empty = True
-fail_under = 50
+precision = 2
+# 覆盖率门槛按实测重设（plan-20261103-012），旧值 50% 早已低于实际水平，形同虚设。
+#
+# 实测基线（同一 commit，`coverage run -m pytest tests -q -m "not png"`）：
+#   本地 Windows（Python 3.13.5，本分支 HEAD，606 passed）：9247 stmts / 2155 miss = 76.70%
+#   本地改造前同机（558 passed）：9247 / 2156 = 76.68%
+#   main CI Linux（2026-11-16, run 43923401645，旧代码）：9266 / 2188 = 76.39%
+# 门槛取「本地实测向下取 0.1」，保证不低于实测值；CI 若因平台分支差异低于该值，
+# 以 CI 日志里的实测百分比为准调整本行并在此注明，不得下调到实测值以下。
+#
+# 分阶段目标（同时写在 .github/workflows/ci.yml 的 step 注释里）：
+#   P1（当前）：76.6% —— 守住现状，防止回退
+#   P2：80% —— 补齐 agent 层与数据管道异常分支（见 coverage report 的 Missing 列）
+#   P3：85% —— 覆盖 UI 之外的调度/推荐主流程
+fail_under = 76.6

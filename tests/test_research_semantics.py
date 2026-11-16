@@ -337,7 +337,7 @@ class SiteWideVocabularyTests(unittest.TestCase):
     """全站回归：运行时代码不得再出现投资动作词或买卖建议措辞。"""
 
     def _sources(self):
-        files = sorted((ROOT / "astock").rglob("*.py")) + [ROOT / "app.py"]
+        files = [*sorted((ROOT / "astock").rglob("*.py")), ROOT / "app.py"]
         return [p for p in files if p.is_file()]
 
     def _strings(self, path: Path):

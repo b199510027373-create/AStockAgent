@@ -24,12 +24,19 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: requirements.txt
+          # 两个文件都参与缓存键：只改 dev 依赖也必须让缓存失效，否则工具版本会被旧缓存盖住。
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
-      - name: Install dependencies
+      # 一次装齐运行时 + 工具链。工具版本由 requirements-dev.txt 精确锁定
+      # （ruff==0.17.3 / mypy==2.4.1 / coverage==7.17.0 / pytest==9.2.0），
+      # 不再 `pip install ruff mypy` 裸装最新版——2026-11-16 的 main 跑出了
+      # ruff 0.17.5 / coverage 7.17.3，与本地实测版本不一致，导致结论无法归因。
+      - name: Install dependencies (pinned)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
           python -m pip check
 
       - name: Reject secrets and runtime artifacts
@@ -43,20 +50,26 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q astock app.py
 
-      - name: Lint and type-check
+      # 全仓静态检查：astock + tests 全量 blocking（规则清单见 ruff.toml 的显式 select）。
+      # PR 与 main 都跑，规则集/工具版本任一变化都会在 CI 里暴露。
+      # app.py 是仓库根历史原型脚本，已在 ruff.toml 里 exclude，见该文件注释（P3 单独清理）。
+      - name: Lint and type-check (ruff + mypy, blocking)
         run: |
-          python -m pip install ruff mypy
-          ruff check astock app.py tests --select E9,F63,F7,F82
+          ruff --version
+          mypy --version
+          ruff check astock tests
           mypy astock app.py
 
-      - name: Run tests with coverage gate (50%)
+      # 覆盖率门槛来自 .coveragerc（fail_under），这里不再重复 --fail-under，避免两处数字打架。
+      # 分阶段目标：P1 76.6%（本分支实测 76.70% / Linux main 旧代码 76.39%）→ P2 80% → P3 85%。
+      # 提升路径见 .coveragerc 注释；每次上调都在 PR 里附 coverage report 的 Missing 列。
+      - name: Run tests with coverage gate (P1 76.6% → 80% → 85%)
         run: |
-          python -m pip install -r requirements-dev.txt
           # 固定用 pytest 并显式传 tests：直接 pytest 会连同 release/AStockAgent/tests 重复收集。
           # 真实 PNG 导出（marker=png）需要 Chrome/字体，只在独立 png-export job 里跑，
           # 不让宿主环境抖动拖红主流水线（评审 P1）。
           coverage run -m pytest tests -q -m "not png"
-          coverage report -m --fail-under=50
+          coverage report -m
 
   # 真实 PNG 导出（非 monkeypatch）：独立 job，失败/超时单独可见，不拖垮主测试流水线。
   # 依赖 Windows 开发机同款组合：plotly/kaleido 由 requirements.txt 锁版本，
@@ -74,7 +87,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install CJK fonts for PNG export
         run: |
@@ -84,10 +99,9 @@ jobs:
           echo "cjk_fonts=$count"
           test "$count" -gt 0
 
-      - name: Install dependencies
+      - name: Install dependencies (pinned)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
           python -m pip check
 

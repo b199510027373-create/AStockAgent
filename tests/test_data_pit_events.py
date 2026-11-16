@@ -5,12 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
 import pandas as pd
 
-import astock.data as data
-import astock.events as events
-import astock.pit as pit
+from astock import data, events, pit
 
 
 class FakeTushare:

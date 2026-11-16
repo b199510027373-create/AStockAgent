@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import gradio as gr
 import pandas as pd
+
+import gradio as gr
 
 from .charts import (
     candlestick_figure,
@@ -173,7 +174,7 @@ def render(
                 )
             updates = [_update(fig) for fig in figs]
             updates += [_update(empty_figure("—"), False)] * (4 - len(updates))
-            return updates + [summary, status]
+            return [*updates, summary, status]
 
         if mode == "区间对比":
             p1 = normalized_compare_figure(daily_e, code)

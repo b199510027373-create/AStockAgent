@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -195,10 +196,9 @@ class UsageLogger:
                 except OSError as exc:  # 日志失败不应影响主流程
                     self.last_write_error = f"{type(exc).__name__}: {exc}"
         if self.sink is not None:
-            try:
+            # 外部回调失败不应影响主流程；异常类型由调用方决定，只能兜底
+            with contextlib.suppress(Exception):
                 self.sink(record)
-            except Exception:  # noqa: BLE001, S110 - 外部回调失败不应影响主流程
-                pass
 
     def summary(self) -> dict[str, int]:
         records = self.records

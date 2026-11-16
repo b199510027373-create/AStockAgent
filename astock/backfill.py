@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 
@@ -28,7 +27,8 @@ def _existing_as_of() -> set[str]:
             data = json.loads(path.read_text(encoding="utf-8"))
             if data.get("as_of"):
                 out.add(str(data["as_of"])[:10])
-        except Exception:
+        except (OSError, ValueError, AttributeError):
+            # 单个台账缺失/损坏（非 JSON、字段类型异常）跳过；OSError=读取失败，ValueError=JSON 解码
             continue
     return out
 

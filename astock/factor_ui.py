@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import gradio as gr
 import pandas as pd
+
+import gradio as gr
 
 from .factors import ic_figure, run_factor_ic
 
@@ -13,7 +14,7 @@ def run_factor(
     horizon: int,
     rebalance: int,
     neutralize: bool,
-    progress=gr.Progress(),
+    progress=gr.Progress(),  # noqa: B008 - Gradio 回调惯例：Progress 默认实例由框架注入
 ):
     try:
         result = run_factor_ic(

@@ -526,7 +526,8 @@ def sync_json_dir(path: Path | str | None = None) -> int:
                 payload["run_id"] = f"legacy_{file.stem}"
             if save_run(payload, json_path=str(file)):
                 count += 1
-        except Exception:
+        except (OSError, ValueError, TypeError, sqlite3.Error):
+            # 单个历史 JSON 损坏/写库失败（磁盘、约束）跳过，不影响其余迁移
             continue
     return count
 

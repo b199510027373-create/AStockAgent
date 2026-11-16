@@ -39,7 +39,7 @@ def get_client() -> OpenAI:
                 client.models.list()
                 _CLIENT, _MODE = client, mode
                 break
-            except Exception:
+            except Exception:  # noqa: BLE001, S112 - 逐个网络模式探活，失败换下一种
                 continue
         if _CLIENT is None:
             raise RuntimeError("DeepSeek 客户端初始化失败（直连/代理均不可用）")

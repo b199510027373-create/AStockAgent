@@ -17,25 +17,26 @@ from __future__ import annotations
 
 import json
 import math
-from typing import Any, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 import pandas as pd
 
 __all__ = [
-    "ContractError",
-    "DataContractError",
     "BAR_SCHEMA",
     "EVENT_SCHEMA",
     "EVIDENCE_REQUIRED_KEYS",
-    "RECOMMENDATION_REQUIRED_KEYS",
     "LEGACY_ACTION_WORDS",
+    "RECOMMENDATION_REQUIRED_KEYS",
     "RESEARCH_ACTIONS",
     "BarFrame",
+    "ContractError",
+    "DataContractError",
     "EventFrame",
     "Evidence",
     "RecommendationRun",
-    "normalize_action",
     "action_short",
+    "normalize_action",
     "validate_bars",
     "validate_events",
     "validate_evidence",

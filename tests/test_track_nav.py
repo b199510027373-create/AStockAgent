@@ -98,7 +98,7 @@ class PortfolioNavTests(unittest.TestCase):
     def test_entry_uses_open_and_ignores_pre_entry_history(self):
         detail = detail_rows([("2026-01-02", "2026-01-05", [f"A{i}" for i in range(1, 6)])])
         history = bars(
-            ["2026-01-02"] + list(DATES), [1000.0] + [10.0] * 6, [1000.0, 11.0, 12.0, 12.0, 12.0, 12.0, 12.0]
+            ["2026-01-02", *list(DATES)], [1000.0] + [10.0] * 6, [1000.0, 11.0, 12.0, 12.0, 12.0, 12.0, 12.0]
         )
         prices = {f"A{i}": history for i in range(1, 6)}
 
@@ -542,7 +542,6 @@ class TrackUiWiringTests(unittest.TestCase):
 
     def test_build_track_tab_folds_excess_tables_below_nav(self):
         import gradio as gr
-
         from astock import track_ui
 
         demo = gr.Blocks()

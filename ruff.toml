@@ -1,0 +1,64 @@
+# 显式 Ruff 基线（plan-20261103-012）。
+#
+# 为什么不用 Ruff 默认规则集：默认集会随 Ruff 版本变化，CI 升级工具就可能凭空多出一批
+# 与本次改动无关的报错。这里的 select/ignore 是冻结的规则清单，升级 Ruff 时必须显式改本文件，
+# 让「规则变化」和「代码变化」分开评审。版本固定在 requirements-dev.txt（ruff==<pin>）。
+#
+# 分阶段策略：
+#   P1（本次）：上述清单归零 + CI blocking；astock/scheduler.py 与 astock/jobs.py 因
+#               PR #9 五日观察（至 2026-11-21）暂缓清理，仅在 per-file-ignores 里豁免既有 5 类问题。
+#   P2（观察期结束后）：删除下面两条 per-file-ignores，清理 scheduler/jobs 的 22 条存量问题。
+#   P3：逐族开启 RUF001/RUF002/RUF003（中文全角标点）与 B905（zip strict），先评估再决定。
+target-version = "py313"
+line-length = 120
+# app.py 是仓库根的历史原型脚本（单文件 Streamlit/Gradio 试作，113 条 E402/E701/E702 等），
+# 不属于 astock 包，也不在本次实测基线（astock 264 + tests 56）与验收命令
+# `ruff check astock tests` 的范围内。这里显式排除，避免本地随手 `ruff check .`
+# 与 CI 结论不一致；该文件的清理单独排期（P3），清理前不做任何行为改动。
+exclude = ["app.py"]
+
+[lint]
+# 显式选择规则族 + 少量单条规则；不接受默认集。
+select = [
+    "E4",      # import 语法
+    "E7",      # 语句级语法
+    "E9",      # 运行时错误（未定义名等）
+    "F",       # pyflakes
+    "I",       # import 排序
+    "B",       # bugbear
+    "C4",      # 推导式
+    "SIM",     # 可简化写法
+    "UP",      # pyupgrade
+    "RUF",     # ruff 自有规则
+    "PIE",     # flake8-pie
+    "FURB",    # refurb
+    "PLR0402", # 手工 from-import
+    "PLR0124", # 与自身比较
+    "PLR1716", # 链式比较
+    "PLW0127", # 自赋值
+    "S110",    # try-except-pass（验收要求逐条给理由）
+    "S112",    # try-except-continue（验收要求逐条给理由）
+    "BLE",     # 盲捕异常（验收要求逐条审计）
+    "ISC",     # 隐式字符串拼接（验收要求手工处理）
+    "TRY004",  # 类型检查未抛 TypeError
+]
+ignore = [
+    # 中文注释/文档字符串里的全角标点会被判为「易混淆 Unicode」。本项目注释就是中文，
+    # 该规则只会制造噪声；若要启用需先统一改写注释，放到 P3 评估。
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # zip 不写 strict 在现有数据管道里是刻意行为（长度由上游断言保证），
+    # 逐处补 strict 属于行为变更，单独排期。
+    "B905",
+]
+
+[lint.isort]
+known-first-party = ["astock"]
+
+[lint.per-file-ignores]
+# PR #9 五日观察（2026-11-21 结束）期间不得改动调度运行时代码，否则观察样本失效。
+# 只豁免这两个文件里**现有**的 5 类问题；其他规则仍照常检查，避免新问题混入。
+# 观察期结束后删除本节并清理存量（见文件头 P2）。
+"astock/scheduler.py" = ["BLE001", "S110", "S112", "F401", "PIE808"]
+"astock/jobs.py" = ["BLE001", "S110", "S112", "F401", "PIE808"]

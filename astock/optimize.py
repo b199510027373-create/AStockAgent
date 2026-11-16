@@ -114,7 +114,7 @@ def grid_heatmap(grid: pd.DataFrame, metric: str = "sharpe") -> go.Figure:
             x=[str(c) for c in pivot.columns],
             y=[str(i) for i in pivot.index],
             colorscale="RdYlGn",
-            colorbar=dict(title=key),
+            colorbar={"title": key},
             hovertemplate="fast=%{y}<br>slow=%{x}<br>" + key + "=%{z:.3f}<extra></extra>",
         )
     )
@@ -124,7 +124,7 @@ def grid_heatmap(grid: pd.DataFrame, metric: str = "sharpe") -> go.Figure:
         height=440,
         xaxis_title="slow",
         yaxis_title="fast",
-        margin=dict(t=50, b=40, l=50, r=20),
+        margin={"t": 50, "b": 40, "l": 50, "r": 20},
     )
     return fig
 
@@ -152,8 +152,6 @@ def walk_forward(
         (fast, slow): ma_cross_signals(daily_e, fast, slow)
         for fast, slow in combos
     }
-    key = "夏普" if metric == "sharpe" else "年化收益%"
-
     windows: list[dict] = []
     returns = []
     bench_returns = []
@@ -301,7 +299,7 @@ def oos_figure(equity: pd.DataFrame, title: str = "Walk-forward 样本外净值"
             y=equity["strategy"],
             mode="lines",
             name="Walk-forward 策略",
-            line=dict(color="#1565C0", width=2),
+            line={"color": "#1565C0", "width": 2},
         )
     )
     if "benchmark" in equity.columns:
@@ -311,7 +309,7 @@ def oos_figure(equity: pd.DataFrame, title: str = "Walk-forward 样本外净值"
                 y=equity["benchmark"],
                 mode="lines",
                 name="沪深300",
-                line=dict(color="#9E9E9E", width=1.2, dash="dash"),
+                line={"color": "#9E9E9E", "width": 1.2, "dash": "dash"},
             )
         )
     fig.update_layout(
@@ -319,8 +317,8 @@ def oos_figure(equity: pd.DataFrame, title: str = "Walk-forward 样本外净值"
         template="plotly_white",
         height=420,
         hovermode="x unified",
-        margin=dict(t=50, b=30, l=40, r=20),
-        legend=dict(orientation="h", y=1.08, x=0),
+        margin={"t": 50, "b": 30, "l": 40, "r": 20},
+        legend={"orientation": "h", "y": 1.08, "x": 0},
     )
     fig.update_yaxes(title_text="净值（起点=1）")
     fig.add_hline(y=1, line_color="#999", line_width=1)

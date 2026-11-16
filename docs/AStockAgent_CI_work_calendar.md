@@ -8,20 +8,19 @@
 
 - CI 已配置、已提交、已推送。
 - GitHub Actions 对应提交已运行完成，结果为 `success`。
-- 本地 29 个单元测试全部通过（提交 e8cd9af 时；当前代码已增至 57 个）。
+- 质量门禁已深化（plan-20261103-012，2026-11-17）：`ruff check astock tests` 全仓 0 条并 blocking、`mypy astock app.py` 覆盖全部非 UI 模块（36 个源文件 Success）、覆盖率门槛按实测重设为 76.6%（实测 76.68%），依赖全部精确锁定。
 - 当前 `main` 与 `origin/main` 一致。
-- 发布仓库工作区干净。
 - 没有提交 `.env`、密钥、虚拟环境、缓存、推荐产物或 Python 字节码。
 
 ## 2. 仓库位置
 
-主项目目录：
+主项目目录（**也是 Git 仓库根**，2026-11-17 起 `.git` 已在本目录）：
 
 ```text
 C:\Users\b1995\Documents\AStockAgent
 ```
 
-真正关联 GitHub 的 Git 仓库是：
+历史上曾使用过的发布仓库副本：
 
 ```text
 C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
@@ -51,7 +50,7 @@ e8cd9afe94e7d7ff97b191be6876a3fac30e623f
 Add CI and sync v1.1 application code
 ```
 
-注意：主项目根目录本身没有 `.git`。后续如需提交或推送代码，应进入 `release\AStockAgent`，并先核对两个目录中的代码是否一致。
+注意：`release/AStockAgent` 是历史发布副本，不再作为提交入口。提交/推送直接在仓库根目录进行；该副本已加入 `.gitignore`，不要再往里同步。
 
 ## 3. 完成事项
 
@@ -83,22 +82,22 @@ Add CI and sync v1.1 application code
 - 针对 `main` 的 Pull Request
 - 手动触发 `workflow_dispatch`
 
-执行内容：
+执行内容（plan-20261103-012 之后的当前形态）：
 
 1. 检出仓库。
 2. 安装 Python 3.13。
-3. 安装 `requirements.txt` 中的依赖。
+3. 从 `requirements-dev.txt` 一次装齐运行时与工具链（全部精确锁定，CI 不再裸装 ruff/mypy）。
 4. 检查 Git 是否跟踪了密钥或运行产物。
 5. `compileall` 语法编译。
-6. `ruff` 基础规则检查。
-7. `mypy astock app.py`（核心模块 + 旧入口；见 `mypy.ini`）。
-8. 覆盖率运行与报告（门槛 50%）。
+6. `ruff check astock tests`（全仓 blocking；规则集固定在 `ruff.toml` 的显式 select/ignore）。
+7. `mypy astock app.py`（全部非 UI 模块；UI 文件在 `mypy.ini` 中排除）。
+8. `coverage run -m pytest tests -q -m "not png"` + `coverage report -m`（门槛在 `.coveragerc`，当前 76.6%，分阶段目标 80% / 85%）。
 
 ```text
-ruff check astock app.py tests --select E9,F63,F7,F82
+ruff check astock tests
 mypy astock app.py
-coverage run -m unittest discover -s tests -v
-coverage report -m --fail-under=50
+coverage run -m pytest tests -q -m "not png"
+coverage report -m
 ```
 
 ### 3.3 强化忽略规则
@@ -127,25 +126,28 @@ __pycache__/
 
 ## 4. 验证记录
 
-### 4.1 本地测试
+### 4.1 本地测试（2026-11-17 更新）
 
-执行目录：
+执行目录（仓库根，不再进 `release/AStockAgent`）：
 
 ```text
-C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
+C:\Users\b1995\Documents\AStockAgent
 ```
 
 执行命令：
 
 ```powershell
-& 'C:\Users\b1995\Documents\AStockAgent\.venv\Scripts\python.exe' -m unittest discover -s tests -v
+.venv\Scripts\python.exe -m pytest tests -q -m "not png"
+.venv\Scripts\ruff.exe check astock tests
+.venv\Scripts\mypy.exe astock app.py
 ```
 
 结果：
 
 ```text
-Ran 29 tests
-OK
+558 passed, 1 skipped, 5 deselected, 12 subtests passed
+All checks passed!
+Success: no issues found in 36 source files
 ```
 
 ### 4.2 暂存区审计
@@ -182,10 +184,11 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 - 本地 `HEAD`、`origin/main`、远端 `refs/heads/main` 均为 `e8cd9af`；该提交时 `git status --short` 为空。
 - **当前工作区已有 v1.2 未提交改动**（SQLite ledger、PIT 快照、原始价/ST、研究语义等）；推送后需要重新跑 GitHub Actions，不能沿用 `e8cd9af` 的 CI 结果。
 - GitHub Actions API 核验：run `41402554097` 为 `completed / success`，`head_sha=e8cd9af`。
-- 本地 57 个 unittest 通过；根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希一致。
+- 当时 unittest 全通过；根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希一致。
 - `git ls-files` 未发现 `.env`、`env.env`、`.venv/`、`cache/`、`data/recommendations/`、`__pycache__/`、`*.pyc`；`.env.example` 已跟踪。
-- CI 当前覆盖「依赖安装 + 敏感文件检查 + 语法编译 + ruff 基础规则 + 核心模块 mypy + 覆盖率门槛（50%）+ 单元测试」；UI/图表模块在 `.coveragerc` 中排除。
-- 2026-11-03 基线：`mypy astock app.py` 通过 22 个源文件；覆盖率（排除 UI/图表）**57%**（3492 statements / 1493 miss）。
+- CI 覆盖「依赖安装（精确锁定）+ 敏感文件检查 + 语法编译 + 全仓 `ruff check astock tests` + `mypy astock app.py` + pytest + 覆盖率门槛（`.coveragerc`，当前 76.6%）」；UI/图表模块在 `.coveragerc` 中排除。
+- 历史基线（2026-11-03，已被取代）：`mypy` 覆盖 22 个源文件；覆盖率 57%（3492 statements / 1493 miss）。
+- 当前基线（2026-11-17 实测，plan-20261103-012）：`mypy astock app.py` = 36 个源文件 Success；`pytest tests -q -m "not png"` = 558 passed / 1 skipped / 5 deselected；覆盖率 76.68%（9247 statements / 2156 miss，Linux main 同期 76.39%）。
 
 ## 5. 安全红线
 
@@ -248,10 +251,16 @@ git push origin main
 
 当前没有阻塞项，CI 已能作为基础质量门禁。
 
+已完成（plan-20261103-012，2026-11-17）：
+
+- ~~增加静态检查，例如 `ruff`。~~ 已全仓归零并纳入 CI blocking（`ruff check astock tests`）。
+- ~~为关键模块补充覆盖率报告。~~ 已覆盖全部非 UI 模块，门槛按实测重设为 76.6%，分阶段目标 80% / 85%。
+
 可选的后续改进：
 
-- 增加静态检查，例如 `ruff`。
-- 为关键模块补充覆盖率报告。
+- PR #9 五日观察（2026-11-21）结束后，删除 `ruff.toml` 中 `astock/scheduler.py`、`astock/jobs.py` 的 per-file-ignores，清理存量 22 条问题。
+- 清理仓库根历史原型脚本 `app.py`（113 条 Ruff 问题），目前已在 `ruff.toml` 里显式 exclude。
+- 逐族开启 `RUF001/RUF002/RUF003`（中文全角标点）与 `B905`（zip strict），先评估再决定。
 - 增加依赖漏洞扫描。
 - 增加 GitHub Actions 运行结果徽章到 README。
 - 如果后续需要发布文档，单独建立 `docs/` 内容策略，不要把运行数据或产品构建产物混入源码仓库。

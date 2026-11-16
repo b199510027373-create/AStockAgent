@@ -89,7 +89,7 @@ def _atomic_json(payload: dict[str, Any], path: Path) -> None:
 def _read_parquet(path: Path) -> pd.DataFrame | None:
     try:
         return pd.read_parquet(path) if path.exists() else None
-    except Exception:
+    except (OSError, ValueError):  # 缓存缺失/损坏时视为无缓存
         return None
 
 
@@ -186,7 +186,7 @@ def active_industry_conflicts(
         rows.append(
             {
                 "code": str(code),
-                "n_records": int(len(group)),
+                "n_records": len(group),
                 "n_industries": int(group["industry"].nunique()),
                 "industries": sorted(set(group["industry"])),
                 "in_dates": sorted(group["in_date"].dt.strftime("%Y-%m-%d")),
@@ -380,7 +380,7 @@ def label_change_breakdown(pairs: pd.DataFrame, edges: pd.DataFrame) -> dict[str
     structural = changed[changed["is_structural"]]
     total = len(merged)
     return {
-        "structural_label_changed_codes": int(len(structural)),
+        "structural_label_changed_codes": len(structural),
         "structural_label_changed_share": round(len(structural) / total, 6) if total else 0.0,
         "residual_label_changed_codes": int(len(changed) - len(structural)),
         "residual_label_changed_share": round((len(changed) - len(structural)) / total, 6) if total else 0.0,
@@ -449,7 +449,7 @@ def build_crosswalk_artifacts(
         if cached is not None and not cached.empty and summary_path.exists():
             try:
                 cached_summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            except Exception:
+            except (OSError, ValueError):  # 摘要缺失/损坏时按无摘要处理
                 cached_summary = None
             if cached_summary is not None and _cache_matches(
                 cached_summary,
@@ -606,8 +606,8 @@ def snapshot_metrics(snapshot: pd.DataFrame, summary: dict[str, Any]) -> pd.Data
         universe = _version_universe(summary, version) if version in {"SW2014", "SW2021"} else set()
         sw = chunk[chunk["industry"].isin(universe)]
         non_sw = chunk[~chunk["industry"].isin(universe)]
-        n_members = int(len(chunk))
-        n_sw = int(len(sw))
+        n_members = len(chunk)
+        n_sw = len(sw)
         total_weight_all = float(chunk["weight"].sum())
         total_weight_sw = float(sw["weight"].sum())
         counts = sw.groupby("industry")["code"].nunique()
@@ -750,16 +750,16 @@ def bridge_diff(
         "hhi_count_new": _hhi(new_counts),
         "hhi_weight_old": _hhi(old_weights),
         "hhi_weight_new": _hhi(new_weights),
-        "paired_codes": int(len(merged)),
+        "paired_codes": len(merged),
         "only_old_codes": int(len(old) - len(merged)),
         "only_new_codes": int(len(new) - len(merged)),
-        "changed_codes": int(len(changed)),
+        "changed_codes": len(changed),
         "changed_share": _count_share(merged["changed"]),
         "changed_weight_share": _share(merged["changed"]),
-        "structural_changed_codes": int(len(structural)),
+        "structural_changed_codes": len(structural),
         "structural_changed_share": _count_share(merged["changed"] & merged["is_structural"]),
         "structural_changed_weight_share": _share(merged["changed"] & merged["is_structural"]),
-        "residual_changed_codes": int(len(residual)),
+        "residual_changed_codes": len(residual),
         "residual_changed_share": _count_share(merged["changed"] & ~merged["is_structural"]),
         "residual_changed_weight_share": _share(merged["changed"] & ~merged["is_structural"]),
         "forward_clean_share": _count_share(forward_clean),
@@ -914,7 +914,7 @@ def build_distribution_artifacts(
     if not refresh and paths["meta"].exists():
         try:
             cached_meta = json.loads(paths["meta"].read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, ValueError):  # 元数据缺失/损坏时按无缓存处理
             cached_meta = None
         cached_dist = _read_parquet(paths["distribution"])
         cached_metrics = _read_parquet(paths["metrics"])

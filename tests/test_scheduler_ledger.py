@@ -15,9 +15,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import astock.ledger as ledger
-import astock.scheduler as scheduler
-from astock import jobs
+from astock import jobs, ledger, scheduler
 from astock.use_cases import RunResult
 
 
@@ -566,9 +564,12 @@ class JobsCliTests(unittest.TestCase):
 
     def _run_cli(self, *argv: str) -> tuple[int, str]:
         out = StringIO()
-        with patch.object(sys, "argv", ["astock.jobs", *argv]), redirect_stdout(out):
-            with self.assertRaises(SystemExit) as ctx:
-                jobs.main()
+        with (
+            patch.object(sys, "argv", ["astock.jobs", *argv]),
+            redirect_stdout(out),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            jobs.main()
         return int(ctx.exception.code), out.getvalue()
 
     def test_report_cli_returns_zero_for_five_successful_days(self):

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import gradio as gr
 import pandas as pd
+
+import gradio as gr
 
 from .backtest import STRATEGIES, run_strategy
 from .backtest_chart import backtest_figure, metrics_markdown

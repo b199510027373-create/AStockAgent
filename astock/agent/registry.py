@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import copy
-import json
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -27,13 +26,13 @@ from typing import Any
 from astock.agent.types import MAX_TABLE_ROWS, ToolResult
 
 __all__ = [
-    "Permission",
     "SAFE_PERMISSIONS",
+    "Permission",
     "ToolArgumentError",
     "ToolNotFoundError",
     "ToolRegistrationError",
-    "ToolSpec",
     "ToolRegistry",
+    "ToolSpec",
     "apply_defaults",
     "validate_tool_arguments",
 ]
@@ -63,7 +62,7 @@ class ToolArgumentError(ValueError):
         super().__init__(f"工具 {tool} 参数校验失败：{detail}")
 
 
-class Permission(str, Enum):
+class Permission(str, Enum):  # noqa: UP042 - ADR 冻结枚举；StrEnum 会改变 str() 行为
     """允许 Agent 使用的工具权限（只读 / 计算 / 渲染 / 追问）。"""
 
     MARKET_READ = "market:read"
