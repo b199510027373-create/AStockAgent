@@ -34,9 +34,22 @@
 5. **raw 边界不变**：涨跌停、成交额/成交量、绝对价位判断仍用 raw；缓存 meta 的 `base_factor` 变化即失效。
 6. **可追溯**：图表与行情工具的 metadata 暴露 `adj`/`adj_base`/`adj_source`；`ChartSpec.data.adj` 增加 `hfq` 枚举（默认仍 `qfq`），旧 `none` 保留给涨跌停/成交类图。落地项 `plan-20261114-003`（D1）与 `plan-20261114-002`（图注）。
 
+## 落地（plan-20261114-003，2026-11-16）
+
+1. **因子历史区间**：`astock/data.py` 新增 `ADJ_HISTORY_START = "19900101"`；`_fetch_daily` 与 `load_adj_factors` 均从该日起取 `adj_factor`，基准不再由请求区间推断。
+2. **基准与比值**：`_adj_base(factors, adj)` 中 qfq 取最新因子、hfq 取最早可用交易日因子（`iloc[0]`）；`ratio = adj_factor / base_factor`，hfq 首日价格等于 raw，之后按累计因子放大。
+3. **硬失败**：新增 `_clean_adj_factors` 与 `astock.contracts.DataContractError`（`ContractError` 子类）；空表、缺列、缺失/NaN/inf/`<=0` 一律抛错，禁止 ffill/bfill、禁止填 1.0、禁止回退 qfq；`BarFrame.validate(require_adj=True)` 同步加严。
+4. **metadata**：日线与分钟线结果 `attrs["adjustment"]` 统一为 `{adj, adj_base, base_factor, adj_source="daily"}`；`load_daily`/`load_minute` 在 `validate_bars` 之后重新挂回 attrs，供行情工具与图表图注消费。
+5. **缓存失效**：`_cache_base_valid` 校验 meta 的 `base_factor`/`adj_base`——qfq 要求缓存末行因子等于 `base_factor`；hfq 要求覆盖基准日且该日因子等于 `base_factor`；旧版无 `adj_base` 的 hfq meta 直接失效重拉。
+6. **raw 边界不变**：涨跌停、成交额/成交量与 `raw_*` 列保持原始价；分钟线只改价格列与涨跌幅。
+7. **测试**：`tests/test_data_adj_caliber.py` 覆盖 hfq/qfq/raw 对照（逐行比值恒定）、基准不受请求区间影响（断言查询起点为 `19900101`）、因子异常（空/`=0`/负/NaN/inf）与缺行、分钟线 attrs、缓存 `base_factor` 篡改与旧 hfq meta 失效。
+
 ## 证据
 
 - `astock/data.py`（`raw_*`、`base_factor`）
 - `astock/backtest.py`（限价、ST、IPO）
 - 修复记录 D7/D8/D12
 - 用户 2026-11-14 裁决（D1）
+- `astock/contracts.py`（`DataContractError`、`BarFrame.validate` 的 `adj_factor` 硬校验）
+- `tests/test_data_adj_caliber.py`（hfq/qfq/raw 对照、因子异常、分钟 attrs、缓存基准失效）
+- `tests/test_data_pit_events.py`（hfq 最早因子基准、空因子抛 `DataContractError`）

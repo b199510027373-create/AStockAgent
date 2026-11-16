@@ -23,6 +23,7 @@ import pandas as pd
 
 __all__ = [
     "ContractError",
+    "DataContractError",
     "BAR_SCHEMA",
     "EVENT_SCHEMA",
     "EVIDENCE_REQUIRED_KEYS",
@@ -86,6 +87,16 @@ class ContractError(ValueError):
         self.missing = list(missing)
         self.invalid = list(invalid)
         super().__init__(f"[{contract}] {detail}")
+
+
+class DataContractError(ContractError):
+    """行情/复权数据本身违约（ADR-008 D1）。
+
+    与"表结构不对"的 :class:`ContractError` 区分：复权因子缺失、为空、
+    ``<= 0``、NaN、inf 属于数据硬失败，调用方不得静默回退 qfq 或用 1.0 填充，
+    只允许显式报错。作为 :class:`ContractError` 的子类，既有 ``except
+    ContractError`` 仍能兜住，不会漏成裸异常。
+    """
 
 
 # --------------------------------------------------------------------------- #
@@ -289,12 +300,16 @@ class BarFrame:
         if "adj_factor" in frame.columns:
             numeric.append("adj_factor")
         _to_numeric(frame, numeric, cls.name)
-        if require_adj and frame["adj_factor"].isna().any():
-            raise ContractError(
-                cls.name,
-                f"列 'adj_factor' 存在缺失值（{int(frame['adj_factor'].isna().sum())} 行）",
-                invalid=["adj_factor"],
-            )
+        if require_adj:
+            factors = pd.to_numeric(frame["adj_factor"], errors="coerce")
+            bad = factors.isna() | ~factors.map(math.isfinite) | (factors <= 0)
+            if bad.any():
+                raise DataContractError(
+                    cls.name,
+                    f"列 'adj_factor' 存在 {int(bad.sum())} 行非法值"
+                    "（缺失/NaN/inf/<=0）；禁止填充或回退复权口径",
+                    invalid=["adj_factor"],
+                )
         return frame
 
 

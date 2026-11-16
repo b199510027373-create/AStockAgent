@@ -134,7 +134,7 @@ class DataCacheAndQfqTests(unittest.TestCase):
         with (
             patch.object(data, "_ADJ_MEM", {}),
             patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")),
-            self.assertRaises(data.TushareError),
+            self.assertRaises(data.DataContractError),
         ):
             data.load_adj_factors("600519.SH", client=empty)
 
@@ -420,12 +420,16 @@ class AdjCaliberTests(unittest.TestCase):
         # none 口径不需要复权因子
         self.assertEqual(fake.calls, ["daily"])
 
-    def test_fetch_daily_hfq_scales_against_original_factor(self):
+    def test_fetch_daily_hfq_scales_against_earliest_factor(self):
         fake = FakeTushare(self.raw, self.factors)
         out = data._fetch_daily(fake, "600519.SH", "20250102", "20250106", "hfq")
+        # 最早可用交易日（2025-01-02，因子 1.0）是基准，不是"原始因子 1.0"。
         self.assertAlmostEqual(float(out["close"].iloc[0]), 10.2 * 1.0)
         self.assertAlmostEqual(float(out["close"].iloc[-1]), 12.2 * 4.0)
         self.assertAlmostEqual(float(out["raw_close"].iloc[-1]), 12.2)
+        self.assertEqual(out.attrs["adjustment"]["adj"], "hfq")
+        self.assertEqual(out.attrs["adjustment"]["adj_base"], "2025-01-02")
+        self.assertAlmostEqual(out.attrs["adjustment"]["base_factor"], 1.0)
 
     def test_load_daily_rejects_unknown_adj(self):
         fake = FakeTushare(self.raw, self.factors)
