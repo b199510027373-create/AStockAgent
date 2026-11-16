@@ -103,6 +103,9 @@ CREATE INDEX IF NOT EXISTS idx_agent_artifacts_digest ON agent_artifacts(digest)
 
 ARTIFACT_KINDS = ("figure", "table", "file", "report")
 ARTIFACT_ID_RE = re.compile(r"^art_[0-9a-f]{16}$")
+# 渲染器 PNG 导出降级时的告警前缀；``record_artifact`` 靠它识别「同一 artifact 已补齐 PNG」。
+PNG_DEGRADED_WARNING_PREFIX = "PNG 导出降级"
+_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
 DEFAULT_DB_PATH = Path(os.getenv("ASTOCK_DB_PATH") or (BASE_DIR / "data" / "astock.db"))
 DEFAULT_ARTIFACT_ROOT = Path(
@@ -236,6 +239,39 @@ class ArtifactRecord:
         }
 
 
+def _load_meta(raw: Any) -> dict[str, Any]:
+    try:
+        meta = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
+def _merge_artifact_meta(
+    existing: Mapping[str, Any], newest: Mapping[str, Any]
+) -> dict[str, Any]:
+    """同一 ``artifact_id`` 重写时以最新一次为准，但成功态只升不降。
+
+    HTML 内容寻址，``artifact_id`` 相同即 HTML 字节相同，此前导出的 PNG 仍描述同一张图；
+    因此最新一次写入若没能出 PNG（``png_path=None``/``degraded=True``），不得把已有
+    ``png_path`` 与 ``degraded=False`` 覆盖掉（§3.4 的「升级」语义，评审 P1）。
+    """
+    merged = dict(newest)
+    previous_png = existing.get("png_path")
+    if previous_png and not merged.get("png_path"):
+        merged["png_path"] = previous_png
+        merged["degraded"] = False
+        warnings = merged.get("warnings")
+        if isinstance(warnings, list):
+            # 沿用了旧 PNG，就不能再留「本次 PNG 降级」的告警，否则 meta 自相矛盾。
+            merged["warnings"] = [
+                item
+                for item in warnings
+                if not (isinstance(item, str) and item.startswith(PNG_DEGRADED_WARNING_PREFIX))
+            ]
+    return merged
+
+
 def record_artifact(
     conn: sqlite3.Connection,
     *,
@@ -252,7 +288,13 @@ def record_artifact(
         raise ValueError(f"kind 必须是 {ARTIFACT_KINDS} 之一，实际 {kind!r}")
     filename = Path(path).name
     artifact_id = artifact_id_for(digest, filename)
-    payload = json.dumps(dict(meta or {}), ensure_ascii=False, sort_keys=True)
+    newest = dict(meta or {})
+    existing = conn.execute(
+        "SELECT meta_json FROM agent_artifacts WHERE artifact_id = ?", (artifact_id,)
+    ).fetchone()
+    if existing is not None:
+        newest = _merge_artifact_meta(_load_meta(existing["meta_json"]), newest)
+    payload = json.dumps(newest, ensure_ascii=False, sort_keys=True)
     conn.execute(
         """
         INSERT INTO agent_artifacts(
@@ -368,6 +410,34 @@ def find_artifacts_by_digest(
     return [record for record in (_row_to_record(row) for row in rows) if record]
 
 
+def _path_digest(value: Any) -> str | None:
+    """从 artifact 路径中取出内容寻址目录名（绝对路径与相对路径都适用）。"""
+    if not isinstance(value, str) or not value:
+        return None
+    for part in Path(value).parts:
+        if _DIGEST_RE.match(part):
+            return part
+    return None
+
+
+def _protected_digests(conn: sqlite3.Connection, keep: set[str]) -> set[str]:
+    """仍被引用的 digest 目录：行 ``digest`` + ``meta_json.png_path`` 所在目录 + ``keep_digests``。
+
+    PNG 与 HTML 分属不同 digest 目录，且 PNG 不单独落行（``kind='figure'`` 只记 HTML）；
+    只看 ``agent_artifacts.digest`` 会把仍被存活 artifact 引用的 PNG 一起删掉（评审 P1）。
+    """
+    protected = set(keep)
+    protected |= {
+        row["digest"]
+        for row in conn.execute("SELECT DISTINCT digest FROM agent_artifacts")
+    }
+    for row in conn.execute("SELECT meta_json FROM agent_artifacts"):
+        digest = _path_digest(_load_meta(row["meta_json"]).get("png_path"))
+        if digest:
+            protected.add(digest)
+    return protected
+
+
 def prune_artifacts(
     conn: sqlite3.Connection,
     *,
@@ -410,7 +480,10 @@ def prune_artifacts(
         removed_rows += 1
         stale_digests.add(row["digest"])
     if delete_files:
+        protected = _protected_digests(conn, keep)
         for digest in stale_digests:
+            if digest in protected:
+                continue
             remaining = conn.execute(
                 "SELECT COUNT(*) AS n FROM agent_artifacts WHERE digest = ?", (digest,)
             ).fetchone()["n"]
@@ -434,12 +507,13 @@ def prune_artifacts(
         }
         artifacts_root = base / "artifacts"
         if artifacts_root.is_dir():
-            # 二次渲染/降级升级会留下没有 DB 行的 digest 目录（例如 PNG），一并清掉。
+            # 二次渲染/降级升级会留下没有 DB 行的 digest 目录（例如 PNG），一并清掉；
+            # 但仍被存活 artifact 引用的目录（行 digest / png_path / keep_digests）必须保留。
             for shard in sorted(artifacts_root.iterdir()):
                 if not shard.is_dir():
                     continue
                 for directory in sorted(shard.iterdir()):
-                    if not directory.is_dir() or directory.name in referenced:
+                    if not directory.is_dir() or directory.name in protected:
                         continue
                     for entry in sorted(directory.iterdir()):
                         if entry.is_file():

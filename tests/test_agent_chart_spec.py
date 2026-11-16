@@ -646,3 +646,59 @@ def test_freeze_doc_records_alias_removal() -> None:
     assert "别名已删除" in text
     assert "Q4=B" in text
     assert "panes" in text and "style" in text and "raw" in text
+
+
+def test_freeze_v1_doc_stays_v1_and_v2_only_lives_in_draft() -> None:
+    """冻结清单一律按 v1 口径读：v2 语义只能待在草案文件里（评审 P1）。
+
+    2026-11-14 曾把 ``agent_artifact_versions``/``view_as_of``/``data_digest`` 等 v2 口径
+    就地写进 v1 冻结清单，而 ``main`` 的实现仍是 v1，导致「文档说 v2、代码是 v1」。
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    v1 = (root / "docs" / "AStockAgent_interface_freeze_v1.md").read_text(encoding="utf-8")
+    for marker in (
+        "v2 覆盖",
+        "agent_artifact_versions",
+        "view_as_of",
+        "data_digest",
+        "已由",
+    ):
+        assert marker not in v1, marker
+    # v1 仍然记录自己那套 meta（不许随着「去 v2」一起丢）
+    assert "time_point_scope" in v1
+    assert "png_path" in v1
+
+    draft = (root / "docs" / "AStockAgent_interface_freeze_v2_draft.md").read_text(
+        encoding="utf-8"
+    )
+    assert "草案、未实现" in draft
+    assert "plan-20261114-002" in draft
+    assert "不作为当前实现依据" in draft
+    assert "agent_artifact_versions" in draft
+
+
+def test_freeze_v1_doc_documents_both_bbox_classes() -> None:
+    """文件 bbox 的两类语义是 v1 已实现口径，回滚 v2 时不得退化成单一类型。
+
+    评审 P2 ``iss-mwik3v22-213a0f``：上一轮按 556c8dc^ 恢复 v1 正文时把 §4 的
+    「PDF 页面坐标 / 表格行列坐标」写成了单一 ``[x0,y0,x1,y1]``，并把已实现语义误标进
+    v2 草案。这里同时锁 v1 的完整说明与 v2 草案不重复声明。
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    v1 = (root / "docs" / "AStockAgent_interface_freeze_v1.md").read_text(encoding="utf-8")
+    assert "[x0,y0,x1,y1] | [row_start,col_start,row_end,col_end] | null" in v1
+    assert "row_start,col_start,row_end,col_end" in v1
+    assert "x0,y0,x1,y1" in v1
+    assert "pdfplumber" in v1
+
+    draft = (root / "docs" / "AStockAgent_interface_freeze_v2_draft.md").read_text(
+        encoding="utf-8"
+    )
+    assert "row_start" not in draft
+    assert "x0,y0,x1,y1" not in draft
+    assert "不属于 v2 草案" in draft
+

@@ -46,6 +46,7 @@ from astock.agent.chart_spec import (
 )
 from astock.agent.store import (
     DEFAULT_ARTIFACT_ROOT,
+    PNG_DEGRADED_WARNING_PREFIX,
     artifact_id_for,
     connect,
     ensure_run,
@@ -1238,7 +1239,9 @@ def render(
             )
             if payload is None:
                 degraded = True
-                warnings.append(f"PNG 导出降级：{reason}（仅 HTML artifact）")
+                warnings.append(
+                    f"{PNG_DEGRADED_WARNING_PREFIX}：{reason}（仅 HTML artifact）"
+                )
             else:
                 _, _, absolute_png = put_content(
                     payload, filename=f"chart_{artifact_id}.png", root=artifact_root
