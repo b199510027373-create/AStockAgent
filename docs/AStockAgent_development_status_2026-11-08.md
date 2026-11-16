@@ -137,10 +137,10 @@ CI 内容（2026-11-17 按 plan-20261103-012 更新到当前形态）：
 本地验证结果（2026-11-17 实测）：
 
 ```text
-pytest tests -m "not png": 608 passed, 1 skipped, 5 deselected
+pytest tests -m "not png": 610 passed, 1 skipped, 5 deselected
 mypy astock app.py: Success, no issues found in 36 source files
 ruff check astock tests: All checks passed!
-coverage: 9247 statements / 2155 miss = 76.68%（CI Linux 9248/2178 = 76.45%，门禁 76.45%）
+coverage: 9248 statements / 2157 miss = 76.68%（CI Linux 9248/2178 = 76.45%，门禁 76.45%）
 ```
 
 ## 5. 已完成的主要开发内容
