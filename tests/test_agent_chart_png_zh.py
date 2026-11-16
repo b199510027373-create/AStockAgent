@@ -117,6 +117,13 @@ def test_chinese_candlestick_png_renders_glyphs(tmp_path: Path) -> None:
     band_ink = sum(count for count, colour in band_colours if sum(colour) < 700)
     assert band_ink > 150, f"标题带笔画过少（{band_ink} px）：中文标题可能没渲染出来"
 
+    # 图例（右上角，位于标题带下沿 y≈62-100）必须有中文「K 线」笔画；
+    # 丢字形时图例区只剩色块、墨迹极少。
+    legend_band = image.crop((int(width * 0.78), 62, width, 100))
+    legend_colours = legend_band.getcolors(maxcolors=1 << 24) or []
+    legend_ink = sum(count for count, colour in legend_colours if sum(colour) < 700)
+    assert legend_ink > 80, f"图例区笔画过少（{legend_ink} px）：中文图例可能没渲染出来"
+
 
 def test_chinese_font_family_is_recorded_in_meta(tmp_path: Path) -> None:
     """字体必须进 meta：换机器复现 PNG 时要知道用的是哪套 CJK 字体（评审 P1）。"""

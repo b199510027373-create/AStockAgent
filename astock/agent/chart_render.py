@@ -802,7 +802,8 @@ def _build_candlestick(
             increasing_fillcolor=PRICE_UP,
             decreasing_line_color=PRICE_DOWN,
             decreasing_fillcolor=PRICE_DOWN,
-            showlegend=False,
+            # 图例保留中文「K 线」条目：ADR-016 Q6=A 要求中文图例在 PNG 中可读，
+            # 不设 showlegend=False，图例位置见下方 update_layout。
         ),
         row=1,
         col=1,
@@ -975,7 +976,7 @@ def _build_candlestick(
         height=420 + 120 * (rows - 1),
         margin={"l": 52, "r": 18, "t": 78, "b": 36},
         hovermode="x unified",
-        legend={"orientation": "h", "y": 1.02, "x": 0},
+        legend={"orientation": "h", "y": 1.02, "x": 1, "xanchor": "right"},
         bargap=0.1,
     )
     figure.update_xaxes(showgrid=True, gridcolor=GRID, rangeslider_visible=False)
