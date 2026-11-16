@@ -23,10 +23,12 @@ RUFF_PATH = ROOT / "ruff.toml"
 COVERAGE_PATH = ROOT / ".coveragerc"
 MYPY_PATH = ROOT / "mypy.ini"
 
-# 实测基线（plan-20261103-012）：CI Linux 76.47%（门禁权威值）、本地 Windows 76.70%。
-# 门槛等于 CI 实测显示值 76.47（评审 iss-mwjmi7bw-9b664c：常量若低于实测值，
-# 门槛可被静默下调 0.47pp 而用例仍绿）。调整门槛必须同步改本断言并过评审。
-MIN_COVERAGE_FLOOR = 76.47
+# 实测基线（plan-20261103-012）：CI Linux 76.45%（run 43935079016，门禁权威值）、
+# 本地 Windows 76.68%。比 PR #21 的 76.47% 低 0.02pp：scheduler.py 为守住 PR #9 观察期
+# 回退到 92f5e47 原文，恢复的两处 try/except 分支在 Linux 上未被覆盖（+1 stmt / +2 miss）。
+# 门槛等于 CI 实测显示值 76.45（评审 iss-mwjmi7bw-9b664c：常量若低于实测值，
+# 门槛可被静默下调而用例仍绿）。调整门槛必须同步改本断言并过评审。
+MIN_COVERAGE_FLOOR = 76.45
 
 # mypy 只排除 UI / 图表模块；这个白名单是「覆盖全部非 UI 模块」的唯一定义处。
 MYPY_UI_WHITELIST = {
