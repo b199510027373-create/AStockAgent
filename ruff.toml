@@ -17,10 +17,10 @@ line-length = 120
 # 与 CI 结论不一致；该文件的清理单独排期（P3），清理前不做任何行为改动。
 exclude = ["app.py"]
 #
-# 本地复核提示：Ruff 的 isort 会把仓库根下「同名顶层目录」自动当成 first-party，
-# 例如本机遗留的未跟踪 `gradio/` 目录会让 `import gradio as gr` 被判为 first-party，
-# 从而本地 I001 全绿而 CI（干净检出）报 9 条。提交前如果本地有此类残留目录，
-# 先移走/清理，或用干净 worktree 复核：`ruff check astock tests`。
+# 本地复核提示：Ruff 的 isort 会把仓库根下「同名顶层目录」自动当成 first-party。
+# 本机跑测试时 Gradio 会在仓库根生成 `gradio/`（内含 vibe_edit_history），
+# 于是 `import gradio as gr` 被误判为 first-party，本地 I001 报 9 条而 CI（干净检出）全绿。
+# 该目录已加入 .gitignore；本地复核前先删除它，或用干净 worktree 跑 `ruff check astock tests`。
 
 [lint]
 # 显式选择规则族 + 少量单条规则；不接受默认集。

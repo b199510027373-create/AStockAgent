@@ -47,3 +47,6 @@ notebooks/Untitled.ipynb
 notebooks/test.ipynb
 notebooks/app_write.ipynb
 tools/*.pkl
+
+# Gradio 在仓库根生成的 UI 编辑历史目录（测试实例化 Blocks 时产生，勿提交）
+gradio/

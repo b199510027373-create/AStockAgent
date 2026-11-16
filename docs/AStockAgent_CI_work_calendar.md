@@ -8,7 +8,7 @@
 
 - CI 已配置、已提交、已推送。
 - GitHub Actions 对应提交已运行完成，结果为 `success`。
-- 质量门禁已深化（plan-20261103-012，2026-11-17）：`ruff check astock tests` 全仓 0 条并 blocking、`mypy astock app.py` 覆盖全部非 UI 模块（36 个源文件 Success）、覆盖率门槛按实测重设为 76.6%（实测 76.68%），依赖全部精确锁定。
+- 质量门禁已深化（plan-20261103-012，2026-11-17）：`ruff check astock tests` 全仓 0 条并 blocking、`mypy astock app.py` 覆盖全部非 UI 模块（36 个源文件 Success）、覆盖率门槛按实测重设为 76.4%（CI Linux 实测 76.47%，本地 76.70%），依赖全部精确锁定。
 - 当前 `main` 与 `origin/main` 一致。
 - 没有提交 `.env`、密钥、虚拟环境、缓存、推荐产物或 Python 字节码。
 
@@ -91,7 +91,7 @@ Add CI and sync v1.1 application code
 5. `compileall` 语法编译。
 6. `ruff check astock tests`（全仓 blocking；规则集固定在 `ruff.toml` 的显式 select/ignore）。
 7. `mypy astock app.py`（全部非 UI 模块；UI 文件在 `mypy.ini` 中排除）。
-8. `coverage run -m pytest tests -q -m "not png"` + `coverage report -m`（门槛在 `.coveragerc`，当前 76.6%，分阶段目标 80% / 85%）。
+8. `coverage run -m pytest tests -q -m "not png"` + `coverage report -m`（门槛在 `.coveragerc`，当前 76.4%，分阶段目标 80% / 85%）。
 
 ```text
 ruff check astock tests
@@ -145,7 +145,7 @@ C:\Users\b1995\Documents\AStockAgent
 结果：
 
 ```text
-558 passed, 1 skipped, 5 deselected, 12 subtests passed
+606 passed, 1 skipped, 5 deselected, 12 subtests passed
 All checks passed!
 Success: no issues found in 36 source files
 ```
@@ -186,9 +186,9 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 - GitHub Actions API 核验：run `41402554097` 为 `completed / success`，`head_sha=e8cd9af`。
 - 当时 unittest 全通过；根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希一致。
 - `git ls-files` 未发现 `.env`、`env.env`、`.venv/`、`cache/`、`data/recommendations/`、`__pycache__/`、`*.pyc`；`.env.example` 已跟踪。
-- CI 覆盖「依赖安装（精确锁定）+ 敏感文件检查 + 语法编译 + 全仓 `ruff check astock tests` + `mypy astock app.py` + pytest + 覆盖率门槛（`.coveragerc`，当前 76.6%）」；UI/图表模块在 `.coveragerc` 中排除。
+- CI 覆盖「依赖安装（精确锁定）+ 敏感文件检查 + 语法编译 + 全仓 `ruff check astock tests` + `mypy astock app.py` + pytest + 覆盖率门槛（`.coveragerc`，当前 76.4%）」；UI/图表模块在 `.coveragerc` 中排除。
 - 历史基线（2026-11-03，已被取代）：`mypy` 覆盖 22 个源文件；覆盖率 57%（3492 statements / 1493 miss）。
-- 当前基线（2026-11-17 实测，plan-20261103-012）：`mypy astock app.py` = 36 个源文件 Success；`pytest tests -q -m "not png"` = 558 passed / 1 skipped / 5 deselected；覆盖率 76.68%（9247 statements / 2156 miss，Linux main 同期 76.39%）。
+- 当前基线（2026-11-17 实测，plan-20261103-012，PR #21）：`mypy astock app.py` = 36 个源文件 Success；`pytest tests -q -m "not png"` 本地 606 passed / 1 skipped / 5 deselected（CI Linux 605 passed / 2 skipped）；覆盖率 CI Linux 76.47%（9247/2176，门禁权威值）、本地 76.70%（9247/2155）。
 
 ## 5. 安全红线
 
@@ -254,7 +254,7 @@ git push origin main
 已完成（plan-20261103-012，2026-11-17）：
 
 - ~~增加静态检查，例如 `ruff`。~~ 已全仓归零并纳入 CI blocking（`ruff check astock tests`）。
-- ~~为关键模块补充覆盖率报告。~~ 已覆盖全部非 UI 模块，门槛按实测重设为 76.6%，分阶段目标 80% / 85%。
+- ~~为关键模块补充覆盖率报告。~~ 已覆盖全部非 UI 模块，门槛按实测重设为 76.4%，分阶段目标 80% / 85%。
 
 可选的后续改进：
 
