@@ -145,7 +145,7 @@ C:\Users\b1995\Documents\AStockAgent
 结果：
 
 ```text
-608 passed, 1 skipped, 5 deselected, 12 subtests passed
+610 passed, 1 skipped, 5 deselected, 12 subtests passed
 All checks passed!
 Success: no issues found in 36 source files
 ```
@@ -188,7 +188,7 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 - `git ls-files` 未发现 `.env`、`env.env`、`.venv/`、`cache/`、`data/recommendations/`、`__pycache__/`、`*.pyc`；`.env.example` 已跟踪。
 - CI 覆盖「依赖安装（精确锁定）+ 敏感文件检查 + 语法编译 + 全仓 `ruff check astock tests` + `mypy astock app.py` + pytest + 覆盖率门槛（`.coveragerc`，当前 76.45%）」；UI/图表模块在 `.coveragerc` 中排除。
 - 历史基线（2026-11-03，已被取代）：`mypy` 覆盖 22 个源文件；覆盖率 57%（3492 statements / 1493 miss）。
-- 当前基线（2026-11-17 实测，plan-20261103-012，评审第 1 轮后 PR #24 / CI run 43935079016）：`mypy astock app.py` = 36 个源文件 Success；`pytest tests -q -m "not png"` 本地 608 passed / 1 skipped / 5 deselected（CI Linux 607 passed / 2 skipped）；覆盖率 CI Linux 76.45%（9248/2178，门禁权威值）、本地 76.68%（9248/2157）。比 PR #21 的 76.47% 低 0.02pp：`astock/scheduler.py` 为守住 PR #9 观察期回退到 92f5e47 原文，恢复的 try/except 分支在 Linux 未被覆盖。
+- 当前基线（2026-11-17 实测，plan-20261103-012，评审第 1 轮后 PR #24 / CI run 43935079016）：`mypy astock app.py` = 36 个源文件 Success；`pytest tests -q -m "not png"` 本地 610 passed / 1 skipped / 5 deselected（CI Linux 609 passed / 2 skipped）；覆盖率 CI Linux 76.45%（9248/2178，门禁权威值）、本地 76.68%（9248/2157）。比 PR #21 的 76.47% 低 0.02pp：`astock/scheduler.py` 为守住 PR #9 观察期回退到 92f5e47 原文，恢复的 try/except 分支在 Linux 未被覆盖。
 
 ## 5. 安全红线
 

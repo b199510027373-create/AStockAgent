@@ -574,6 +574,16 @@
       "notes": "第 1 轮 · request_changes"
     },
     {
+      "id": "cal-rev-20261117-001-r2",
+      "type": "review",
+      "title": "评审：评审：CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
+      "start": "2026-11-16T19:19:05.199Z",
+      "end": "2026-11-16T19:20:08.970Z",
+      "planItemId": "plan-20261103-012",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261110-005-planned",
       "type": "planned",
       "title": "ADR-016 图表：ChartSpec v1 校验与渲染（不执行任意 Python）",

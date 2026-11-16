@@ -137,6 +137,66 @@ def test_coverage_threshold_not_below_measured_baseline() -> None:
     assert int(report.get("precision", "0")) >= 1, "precision 至少要能看出小数点，否则 76.9% 会显示成 77%"
 
 
+DOCS_WITH_BASELINE = (
+    ROOT / "docs" / "AStockAgent_CI_work_calendar.md",
+    ROOT / "docs" / "AStockAgent_development_status_2026-11-08.md",
+    ROOT / "docs" / "AStockAgent_architecture_v1.3.md",
+    ROOT / "docs" / "AStockAgent_product_snapshot_v1.3.md",
+    ROOT / "README.md",
+)
+
+
+def _coverage_comment_baselines() -> tuple[tuple[int, int, float], tuple[int, int, float], int]:
+    """从 .coveragerc 注释里取出本地实测、CI 实测与本地用例数（唯一数据源）。"""
+    text = COVERAGE_PATH.read_text(encoding="utf-8")
+    local = re.search(r"本地 Windows[^：]*：(\d+) / (\d+) = ([\d.]+)%", text)
+    ci = re.search(r"本 PR CI Linux[^：]*：(\d+) stmts / (\d+) miss = ([\d.]+)%", text)
+    passed = re.search(r"本地 Windows[^：]*?(\d+) passed", text)
+    assert local and ci and passed, "无法从 .coveragerc 注释解析实测基线"
+    local_baseline = (int(local.group(1)), int(local.group(2)), float(local.group(3)))
+    ci_baseline = (int(ci.group(1)), int(ci.group(2)), float(ci.group(3)))
+    return local_baseline, ci_baseline, int(passed.group(1))
+
+
+def test_coveragerc_baseline_arithmetic_is_self_consistent() -> None:
+    """语句数、未覆盖数与百分比必须自洽：9247/2155 配 76.68% 这类拼接错误要能变红。"""
+    local, ci, _ = _coverage_comment_baselines()
+
+    for stmts, miss, pct in (local, ci):
+        computed = round((stmts - miss) / stmts * 100, 2)
+        assert computed == pct, f"{stmts}/{miss} 算出来是 {computed}%，.coveragerc 注释写的是 {pct}%"
+
+
+def test_docs_baseline_matches_measured_numbers() -> None:
+    """四处文档与 README 的基线数字必须等于 .coveragerc 实测（评审 iss-mwjnea54-cbaf29）。
+
+    此前的缺陷是「4 份文档同步」实际漏了一行：development_status 仍写 9247/2155，
+    README 仍写 606 passed，读者按文档复算会得到与门禁不一致的数。
+    """
+    local, ci, local_passed = _coverage_comment_baselines()
+    local_stmts, local_miss, local_pct = local
+    ci_stmts, ci_miss, ci_pct = ci
+
+    texts = {path.name: path.read_text(encoding="utf-8") for path in DOCS_WITH_BASELINE}
+    stale = ("9247 statements", "2155 miss", "9247/2155", "606 passed", "606 个", "50%")
+    for name, text in texts.items():
+        for marker in stale:
+            assert marker not in text, f"{name} 仍残留旧基线表述 {marker!r}"
+
+    dev = texts["AStockAgent_development_status_2026-11-08.md"]
+    assert f"{local_stmts} statements / {local_miss} miss = {local_pct:.2f}%" in dev, (
+        "development_status 的本地实测行必须与 .coveragerc 注释一致"
+    )
+
+    calendar = texts["AStockAgent_CI_work_calendar.md"]
+    assert f"{ci_stmts}/{ci_miss}" in calendar, "CI 日历缺少 CI 实测语句数/未覆盖数"
+    assert f"{local_stmts}/{local_miss}" in calendar, "CI 日历缺少本地实测语句数/未覆盖数"
+    assert f"{ci_pct:.2f}%" in calendar and f"{local_pct:.2f}%" in calendar
+
+    readme = texts["README.md"]
+    assert f"{local_passed} passed" in readme, "README 的用例数必须与 .coveragerc 记录的实测一致"
+
+
 def _ruff_config() -> dict[str, Any]:
     return tomllib.loads(RUFF_PATH.read_text(encoding="utf-8"))
 
@@ -150,6 +210,12 @@ def test_ruff_config_uses_explicit_rule_selection() -> None:
     assert "S110" in lint["select"] and "S112" in lint["select"], "静默异常审计要求 S110/S112 开启"
     assert "ISC" in lint["select"], "隐式字符串拼接要求 ISC 开启"
     assert "C4" in lint["select"], "C408（dict() 调用）要求 C4 开启"
+
+    # isort 分区必须显式固定：测试运行会在仓库根生成 gradio/ 目录，不钉死第三方归属时
+    # 本地会把 `import gradio` 判成 first-party，与干净检出的 CI 结论分叉（首轮 CI 红灯即此）。
+    isort = lint["isort"]
+    assert isort["known-first-party"] == ["astock"]
+    assert "gradio" in isort["known-third-party"], "gradio 必须显式钉为第三方模块"
 
 
 def test_ruff_config_documents_ignored_families() -> None:
