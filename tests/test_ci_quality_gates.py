@@ -22,7 +22,7 @@ RUFF_PATH = ROOT / "ruff.toml"
 COVERAGE_PATH = ROOT / ".coveragerc"
 
 # 实测基线（plan-20261103-012）：CI Linux 76.47%（门禁权威值）、本地 Windows 76.70%。
-# 门槛不得低于实测值，所以这里断言「不低于 76」并且配置里写着分阶段目标。
+# 门槛等于 CI 实测显示值 76.47，所以这里断言「不低于 76」并且配置里写着分阶段目标。
 MIN_COVERAGE_FLOOR = 76.0
 
 
