@@ -2,14 +2,14 @@
   "id": "plan-20261103-012",
   "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
   "description": "旧基线（22 源文件 / 57 tests / coverage 57% / 门槛 50%）已过时。以执行时最新 main 实测为准（当前 pytest 513 passed + 1 skipped，mypy 35 files Success），不写死未测量的数字。目标：mypy 扩到全部非 UI 模块并全库通过；用最新实测覆盖率重设门槛（不得低于当前实测，分阶段提升）；requirements/requirements-dev 全部锁精确版本（含 ruff/mypy/plotly/kaleido）；CI 在 PR 与 main 都跑并连续两次通过。新增全仓 Ruff 基线：当前 `ruff check astock tests` 320 条（astock 264、tests 56；96 条可安全 --fix），先固定配置与工具版本，再分阶段清理，最终全仓 0 并纳入 CI blocking。PR #9 五日观察结束（11/21）前，Ruff 清理排除 astock/scheduler.py 与 astock/jobs.py，避免改动调度运行时代码使观察样本失效。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-27",
   "estimateH": 12,
-  "progress": 0,
+  "progress": 95,
   "acceptance": [
     "mypy 覆盖全部非 UI 模块，最新 main 全库通过（当前 35 files Success，以执行时实测为准）",
     "记录最新 coverage 实测值，门槛按实测重设且不低于当前；分阶段提升目标写入 CI 注释",
@@ -33,8 +33,22 @@
     ],
     "docs": [
       "docs/AStockAgent_CI_work_calendar.md"
+    ],
+    "branch": "feat/ci-quality-gates-plan-20261103-012 (merged) / feat/ci-gate-align-measured (merged)",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/21, https://github.com/b199510027373-create/AStockAgent/pull/22",
+    "test": [
+      "pytest tests -q -m \"not png\" -> 606 passed, 1 skipped, 5 deselected, 12 subtests passed (本地 e4102eb)",
+      "ruff check astock tests --no-cache -> All checks passed!（先移走测试生成的 gradio/ 目录，否则 isort 误判 first-party）",
+      "mypy astock app.py -> Success: no issues found in 36 source files",
+      "coverage run -m pytest tests -q -m \"not png\" + coverage report -> TOTAL 9247 stmts / 2155 miss = 76.70%（本地；门槛 76.47%）",
+      "pip check -> No broken requirements found.",
+      "GitHub CI PR #21 run 43929440949: attempt1 test pass 1m20s / png-export pass 1m2s；attempt2 test pass 1m10s / png-export pass 51s（连续两次）",
+      "GitHub CI main run 43930042354 (47645c3): success",
+      "GitHub CI PR #22 run 43930603107: 两次 test/png-export 全 pass；coverage TOTAL 9247/2176 = 76.47% 恰好过门槛；ruff All checks passed；mypy 36 files Success",
+      "GitHub CI main run 43931162007 (e284a50): success"
     ]
   },
   "createdAt": "2026-11-03T12:10:57.134Z",
-  "updatedAt": "2026-11-16T06:38:18.336Z"
+  "updatedAt": "2026-11-16T18:41:13.677Z",
+  "devSessionId": "session-73d90b4d-a2d4-4a72-a16d-9ad17246fe67"
 }

@@ -534,6 +534,36 @@
       "notes": "第 4 轮 · approve"
     },
     {
+      "id": "cal-rev-20261116-003-r1",
+      "type": "review",
+      "title": "评审：评审：SW2014→SW2021 行业边界校准与 crosswalk",
+      "start": "2026-11-16T12:34:00.239Z",
+      "end": "2026-11-16T12:39:05.129Z",
+      "planItemId": "plan-20261103-008",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261116-003-r2",
+      "type": "review",
+      "title": "评审：评审：SW2014→SW2021 行业边界校准与 crosswalk",
+      "start": "2026-11-16T17:37:20.977Z",
+      "end": "2026-11-16T17:40:00.044Z",
+      "planItemId": "plan-20261103-008",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261116-003-r3",
+      "type": "review",
+      "title": "评审：评审：SW2014→SW2021 行业边界校准与 crosswalk",
+      "start": "2026-11-16T17:53:09.380Z",
+      "end": "2026-11-16T17:53:43.354Z",
+      "planItemId": "plan-20261103-008",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261110-005-planned",
       "type": "planned",
       "title": "ADR-016 图表：ChartSpec v1 校验与渲染（不执行任意 Python）",
@@ -644,17 +674,6 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261103-012-planned",
-      "type": "planned",
-      "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
-      "start": "2026-11-23T00:00:00+08:00",
-      "end": "2026-11-27T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261103-012",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",
@@ -662,6 +681,17 @@
       "end": "2026-11-27T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261103-008",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261103-012-planned",
+      "type": "planned",
+      "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
+      "start": "2026-11-23T00:00:00+08:00",
+      "end": "2026-11-27T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-012",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
