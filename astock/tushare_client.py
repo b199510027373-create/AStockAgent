@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, ClassVar
 
 import pandas as pd
 import requests
@@ -143,11 +143,11 @@ class TushareClient:
         return out.drop_duplicates(subset=subset or None, keep="first").reset_index(drop=True)
 
     # 明确允许的旧式调用；拼写错误直接报错，不再走到网络才 404
-    _LEGACY_APIS = {
+    _LEGACY_APIS: ClassVar[frozenset[str]] = frozenset({
         "daily", "adj_factor", "weekly", "monthly", "index_daily", "trade_cal",
         "stock_basic", "daily_basic", "stk_mins", "rt_min", "anns_d",
         "report_rc", "research_report", "npr", "news", "major_news", "index_weight",
-    }
+    })
 
     def __getattr__(self, name: str):
         if name.startswith("_"):

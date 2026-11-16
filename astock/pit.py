@@ -9,7 +9,6 @@ Sources (verified 2026-11-02):
 """
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
@@ -47,7 +46,7 @@ def _atomic_parquet(df: pd.DataFrame, path: Path) -> None:
 def _read_parquet(path: Path) -> pd.DataFrame | None:
     try:
         return pd.read_parquet(path) if path.exists() else None
-    except Exception:
+    except (OSError, ValueError):  # 缓存缺失/损坏时视为无缓存
         return None
 
 
@@ -188,7 +187,7 @@ def sw_l1_members(version: str = "SW2014", refresh=False) -> pd.DataFrame:
                 index_code=index_code,
                 fields="index_code,con_code,in_date,out_date,is_new",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - 单只指数成分拉取失败（权限/网络）跳过，其余继续
             continue
         if members is None or members.empty:
             continue

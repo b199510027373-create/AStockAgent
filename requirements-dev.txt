@@ -1,8 +1,16 @@
 -r requirements.txt
 
-# Development / CI only
-ruff>=0.17
-mypy>=2.4
-coverage>=7.17
-pytest>=8
-pytest-timeout>=2.3
+# 开发 / CI 专用依赖：同样锁精确版本（plan-20261103-012）。
+#
+# 工具版本必须与 CI 实际使用的版本一致，否则「本地绿、CI 红」无法归因：
+# ruff 的规则集、mypy 的检查项、coverage 的统计口径都会随版本变化。
+# CI 只从本文件安装（不再 `pip install ruff mypy` 裸装最新版）。
+#
+# 版本来源：ruff/mypy/coverage/pytest 取本地 .venv 实测并通过全量测试的版本；
+# pytest-timeout 本地未安装（Windows 不跑 png 用例），版本取自 main CI run
+# 43923401645 日志中实际安装成功的 2.4.0。
+ruff==0.17.3
+mypy==2.4.1
+coverage==7.17.0
+pytest==9.2.0
+pytest-timeout==2.4.0

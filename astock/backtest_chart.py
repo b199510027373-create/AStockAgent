@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -55,7 +54,7 @@ def backtest_figure(
                     y=df[col],
                     mode="lines",
                     name=label,
-                    line=dict(color=color, width=1.2),
+                    line={"color": color, "width": 1.2},
                 ),
                 row=1,
                 col=1,
@@ -69,12 +68,12 @@ def backtest_figure(
                 y=trades["买入价"],
                 mode="markers",
                 name="买入",
-                marker=dict(
-                    symbol="triangle-up",
-                    size=11,
-                    color=UP,
-                    line=dict(width=1, color="#B71C1C"),
-                ),
+                marker={
+                    "symbol": "triangle-up",
+                    "size": 11,
+                    "color": UP,
+                    "line": {"width": 1, "color": "#B71C1C"},
+                },
                 hovertemplate="买入 %{x|%Y-%m-%d}<br>价格 %{y:.2f}<extra></extra>",
             ),
             row=1,
@@ -86,12 +85,12 @@ def backtest_figure(
                 y=trades["卖出价"],
                 mode="markers",
                 name="卖出",
-                marker=dict(
-                    symbol="triangle-down",
-                    size=11,
-                    color=DOWN,
-                    line=dict(width=1, color="#00695C"),
-                ),
+                marker={
+                    "symbol": "triangle-down",
+                    "size": 11,
+                    "color": DOWN,
+                    "line": {"width": 1, "color": "#00695C"},
+                },
                 hovertemplate="卖出 %{x|%Y-%m-%d}<br>价格 %{y:.2f}<extra></extra>",
             ),
             row=1,
@@ -105,7 +104,7 @@ def backtest_figure(
             y=eq_norm,
             mode="lines",
             name="策略净值",
-            line=dict(color="#1565C0", width=1.8),
+            line={"color": "#1565C0", "width": 1.8},
         ),
         row=2,
         col=1,
@@ -119,7 +118,7 @@ def backtest_figure(
                 y=b / base * 100 if base else b,
                 mode="lines",
                 name="沪深300",
-                line=dict(color="#9E9E9E", width=1.2, dash="dash"),
+                line={"color": "#9E9E9E", "width": 1.2, "dash": "dash"},
             ),
             row=2,
             col=1,
@@ -131,7 +130,7 @@ def backtest_figure(
             y=eq["drawdown"] * 100,
             mode="lines",
             name="回撤",
-            line=dict(color="#C62828", width=1.2),
+            line={"color": "#C62828", "width": 1.2},
             fill="tozeroy",
             fillcolor="rgba(198,40,40,0.18)",
         ),
@@ -140,8 +139,8 @@ def backtest_figure(
     )
 
     rb = [
-        dict(bounds=["sat", "mon"]),
-        dict(values=non_trading_days(df["trade_date"].min(), df["trade_date"].max())),
+        {"bounds": ["sat", "mon"]},
+        {"values": non_trading_days(df["trade_date"].min(), df["trade_date"].max())},
     ]
     fig.update_xaxes(
         rangebreaks=rb,
@@ -164,29 +163,29 @@ def backtest_figure(
     fig.update_yaxes(title_text="回撤 %", ticksuffix="%", row=3, col=1)
 
     fig.update_layout(
-        title=dict(
-            text=f"{code} 回测 · {strategy}",
-            x=0.005,
-            xanchor="left",
-            y=0.985,
-            yanchor="top",
-            font=dict(size=15),
-        ),
+        title={
+            "text": f"{code} 回测 · {strategy}",
+            "x": 0.005,
+            "xanchor": "left",
+            "y": 0.985,
+            "yanchor": "top",
+            "font": {"size": 15},
+        },
         height=height,
         template="plotly_white",
         hovermode="x unified",
         dragmode="pan",
         showlegend=True,
-        legend=dict(
-            orientation="v",
-            y=1.0,
-            x=1.005,
-            xanchor="left",
-            yanchor="top",
-            font=dict(size=10),
-            bgcolor="rgba(255,255,255,0.65)",
-        ),
-        margin=dict(t=56, b=26, l=64, r=104),
+        legend={
+            "orientation": "v",
+            "y": 1.0,
+            "x": 1.005,
+            "xanchor": "left",
+            "yanchor": "top",
+            "font": {"size": 10},
+            "bgcolor": "rgba(255,255,255,0.65)",
+        },
+        margin={"t": 56, "b": 26, "l": 64, "r": 104},
         xaxis_rangeslider_visible=False,
     )
     return fig
@@ -197,7 +196,7 @@ def _pct(value, digits: int = 2) -> str:
         if value is None or pd.isna(value):
             return "—"
         return f"{float(value) * 100:.{digits}f}%"
-    except Exception:
+    except (TypeError, ValueError):  # 非数值/不可格式化时显示占位
         return "—"
 
 
@@ -206,7 +205,7 @@ def _num(value, digits: int = 2) -> str:
         if value is None or pd.isna(value):
             return "—"
         return f"{float(value):.{digits}f}"
-    except Exception:
+    except (TypeError, ValueError):  # 非数值/不可格式化时显示占位
         return "—"
 
 

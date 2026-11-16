@@ -49,7 +49,7 @@ def run_recommend(
     candidate_n: int,
     news_range: str,
     use_llm: bool,
-    progress=gr.Progress(),
+    progress=gr.Progress(),  # noqa: B008 - Gradio 回调惯例：Progress 默认实例由框架注入
 ):
     result = run_recommendation(
         mode="generate",

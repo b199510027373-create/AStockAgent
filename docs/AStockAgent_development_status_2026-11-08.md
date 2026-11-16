@@ -123,32 +123,25 @@ e13c4d7 test: scope metadata mock to evidence test
 - 针对 `main` 的 Pull Request
 - 手动触发
 
-CI 内容：
+CI 内容（2026-11-17 按 plan-20261103-012 更新到当前形态）：
 
 1. Python 3.13
-2. 安装 `requirements.txt`
+2. 从 `requirements-dev.txt` 安装（运行时 + 工具链全部精确锁定）
 3. 检查禁止入库的密钥和运行产物
 4. 编译 Python 源码
-5. Ruff 基础错误检查
-6. Mypy 类型检查
+5. `ruff check astock tests` 全仓 blocking（规则集固定在 `ruff.toml`）
+6. `mypy astock app.py`（全部非 UI 模块）
 7. 运行全部测试
-8. 覆盖率门槛 50%
+8. 覆盖率门槛 76.4%（`.coveragerc`；CI Linux 实测 76.47%、本地 76.70%，分阶段目标 80% / 85%）
 
-最新成功运行：
-
-```text
-https://github.com/b199510027373-create/AStockAgent/actions/runs/42478721907
-```
-
-本地验证结果：
+本地验证结果（2026-11-17 实测）：
 
 ```text
-Ran 90 tests
-OK
-Mypy: Success, no issues found in 23 source files
+pytest tests -m "not png": 606 passed, 1 skipped, 5 deselected
+mypy astock app.py: Success, no issues found in 36 source files
+ruff check astock tests: All checks passed!
+coverage: 9247 statements / 2155 miss = 76.70%（CI Linux 9247/2176 = 76.47%，门禁 76.4%）
 ```
-
-本地 Ruff 在当前 `.venv` 中存在启动异常，但 GitHub Actions 中的 Ruff 已通过。
 
 ## 5. 已完成的主要开发内容
 

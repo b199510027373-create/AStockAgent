@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pandas as pd
 
@@ -37,7 +36,7 @@ GENERIC_ALIASES = {
     "保险", "地产", "能源", "电力", "汽车", "医药", "白酒", "食品", "材料",
     "电子", "通信", "传媒", "环保", "机械", "化工", "钢铁", "煤炭", "有色",
     "化学", "办公", "发展", "实业", "公司", "技术", "产业", "电器", "财富",
-    "网络", "信息", "生物", "重工", "新材", "控股", "投资", "资本",
+    "网络", "信息", "生物", "重工", "新材", "投资", "资本",
 }
 REGION_ALIASES = {
     "贵州", "中国", "上海", "北京", "深圳", "广东", "浙江", "江苏", "山东",
@@ -76,7 +75,7 @@ INDUSTRY_KEYWORDS = {
     "电力": ["电力", "电网", "电价", "绿电"],
 }
 
-_CODE_RE = re.compile(r"(?<!\d)(\d{6})(?:\.(SH|SZ|BJ))?(?!\d)", re.I)
+_CODE_RE = re.compile(r"(?<!\d)(\d{6})(?:\.(SH|SZ|BJ))?(?!\d)", re.IGNORECASE)
 
 
 def _clean_text(text: str) -> str:
@@ -164,7 +163,7 @@ def stock_basic(refresh: bool = False) -> pd.DataFrame:
             if meta.exists() and meta.read_text(encoding="utf-8").strip() == _today_str():
                 _BASIC = pd.read_parquet(path)
                 return _BASIC.copy()
-        except Exception:
+        except (OSError, ValueError):  # 缓存缺失/损坏时走网络重拉
             pass
 
     df = get_client().query(
@@ -293,7 +292,7 @@ def fetch_news(days: int = 2, limit: int = 800, refresh: bool = False) -> pd.Dat
         except ContractError:
             # 契约错误必须冒泡：供应商列漂移不能被当成"这个源没新闻"
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - 单个新闻源失败跳过；ContractError 已单独 raise
             continue
 
     if not frames:
@@ -328,7 +327,7 @@ def fetch_major_news(days: int = 7, refresh: bool = False) -> pd.DataFrame:
         out = _normalize_news(df, "新华网", "news")
     except ContractError:
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 - ContractError 已单独 raise；网络/限流异常降级为空表
         out = pd.DataFrame()
     return _cache_put(key, validate_events(out, allow_empty=True, source="fetch_major_news"))
 
@@ -370,7 +369,7 @@ def fetch_policy(days: int = 7, refresh: bool = False) -> pd.DataFrame:
         )
     except ContractError:
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 - ContractError 已单独 raise；网络/限流异常降级为空表
         out = pd.DataFrame()
     return _cache_put(key, out)
 
@@ -427,7 +426,7 @@ def fetch_announcements(codes: list[str], days: int = 30) -> pd.DataFrame:
                 _cache_put(key, pd.DataFrame())
         except ContractError:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - 单只股票公告失败跳过；ContractError 已单独 raise
             continue
     if not frames:
         return pd.DataFrame()
@@ -482,7 +481,7 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                 frames.append(rc)
         except ContractError:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - 单只股票研报失败跳过；ContractError 已单独 raise
             pass
 
         try:
@@ -519,7 +518,7 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                 frames.append(rr)
         except ContractError:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - 单只股票研报失败跳过；ContractError 已单独 raise
             pass
     else:
         for code in codes:
@@ -587,7 +586,7 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                     frames.append(rr)
             except ContractError:
                 raise
-            except Exception:
+            except Exception:  # noqa: BLE001, S112 - 单条研报失败跳过；ContractError 已单独 raise
                 continue
 
     if not frames:
@@ -763,7 +762,7 @@ def score_events(evidence: list[dict]) -> tuple[float, dict]:
             pub = pd.Timestamp(item.get("pub_time") or item.get("date"))
             age = max(0, (now.normalize() - pub.normalize()).days)
             weight *= 1.0 / (1.0 + age / 45.0)
-        except Exception:
+        except (TypeError, ValueError):  # 发布时间缺失/非法时不做时间衰减
             pass
         weighted_sum += item_score * weight
         weight_sum += weight
@@ -784,7 +783,7 @@ def build_ai_context(message: str, limit: int = 8) -> tuple[str, list[dict]]:
     except ContractError:
         # 契约错误不能退化成"没有上下文"，否则供应商列漂移会被当成无新闻
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 - ContractError 已单独 raise；其余异常降级为空上下文
         return "", []
 
     items: list[dict] = []

@@ -13,21 +13,22 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, replace
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any
 
 import pandas as pd
 
 __all__ = [
     "MAX_TABLE_ROWS",
     "MAX_TEXT_CHARS",
+    "AgentRunResult",
+    "ModelReply",
+    "StepRecord",
     "StopReason",
     "ToolCall",
     "ToolResult",
-    "ModelReply",
-    "StepRecord",
-    "AgentRunResult",
 ]
 
 #: 单次工具结果允许进入模型上下文的表格行数上限。
@@ -37,7 +38,7 @@ MAX_TABLE_ROWS = 200
 MAX_TEXT_CHARS = 4000
 
 
-class StopReason(str, Enum):
+class StopReason(str, Enum):  # noqa: UP042 - ADR 冻结枚举；StrEnum 会改变 str() 行为
     """一轮 Agent 运行结束的原因。"""
 
     COMPLETED = "completed"
@@ -144,7 +145,7 @@ class ToolResult:
             self.to_dict(), ensure_ascii=False, sort_keys=True, default=str
         )
 
-    def trim_table(self, limit: int = MAX_TABLE_ROWS) -> "ToolResult":
+    def trim_table(self, limit: int = MAX_TABLE_ROWS) -> ToolResult:
         """按行数截断表格并记录被舍弃的行数（完整行由 artifact writer 落盘）。"""
         if self.table is None or len(self.table) <= limit:
             return self
@@ -159,7 +160,7 @@ class ToolResult:
         )
 
     @classmethod
-    def coerce(cls, value: Any) -> "ToolResult":
+    def coerce(cls, value: Any) -> ToolResult:
         """把工具处理函数的常见返回值规范化为 ToolResult。
 
         支持 :class:`ToolResult`、``str``、``list[dict]``、``DataFrame``、

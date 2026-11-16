@@ -4,7 +4,6 @@ import html
 import json
 import math
 from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -105,7 +104,7 @@ def _test_series(values, horizon: int) -> dict:
     low, high, p_boot = _block_bootstrap_ci(arr, block=block)
     return {
         "n": n,
-        "independent": int(math.ceil(n / max(1, horizon))),
+        "independent": math.ceil(n / max(1, horizon)),
         "effective": eff,
         "usable": usable,
         "mean": mean,
@@ -294,7 +293,7 @@ def alpha_banner(
         diffs.append(top - rest)
 
     n_diffs = len(diffs)
-    independent = int(math.ceil(n_diffs / horizon)) if n_diffs else 0
+    independent = math.ceil(n_diffs / horizon) if n_diffs else 0
     effective = effective_n(n_diffs, horizon) if n_diffs else 0.0
     nw = newey_west(diffs, horizon=horizon) if n_diffs else None
     p_value = nw.p if nw is not None and effective >= min_effective else None
@@ -449,7 +448,7 @@ def alpha_banner_markdown(banner: AlphaBanner) -> str:
 def _from_ledger() -> list[dict]:
     try:
         from .ledger import recommendation_batches
-    except Exception:
+    except ImportError:  # ledger 依赖缺失时退化为无台账
         return []
     batches: list[dict] = []
     for data in recommendation_batches(limit=500):
@@ -463,7 +462,7 @@ def _from_ledger() -> list[dict]:
                 if data.get("tradable_from")
                 else next_open_date(as_of_ts)
             )
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - 台账字段不全/日期非法时跳过该批次
             continue
         batches.append(
             {
@@ -493,7 +492,7 @@ def _load_batches() -> list[dict]:
     for path in sorted(REC_DIR.glob("recommend_*.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, ValueError):  # 单个推荐 JSON 缺失/损坏时跳过
             continue
         rows = data.get("table") or []
         if not rows:
@@ -511,7 +510,7 @@ def _load_batches() -> list[dict]:
                 as_of_ts = opened
             tradable_raw = data.get("tradable_from")
             tradable = pd.Timestamp(tradable_raw) if tradable_raw else next_open_date(as_of_ts)
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - 历史 JSON 字段缺失/日期非法时跳过该批次
             continue
         batches.append(
             {
@@ -564,7 +563,7 @@ def _forward_return(
 def _as_ts(value) -> pd.Timestamp | None:
     try:
         ts = pd.Timestamp(value)
-    except Exception:
+    except (TypeError, ValueError):  # 非法日期返回 None
         return None
     if pd.isna(ts):
         return None
@@ -599,7 +598,7 @@ def _trading_days(start: pd.Timestamp, end: pd.Timestamp) -> pd.DatetimeIndex:
     """SSE 交易日序列（不拿指数当日 bar 冒充交易日历）。"""
     try:
         cal = load_trade_cal()
-    except Exception:
+    except Exception:  # noqa: BLE001 - 日历不可用时降级为空日历（调用方按交易日为空处理）
         return pd.DatetimeIndex([])
     if cal is None or cal.empty or "cal_date" not in cal.columns or "is_open" not in cal.columns:
         return pd.DatetimeIndex([])
@@ -707,7 +706,7 @@ def portfolio_nav(
     if bench is None:
         try:
             bench = load_index_daily("000300.SH", start=start_s, end=end_s)
-        except Exception:
+        except Exception:  # noqa: BLE001 - 基准缺失只降级为“无基准”，跟踪主体不受影响
             bench = pd.DataFrame()
     bench_bars = _bar_frame(bench)
 
@@ -729,7 +728,7 @@ def portfolio_nav(
                         daily[code] = _bar_frame(
                             load_daily(code, start=start_s, end=end_s, adj="qfq")
                         )
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - 单只股票日线缺失时用空帧占位，不中断整批
                         daily[code] = pd.DataFrame()
                 frame = daily[code]
                 if _frame_price(frame, entry) is None:
@@ -875,8 +874,8 @@ def nav_status_text(nav: pd.DataFrame, dropped: pd.DataFrame | None = None) -> s
         bench_values = bench_series.dropna()
         bench_anchor = nav.attrs.get("bench_anchor") if hasattr(nav, "attrs") else None
         parts = [
-            f"组合净值：{n_batches} 个批次 / {len(nav)} 个交易日"
-            f"（{start:%Y-%m-%d} → {end:%Y-%m-%d}）",
+            (f"组合净值：{n_batches} 个批次 / {len(nav)} 个交易日"
+            f"（{start:%Y-%m-%d} → {end:%Y-%m-%d}）"),
             f"Top5 等权累计 {port - 1:+.2%}",
         ]
         if len(bench_values):
@@ -955,7 +954,7 @@ def nav_figure(nav: pd.DataFrame) -> go.Figure:
             y=nav["组合净值"],
             mode="lines",
             name="Top5 等权组合",
-            line=dict(color="#d62728", width=2),
+            line={"color": "#d62728", "width": 2},
             hovertemplate="%{x|%Y-%m-%d}<br>组合净值 %{y:.4f}<extra></extra>",
         )
     )
@@ -967,7 +966,7 @@ def nav_figure(nav: pd.DataFrame) -> go.Figure:
                 y=bench,
                 mode="lines",
                 name="沪深300",
-                line=dict(color="#7f7f7f", width=2, dash="dot"),
+                line={"color": "#7f7f7f", "width": 2, "dash": "dot"},
                 hovertemplate="%{x|%Y-%m-%d}<br>沪深300 %{y:.4f}<extra></extra>",
             )
         )
@@ -979,7 +978,7 @@ def nav_figure(nav: pd.DataFrame) -> go.Figure:
                 y=rebalance["组合净值"],
                 mode="markers",
                 name="批次换仓",
-                marker=dict(symbol="triangle-up", size=9, color="#1f77b4"),
+                marker={"symbol": "triangle-up", "size": 9, "color": "#1f77b4"},
                 hovertemplate="批次 %{x|%Y-%m-%d}<br>净值 %{y:.4f}<extra></extra>",
             )
         )
@@ -988,8 +987,8 @@ def nav_figure(nav: pd.DataFrame) -> go.Figure:
         title="Top5 等权组合净值 vs 沪深300（起点 = 首个批次入场日开盘）",
         template="plotly_white",
         height=420,
-        margin=dict(t=50, b=30, l=40, r=20),
-        legend=dict(orientation="h", y=1.08, x=0),
+        margin={"t": 50, "b": 30, "l": 40, "r": 20},
+        legend={"orientation": "h", "y": 1.08, "x": 0},
         hovermode="x unified",
     )
     fig.update_yaxes(title="净值", tickformat=".3f")
@@ -1018,7 +1017,7 @@ def _detail_rows(batches: list[dict]) -> pd.DataFrame:
             if code not in daily_cache:
                 try:
                     daily_cache[code] = load_daily(code, start=start, end=end, adj="qfq")
-                except Exception:
+                except Exception:  # noqa: BLE001 - 单只股票日线缺失时用空帧占位，不中断整批
                     daily_cache[code] = pd.DataFrame()
             df = daily_cache[code]
             rec = {
@@ -1046,7 +1045,7 @@ def _save_tracking_rows(detail: pd.DataFrame) -> int:
     """Persist per-run tracking rows; returns the number of runs written."""
     try:
         from .ledger import save_tracking
-    except Exception:
+    except ImportError:  # ledger 依赖缺失时跳过落库
         return 0
     saved = 0
     for run_id, group in detail.groupby("run_id"):
@@ -1087,7 +1086,7 @@ def refresh_tracking(
         return 0, "暂无推荐批次，跳过跟踪结算"
     try:
         from .ledger import tracking_run_ids
-    except Exception:
+    except ImportError:  # ledger 依赖缺失时跳过结算
         return 0, "ledger 不可用，跳过跟踪结算"
     done = tracking_run_ids(horizon, complete_only=True)
     cutoff = (pd.Timestamp.today() - pd.Timedelta(days=lookback_days)).normalize()
@@ -1123,12 +1122,12 @@ def compute_tracking() -> tuple[pd.DataFrame, pd.DataFrame, str]:
 
     def summarize(name: str, mask: pd.Series) -> dict:
         sub = detail[mask]
-        out = {"分组": name, "样本数": int(len(sub))}
+        out = {"分组": name, "样本数": len(sub)}
         for n in HORIZONS:
             vals = pd.to_numeric(sub[f"超额T+{n}"], errors="coerce").dropna()
             out[f"T+{n}平均超额%"] = round(float(vals.mean()), 2) if len(vals) else None
             out[f"T+{n}胜率%"] = round(float((vals > 0).mean() * 100), 1) if len(vals) else None
-            out[f"T+{n}样本"] = int(len(vals))
+            out[f"T+{n}样本"] = len(vals)
         return out
 
     ranks = pd.to_numeric(detail["排名"], errors="coerce")
@@ -1198,8 +1197,8 @@ def track_figure(summary: pd.DataFrame) -> go.Figure:
         template="plotly_white",
         height=360,
         barmode="group",
-        margin=dict(t=50, b=30, l=40, r=20),
-        legend=dict(orientation="h", y=1.08, x=0),
+        margin={"t": 50, "b": 30, "l": 40, "r": 20},
+        legend={"orientation": "h", "y": 1.08, "x": 0},
     )
     fig.update_yaxes(ticksuffix="%")
     return fig

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
 import time
-from typing import Any
-from datetime import time as clock_time, timedelta
+from datetime import time as clock_time
+from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -76,10 +78,8 @@ def _atomic_text(text: str, path: Path) -> None:
 def _cache_put(cache: dict, key, value, maxsize: int = 512) -> None:
     """Small bounded module cache; evict oldest insertion when full."""
     if len(cache) >= maxsize and key not in cache:
-        try:
+        with contextlib.suppress(StopIteration):
             cache.pop(next(iter(cache)))
-        except StopIteration:
-            pass
     cache[key] = value
 
 
@@ -126,7 +126,7 @@ def _load_trade_cal_impl(
         try:
             cal = pd.read_parquet(CAL_PATH)
             cal["cal_date"] = pd.to_datetime(cal["cal_date"])
-        except Exception:
+        except (OSError, ValueError, KeyError, TypeError):  # 缓存缺失/损坏/缺列时按空日历处理
             cal = pd.DataFrame()
         if not cal.empty:
             last = cal["cal_date"].max()
@@ -217,7 +217,7 @@ def _cache_paths(ts_code: str, adj: str | None) -> tuple[Path, Path]:
 def _read_meta(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, ValueError):  # 元数据缺失/非 JSON 时返回空 dict
         return {}
 
 
@@ -503,7 +503,7 @@ def load_daily(
     if path.exists() and not refresh:
         try:
             cached = pd.read_parquet(path)
-        except Exception:
+        except (OSError, ValueError):
             # 文件损坏/半写：当作无缓存重拉（不算契约问题）
             cached = None
         if cached is not None:
@@ -554,7 +554,7 @@ def load_daily(
                     "adj_source": "daily",
                     "start": _fmt(start_eff),
                     "end": _fmt(end_eff),
-                    "rows": int(len(result)),
+                    "rows": len(result),
                     "fetched_at": _today().strftime("%Y-%m-%d"),
                 },
                 ensure_ascii=False,
@@ -597,7 +597,7 @@ def load_index_daily(
         try:
             cached = pd.read_parquet(path)
             cached["trade_date"] = pd.to_datetime(cached["trade_date"])
-        except Exception:
+        except (OSError, ValueError, KeyError, TypeError):  # 缓存损坏/缺列时当作无缓存
             cached = None
         if cached is not None and not cached.empty and (
             meta.get("fetched_at") == _today().strftime("%Y-%m-%d")
@@ -899,7 +899,7 @@ def load_minute(
             )
             if not rt.empty:
                 df = pd.concat([df, rt], ignore_index=True) if not df.empty else rt
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - 实时分钟线是可选增强（权限/额度受限），失败保留日线
             pass
         if df.empty:
             raise TushareError(f"{code} 历史分钟线为空（stk_mins 无返回）")

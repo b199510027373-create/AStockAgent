@@ -15,10 +15,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from PIL import Image
 
 from astock.agent import chart_render
-
-from PIL import Image  # noqa: E402  Pillow 随 pdfplumber 安装；缺失时 import 失败即暴露环境问题
 
 #: CI 的 png-export job 设 ``ASTOCK_REQUIRE_CJK=1``：缺字体直接失败而不是 skip。
 CJK_ENFORCED = os.getenv("ASTOCK_REQUIRE_CJK") == "1"

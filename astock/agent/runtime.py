@@ -32,17 +32,16 @@ from astock.agent.types import (
     ModelReply,
     StepRecord,
     StopReason,
-    ToolCall,
     ToolResult,
 )
 
 __all__ = [
-    "AgentModel",
-    "AgentRuntime",
     "DEFAULT_MAX_STEPS",
     "DEFAULT_TIMEOUT_SECONDS",
     "DEFAULT_TOKEN_BUDGET",
     "SYSTEM_PROMPT",
+    "AgentModel",
+    "AgentRuntime",
 ]
 
 DEFAULT_MAX_STEPS = 12
@@ -446,7 +445,7 @@ class AgentRuntime:
                 text = reflect(step=index, result=result)
                 if isinstance(text, str) and text.strip():
                     return text
-            except Exception:  # noqa: BLE001 - 反思失败不应打断主循环
+            except Exception:  # noqa: BLE001, S110 - 反思失败不应打断主循环
                 pass
         if result.ok:
             return "工具执行成功，继续判断是否已有足够信息。"

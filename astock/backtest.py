@@ -54,7 +54,7 @@ def _one_price_limit(row: pd.Series, pct: float, side: str, list_date=None) -> b
         try:
             if pd.Timestamp(row.get("trade_date")).normalize() == pd.Timestamp(list_date).normalize():
                 return False
-        except Exception:
+        except (ValueError, TypeError):  # 日期缺失/非法时按“未上市”继续
             pass
     pre = row.get("raw_pre_close", row.get("pre_close"))
     high = row.get("raw_high", row.get("high"))
@@ -263,7 +263,7 @@ def _metrics(equity: pd.DataFrame, trades: pd.DataFrame, cfg: CostConfig) -> dic
         "sharpe": sharpe,
         "max_drawdown": maxdd,
         "calmar": calmar,
-        "trades": int(len(trades)),
+        "trades": len(trades),
         "win_rate": win_rate,
         "profit_factor": profit_factor,
         "avg_holding_days": avg_hold,
@@ -434,7 +434,7 @@ def run_strategy(
 
     try:
         benchmark_df = load_index_daily("000300.SH", start=start, end=end)
-    except Exception:
+    except Exception:  # noqa: BLE001 - 基准指数缺失只降级为“无基准”，回测主体不受影响
         benchmark_df = pd.DataFrame()
     benchmark = None
     if not benchmark_df.empty:

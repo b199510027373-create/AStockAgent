@@ -35,10 +35,11 @@ import re
 import sqlite3
 import uuid
 import zipfile
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import pandas as pd
@@ -49,22 +50,22 @@ __all__ = [
     "BLOCK_FIELDS",
     "DEFAULT_FILES_DIR",
     "EXTRACTION_WARNING_PREFIX",
-    "ExtractedDoc",
     "FILE_CHUNKS_DDL",
     "FILE_CHUNKS_TRIGGER_DDL",
-    "IngestResult",
     "MAX_CHUNK_CHARS",
     "MAX_FILES_PER_BATCH",
     "MAX_FILE_BYTES",
     "MAX_PDF_PAGES",
     "META_FIELDS",
+    "STATUSES",
     "STATUS_EMPTY_TEXT",
     "STATUS_ENCRYPTED",
     "STATUS_OK",
     "STATUS_SUSPECTED_SCAN",
     "STATUS_UNSUPPORTED",
-    "STATUSES",
     "SUPPORTED_EXTS",
+    "ExtractedDoc",
+    "IngestResult",
     "describe_limits",
     "ensure_index_schema",
     "file_dir",
@@ -278,7 +279,7 @@ def ingest_file(
         return _ingest(source, root=root, db_path=db_path, uploaded_at=upload, index=index)
     except _Rejected as exc:
         return IngestResult(name=source.name, status=exc.status, warnings=exc.warnings)
-    except Exception as exc:  # 兜底：解析器内部异常也不让工具层崩（C2）
+    except Exception as exc:  # noqa: BLE001 - 兜底：第三方解析器异常类型不稳定，工具层不能崩（C2）
         return IngestResult(
             name=source.name,
             status=STATUS_UNSUPPORTED,
@@ -305,8 +306,8 @@ def ingest_files(
                     name=source.name,
                     status=STATUS_UNSUPPORTED,
                     warnings=[
-                        f"单轮最多导入 {MAX_FILES_PER_BATCH} 个文件，第 {position} 个"
-                        f"（{source.name}）未处理；请分批导入。"
+                        (f"单轮最多导入 {MAX_FILES_PER_BATCH} 个文件，第 {position} 个"
+                        f"（{source.name}）未处理；请分批导入。")
                     ],
                 )
             )
@@ -338,8 +339,8 @@ def _ingest(
         raise _Rejected(
             STATUS_UNSUPPORTED,
             [
-                f"暂不支持 .{ext or '(无扩展名)'} 格式；"
-                f"当前支持 {', '.join('.' + e for e in SUPPORTED_EXTS)}。"
+                (f"暂不支持 .{ext or '(无扩展名)'} 格式；"
+                f"当前支持 {', '.join('.' + e for e in SUPPORTED_EXTS)}。")
             ],
         )
 
@@ -348,8 +349,8 @@ def _ingest(
         raise _Rejected(
             STATUS_UNSUPPORTED,
             [
-                f"文件大小 {size / (1024 * 1024):.2f} MiB 超过单文件上限 "
-                f"{MAX_FILE_BYTES // (1024 * 1024)} MiB，未解析。{describe_limits()}"
+                (f"文件大小 {size / (1024 * 1024):.2f} MiB 超过单文件上限 "
+                f"{MAX_FILE_BYTES // (1024 * 1024)} MiB，未解析。{describe_limits()}")
             ],
         )
     if size == 0:
@@ -361,8 +362,8 @@ def _ingest(
         raise _Rejected(
             STATUS_ENCRYPTED,
             [
-                f".{ext} 是加密的 OLE 复合文档（文件头 D0 CF 11 E0），v1 不支持解密；"
-                "请另存为未加密副本后重试。"
+                (f".{ext} 是加密的 OLE 复合文档（文件头 D0 CF 11 E0），v1 不支持解密；"
+                "请另存为未加密副本后重试。")
             ],
         )
     digest = hashlib.sha256(payload).hexdigest()
@@ -402,7 +403,7 @@ def _ingest(
     if index and chunk_rows:
         try:
             index_chunks(file_id, chunk_rows, db_path=db_path)
-        except Exception as exc:  # 索引失败不应丢掉已落盘的抽取结果
+        except Exception as exc:  # noqa: BLE001 - duckdb/sqlite 异常类型不一，索引失败不应丢掉已落盘结果
             meta["warnings"].append(
                 f"{EXTRACTION_WARNING_PREFIX} FTS 索引写入失败（{type(exc).__name__}: {exc}），"
                 "文本检索将查不到该文件。"
@@ -462,7 +463,7 @@ def _load_pdfplumber() -> Any | None:
     """惰性导入 pdfplumber；缺失时返回 ``None`` 由调用方降级（不抛 ImportError）。"""
     try:
         import pdfplumber  # type: ignore[import-not-found]
-    except Exception:
+    except ImportError:
         return None
     return pdfplumber
 
@@ -478,8 +479,8 @@ def _parse_pdf(source: Path) -> _Parsed:
         raise _Rejected(
             STATUS_UNSUPPORTED,
             [
-                "解析 PDF 需要 pdfplumber（requirements.txt 中 pdfplumber>=0.11），"
-                "当前环境未安装，无法抽取文本层；请安装后重试。"
+                ("解析 PDF 需要 pdfplumber（requirements.txt 中 pdfplumber>=0.11），"
+                "当前环境未安装，无法抽取文本层；请安装后重试。")
             ],
         )
     version = str(getattr(plumber, "__version__", "unknown"))
@@ -503,8 +504,8 @@ def _parse_pdf(source: Path) -> _Parsed:
             raise _Rejected(
                 STATUS_UNSUPPORTED,
                 [
-                    f"PDF 共 {len(pages)} 页，超过上限 {MAX_PDF_PAGES} 页，未解析；"
-                    "请拆分后重试。"
+                    (f"PDF 共 {len(pages)} 页，超过上限 {MAX_PDF_PAGES} 页，未解析；"
+                    "请拆分后重试。")
                 ],
             )
         parsed.pages = len(pages)
@@ -535,7 +536,7 @@ def _parse_pdf(source: Path) -> _Parsed:
 def _safe_extract_text(page: Any) -> str:
     try:
         text = page.extract_text()
-    except Exception:
+    except Exception:  # noqa: BLE001 - pdfminer 抛出的异常类型不稳定（PSException 等），单页失败返回空串
         return ""
     return text if isinstance(text, str) else ""
 
@@ -547,12 +548,12 @@ def _page_tables(page: Any) -> list[tuple[list[list[Any]], list[float] | None]]:
     if callable(finder):
         try:
             tables = finder()
-        except Exception:
+        except Exception:  # noqa: BLE001 - pdfplumber 表格探测是可选增强，失败按无表处理
             tables = []
         for table in tables:
             try:
                 grid = table.extract()
-            except Exception:
+            except Exception:  # noqa: BLE001, S112 - 单张表抽取失败跳过，其余表继续
                 continue
             bbox = getattr(table, "bbox", None)
             box = [float(v) for v in bbox] if bbox else None
@@ -564,7 +565,7 @@ def _page_tables(page: Any) -> list[tuple[list[list[Any]], list[float] | None]]:
     if callable(extractor):
         try:
             raw = extractor()
-        except Exception:
+        except Exception:  # noqa: BLE001 - 旧版 extract_tables 失败按无表处理
             raw = []
         for grid in raw or []:
             if isinstance(grid, list):
@@ -614,7 +615,7 @@ def _parse_excel(source: Path, ext: str) -> _Parsed:
 
 def _parse_csv(source: Path) -> _Parsed:
     data = source.read_bytes()
-    text, encoding, decode_warnings = _decode_bytes(data)
+    text, _encoding, decode_warnings = _decode_bytes(data)
     delimiter = _detect_delimiter(text[:8192])
     rows: list[list[Any]] = []
     try:
@@ -682,7 +683,7 @@ def _docx_body(source: Path) -> tuple[Any, str, str]:
     DocxDocument: Any
     try:
         from docx import Document as _DocxDocument
-    except Exception:
+    except ImportError:
         DocxDocument = None
     else:
         DocxDocument = _DocxDocument
@@ -998,8 +999,8 @@ def _write_original(directory: Path, ext: str, payload: bytes, digest: str) -> N
         raise _Rejected(
             STATUS_UNSUPPORTED,
             [
-                f"同一内容的文件已按 {others[0]} 导入过；内容寻址目录 "
-                f"{directory.name[:12]}… 只保留一份原始文件，请勿用不同扩展名重复导入。"
+                (f"同一内容的文件已按 {others[0]} 导入过；内容寻址目录 "
+                f"{directory.name[:12]}… 只保留一份原始文件，请勿用不同扩展名重复导入。")
             ],
         )
     if target.exists():
@@ -1008,8 +1009,8 @@ def _write_original(directory: Path, ext: str, payload: bytes, digest: str) -> N
             raise _Rejected(
                 STATUS_UNSUPPORTED,
                 [
-                    f"内容寻址目录 {directory.name} 内的 original.{ext} 与 sha256 不一致，"
-                    "拒绝覆盖；请人工检查该目录。"
+                    (f"内容寻址目录 {directory.name} 内的 original.{ext} 与 sha256 不一致，"
+                    "拒绝覆盖；请人工检查该目录。")
                 ],
             )
         return
@@ -1125,7 +1126,7 @@ def _self_check(
         path = directory / "tables" / f"{sheet['slug']}.parquet"
         try:
             frame = pd.read_parquet(path)
-        except Exception as exc:
+        except (OSError, ValueError) as exc:  # pyarrow.ArrowInvalid 是 ValueError 子类
             warnings.append(f"{prefix} 工作表 {sheet['name']} 的 parquet 回读失败：{exc}")
             continue
         if list(frame.shape) != [sheet["rows"], sheet["cols"]]:
@@ -1193,8 +1194,8 @@ def _decode_bytes(data: bytes) -> tuple[str, str, list[str]]:
         data.decode("latin-1"),
         "latin-1",
         [
-            f"{EXTRACTION_WARNING_PREFIX} 无法判定编码（尝试 utf-8/gb18030/gbk 均失败），"
-            "已按 latin-1 解码，中文可能乱码。"
+            (f"{EXTRACTION_WARNING_PREFIX} 无法判定编码（尝试 utf-8/gb18030/gbk 均失败），"
+            "已按 latin-1 解码，中文可能乱码。")
         ],
     )
 
@@ -1219,7 +1220,7 @@ def _package_version(name: str) -> str:
         from importlib.metadata import version
 
         return version(name)
-    except Exception:  # pragma: no cover - 元数据缺失时降级
+    except ImportError:  # pragma: no cover - 元数据缺失时降级
         return "unknown"
 
 

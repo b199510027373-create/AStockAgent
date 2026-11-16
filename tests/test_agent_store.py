@@ -332,7 +332,7 @@ def test_prune_artifacts_sweeps_orphan_digest_dirs(tmp_path: Path) -> None:
             digest=digest,
             created_at="2026-06-01T00:00:00+00:00",
         )
-        orphan_digest, orphan_rel, orphan_abs = store.put_content(
+        orphan_digest, _orphan_rel, orphan_abs = store.put_content(
             b"\x89PNG\r\norphan", filename="chart_art_0123456789abcdef.png", root=str(root)
         )
 
@@ -536,8 +536,8 @@ def test_reused_png_records_provenance_without_contradiction(tmp_path: Path) -> 
                 "png_reused": False,
                 "png_error": "Chrome executable not found",
                 "warnings": [
-                    f"{store.PNG_DEGRADED_WARNING_PREFIX}：Chrome executable not found"
-                    "（仅 HTML artifact）"
+                    (f"{store.PNG_DEGRADED_WARNING_PREFIX}：Chrome executable not found"
+                    "（仅 HTML artifact）")
                 ],
             },
         )

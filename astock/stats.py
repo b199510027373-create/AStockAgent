@@ -118,10 +118,7 @@ def newey_west(values, lags: int | None = None, horizon: int | None = None) -> N
     mean = float(arr.mean())
     std = float(arr.std(ddof=1)) if n > 1 else 0.0
     if lags is None:
-        if horizon is not None:
-            lags = max(0, int(horizon) - 1)
-        else:
-            lags = max(1, int(4 * (n / 100) ** (2 / 9)))
+        lags = max(0, int(horizon) - 1) if horizon is not None else max(1, int(4 * (n / 100) ** (2 / 9)))
     lags = max(0, min(int(lags), max(0, n - 2)))
     e = arr - mean
     gamma0 = float((e * e).sum() / n)
@@ -148,7 +145,7 @@ def benjamini_hochberg(pvalues) -> list[float | None]:
     adjusted = [None] * m
     running = 1.0
     for rank in range(m, 0, -1):
-        idx, p = vals[rank - 1]
+        _idx, p = vals[rank - 1]
         adj = min(1.0, p * m / rank)
         running = min(running, adj)
         adjusted[rank - 1] = running

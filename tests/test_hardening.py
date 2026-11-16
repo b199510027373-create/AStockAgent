@@ -11,12 +11,10 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 
-import astock.ledger as ledger
-import astock.pit as pit
-import astock.scheduler as scheduler
-from astock.pit import snapshot_maps
+from astock import ledger, pit, scheduler
 from astock.backtest import _one_price_limit, limit_pct, run_backtest
 from astock.events import _col, score_events
+from astock.pit import snapshot_maps
 from astock.recommend import _clean_json, _pick_diverse
 from astock.stats import benjamini_hochberg, effective_n, newey_west, student_t_p
 from astock.track import _forward_return
@@ -113,17 +111,21 @@ class SchedulerIdempotencyTests(unittest.TestCase):
 
     def test_premarket_and_close_have_distinct_keys(self):
         fake = make_result("2026-10-30", run_id="pre")
-        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-10-30")):
-            with patch.object(scheduler, "run_recommendation", return_value=fake) as fn:
-                scheduler.run_once(slot="premarket", now=datetime(2026, 11, 2, 8, 31))
-                self.assertEqual(fn.call_count, 1)
+        with (
+            patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-10-30")),
+            patch.object(scheduler, "run_recommendation", return_value=fake) as fn,
+        ):
+            scheduler.run_once(slot="premarket", now=datetime(2026, 11, 2, 8, 31))
+            self.assertEqual(fn.call_count, 1)
         self.assertEqual(self.job("2026-10-30:premarket")["status"], "success")
 
         fake2 = make_result("2026-11-02", run_id="close")
-        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
-            with patch.object(scheduler, "run_recommendation", return_value=fake2) as fn:
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
-                self.assertEqual(fn.call_count, 1)
+        with (
+            patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")),
+            patch.object(scheduler, "run_recommendation", return_value=fake2) as fn,
+        ):
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+            self.assertEqual(fn.call_count, 1)
         close_job = self.job("2026-11-02:close")
         self.assertEqual(close_job["status"], "success")
         self.assertEqual(close_job["run_id"], "close")
@@ -134,9 +136,8 @@ class SchedulerIdempotencyTests(unittest.TestCase):
         fake = make_result("2026-11-02", run_id="close")
         with patch.object(
             scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")
-        ):
-            with patch.object(scheduler, "run_recommendation", return_value=fake):
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+        ), patch.object(scheduler, "run_recommendation", return_value=fake):
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         # 调度成功后必须顺手结算 tracking，否则横幅只能等用户打开跟踪页
         self.refresh_mock.assert_called_once_with()
         self.assertEqual(self.job("2026-11-02:close")["status"], "success")
@@ -147,9 +148,8 @@ class SchedulerIdempotencyTests(unittest.TestCase):
         )
         with patch.object(
             scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")
-        ):
-            with patch.object(scheduler, "run_recommendation", return_value=stale):
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+        ), patch.object(scheduler, "run_recommendation", return_value=stale):
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         self.refresh_mock.assert_not_called()
         self.assertEqual(self.job("2026-11-02:close")["status"], "stale")
 
@@ -159,9 +159,11 @@ class SchedulerIdempotencyTests(unittest.TestCase):
             status="stale",
             message="数据未更新：data_as_of=2026-10-30 < expected=2026-11-02",
         )
-        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
-            with patch.object(scheduler, "run_recommendation", return_value=fake):
-                result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+        with (
+            patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")),
+            patch.object(scheduler, "run_recommendation", return_value=fake),
+        ):
+            result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         self.assertIsNone(result)
         job = self.job("2026-11-02:close")
         self.assertEqual(job["status"], "stale")
@@ -169,23 +171,27 @@ class SchedulerIdempotencyTests(unittest.TestCase):
 
     def test_success_is_skipped_on_second_call(self):
         fake = make_result("2026-11-02")
-        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
-            with patch.object(scheduler, "run_recommendation", return_value=fake) as fn:
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45))
-                self.assertEqual(fn.call_count, 1)
+        with (
+            patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")),
+            patch.object(scheduler, "run_recommendation", return_value=fake) as fn,
+        ):
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45))
+            self.assertEqual(fn.call_count, 1)
 
     def test_stale_result_marks_stale_without_last_run(self):
         stale = make_result(
             status="stale", message="StaleDataError: 数据未更新"
         )
-        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
-            with patch.object(
+        with (
+            patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")),
+            patch.object(
                 scheduler,
                 "run_recommendation",
                 return_value=stale,
-            ):
-                result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+            ),
+        ):
+            result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         self.assertIsNone(result)
         job = self.job("2026-11-02:close")
         self.assertEqual(job["status"], "stale")
@@ -193,14 +199,16 @@ class SchedulerIdempotencyTests(unittest.TestCase):
 
     def test_failed_result_increments_attempts(self):
         failed = make_result(status="failed", message="boom")
-        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
-            with patch.object(
+        with (
+            patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")),
+            patch.object(
                 scheduler,
                 "run_recommendation",
                 return_value=failed,
-            ):
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45))
+            ),
+        ):
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45))
         job = self.job("2026-11-02:close")
         self.assertEqual(job["status"], "failed")
         self.assertEqual(job["attempts"], 2)
@@ -208,17 +216,21 @@ class SchedulerIdempotencyTests(unittest.TestCase):
 
     def test_force_reruns_success(self):
         fake = make_result("2026-11-02")
-        with patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")):
-            with patch.object(scheduler, "run_recommendation", return_value=fake) as fn:
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
-                scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45), force=True)
-                self.assertEqual(fn.call_count, 2)
+        with (
+            patch.object(scheduler, "last_completed_trade_date", return_value=pd.Timestamp("2026-11-02")),
+            patch.object(scheduler, "run_recommendation", return_value=fake) as fn,
+        ):
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+            scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 45), force=True)
+            self.assertEqual(fn.call_count, 2)
         self.assertEqual(self.job("2026-11-02:close")["attempts"], 2)
 
     def test_no_trade_date_returns_none(self):
-        with patch.object(scheduler, "last_completed_trade_date", return_value=None):
-            with patch.object(scheduler, "run_recommendation") as fn:
-                result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
+        with (
+            patch.object(scheduler, "last_completed_trade_date", return_value=None),
+            patch.object(scheduler, "run_recommendation") as fn,
+        ):
+            result = scheduler.run_once(slot="close", now=datetime(2026, 11, 2, 16, 40))
         self.assertIsNone(result)
         self.assertEqual(fn.call_count, 0)
 

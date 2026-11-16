@@ -19,7 +19,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-import astock.data as data
+from astock import data
 from astock.contracts import DataContractError
 
 
@@ -336,9 +336,11 @@ class MinuteAdjCaliberTests(unittest.TestCase):
         """非当日缺因子不得被盘中例外吞掉：仍必须硬失败。"""
         minute = _minute_frame(include_today=True)
         factors = _factors().iloc[:2]  # 缺 2025-01-06
-        with patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")):
-            with self.assertRaises(DataContractError) as ctx:
-                data._apply_minute_adj(minute, factors, "qfq", ts_code="600519.SH")
+        with (
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")),
+            self.assertRaises(DataContractError) as ctx,
+        ):
+            data._apply_minute_adj(minute, factors, "qfq", ts_code="600519.SH")
         self.assertIn("2025-01-06", str(ctx.exception))
         self.assertIn("禁止用 1.0 填充或回退 qfq", str(ctx.exception))
 
@@ -351,11 +353,13 @@ class MinuteAdjCaliberTests(unittest.TestCase):
         缺因子硬失败，异常文案要指出具体交易日，避免与覆盖断言混淆。
         """
         factors = _factors().iloc[[1, 2]]  # 只有 01-03/01-06，缺 01-02
-        with patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")):
-            with self.assertRaises(DataContractError) as ctx:
-                data._apply_minute_adj(
-                    _minute_frame(), factors, "hfq", ts_code="600519.SH"
-                )
+        with (
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")),
+            self.assertRaises(DataContractError) as ctx,
+        ):
+            data._apply_minute_adj(
+                _minute_frame(), factors, "hfq", ts_code="600519.SH"
+            )
         message = str(ctx.exception)
         self.assertIn("分钟线以下交易日缺少 adj_factor", message)
         self.assertIn("2025-01-02", message)
@@ -364,11 +368,13 @@ class MinuteAdjCaliberTests(unittest.TestCase):
     def test_minute_qfq_truncated_history_surfaces_as_missing_factor(self):
         """分钟 qfq 缺最新因子时同样由缺因子分支报错，不得沿用旧因子。"""
         factors = _factors().iloc[:2]  # 只有 01-02/01-03，缺 01-06（非当日）
-        with patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")):
-            with self.assertRaises(DataContractError) as ctx:
-                data._apply_minute_adj(
-                    _minute_frame(include_today=True), factors, "qfq", ts_code="600519.SH"
-                )
+        with (
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")),
+            self.assertRaises(DataContractError) as ctx,
+        ):
+            data._apply_minute_adj(
+                _minute_frame(include_today=True), factors, "qfq", ts_code="600519.SH"
+            )
         message = str(ctx.exception)
         self.assertIn("分钟线以下交易日缺少 adj_factor", message)
         self.assertIn("2025-01-06", message)

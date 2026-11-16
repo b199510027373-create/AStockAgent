@@ -20,15 +20,17 @@ plan-20261107-008 扩展；扩展时**不得改表结构**（冻结清单 §8 �
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
 import sqlite3
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from astock.config import BASE_DIR
 
@@ -116,7 +118,7 @@ DEFAULT_ARTIFACT_ROOT = Path(
 
 def utc_now() -> str:
     """审计时间戳统一用带时区的 UTC ISO 串。"""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def sha256_bytes(payload: bytes) -> str:
@@ -125,7 +127,7 @@ def sha256_bytes(payload: bytes) -> str:
 
 def artifact_id_for(digest: str, filename: str) -> str:
     """``art_<16 hex>``：由内容 digest + 文件名派生，同一内容稳定复现同一 id。"""
-    seed = f"{digest}\x00{filename}".encode("utf-8")
+    seed = f"{digest}\x00{filename}".encode()
     return "art_" + hashlib.sha256(seed).hexdigest()[:16]
 
 
@@ -554,9 +556,6 @@ def prune_artifacts(
             except OSError:
                 # 目录非空或已被占用：保留目录，不影响行删除结果。
                 pass
-        referenced = {
-            row["digest"] for row in conn.execute("SELECT DISTINCT digest FROM agent_artifacts")
-        }
         artifacts_root = base / "artifacts"
         if artifacts_root.is_dir():
             # 二次渲染/降级升级会留下没有 DB 行的 digest 目录（例如 PNG），一并清掉；
@@ -576,9 +575,7 @@ def prune_artifacts(
                         pruned_dirs += 1
                     except OSError:
                         pass
-                try:
+                with contextlib.suppress(OSError):
                     shard.rmdir()
-                except OSError:
-                    pass
     conn.commit()
     return {"rows": removed_rows, "files": removed_files, "pruned_digests": pruned_dirs}

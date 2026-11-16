@@ -173,7 +173,7 @@ def render(
                 )
             updates = [_update(fig) for fig in figs]
             updates += [_update(empty_figure("—"), False)] * (4 - len(updates))
-            return updates + [summary, status]
+            return [*updates, summary, status]
 
         if mode == "区间对比":
             p1 = normalized_compare_figure(daily_e, code)

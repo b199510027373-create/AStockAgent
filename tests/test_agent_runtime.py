@@ -34,8 +34,8 @@ from astock.agent.runtime import (
     DEFAULT_TOKEN_BUDGET,
     SYSTEM_PROMPT,
 )
-from astock.agent.types import MAX_TABLE_ROWS, ToolResult as ResultAlias
-
+from astock.agent.types import MAX_TABLE_ROWS
+from astock.agent.types import ToolResult as ResultAlias
 
 PRICE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -671,6 +671,19 @@ class SessionTests(unittest.TestCase):
         finally:
             target.unlink(missing_ok=True)
             target.with_name(target.name + ".tmp").unlink(missing_ok=True)
+
+    def test_load_rejects_non_object_payload_with_type_error(self) -> None:
+        """顶层不是 JSON object 时必须抛 TypeError（公共 API 语义，plan-20261103-012）。"""
+        target = Path(__file__).parent / f"_agent_session_bad_{uuid.uuid4().hex}.json"
+        try:
+            target.write_text('["not", "an", "object"]', encoding="utf-8")
+
+            with self.assertRaises(TypeError) as ctx:
+                AgentSession.load(target)
+
+            self.assertIn("顶层必须是 object", str(ctx.exception))
+        finally:
+            target.unlink(missing_ok=True)
 
     def test_recent_messages_limit_zero_returns_empty(self) -> None:
         session = AgentSession()

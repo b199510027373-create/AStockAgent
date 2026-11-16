@@ -6,8 +6,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-import astock.recommend_ui as recommend_ui
-import astock.use_cases as use_cases
+from astock import recommend_ui, use_cases
 from astock.contracts import ContractError
 from astock.recommend import Recommendation, StaleDataError
 from astock.track import AlphaBanner

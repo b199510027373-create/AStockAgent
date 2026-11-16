@@ -498,10 +498,10 @@ class ArtifactTests(unittest.TestCase):
             with patch.object(sw, "PIT_DIR", tmp), patch.object(
                 sw, "build_crosswalk_artifacts", return_value=(CLASSIFY_EDGES, summary)
             ), patch.object(sw, "snapshot_window", side_effect=fake_snapshot):
-                first_dist, first_metrics = sw.build_distribution_artifacts(
+                _first_dist, first_metrics = sw.build_distribution_artifacts(
                     "000300.SH", "2021-06-01", "2021-08-31", refresh=True
                 )
-                second_dist, second_metrics = sw.build_distribution_artifacts(
+                _second_dist, second_metrics = sw.build_distribution_artifacts(
                     "000300.SH", "2021-09-01", "2021-11-30", refresh=False
                 )
                 self.assertTrue(

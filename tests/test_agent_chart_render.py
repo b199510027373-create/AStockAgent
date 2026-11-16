@@ -133,7 +133,7 @@ def test_line_chart_renders_self_contained_html_and_records_artifact(paths: dict
 
     # plotly 6.x 的 full_html 以 <html> 开头，plotly 7.x 前置 <!doctype html>，两者都是完整文档
     head = rendered.html.lstrip().lower()
-    assert head.startswith("<!doctype html>") or head.startswith("<html>")
+    assert head.startswith(("<!doctype html>", "<html>"))
     assert "plotly.js" in rendered.html
     assert len(rendered.html) > 1_000_000  # plotly.js 内联 → 自包含
     assert rendered.data_as_of == "2024-01-04"
@@ -365,7 +365,7 @@ def test_unadjusted_price_caliber_is_noted_in_caption(paths: dict[str, str]) -> 
 def test_degrades_to_html_when_kaleido_missing(
     paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def failing_png(figure, *, width: int, height: int):  # noqa: ANN001 - 测试替身
+    def failing_png(figure, *, width: int, height: int):
         return None, 'Image export using the "kaleido" engine requires the Kaleido package'
 
     monkeypatch.setattr(chart_render, "_try_png", failing_png)
@@ -400,7 +400,7 @@ def test_png_mode_require_raises_and_marks_run_failed(
 ) -> None:
     """显式请求 PNG 失败必须报错：不静默降级、不落半成品 artifact 行。"""
 
-    def failing(figure, *, width: int, height: int):  # noqa: ANN001 - 测试替身
+    def failing(figure, *, width: int, height: int):
         return None, "kaleido not installed"
 
     monkeypatch.setattr(chart_render, "_try_png", failing)
@@ -463,7 +463,7 @@ def test_png_mode_auto_caches_env_failure_and_warns_once(
     """auto 首次环境失败后不再逐图起 Chrome：只探测一次，后续标注缓存原因。"""
     calls: list[str] = []
 
-    def failing(figure, *, width: int, height: int):  # noqa: ANN001 - 测试替身
+    def failing(figure, *, width: int, height: int):
         calls.append("export")
         return None, "Chrome executable not found"
 
@@ -585,7 +585,7 @@ def test_market_adj_is_mapped_to_data_layer(
 def test_adj_raw_is_rejected_before_touching_market_data(
     paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def forbidden(*args: object, **kwargs: object) -> pd.DataFrame:  # noqa: ANN401
+    def forbidden(*args: object, **kwargs: object) -> pd.DataFrame:
         raise AssertionError("非法 spec 不应进入取数阶段")
 
     monkeypatch.setattr("astock.data.load_daily", forbidden)
@@ -801,7 +801,7 @@ class _FlakyImageFigure:
         self._errors = list(errors)
         self.calls = 0
 
-    def to_image(self, **_kwargs: object) -> bytes:  # noqa: ANN401 - 测试替身
+    def to_image(self, **_kwargs: object) -> bytes:
         self.calls += 1
         if self._errors:
             raise RuntimeError(self._errors.pop(0))

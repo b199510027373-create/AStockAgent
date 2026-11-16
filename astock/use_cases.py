@@ -15,6 +15,7 @@ UI 会把它直接展示给用户。
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -217,7 +218,7 @@ def _diagnostics_markdown(diagnostics: Any) -> list[str]:
         else:
             lines.append(f"- `{key}`：{str(value)[:200]}")
     if len(lines) > 40:
-        lines = lines[:40] + [f"- …其余 {len(lines) - 40} 项已省略"]
+        lines = [*lines[:40], f"- …其余 {len(lines) - 40} 项已省略"]
     return lines
 
 
@@ -262,8 +263,10 @@ def _batch_markdown(
         lines.extend(
             [
                 "",
-                f"> JSON 归档：`{payload['json_path']}`"
-                "（仅归档下载，页面主读源为 SQLite 台账）",
+                (
+                    f"> JSON 归档：`{payload['json_path']}`"
+                    "（仅归档下载，页面主读源为 SQLite 台账）"
+                ),
             ]
         )
     return "\n".join(lines)
@@ -425,10 +428,8 @@ def _ledger_view(
         "batch_diagnostics": batch,
     }
     if batch.get("candidate_n") not in (None, ""):
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             diagnostics["candidate_n"] = int(batch["candidate_n"])
-        except (TypeError, ValueError):
-            pass
 
     now = now or datetime.now()
     stale = False
@@ -479,7 +480,7 @@ def _ledger_view(
         else:
             try:
                 as_of_ts = pd.Timestamp(data_as_of)
-            except Exception:
+            except (TypeError, ValueError):  # 数据日期缺失/非法时按过期处理
                 stale = True
                 diagnostics["message"] = (
                     f"该推荐记录 data_as_of={data_as_of} 无法解析，无法确认数据新鲜度；"
@@ -716,7 +717,7 @@ def run_tracking() -> RunResult:
     if "推荐日" in detail.columns:
         try:
             latest_as_of = pd.Timestamp(detail["推荐日"].max()).strftime("%Y-%m-%d")
-        except Exception:
+        except (TypeError, ValueError):  # 日期列非法时退回原始字符串
             latest_as_of = str(detail["推荐日"].max())
 
     nav_error = ""
@@ -730,7 +731,7 @@ def run_tracking() -> RunResult:
         nav_status = nav_error
         try:
             nav_chart = nav_figure(pd.DataFrame())
-        except Exception:
+        except Exception:  # noqa: BLE001 - 净值图是展示增强，失败只降级为无图
             nav_chart = None
 
     diagnostics: dict[str, Any] = {

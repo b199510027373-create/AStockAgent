@@ -27,9 +27,10 @@ from __future__ import annotations
 import copy
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "ADJ_VALUES",
@@ -298,10 +299,7 @@ def _check_field_name(
 def _check_range(
     value: Any, bounds: tuple[Any, Any] | None, path: str, issues: _Issues, kind: str
 ) -> Any | None:
-    if kind == "int":
-        ok = _is_int(value)
-    else:
-        ok = _is_number(value)
+    ok = _is_int(value) if kind == "int" else _is_number(value)
     if not ok:
         issues.add(path, f"必须是{'整数' if kind == 'int' else '数值'}，实际是 {_type_name(value)}")
         return None
@@ -426,9 +424,10 @@ def _check_params(
             continue
         _check_param(key, value, schema[key], key_path, issues)
     # filter 的 cmp=in 与 value 形态必须一致
-    if "cmp" in mapping and mapping.get("cmp") == "in":
-        if "value" in mapping and not isinstance(mapping["value"], (list, tuple)):
-            issues.add(f"{path}.value", "cmp=in 时 value 必须是数组")
+    if mapping.get("cmp") == "in" and "value" in mapping and not isinstance(
+        mapping["value"], (list, tuple)
+    ):
+        issues.add(f"{path}.value", "cmp=in 时 value 必须是数组")
     return dict(mapping)
 
 
@@ -437,7 +436,7 @@ def _check_params(
 # ---------------------------------------------------------------------------
 
 
-def _parse_range_date(text: str, path: str, issues: "_Issues") -> date | None:
+def _parse_range_date(text: str, path: str, issues: _Issues) -> date | None:
     """严格解析 ``YYYY-MM-DD:YYYY-MM-DD`` 的两端；非法日期转字段级错误，不抛裸 ValueError。
 
     正则只约束形状，``2026-13-01`` / ``2026-02-30`` 这类日历上不存在的日期必须由
@@ -621,10 +620,8 @@ def _validate_encode(encode: Any, kind: str | None, path: str, issues: _Issues) 
             issues.add(f"{path}.y", "heatmap 的 encode.y 只能是单个字段")
         if "color" not in encode:
             issues.add(f"{path}.color", "heatmap 需要 encode.color（数值列，作为色深）")
-    elif kind is not None:
-        if y_raw is None:
-            issues.add(f"{path}.y", f"{kind} 需要 encode.y")
-        color = color
+    elif kind is not None and y_raw is None:
+        issues.add(f"{path}.y", f"{kind} 需要 encode.y")
 
     normalized: dict[str, Any] = {}
     if x:
@@ -654,7 +651,7 @@ def _validate_transforms(value: Any, path: str, issues: _Issues) -> list[dict[st
             issues.add(f"{item_path}.op", f"取值 {op!r} 不在白名单 {list(TRANSFORM_OPS)} 中")
             out.append(dict(item))
             continue
-        _check_unknown_keys(item, ("op",) + tuple(TRANSFORM_PARAMS[op]), item_path, issues)
+        _check_unknown_keys(item, ("op", *tuple(TRANSFORM_PARAMS[op])), item_path, issues)
         params = {k: v for k, v in item.items() if k != "op"}
         _check_params(params, TRANSFORM_PARAMS[op], TRANSFORM_REQUIRED[op], item_path, issues)
         out.append({"op": op, **params})
@@ -685,7 +682,7 @@ def _validate_layers(
             issues.add(item_path, f"layers 只支持 candlestick，{kind} 不接受图层叠加")
             out.append(dict(item))
             continue
-        _check_unknown_keys(item, ("type",) + tuple(LAYER_PARAMS[layer_type]), item_path, issues)
+        _check_unknown_keys(item, ("type", *tuple(LAYER_PARAMS[layer_type])), item_path, issues)
         raw_params = {k: v for k, v in item.items() if k != "type"}
         _check_params(raw_params, LAYER_PARAMS[layer_type], (), item_path, issues)
         merged = {**LAYER_DEFAULTS[layer_type], **raw_params}
@@ -713,7 +710,7 @@ def _validate_annotations(value: Any, path: str, issues: _Issues) -> list[dict[s
             )
             out.append(dict(item))
             continue
-        _check_unknown_keys(item, ("type",) + tuple(ANNOTATION_PARAMS[ann_type]), item_path, issues)
+        _check_unknown_keys(item, ("type", *tuple(ANNOTATION_PARAMS[ann_type])), item_path, issues)
         params = {k: v for k, v in item.items() if k != "type"}
         _check_params(params, ANNOTATION_PARAMS[ann_type], ANNOTATION_REQUIRED[ann_type], item_path, issues)
         out.append({"type": ann_type, **params})

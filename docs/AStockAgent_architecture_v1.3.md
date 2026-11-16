@@ -104,5 +104,5 @@ tracking(run_id, code, horizon, entry_date, exit_date, ret, excess,
 - 推荐 UI 的“生成”与“历史读取”尚未统一到同一 service。
 - SW2014→SW2021 行业边界未校准。
 - 事件分权重人工设定，未做标注校准。
-- 全库 mypy/覆盖率未开；CI 只检查新模块类型。
+- ~~全库 mypy/覆盖率未开；CI 只检查新模块类型。~~ 已解决（plan-20261103-012，2026-11-17）：`mypy astock app.py` 覆盖全部非 UI 模块（36 个源文件 Success），CI 跑全仓 `ruff check astock tests`（0 条）与覆盖率门槛 76.4%（CI Linux 实测 76.47%、本地 76.70%）。
 - 多用户/远程、FastAPI、任务队列均未做，也不建议现在做。

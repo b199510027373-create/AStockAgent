@@ -28,12 +28,14 @@ import platform
 import re
 import sqlite3
 import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from functools import lru_cache
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -65,9 +67,9 @@ __all__ = [
     "CODE_VERSION",
     "DEFAULT_FONT_FAMILY",
     "FIGURE_DIV_PREFIX",
-    "PNGExportError",
     "PRICE_DOWN",
     "PRICE_UP",
+    "PNGExportError",
     "RenderedFigure",
     "apply_transforms",
     "figure_div_id",
@@ -512,9 +514,9 @@ def _transform_group(
     if not metrics:
         raise ChartSpecError([SpecIssue(f"{path}.metrics", "metrics 不能为空")])
     spec: dict[str, tuple[str, str]] = {}
-    for field, func in metrics.items():
-        _require_column(frame, field, f"{path}.metrics.{field}")
-        spec[f"{field}_{func}"] = (field, str(func))
+    for column, func in metrics.items():
+        _require_column(frame, column, f"{path}.metrics.{column}")
+        spec[f"{column}_{func}"] = (column, str(func))
     grouped = frame.groupby(by_list, dropna=False).agg(**spec).reset_index()
     return grouped
 
@@ -914,10 +916,7 @@ def _build_candlestick(
     for pane in pane_specs:
         series = _pane_series(frame, pane)
         kind = pane["type"]
-        if isinstance(series, pd.DataFrame):
-            columns = list(series.columns)
-        else:
-            columns = list(series)
+        columns = list(series.columns) if isinstance(series, pd.DataFrame) else list(series)
         for index, column in enumerate(columns):
             values = series[column]
             if kind == "macd" and column == "macd_hist":
@@ -1171,7 +1170,7 @@ def _json_scalar(value: Any) -> Any:
     if value is None or isinstance(value, (str, bool, int)):
         return value
     if isinstance(value, float):
-        return None if value != value else value  # NaN → None
+        return None if value != value else value  # noqa: PLR0124 - NaN 自比较是标准判定
     if isinstance(value, (pd.Timestamp, datetime, date)):
         return pd.Timestamp(value).isoformat()
     if hasattr(value, "item"):
@@ -1199,13 +1198,13 @@ def data_snapshot(frame: pd.DataFrame, *, limit: int = MAX_SNAPSHOT_ROWS) -> dic
     截断时必须保留最新一根 bar：图注的 ``data_as_of`` 由它决定，
     否则 ``meta["data_as_of"]`` 会与 ``rows[-1]`` 指向不同交易日（评审 P1）。
     """
-    total = int(len(frame))
-    if total > limit and limit > 0:
+    total = len(frame)
+    if total > limit > 0:
         positions = list(range(total - limit, total))
         latest = _latest_position(frame)
         if latest is not None and latest not in positions:
             # 丢掉最早的一行，把最新行补到末尾（快照仍按时间升序可回放）。
-            positions = positions[-(limit - 1) :] + [latest] if limit > 1 else [latest]
+            positions = [*positions[-(limit - 1):], latest] if limit > 1 else [latest]
         selected = frame.iloc[positions]
     else:
         selected = frame
@@ -1404,7 +1403,7 @@ def render(
             div_id=div_id,
         )
 
-        digest, rel_path, absolute = put_content(
+        digest, rel_path, _absolute = put_content(
             html,
             filename="chart.html",
             root=artifact_root,

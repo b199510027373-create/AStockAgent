@@ -7,12 +7,12 @@ import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import patch
 
 import pandas as pd
 
-import astock.ledger as ledger
-import astock.track as track
+from astock import ledger, track
 from astock.track import (
     AlphaBanner,
     alpha_banner,
@@ -188,15 +188,14 @@ class AlphaBannerStatsTests(unittest.TestCase):
         with patch(
             "astock.ledger.tracking_rows",
             side_effect=sqlite3.OperationalError("database is locked"),
-        ):
-            with self.assertRaises(sqlite3.OperationalError):
-                alpha_banner_snapshot()
+        ), self.assertRaises(sqlite3.OperationalError):
+            alpha_banner_snapshot()
 
 
 class BannerCaveatDedupTests(unittest.TestCase):
     """ADR-010 C2：横幅五状态各一句说明，静态提示不再复述「样本不足/未验证」。"""
 
-    DETAILS = {
+    DETAILS: ClassVar[dict[str, str]] = {
         "insufficient": "有效独立样本 < 10，暂不显示显著性结论",
         "unavailable": "p 值暂不可计算",
         "no_alpha": "差异不显著",
