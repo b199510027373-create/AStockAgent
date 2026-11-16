@@ -9,7 +9,7 @@
   "start": "2026-11-18",
   "due": "2026-11-22",
   "estimateH": 8,
-  "progress": 98,
+  "progress": 99,
   "acceptance": [
     "hfq 基准 1.0 公式与最早可用交易日 base_factor 写入 ADR-008 和 data.py 注释",
     "构造已知因子序列验证 hfq 价格与收益率；qfq 仍以最新因子为基准，二者不混用",
@@ -36,15 +36,15 @@
     ],
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/15",
     "test": [
-      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py tests/test_data_pit_events.py tests/test_quant.py -q -> 47 passed, 10 subtests passed (2.52s)",
-      ".venv\\Scripts\\python.exe -m pytest tests -q -> 507 passed, 1 skipped, 12 subtests passed (34.40s)",
-      ".venv\\Scripts\\python.exe -m pytest tests -q -> 528 passed, 1 skipped, 12 subtests passed (61.62s) [merge main ac19532 into branch]",
+      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py tests/test_data_pit_events.py tests/test_quant.py tests/test_contracts.py -q -> 97 passed, 10 subtests passed (14.63s)",
+      ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py -q -> 23 passed (1.38s) [评审 rev-20261116-002 后新增 8 例]",
+      ".venv\\Scripts\\python.exe -m pytest tests -q -> 536 passed, 1 skipped, 12 subtests passed (65.74s)",
       ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q -> 32 passed, 1 skipped",
       ".venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed!",
       ".venv\\Scripts\\python.exe -m mypy astock app.py -> Success: no issues found in 35 source files",
-      "GitHub Actions runs 43782366648 (13ef4f6) / 43782567956 (3a19ed5) / 43794324481 (e58de26) / 43795063293 (42bfcac merge main) / 43795349946 (fca30f5 plan meta) -> test pass"
+      "GitHub Actions runs 43782366648 (13ef4f6) / 43782567956 (3a19ed5) / 43794324481 (e58de26) / 43795063293 (42bfcac) / 43795349946 (fca30f5) / 43795764674 (8177643) -> test pass"
     ]
   },
   "createdAt": "2026-11-13T19:08:42.756Z",
-  "updatedAt": "2026-11-16T03:00:28.116Z"
+  "updatedAt": "2026-11-16T06:51:04.666Z"
 }
