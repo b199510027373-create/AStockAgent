@@ -17,13 +17,11 @@
 - 复现前提：同一 `spec`、同一份数据快照、**同一 plotly/python 版本与 `include_plotlyjs` 设置**。`params` 记录版本；规范 HTML 的 div id 固定，`embed_html` 为每个嵌入实例分配唯一 `astock-chart-<8 hex>`，不同图/重复嵌入不共享 id；
 - 同一 `artifact_id` 重复渲染时**不覆盖 meta**：追加 `agent_artifact_versions`（`meta_digest`/`env_version`），修正走 `corrections`（actor/理由/旧值/新值/时间），行数不合并；旧 `as_recorded` 与 `recomputed` 回放分离，不一致只给 warning。
 
-## 4. 文件 `meta.json` 的 `bbox` 语义（v2 草案）
+## 4. 文件 `extracted.jsonl` 的 `bbox` 语义
 
-`extracted.jsonl` 单行结构：
-
-`{"file_id", "page": int|null, "sheet": str|null, "block": int, "kind": "text"|"table", "text": str, "bbox": ...|null, "cells": int|null}`
-
-`bbox` 分两类，不得混用：PDF 页面坐标 `[x0,y0,x1,y1]`（points，左上原点）；Excel/CSV/DOCX 表格坐标 `[row_start,col_start,row_end,col_end]`（1-based 闭区间，DOCX 为源表格行号）。文本块 `bbox=null`；表格块必须带 `cells`（行×列）与 `sheet`（Excel）。`meta.json` 明确为 15 个必填字段。
+**不属于 v2 草案**：`bbox` 的两类坐标（PDF 页面坐标 / 表格行列坐标）已在 `main` 的
+`astock/agent/files.py` 与 v1 冻结清单 §4 实现，是 v1 生效口径；本文件不再重复声明，
+v2 只保留下方真正未实现的 DDL / meta 变更。
 
 ## 5. `agent_*` 三表 DDL（v2 覆盖草案）
 

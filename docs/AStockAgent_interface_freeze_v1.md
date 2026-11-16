@@ -260,7 +260,9 @@ data/agent/files/<sha256>/            # sha256 为原文 64 位小写十六进�
 | `warnings` | `list[str]` | 可读提示，直接回显给用户 |
 
 `extracted.jsonl` 单行结构：
-`{"file_id", "page": int|null, "sheet": str|null, "block": int, "kind": "text"|"table", "text": str, "bbox": [x0,y0,x1,y1]|null, "cells": int|null}`。
+`{"file_id", "page": int|null, "sheet": str|null, "block": int, "kind": "text"|"table", "text": str, "bbox": [x0,y0,x1,y1] | [row_start,col_start,row_end,col_end] | null, "cells": int|null}`。
+
+`bbox` 分两类，不得混用：PDF 页面坐标 `[x0,y0,x1,y1]`（points，左上原点，文本块 `bbox=null`，PDF 表格取 pdfplumber 的表格框）；Excel/CSV/DOCX 表格坐标 `[row_start,col_start,row_end,col_end]`（1 基闭区间，行号即源表格行号）。表格块必须带 `cells`（行×列），Excel 表格块带 `sheet`；这两类语义与 `astock/agent/files.py` 的落盘实现一致。
 
 表格落盘规则：`sheet_slug` = 工作表名转小写、非 `[a-z0-9]` 替换为 `_`、截断 40 字符、重名后缀 `_2`；
 parquet 列名取原始表头（去首尾空白），无表头时 `col_1..col_n`；数值列尽力转 `float`，转换失败**保留字符串**，
