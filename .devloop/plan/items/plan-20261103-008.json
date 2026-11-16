@@ -9,7 +9,7 @@
   "start": "2026-11-23",
   "due": "2026-11-27",
   "estimateH": 6,
-  "progress": 98,
+  "progress": 99,
   "acceptance": [
     "产出一张 SW2014 L1 ↔ SW2021 L1 的可审计映射表（含未匹配清单）",
     "2021-12-13 前后各 6 个快照的行业分布差异有量化说明",
@@ -37,16 +37,15 @@
       "docs/AStockAgent_PIT_data_interfaces.md"
     ],
     "test": [
-      "pytest tests/test_sw_crosswalk.py -q -p no:cacheprovider --basetemp=.tmp-test/pytest_sw5 -> 22 passed, 1 warning in 0.95s",
-      "pytest tests -q -m \"not png\" -p no:cacheprovider --basetemp=.tmp-test/pytest4 -> 555 passed, 1 skipped, 5 deselected, 12 subtests passed in 32.32s",
+      "pytest tests/test_sw_crosswalk.py -q -p no:cacheprovider --basetemp=.tmp-test/pytest_sw7 -> 25 passed, 1 warning in 1.75s (round-2: 10/40 sensitivity + distribution cache hit/threshold invalidation)",
+      "pytest tests -q -m \"not png\" -p no:cacheprovider --basetemp=.tmp-test/pytest5 -> 558 passed, 1 skipped, 5 deselected, 1 warning, 12 subtests passed in 32.47s",
       "mypy astock/sw_crosswalk.py -> Success: no issues found in 1 source file",
       "python -m astock.sw_crosswalk --refresh --export-docs -> exit 0, edges 200 (32 structural), paired 4194, changed 1306, dist 807 rows, metrics 25; re-export produced zero CSV diff",
       "GitHub Actions run 43912642771 (head 08a2a8c): test pass 1m31s, png-export pass 1m8s",
-      "pytest tests/test_sw_crosswalk.py tests/test_data_pit_events.py tests/test_hardening.py tests/test_contracts.py tests/test_core_paths.py -q -> 111 passed (previous delivery)",
-      "GitHub Actions run 43830495310: test pass, png-export pass (previous delivery)"
+      "GitHub Actions run 43913008986 (head d3ef09a): test pass 1m19s, png-export pass 55s"
     ]
   },
   "createdAt": "2026-11-03T12:10:44.089Z",
-  "updatedAt": "2026-11-16T16:56:22.074Z",
+  "updatedAt": "2026-11-16T17:47:53.463Z",
   "devSessionId": "session-7bc34221-e10d-4cf7-8884-b65970d84206"
 }

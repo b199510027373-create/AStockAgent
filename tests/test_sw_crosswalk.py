@@ -7,6 +7,7 @@ today's Tushare data.
 
 from __future__ import annotations
 
+import json
 import shutil
 import unittest
 from pathlib import Path
@@ -79,6 +80,26 @@ def _expand(pairs: list[tuple[str, str, int]]) -> pd.DataFrame:
 
 
 CLASSIFY_EDGES = sw.edge_table(_expand(CLASSIFY_PAIRS))
+
+# Mirrors the two edges that become structural at 10%/40%: 传媒->社会服务
+# (old-side 10.7%) and 化工->美容护理 (new-side 46.2%).  The other counts are
+# synthetic but keep every non-target edge below both default thresholds.
+SENSITIVITY_PAIRS = [
+    ("传媒", "传媒", 158),
+    ("传媒", "社会服务", 19),
+    ("化工", "基础化工", 360),
+    ("化工", "石油石化", 26),
+    ("化工", "美容护理", 12),
+    ("休闲服务", "社会服务", 37),
+    ("综合", "综合", 28),
+    ("综合", "社会服务", 11),
+    ("轻工制造", "纺织服饰", 91),
+    ("轻工制造", "美容护理", 9),
+    ("采掘", "煤炭", 55),
+    ("采掘", "美容护理", 5),
+]
+SENSITIVITY_OLD_UNIVERSE = ["传媒", "化工", "休闲服务", "综合", "轻工制造", "采掘"]
+SENSITIVITY_NEW_UNIVERSE = ["传媒", "社会服务", "基础化工", "石油石化", "美容护理", "综合", "纺织服饰", "煤炭"]
 
 
 def _row(frame: pd.DataFrame, **where: str) -> pd.Series:
@@ -221,6 +242,26 @@ class EdgeTableTests(unittest.TestCase):
         self.assertEqual(result["old_without_structural_successor"], ["钢铁"])
         self.assertEqual(result["new_without_structural_source"], ["美容护理"])
         self.assertEqual(_row(CLASSIFY_EDGES, sw2014_l1="采掘", sw2021_l1="银行")["is_structural"], False)
+
+    def test_sensitivity_at_10_40_changes_one_to_many(self) -> None:
+        base_edges = sw.edge_table(_expand(SENSITIVITY_PAIRS))
+        loose_edges = sw.edge_table(_expand(SENSITIVITY_PAIRS), old_share=0.10, new_share=0.40)
+        base = sw.classify_mapping(
+            base_edges, old_universe=SENSITIVITY_OLD_UNIVERSE, new_universe=SENSITIVITY_NEW_UNIVERSE
+        )
+        loose = sw.classify_mapping(
+            loose_edges, old_universe=SENSITIVITY_OLD_UNIVERSE, new_universe=SENSITIVITY_NEW_UNIVERSE
+        )
+        self.assertEqual(int(base_edges["is_structural"].sum()), 8)
+        self.assertEqual(int(loose_edges["is_structural"].sum()), 10)
+        self.assertEqual(set(base["one_to_many"]), {"化工", "综合"})
+        self.assertEqual(set(loose["one_to_many"]), {"传媒", "化工", "综合"})
+        self.assertEqual(base["new_without_structural_source"], ["美容护理"])
+        self.assertEqual(loose["new_without_structural_source"], [])
+        media = _row(loose_edges, sw2014_l1="传媒", sw2021_l1="社会服务")
+        self.assertAlmostEqual(media["share_of_sw2014"], 19 / 177, places=6)
+        cosmetics = _row(loose_edges, sw2014_l1="化工", sw2021_l1="美容护理")
+        self.assertAlmostEqual(cosmetics["share_of_sw2021"], 12 / 26, places=6)
 
     def test_label_change_breakdown(self) -> None:
         pairs = _expand(CLASSIFY_PAIRS)
@@ -473,6 +514,84 @@ class ArtifactTests(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
         self.assertEqual(len(first_metrics), 2)
         self.assertEqual(len(second_metrics), 1)
+
+    def _distribution_snapshot(self) -> pd.DataFrame:
+        rows = [
+            ("2021-06-30", "A", "采掘", 1.0, "SW2014"),
+            ("2021-12-13", "A", "煤炭", 1.0, "SW2021"),
+        ]
+        return pd.DataFrame(rows, columns=["date", "code", "industry", "weight", "industry_version"])
+
+    def test_distribution_same_window_hits_cache_after_parquet_roundtrip(self) -> None:
+        tmp = Path(".tmp-test") / "crosswalk_distribution_cache_hit"
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        calls: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+        snapshot = self._distribution_snapshot()
+
+        def fake_snapshot(index_code: str, start, end, refresh: bool = False) -> pd.DataFrame:
+            calls.append((pd.Timestamp(start), pd.Timestamp(end)))
+            return snapshot.copy()
+
+        real_build = sw.build_crosswalk_artifacts
+
+        def build_with_members(*args, **kwargs):
+            return real_build(*args, old_members=OLD_MEMBERS, new_members=NEW_MEMBERS, **kwargs)
+
+        try:
+            with patch.object(sw, "PIT_DIR", tmp), patch.object(
+                sw, "build_crosswalk_artifacts", side_effect=build_with_members
+            ), patch.object(sw, "snapshot_window", side_effect=fake_snapshot):
+                first_dist, first_metrics = sw.build_distribution_artifacts(
+                    "000300.SH", "2021-06-01", "2021-08-31", refresh=True
+                )
+                second_dist, second_metrics = sw.build_distribution_artifacts(
+                    "000300.SH", "2021-06-01", "2021-08-31", refresh=False
+                )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(len(calls), 1, "same window must not fetch the snapshot twice")
+        pd.testing.assert_frame_equal(first_dist, second_dist)
+        pd.testing.assert_frame_equal(first_metrics, second_metrics)
+
+    def test_threshold_change_invalidates_distribution_meta(self) -> None:
+        tmp = Path(".tmp-test") / "crosswalk_distribution_threshold"
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        calls: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+        snapshot = self._distribution_snapshot()
+
+        def fake_snapshot(index_code: str, start, end, refresh: bool = False) -> pd.DataFrame:
+            calls.append((pd.Timestamp(start), pd.Timestamp(end)))
+            return snapshot.copy()
+
+        real_build = sw.build_crosswalk_artifacts
+
+        def build_with_members(*args, **kwargs):
+            return real_build(*args, old_members=OLD_MEMBERS, new_members=NEW_MEMBERS, **kwargs)
+
+        try:
+            with patch.object(sw, "PIT_DIR", tmp), patch.object(
+                sw, "build_crosswalk_artifacts", side_effect=build_with_members
+            ), patch.object(sw, "snapshot_window", side_effect=fake_snapshot):
+                sw.build_distribution_artifacts("000300.SH", "2021-06-01", "2021-08-31", refresh=True)
+                _, second_metrics = sw.build_distribution_artifacts(
+                    "000300.SH",
+                    "2021-06-01",
+                    "2021-08-31",
+                    refresh=False,
+                    old_share=0.60,
+                    new_share=0.90,
+                )
+            meta = json.loads(
+                (tmp / "sw_crosswalk_meta_000300.SH_20210601_20210831.json").read_text(encoding="utf-8")
+            )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(len(calls), 2, "threshold change must rebuild the distribution")
+        self.assertEqual(meta["thresholds"]["structural_old_share"], 0.60)
+        self.assertEqual(meta["thresholds"]["structural_new_share"], 0.90)
+        self.assertFalse(second_metrics.empty)
 
     def test_export_audit_docs_keeps_month_ends_plus_switch_day(self) -> None:
         tmp = Path(".tmp-test") / "crosswalk_docs_export"
