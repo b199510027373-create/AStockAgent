@@ -2,14 +2,14 @@
   "id": "plan-20261114-001",
   "title": "PNG 导出基础设施：Kaleido/Chrome/字体与 CI",
   "description": "2026-11-14 裁决 Q6=A：PNG 导出从“可选降级”升级为 v1 支持功能。依据 ADR-016 补充裁决，锁定 plotly 与 kaleido 版本，打通 Windows 开发机 + Linux CI 的真实导出链路；解决 Chromium/无头模式、中文字体、超时/降级、PNG artifact 记录与文档。先做半天 spike 验证目标环境组合，再固化依赖与 CI。与 plan-20261107-005（渲染管线）配套，但不改 ChartSpec 语义。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-15",
   "due": "2026-11-21",
   "estimateH": 12,
-  "progress": 0,
+  "progress": 95,
   "acceptance": [
     "锁定 plotly 与 kaleido 精确版本，requirements 不再用无上限的 >= 漂移",
     "Windows 开发机与 Linux CI 均能生成 PNG；先完成目标环境 spike 并记录 Chrome/字体/版本组合",
@@ -34,8 +34,16 @@
       "ADR-016"
     ],
     "module": "chart_render",
-    "branch": "feat/agent-chart-pipeline"
+    "branch": "fix/agent-chart-png-kaleido",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/17",
+    "test": [
+      "pytest tests -q -> 511 passed, 1 skipped, 2 subtests (41.39s)",
+      "pytest tests/test_agent_chart_png_zh.py tests/test_agent_chart_png_export.py tests/test_agent_chart_render.py -q -> 46 passed (19.84s)",
+      "ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed",
+      "mypy astock app.py -> Success: no issues found in 35 source files",
+      "CI run 43790295645: test pass 2m6s; png-export pass 1m6s (5 passed in 14.59s, Chrome 157.0.8103.50, artifact chart-png/chinese_candlestick.png 47891 bytes)"
+    ]
   },
   "createdAt": "2026-11-13T16:36:18.516Z",
-  "updatedAt": "2026-11-13T16:36:51.995Z"
+  "updatedAt": "2026-11-16T02:10:53.788Z"
 }
