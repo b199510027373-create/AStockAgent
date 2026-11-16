@@ -2,14 +2,14 @@
   "id": "plan-20261103-008",
   "title": "SW2014→SW2021 行业边界校准与 crosswalk",
   "description": "ADR-007 的已知限制：没有官方 crosswalk，SW2014 的采掘等旧行业在 SW2021 拆成煤炭/石油石化等，跨版本名称不完全可比。本项不改主流程，只做边界校准：建立 28→31 的 L1 映射（含一对多/多对一/无匹配），量化切换日前后行业分布差异，把结论写进研究文档，避免\"2016 年前 IC\"被误读。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-research",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-27",
   "estimateH": 6,
-  "progress": 0,
+  "progress": 95,
   "acceptance": [
     "产出一张 SW2014 L1 ↔ SW2021 L1 的可审计映射表（含未匹配清单）",
     "2021-12-13 前后各 6 个快照的行业分布差异有量化说明",
@@ -25,8 +25,25 @@
   "links": {
     "adr": [
       "ADR-007"
+    ],
+    "module": "astock/sw_crosswalk.py",
+    "branch": "feat/sw2014-sw2021-crosswalk",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/20",
+    "docs": [
+      "docs/sw2014_sw2021_crosswalk.md",
+      "docs/sw2014_sw2021_crosswalk.csv",
+      "docs/sw2014_sw2021_distribution_metrics.csv",
+      "docs/AStockAgent_research_conclusions_v1.3.md",
+      "docs/AStockAgent_PIT_data_interfaces.md"
+    ],
+    "test": [
+      "pytest tests/test_sw_crosswalk.py -q -> 16 passed",
+      "pytest tests/test_sw_crosswalk.py tests/test_data_pit_events.py tests/test_hardening.py tests/test_contracts.py tests/test_core_paths.py -q -> 111 passed",
+      "mypy astock/sw_crosswalk.py -> Success: no issues found in 1 source file",
+      "full repo pytest -q -> attempted; 38 pre-existing collection errors (repo-root pip/tmp dirs PermissionError, release/ duplicate test basenames) and unrelated integration tests hang; not caused by this change, related PIT/contract suite 111 passed"
     ]
   },
   "createdAt": "2026-11-03T12:10:44.089Z",
-  "updatedAt": "2026-11-03T12:10:44.089Z"
+  "updatedAt": "2026-11-16T08:20:50.288Z",
+  "devSessionId": "session-7bc34221-e10d-4cf7-8884-b65970d84206"
 }
