@@ -181,7 +181,7 @@
     "title": "文件导入与检索：PDF / Excel / CSV / DOCX",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted-with-conditions] 文件导入：内容寻址布局、meta.json 13 字段、FTS5、file_id=f_<sha16> 五个字段；条件 C1–C4 分挂 plan-20261107-003（C1 布局/索引、C2 依赖与限额、C3 抽取自检）与 plan-20261107-004（C4 检索与表格查询契约）。",
+    "summary": "[accepted-with-conditions] 文件导入：内容寻址布局、meta.json 15 字段、FTS5、file_id=f_<sha16> 五个字段；bbox 分两类（PDF [x0,y0,x1,y1] points；Excel/CSV/DOCX [row_start,col_start,row_end,col_end] 1-based 闭区间），不得混用。条件 C1–C4 分挂 plan-20261107-003（C1 布局/索引、C2 依赖与限额、C3 抽取自检）与 plan-20261107-004（C4 检索与表格查询契约，已由 astock/agent/tools/file_tools.py + citations.py + sql_guard.py 落地，测试 tests/test_agent_tools.py）。",
     "tags": [
       "文件导入",
       "PDF",

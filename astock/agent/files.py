@@ -69,12 +69,15 @@ __all__ = [
     "describe_limits",
     "ensure_index_schema",
     "file_dir",
+    "files_root",
     "index_chunks",
+    "index_db_path",
     "ingest_file",
     "ingest_files",
     "iter_chunks",
     "load_meta",
     "load_table",
+    "table_path",
 ]
 
 # ---------------------------------------------------------------------------
@@ -820,7 +823,9 @@ def _add_sheet(
                 sheet=name,
                 kind="table",
                 text=text,
-                bbox=[row_number, 1, row_number, len(columns)],
+                # PDF 表格只有整表页面坐标 [x0,y0,x1,y1]（points）；Excel/CSV/DOCX
+                # 才能精确定位到源表格行，写成 [row,1,row,cols]（1 基闭区间）。
+                bbox=bbox if bbox is not None else [row_number, 1, row_number, len(columns)],
                 cells=sum(1 for value in row if value is not None and str(value).strip()),
             )
         )
@@ -1291,6 +1296,16 @@ def _default_db_path() -> Path:
     return Path(ledger.DB_PATH)
 
 
+def index_db_path() -> Path:
+    """检索索引所在库路径（与 ledger 同库 ``data/astock.db``）。"""
+    return _default_db_path()
+
+
+def files_root(root: str | Path | None = None) -> Path:
+    """文件存储根目录（``AGENT_FILES_DIR`` 可覆盖；工具层与测试复用）。"""
+    return _files_root(root)
+
+
 # ---------------------------------------------------------------------------
 # 读取辅助（按 file_id 或完整 sha256 定位）
 # ---------------------------------------------------------------------------
@@ -1337,6 +1352,17 @@ def iter_chunks(file_id: str, *, root: str | Path | None = None) -> Iterator[dic
                 yield json.loads(line)
 
 
+def table_path(file_id: str, sheet_slug: str, *, root: str | Path | None = None) -> Path:
+    """定位某张表的 parquet，并拒绝越出 ``tables/`` 的 ``sheet_slug``（AGENT-05）。"""
+    if not isinstance(sheet_slug, str) or not _SHEET_SLUG_RE.fullmatch(sheet_slug):
+        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
+    tables_dir = (file_dir(file_id, root=root) / "tables").resolve()
+    path = (tables_dir / f"{sheet_slug}.parquet").resolve()
+    if not path.is_relative_to(tables_dir):
+        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
+    return path
+
+
 def load_table(
     file_id: str, sheet_slug: str, *, root: str | Path | None = None
 ) -> pd.DataFrame:
@@ -1346,10 +1372,4 @@ def load_table(
     路径仍在 ``tables/`` 内，否则 ``../`` 或绝对路径会越出内容寻址目录
     （AGENT-05）。
     """
-    if not isinstance(sheet_slug, str) or not _SHEET_SLUG_RE.fullmatch(sheet_slug):
-        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
-    tables_dir = (file_dir(file_id, root=root) / "tables").resolve()
-    path = (tables_dir / f"{sheet_slug}.parquet").resolve()
-    if not path.is_relative_to(tables_dir):
-        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
-    return pd.read_parquet(path)
+    return pd.read_parquet(table_path(file_id, sheet_slug, root=root))

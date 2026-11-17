@@ -72,7 +72,7 @@
   给出可读提示；**禁止静默返回空文档**。验收：`tests/test_agent_files.py::test_scan_like_pdf_is_flagged`。
 - **C4 检索与表格查询契约（承接 plan-20261107-004）**：`file_search` 命中必须能回查 `file_id + page + block`；
   `table_query` 只允许单条 `SELECT` + 强制 `LIMIT` + 5 秒超时，写语句/DDL 一律拒绝；DuckDB 只读连接不得落临时文件；
-  文件内容进 prompt 必须包在不可信数据块内（ADR-017 §5）。验收：`tests/test_agent_files.py::test_table_query_rejects_write`。
+  文件内容进 prompt 必须包在不可信数据块内（ADR-017 §5）。验收：`tests/test_agent_tools.py::test_table_query_rejects_unsafe_sql`。
 
 ## 字段与 bbox 订正（2026-11-14）
 
