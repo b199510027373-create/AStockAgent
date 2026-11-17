@@ -2,14 +2,14 @@
   "id": "plan-20261107-004",
   "title": "文件检索 / 表格查询 + 强制引用",
   "description": "依据 ADR-015 实现文件检索与表格查询工具：SQLite FTS5 索引文本块（file_chunks：file_id/page/chunk/text）；表格用 DuckDB 只读查 Parquet（仅 SELECT、强制 LIMIT、5s 超时）。工具：file_list / file_search / file_read / table_schema / table_query。回答强制引用「文件名 + 页码/工作表/单元格范围」，无引用即标「未在文件中找到」。开工前先订正 ADR-015 的两处旧口径：meta 必填字段由 13 改为实际 15（file_id/sha256/name/ext/media_type/size_bytes/uploaded_at/pages/sheets/text_chars/chunks_count/parser/parser_version/status/warnings）；表格 bbox 明确区分 PDF 页面坐标 `[x0,y0,x1,y1]`（points）与 Excel/CSV/DOCX 表格坐标 `[row_start,col_start,row_end,col_end]`（1-based，闭区间），不得混用。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-28",
   "estimateH": 18,
-  "progress": 0,
+  "progress": 85,
   "acceptance": [
     "file_search 返回 chunk + 页码，可被回答引用",
     "table_query 仅允许 SELECT 且强制 LIMIT/超时",
@@ -40,8 +40,17 @@
     ],
     "mergedFrom": [
       "plan-20261110-004"
+    ],
+    "branch": "feat/plan-20261107-004-file-tools",
+    "test": [
+      "pytest tests/test_agent_tools.py -q → 34 passed",
+      "coverage run -m pytest tests -q -m \"not png\" → 645 passed, 5 deselected；coverage TOTAL 77.33% ≥ fail_under 76.45",
+      "ruff check astock tests → All checks passed",
+      "mypy astock app.py → Success: no issues found in 40 source files",
+      "tests/test_agent_tools.py::test_table_query_100k_rows_under_three_seconds → 查询本身 < 3s（整例 35s 主要是生成并导入 10 万行 xlsx）"
     ]
   },
   "createdAt": "2026-11-07T14:12:03.517Z",
-  "updatedAt": "2026-11-13T19:09:17.043Z"
+  "updatedAt": "2026-11-17T01:41:47.504Z",
+  "devSessionId": "session-846420cf-30ed-483d-a5e4-5928a779f575"
 }
