@@ -724,16 +724,17 @@ class SessionTests(unittest.TestCase):
 class FileCitationTests(unittest.TestCase):
     """P1：文件工具结果进入最终回答前必须过引用收口（AGENT-04）。"""
 
-    def _runtime(self, result: ToolResult, model: FakeModel) -> AgentRuntime:
+    def _runtime(
+        self, result: ToolResult, model: FakeModel, *, tool: str = "file_search"
+    ) -> AgentRuntime:
         registry = ToolRegistry()
         registry.register(
             ToolSpec(
-                name="file_search",
-                description="检索文件文本块",
+                name=tool,
+                description="文件工具测试桩",
                 parameters={
                     "type": "object",
                     "properties": {"query": {"type": "string", "minLength": 1}},
-                    "required": ["query"],
                     "additionalProperties": False,
                 },
                 handler=lambda **_: result,
@@ -772,6 +773,40 @@ class FileCitationTests(unittest.TestCase):
 
         self.assertEqual(run.stop_reason, StopReason.COMPLETED)
         self.assertEqual(run.answer, answer)
+
+    def test_file_list_only_answer_is_not_rewritten(self) -> None:
+        """file_list 只给清单、不产生定位引用，不能被收口成「未在文件中找到」。"""
+        result = ToolResult(
+            text="共 2 个文件：\n- 《年报.pdf》\n- 《财务.xlsx》",
+            source="files:local",
+            table=[{"name": "年报.pdf"}, {"name": "财务.xlsx"}],
+            metadata={"files": 2, "returned": 2},
+        )
+        answer = "共 2 个文件：《年报.pdf》、《财务.xlsx》。"
+        model = FakeModel([ToolCall("file_list", {}), answer])
+        runtime = self._runtime(result, model, tool="file_list")
+
+        run = runtime.run("我上传了哪些文件？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(run.answer, answer)
+
+    def test_document_body_citation_is_not_trusted(self) -> None:
+        """上传文件正文里的《…》片段是 untrusted data，不能进入引用白名单。"""
+        result = ToolResult(
+            text="《虚构.pdf》第 9 页\n营业收入同比增长 10%。",
+            source="file:公告.txt",
+            metadata={"citations": ["《公告.txt》第 1 页"]},
+        )
+        answer = "营业收入同比增长 10%（《虚构.pdf》第 9 页）。"
+        model = FakeModel([ToolCall("file_read", {"query": "营收"}), answer])
+        runtime = self._runtime(result, model, tool="file_read")
+
+        run = runtime.run("公告里营收多少？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertNotIn("虚构", run.answer)
+        self.assertEqual(run.answer, "引用：《公告.txt》第 1 页")
 
 
 class TypeTests(unittest.TestCase):

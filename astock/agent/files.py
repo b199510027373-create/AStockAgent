@@ -184,22 +184,9 @@ FILE_CHUNKS_LEGACY_TRIGGERS_DDL = """DROP TRIGGER IF EXISTS file_chunks_ai;
 DROP TRIGGER IF EXISTS file_chunks_ad;
 DROP TRIGGER IF EXISTS file_chunks_au;"""
 
-#: 兼容旧导入；新布局不再使用 SQL 触发器同步 FTS（tokens 必须由 Python 计算）。
+#: 兼容旧导入；contentless ``tokens`` 布局不再使用 SQL 触发器同步 FTS
+#: （tokens 必须由 Python 侧 :func:`fts_tokens` 计算），保留空串避免旧调用点回退。
 FILE_CHUNKS_TRIGGER_DDL = ""
-
-#: ``file_chunks_fts`` 与 ``file_chunks`` 的同步触发器（ADR-015 §5）。
-FILE_CHUNKS_TRIGGER_DDL = """CREATE TRIGGER IF NOT EXISTS file_chunks_ai AFTER INSERT ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(rowid, text) VALUES (new.chunk_id, new.text);
-END;
-CREATE TRIGGER IF NOT EXISTS file_chunks_ad AFTER DELETE ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(file_chunks_fts, rowid, text)
-  VALUES ('delete', old.chunk_id, old.text);
-END;
-CREATE TRIGGER IF NOT EXISTS file_chunks_au AFTER UPDATE ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(file_chunks_fts, rowid, text)
-  VALUES ('delete', old.chunk_id, old.text);
-  INSERT INTO file_chunks_fts(rowid, text) VALUES (new.chunk_id, new.text);
-END;"""
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 

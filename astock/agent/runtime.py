@@ -50,10 +50,12 @@ DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_VALIDATION_RETRIES = 1
 DEFAULT_SPIN_LIMIT = 2
 
-#: 文件类工具：它们的结果进入回答前必须带「文件名 + 页码/工作表」引用。
+#: 全部文件类工具（file_list 只返回清单，不产生定位引用）。
 FILE_TOOL_NAMES = frozenset(
     {"file_list", "file_search", "file_read", "table_schema", "table_query"}
 )
+#: 会产生「文件名 + 页码/工作表」定位的工具：只有它们的结果需要走引用收口。
+_CITING_FILE_TOOLS = FILE_TOOL_NAMES - {"file_list"}
 
 
 def _default_registry() -> ToolRegistry:
@@ -68,8 +70,9 @@ def _default_registry() -> ToolRegistry:
 
 
 def _uses_file_tools(steps: Iterable[StepRecord]) -> bool:
+    """本轮是否调用了会产生定位引用的文件工具（file_list 不算）。"""
     for step in steps:
-        if step.tool in FILE_TOOL_NAMES:
+        if step.tool in _CITING_FILE_TOOLS:
             return True
         if step.result is not None and str(step.result.source or "").startswith("file:"):
             return True
@@ -77,9 +80,12 @@ def _uses_file_tools(steps: Iterable[StepRecord]) -> bool:
 
 
 def _collect_file_citations(steps: Iterable[StepRecord]) -> list[str]:
-    """从本轮工具结果里收集可核对的文件引用（metadata + table 行 + 正文）。"""
-    from astock.agent.tools.citations import extract_citations  # 延迟导入，避免循环
+    """从本轮工具结果的可信字段里收集文件引用。
 
+    只取工具显式给出的定位（``metadata["citations"]`` / ``metadata["citation"]``
+    与 table 行的 ``citation``）；结果正文是上传文件内容，属于不可信数据，
+    正文中出现的《…》片段不能作为白名单来源（AGENT-05）。
+    """
     cites: list[str] = []
 
     def add(value: Any) -> None:
@@ -100,8 +106,6 @@ def _collect_file_citations(steps: Iterable[StepRecord]) -> list[str]:
         for row in result.table or []:
             if isinstance(row, Mapping):
                 add(row.get("citation"))
-        for item in extract_citations(result.text):
-            add(item)
     return cites
 
 SYSTEM_PROMPT = (

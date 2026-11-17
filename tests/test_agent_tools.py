@@ -237,6 +237,14 @@ def test_fts5_chinese_bigram_hits_two_char_query(store: Path, db: Path) -> None:
     assert all("《公告.txt》第 1 页" in str(row["citation"]) for row in found.table)
 
 
+def test_trigger_ddl_is_empty_for_contentless_tokens_layout() -> None:
+    """contentless tokens 表的 FTS 同步只能由 Python 写 tokens，不能再挂旧触发器。"""
+    assert F.FILE_CHUNKS_TRIGGER_DDL == ""
+    assert "tokens" in F.FILE_CHUNKS_FTS_DDL
+    assert "contentless_delete" in F.FILE_CHUNKS_FTS_DDL
+    assert F.FILE_CHUNKS_LEGACY_TRIGGERS_DDL.count("DROP TRIGGER IF EXISTS file_chunks_") == 3
+
+
 def test_ensure_index_schema_migrates_legacy_unicode61_table(tmp_path: Path) -> None:
     """P1：存量 unicode61 表在打开时迁移到 tokens(contentless) 布局并回填。"""
     import sqlite3
