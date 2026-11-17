@@ -38,8 +38,8 @@
       "ADR-017"
     ],
     "branch": "feat/plan-20261107-008-v2-audit",
-    "ci": "passed (test 1m48s + png-export; run 44158613454, sha 0c89df6)",
-    "commit": "0c89df6",
+    "ci": "passed (test 1m43s + png-export 1m31s; run 44161487849, sha 8978dd8)",
+    "commit": "8978dd8",
     "docs": [
       "docs/AStockAgent_chart_audit_v2_change_spec.md"
     ],
@@ -62,6 +62,6 @@
     ]
   },
   "createdAt": "2026-11-07T14:12:15.935Z",
-  "updatedAt": "2026-11-17T19:42:22.677Z",
+  "updatedAt": "2026-11-17T19:45:47.871Z",
   "devSessionId": "session-98870ec5-3d66-430a-9952-f2cda3728500"
 }
