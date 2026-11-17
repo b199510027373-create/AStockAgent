@@ -1,0 +1,107 @@
+{
+  "id": "ho-20261117-022",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261107-004：记录提交 b1b9799 与 CI 全绿",
+  "summary": "记录提交 b1b9799（plan 证据、calendar/worklog、ho-20261117-021）已推送，PR #28 CI run 44092069062 test/png-export 均 success。相对 ho-20261117-021 无代码改动；功能与测试证据不变（79 passed 目标测试、655 passed 全量、coverage 77.51%、ruff/mypy 干净）。等 rev-20261117-002 复审。",
+  "requirements": [
+    {
+      "id": "R2-1",
+      "text": "file_list 不触发引用收口；仅 file_search/file_read/table_schema/table_query 生效。",
+      "source": "rev-20261117-002 / iss-mwkoyzkc-cf9ddb"
+    },
+    {
+      "id": "R2-2",
+      "text": "正文引用不得进入白名单，只信工具定位字段（AGENT-05）。",
+      "source": "rev-20261117-002 / iss-mwkoyzlk-7502ab"
+    },
+    {
+      "id": "R2-3",
+      "text": "FILE_CHUNKS_TRIGGER_DDL 唯一空串定义，测试钉住。",
+      "source": "rev-20261117-002 / iss-mwkoz2re-30598e"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-004.json",
+      "summary": "in_review / progress 98，links.test 追加 r2 证据与 CI run 44091690423",
+      "commit": "b1b9799"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261117-021.json",
+      "summary": "r2 修复的 developer handoff（逐条回应 3 个 issue id）",
+      "commit": "b1b9799"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "r2 implementation 工作日志 log-1794921729766-601c38",
+      "commit": "b1b9799"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "同步工作日志",
+      "commit": "b1b9799"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_tools.py tests/test_agent_runtime.py -q -p no:cacheprovider",
+      "result": "79 passed in 12.38s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "coverage run -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "655 passed, 5 deselected, 12 subtests passed in 68.01s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "coverage report -m / ruff check astock tests / mypy astock app.py",
+      "result": "TOTAL 77.51%；ruff All checks passed；mypy 40 files success",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "gh run view 44092069062 --json status,conclusion",
+      "result": "completed success（test、png-export）",
+      "passed": true,
+      "evidence": ""
+    }
+  ],
+  "permissions": [
+    {
+      "name": "file:read（data/agent/files 只读）",
+      "reason": "文件工具只读上传目录",
+      "status": "granted"
+    },
+    {
+      "name": "PR #28 合并",
+      "reason": "复审通过后由用户合并",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-004-file-tools",
+    "commit": "b1b9799",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/28",
+    "ci": "run 44092069062：test success、png-export success",
+    "merge": "未合并（等复审）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-021",
+  "next": "复审 rev-20261117-002（3 个 r2 issue id），通过后由用户合并 PR #28；记录提交 b1b9799 CI run 44092069062 已全绿，复审期间 plan-20261107-004 保持 in_review。",
+  "createdAt": "2026-11-17T13:24:14.077Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-022.md"
+}
