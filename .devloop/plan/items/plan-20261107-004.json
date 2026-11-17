@@ -35,15 +35,15 @@
     "adr": [
       "ADR-015"
     ],
-    "module": [
-      "file_ingest"
-    ],
+    "branch": "feat/plan-20261107-004-file-tools",
+    "ci": "PR #28：代码提交 f22057c run 44084772168（test pass 1m5s、png-export pass 1m6s）；记录提交 218c055 run 44085061093（test pass 1m29s、png-export pass 58s）",
     "mergedFrom": [
       "plan-20261110-004"
     ],
-    "branch": "feat/plan-20261107-004-file-tools",
+    "module": [
+      "file_ingest"
+    ],
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/28",
-    "ci": "PR #28 返工后 run 44084772168：test pass 1m5s、png-export pass 1m6s（首轮 run 43997640831 亦全绿）",
     "test": [
       "pytest tests/test_agent_tools.py -q → 39 passed",
       "coverage run -m pytest tests -q -m \"not png\" → 652 passed, 5 deselected, 12 subtests passed（73.25s）；coverage report TOTAL 77.51% ≥ fail_under 76.45",
@@ -53,6 +53,6 @@
     ]
   },
   "createdAt": "2026-11-07T14:12:03.517Z",
-  "updatedAt": "2026-11-17T12:38:01.441Z",
+  "updatedAt": "2026-11-17T12:40:24.472Z",
   "devSessionId": "session-846420cf-30ed-483d-a5e4-5928a779f575"
 }
