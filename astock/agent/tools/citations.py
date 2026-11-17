@@ -175,16 +175,39 @@ def has_file_citation(text: str | None) -> bool:
     return bool(text) and bool(_CITATION_RE.search(str(text)))
 
 
+def _normalize_citation(text: str) -> str:
+    return re.sub(r"\s+", "", str(text or ""))
+
+
+def extract_citations(text: str | None) -> list[str]:
+    """抽出一段文字里所有「《文件名》…」引用（去重保序）。"""
+    return list(dict.fromkeys(match.group(0) for match in _CITATION_RE.finditer(str(text or ""))))
+
+
+def _grounded(found: str, allowed: list[str]) -> bool:
+    """回答中的引用必须是工具结果里出现过的定位（允许省略工作表/行号后缀）。"""
+    needle = _normalize_citation(found)
+    return any(needle and needle in _normalize_citation(item) for item in allowed)
+
+
 def finalize_file_answer(
     answer: str | None, citations: Iterable[str] | None = None
 ) -> str:
-    """把文件结论收敛成带引用的回答；一条引用都没有时返回「未在文件中找到」。"""
-    cites = [str(item).strip() for item in (citations or []) if str(item).strip()]
+    """把文件结论收敛成带引用的回答；只保留工具结果里真实存在的引用。
+
+    - 没有任何工具引用，或回答正文没有引用：返回「未在文件中找到」；
+    - 回答里的引用都能在 *citations* 中找到：原样返回；
+    - 回答出现白名单外的引用（如模型编造的《虚构.pdf》）：丢弃正文，
+      只用可信引用重建「引用：…」。
+    """
+    cites = list(dict.fromkeys(str(item).strip() for item in (citations or []) if str(item).strip()))
     text = str(answer or "").strip()
     if not text or not cites:
         return CITATION_NOT_FOUND
-    if has_file_citation(text):
+    found = extract_citations(text)
+    if not found:
+        return CITATION_NOT_FOUND
+    if all(_grounded(item, cites) for item in found):
         return text
-    missing = "；".join(dict.fromkeys(cites))
-    body = f"{text}\n\n引用：{missing}".strip()
-    return body
+    # 出现工具结果里没有的引用（模型编造）：丢弃正文，只用可信引用重建。
+    return f"引用：{'；'.join(cites)}"

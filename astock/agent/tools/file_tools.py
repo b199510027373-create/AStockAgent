@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 import threading
 from collections.abc import Mapping
@@ -31,6 +30,7 @@ import pyarrow.parquet as pq
 from astock.agent.files import (
     META_FIELDS,
     files_root,
+    fts_tokens,
     index_db_path,
     iter_chunks,
     load_meta,
@@ -66,8 +66,6 @@ MAX_QUERY_LIMIT = 200
 TABLE_TIMEOUT_SECONDS = 5.0
 
 SNIPPET_CHARS = 160
-
-_FTS_TOKEN_RE = re.compile(r"[0-9A-Za-z_\u4e00-\u9fff]+")
 
 
 def _clip(text: str, limit: int = MAX_TEXT_CHARS) -> str:
@@ -123,10 +121,11 @@ def _chunk_map(file_id: str, root: str | Path | None = None) -> dict[int, dict[s
 
 
 def _fts_query(text: str) -> str:
-    tokens = _FTS_TOKEN_RE.findall(text)
+    """把检索词编成 FTS5 MATCH 表达式（CJK bigram + 英文词，全部必须命中）。"""
+    tokens = fts_tokens(text)[:8]
     if not tokens:
         raise ValueError("检索词必须包含字母、数字或汉字")
-    return " OR ".join(f'"{token}"*' for token in dict.fromkeys(tokens[:8]))
+    return " AND ".join(f'"{token}"' for token in tokens)
 
 
 def _like_hits(
@@ -446,10 +445,22 @@ def describe_table(
     )
 
 
-def _interrupt_on_timeout(conn: duckdb.DuckDBPyConnection, seconds: float, state: dict[str, bool]) -> threading.Timer:
+def _interrupt_on_timeout(
+    conn: duckdb.DuckDBPyConnection,
+    seconds: float,
+    state: dict[str, bool],
+    lock: threading.Lock,
+) -> threading.Timer:
+    """到点中断 *查询*；用锁保证 ``done`` 检查与 ``interrupt()`` 不交错。"""
+
     def fire() -> None:
-        if not state["done"]:
-            conn.interrupt()
+        with lock:
+            if state["done"]:
+                return
+            try:
+                conn.interrupt()
+            except Exception:  # noqa: BLE001 - 连接可能已关闭；超时语义已由外层判定
+                return
 
     timer = threading.Timer(seconds, fire)
     timer.daemon = True
@@ -466,7 +477,7 @@ def query_table(
     root: str | Path | None = None,
     timeout_seconds: float = TABLE_TIMEOUT_SECONDS,
 ) -> ToolResult:
-    """只读查询某张表（单条 SELECT + 强制 LIMIT + 5 秒超时）。"""
+    """只读查询某张表（单条 SELECT + 强制 LIMIT + 查询超时，装载不计入）。"""
     statement = build_limited_sql(sql, limit)
     meta = _file_meta(file_id, root)
     info = _resolve_query_sheet(meta, sheet)
@@ -476,7 +487,8 @@ def query_table(
 
     conn = duckdb.connect(":memory:")
     state = {"done": False}
-    timer = _interrupt_on_timeout(conn, timeout_seconds, state)
+    lock = threading.Lock()
+    timer: threading.Timer | None = None
     try:
         conn.execute("SET temp_directory=''")
         conn.execute("SET threads=1")
@@ -484,16 +496,23 @@ def query_table(
         escaped = str(path).replace("'", "''")
         conn.execute(f"CREATE TEMP TABLE t AS SELECT * FROM read_parquet('{escaped}')")
         conn.execute("SET enable_external_access=false")
-        cursor = conn.execute(statement)
-        columns = [str(item[0]) for item in cursor.description]
-        raw_rows = cursor.fetchall()
-    except duckdb.InterruptException as exc:
-        raise TimeoutError(
-            f"table_query 超过 {timeout_seconds:g}s 超时，请缩小查询范围或先聚合"
-        ) from exc
+        # 装载完成后再计时：装载读本地 parquet，不计入查询预算，也不套用查询超时文案。
+        timer = _interrupt_on_timeout(conn, timeout_seconds, state, lock)
+        try:
+            cursor = conn.execute(statement)
+            columns = [str(item[0]) for item in cursor.description]
+            raw_rows = cursor.fetchall()
+        except duckdb.InterruptException as exc:
+            raise TimeoutError(
+                f"table_query 查询超过 {timeout_seconds:g}s 超时（表格装载不计入），"
+                "请缩小查询范围或先聚合"
+            ) from exc
     finally:
-        state["done"] = True
-        timer.cancel()
+        if timer is not None:
+            with lock:
+                state["done"] = True
+            timer.cancel()
+            timer.join(timeout=1.0)
         conn.close()
 
     rows = [

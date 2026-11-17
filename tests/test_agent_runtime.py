@@ -721,6 +721,59 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(memory.extras, {})
 
 
+class FileCitationTests(unittest.TestCase):
+    """P1：文件工具结果进入最终回答前必须过引用收口（AGENT-04）。"""
+
+    def _runtime(self, result: ToolResult, model: FakeModel) -> AgentRuntime:
+        registry = ToolRegistry()
+        registry.register(
+            ToolSpec(
+                name="file_search",
+                description="检索文件文本块",
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string", "minLength": 1}},
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+                handler=lambda **_: result,
+                permissions=(Permission.FILE_READ,),
+            )
+        )
+        return AgentRuntime(model, registry)
+
+    def test_file_tool_answer_without_citation_becomes_not_found(self) -> None:
+        result = ToolResult(
+            text="《年报.pdf》第 2 页\n营业收入同比增长 10%。",
+            source="file:年报.pdf",
+            metadata={"citations": ["《年报.pdf》第 2 页"]},
+        )
+        model = FakeModel(
+            [ToolCall("file_search", {"query": "营收"}), "营业收入同比增长 10%。"]
+        )
+        runtime = self._runtime(result, model)
+
+        run = runtime.run("年报里营收增长多少？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(run.answer, "未在文件中找到")
+
+    def test_file_tool_answer_with_grounded_citation_is_kept(self) -> None:
+        result = ToolResult(
+            text="《年报.pdf》第 2 页\n营业收入同比增长 10%。",
+            source="file:年报.pdf",
+            metadata={"citations": ["《年报.pdf》第 2 页"]},
+        )
+        answer = "营业收入同比增长 10%（《年报.pdf》第 2 页）。"
+        model = FakeModel([ToolCall("file_search", {"query": "营收"}), answer])
+        runtime = self._runtime(result, model)
+
+        run = runtime.run("年报里营收增长多少？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(run.answer, answer)
+
+
 class TypeTests(unittest.TestCase):
     def test_dataframe_result_is_coerced_to_table(self) -> None:
         import pandas as pd

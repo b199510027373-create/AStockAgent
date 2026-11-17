@@ -9,7 +9,7 @@
   "start": "2026-11-23",
   "due": "2026-11-28",
   "estimateH": 18,
-  "progress": 85,
+  "progress": 95,
   "acceptance": [
     "file_search 返回 chunk + 页码，可被回答引用",
     "table_query 仅允许 SELECT 且强制 LIMIT/超时",
@@ -42,15 +42,17 @@
       "plan-20261110-004"
     ],
     "branch": "feat/plan-20261107-004-file-tools",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/28",
+    "ci": "PR #28 首轮 CI run 43997640831：test pass 1m43s、png-export pass 1m2s；返工提交后重跑中",
     "test": [
-      "pytest tests/test_agent_tools.py -q → 34 passed",
-      "coverage run -m pytest tests -q -m \"not png\" → 645 passed, 5 deselected；coverage TOTAL 77.33% ≥ fail_under 76.45",
+      "pytest tests/test_agent_tools.py tests/test_agent_runtime.py tests/test_agent_files.py tests/test_ci_quality_gates.py -q → 138 passed（返工中间态）；最终 pytest tests/test_agent_tools.py -q → 39 passed",
+      "coverage run -m pytest tests -q -m \"not png\" → 652 passed, 5 deselected, 12 subtests passed（73.25s）；coverage report TOTAL 77.51% ≥ fail_under 76.45",
       "ruff check astock tests → All checks passed",
       "mypy astock app.py → Success: no issues found in 40 source files",
-      "tests/test_agent_tools.py::test_table_query_100k_rows_under_three_seconds → 查询本身 < 3s（整例 35s 主要是生成并导入 10 万行 xlsx）"
+      "新增证据：test_fts5_chinese_bigram_hits_two_char_query（backend=fts5）、test_ensure_index_schema_migrates_legacy_unicode61_table、test_file_answer_rejects_citation_outside_tool_results、test_table_query_starts_timeout_after_loading_table、test_agent_runtime_default_registry_wires_file_tools、tests/test_agent_runtime.py::FileCitationTests 两例、tests/test_agent_tools.py::test_table_query_100k_rows_under_three_seconds（查询 < 3s）"
     ]
   },
   "createdAt": "2026-11-07T14:12:03.517Z",
-  "updatedAt": "2026-11-17T01:41:47.504Z",
+  "updatedAt": "2026-11-17T12:36:13.662Z",
   "devSessionId": "session-846420cf-30ed-483d-a5e4-5928a779f575"
 }

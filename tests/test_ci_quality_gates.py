@@ -1,4 +1,4 @@
-﻿"""CI 质量门禁的配置守护（plan-20261103-012）。
+"""CI 质量门禁的配置守护（plan-20261103-012）。
 
 这些断言不测业务逻辑，只钉住「门禁本身」：一旦有人把 ruff/mypy 降回子集选择、
 把覆盖率门槛调低、或把 CI 改回裸装最新版工具，这里会红。
@@ -45,7 +45,7 @@ MYPY_UI_WHITELIST = {
         "recommend_ui",
     )
 }
-# astock 下共 44 个 .py，排除上述 9 个 → 35 个受检 + app.py = CI 日志里的 36 files。
+# astock 下共 48 个 .py，排除上述 9 个 → 39 个受检 + app.py = CI 日志里的 40 files。
 EXPECTED_CHECKED_MODULES = 39
 
 

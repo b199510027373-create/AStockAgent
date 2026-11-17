@@ -28,6 +28,7 @@ import pytest
 from docx import Document
 from openpyxl import Workbook
 
+from astock.agent import AgentRuntime, FakeModel, StopReason, ToolCall
 from astock.agent import files as F
 from astock.agent.registry import ToolArgumentError
 from astock.agent.tools import citations as C
@@ -221,6 +222,52 @@ def test_file_search_returns_chunk_with_page_citation(
     assert hit["citation"] == "《年报.pdf》第 2 页"
     assert "《年报.pdf》第 2 页" in found.text
     assert C.has_file_citation(found.text)
+    assert found.metadata["backend"] == "fts5"
+
+
+def test_fts5_chinese_bigram_hits_two_char_query(store: Path, db: Path) -> None:
+    """P1：中文按 bigram 写入 tokens，2 字查询走 FTS5 而不是全量 LIKE 扫描。"""
+    _ingest(_write(store.parent / "公告.txt", "公司A 营收同比增长 10%。"), store, db)
+
+    found = T.search_files("营收", root=store, db_path=db)
+
+    assert found.metadata["backend"] == "fts5"
+    assert found.table is not None and found.table
+    assert any("营收" in str(row["text"]) for row in found.table)
+    assert all("《公告.txt》第 1 页" in str(row["citation"]) for row in found.table)
+
+
+def test_ensure_index_schema_migrates_legacy_unicode61_table(tmp_path: Path) -> None:
+    """P1：存量 unicode61 表在打开时迁移到 tokens(contentless) 布局并回填。"""
+    import sqlite3
+
+    db = tmp_path / "legacy.db"
+    with sqlite3.connect(db) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE file_chunks(
+              chunk_id INTEGER PRIMARY KEY, file_id TEXT NOT NULL,
+              page INTEGER, sheet TEXT, block INTEGER NOT NULL, text TEXT NOT NULL);
+            CREATE VIRTUAL TABLE file_chunks_fts USING fts5(
+              text, content='file_chunks', content_rowid='chunk_id',
+              tokenize='unicode61');
+            """
+        )
+        conn.execute(
+            "INSERT INTO file_chunks(file_id, page, block, text) VALUES ('f_legacy', 1, 0, ?)",
+            ("营业收入增长",),
+        )
+        conn.execute("INSERT INTO file_chunks_fts(rowid, text) VALUES (1, ?)", ("营业收入增长",))
+        F.ensure_index_schema(conn)
+        schema = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'file_chunks_fts'"
+        ).fetchone()[0]
+        hits = conn.execute(
+            "SELECT rowid FROM file_chunks_fts WHERE file_chunks_fts MATCH ?", ('"业收"',)
+        ).fetchall()
+
+    assert "contentless_delete" in schema
+    assert hits == [(1,)]
 
 
 def test_file_search_miss_answers_not_found(store: Path, db: Path) -> None:
@@ -314,14 +361,24 @@ def test_file_answer_without_citation_falls_back_to_not_found() -> None:
     """契约 AGENT-04：文件结论必须有引用；没有引用时只能是「未在文件中找到」。"""
     assert C.finalize_file_answer("公司A 营收 100 万元", []) == C.CITATION_NOT_FOUND
     assert C.finalize_file_answer("", ["《财务.xlsx》工作表「利润表」A2:B2"]) == C.CITATION_NOT_FOUND
-
-    answer = C.finalize_file_answer("公司A 营收 100 万元", ["《财务.xlsx》工作表「利润表」A2:B2"])
-    assert "引用：《财务.xlsx》工作表「利润表」A2:B2" in answer
-    assert C.has_file_citation(answer)
+    # 工具有引用、但回答正文没写引用：同样视为未经引用支持的结论。
+    assert (
+        C.finalize_file_answer("公司A 营收 100 万元", ["《财务.xlsx》工作表「利润表」A2:B2"])
+        == C.CITATION_NOT_FOUND
+    )
 
     already = "公司A 营收 100 万元（《财务.xlsx》工作表「利润表」A2:B2）"
     assert C.finalize_file_answer(already, ["《财务.xlsx》工作表「利润表」A2:B2"]) == already
     assert not C.has_file_citation("第 2 页写了营收")
+
+
+def test_file_answer_rejects_citation_outside_tool_results() -> None:
+    """P2：回答里的引用必须来自本轮工具结果，不能是模型编造的文件。"""
+    allowed = [C.format_citation("公告.txt", page=1)]
+    answer = C.finalize_file_answer("结论（《虚构.pdf》第 9 页）", allowed)
+
+    assert "虚构.pdf" not in answer
+    assert answer == "引用：《公告.txt》第 1 页"
 
 
 def test_file_tool_registry_exposes_five_read_only_tools(store: Path, db: Path) -> None:
@@ -449,7 +506,7 @@ def test_table_query_times_out_within_five_seconds(store: Path) -> None:
     result = _ingest(source, store, index=False)
 
     started = time.perf_counter()
-    with pytest.raises(TimeoutError, match="超时"):
+    with pytest.raises(TimeoutError, match="装载不计入"):
         T.query_table(
             result.meta["file_id"],  # type: ignore[index]
             "明细",
@@ -458,6 +515,30 @@ def test_table_query_times_out_within_five_seconds(store: Path) -> None:
             timeout_seconds=0.2,
         )
     assert time.perf_counter() - started < 5.0
+
+
+def test_table_query_starts_timeout_after_loading_table(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P2：计时器必须在 CREATE TEMP TABLE 之后启动，装载不占用查询预算。"""
+    rows = [["序号", "金额"]] + [[index, float(index)] for index in range(1000)]
+    result = _ingest(_make_xlsx(store.parent / "大表.xlsx", {"明细": rows}), store, index=False)
+    original = T._interrupt_on_timeout
+    observed: list[bool] = []
+
+    def spy(conn: Any, seconds: float, state: dict[str, bool], lock: Any) -> Any:
+        tables = {row[0] for row in conn.execute("SHOW TABLES").fetchall()}
+        observed.append("t" in tables)
+        return original(conn, seconds, state, lock)
+
+    monkeypatch.setattr(T, "_interrupt_on_timeout", spy)
+
+    answer = T.query_table(
+        result.meta["file_id"], "明细", "SELECT count(*) AS n FROM t", root=store, timeout_seconds=5  # type: ignore[index]
+    )
+
+    assert observed == [True]
+    assert answer.table is not None
 
 
 def test_table_query_100k_rows_under_three_seconds(store: Path) -> None:
@@ -611,5 +692,39 @@ def test_file_result_requires_source(store: Path, db: Path) -> None:
     assert all("《公告.txt》" in str(row.get("citation")) for row in found.table)
 
     assert C.finalize_file_answer("公司A 营业收入 100 万元", []) == C.CITATION_NOT_FOUND
-    grounded = C.finalize_file_answer("公司A 营业收入 100 万元", [C.format_citation("公告.txt", page=1)])
-    assert grounded.endswith("引用：《公告.txt》第 1 页")
+    assert (
+        C.finalize_file_answer("公司A 营业收入 100 万元", [C.format_citation("公告.txt", page=1)])
+        == C.CITATION_NOT_FOUND
+    )
+    grounded = "公司A 营业收入 100 万元（《公告.txt》第 1 页）"
+    assert C.finalize_file_answer(grounded, [C.format_citation("公告.txt", page=1)]) == grounded
+
+
+def test_agent_runtime_default_registry_wires_file_tools(
+    store: Path, db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P1：不传 registry 的 AgentRuntime 也必须装配五个文件工具并端到端可用。"""
+    _ingest(_write(store.parent / "公告.txt", "公司A 营业收入 100 万元。"), store, db)
+    original = T.build_file_registry
+    calls: list[dict[str, Any]] = []
+
+    def spy(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return original(root=store, db_path=db)
+
+    monkeypatch.setattr(T, "build_file_registry", spy)
+    answer = "公司A 营业收入 100 万元（《公告.txt》第 1 页）。"
+    model = FakeModel([ToolCall("file_search", {"query": "营业收入"}), answer])
+
+    runtime = AgentRuntime(model)
+    names = runtime.registry.names()
+    result = runtime.run("公告里的营业收入是多少？")
+
+    assert calls, "AgentRuntime 默认装配必须调用 build_file_registry"
+    for name in ("file_list", "file_search", "file_read", "table_schema", "table_query"):
+        assert name in names
+    assert result.stop_reason == StopReason.COMPLETED
+    assert [step.tool for step in result.steps] == ["file_search"]
+    assert result.steps[0].result is not None
+    assert "《公告.txt》第 1 页" in result.answer
+    assert result.answer == answer

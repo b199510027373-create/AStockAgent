@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Protocol, runtime_checkable
 
 from astock.agent.registry import (
@@ -49,6 +49,60 @@ DEFAULT_TOKEN_BUDGET = 64_000
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_VALIDATION_RETRIES = 1
 DEFAULT_SPIN_LIMIT = 2
+
+#: 文件类工具：它们的结果进入回答前必须带「文件名 + 页码/工作表」引用。
+FILE_TOOL_NAMES = frozenset(
+    {"file_list", "file_search", "file_read", "table_schema", "table_query"}
+)
+
+
+def _default_registry() -> ToolRegistry:
+    """默认注册表：装配只读文件工具（ADR-015 C4）。
+
+    UI/CLI 未显式传入 registry 时，``AgentRuntime`` 也能直接调用文件检索与
+    表格查询工具；市场/图表等工具由后续计划项继续注册。
+    """
+    from astock.agent.tools.file_tools import build_file_registry  # 延迟导入，避免循环
+
+    return build_file_registry()
+
+
+def _uses_file_tools(steps: Iterable[StepRecord]) -> bool:
+    for step in steps:
+        if step.tool in FILE_TOOL_NAMES:
+            return True
+        if step.result is not None and str(step.result.source or "").startswith("file:"):
+            return True
+    return False
+
+
+def _collect_file_citations(steps: Iterable[StepRecord]) -> list[str]:
+    """从本轮工具结果里收集可核对的文件引用（metadata + table 行 + 正文）。"""
+    from astock.agent.tools.citations import extract_citations  # 延迟导入，避免循环
+
+    cites: list[str] = []
+
+    def add(value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in cites:
+            cites.append(text)
+
+    for step in steps:
+        result = step.result
+        if result is None:
+            continue
+        metadata: Mapping[str, Any] = result.metadata or {}
+        raw_citations = metadata.get("citations")
+        if isinstance(raw_citations, (list, tuple)):
+            for item in raw_citations:
+                add(item)
+        add(metadata.get("citation"))
+        for row in result.table or []:
+            if isinstance(row, Mapping):
+                add(row.get("citation"))
+        for item in extract_citations(result.text):
+            add(item)
+    return cites
 
 SYSTEM_PROMPT = (
     "你是 A 股研究助手。只能调用提供的工具获取数据；回答中的数字、表格和图形"
@@ -104,7 +158,7 @@ class AgentRuntime:
         if spin_limit < 2:
             raise ValueError("spin_limit 必须 >= 2")
         self.model = model
-        self.registry = registry if registry is not None else ToolRegistry()
+        self.registry = registry if registry is not None else _default_registry()
         self.session = session if session is not None else AgentSession()
         self.max_steps = max_steps
         self.token_budget = token_budget
@@ -179,6 +233,10 @@ class AgentRuntime:
 
                 if reply.tool_call is None:
                     answer = reply.content or "（模型没有给出回答）"
+                    if _uses_file_tools(steps):
+                        from astock.agent.tools.citations import finalize_file_answer
+
+                        answer = finalize_file_answer(answer, _collect_file_citations(steps))
                     self.session.add_assistant(answer)
                     stop = StopReason.COMPLETED
                     break
