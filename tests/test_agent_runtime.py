@@ -808,6 +808,17 @@ class FileCitationTests(unittest.TestCase):
         self.assertNotIn("虚构", run.answer)
         self.assertEqual(run.answer, "引用：《公告.txt》第 1 页")
 
+    def test_zero_tool_citation_is_downgraded(self) -> None:
+        """没有工具结果作白名单时，回答自带的《…》引用不得原样落库。"""
+        answer = "营业收入同比增长 10%（《年报.pdf》第 2 页）。"
+        model = FakeModel([answer])
+        runtime = AgentRuntime(model, ToolRegistry())
+
+        run = runtime.run("年报里营收多少？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(run.answer, "未在文件中找到")
+
 
 class TypeTests(unittest.TestCase):
     def test_dataframe_result_is_coerced_to_table(self) -> None:

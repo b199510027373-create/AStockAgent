@@ -237,9 +237,14 @@ class AgentRuntime:
 
                 if reply.tool_call is None:
                     answer = reply.content or "（模型没有给出回答）"
-                    if _uses_file_tools(steps):
-                        from astock.agent.tools.citations import finalize_file_answer
+                    # 零工具调用时若回答自带文件引用，同样要走收口：没有本轮工具
+                    # 结果作白名单，这类凭记忆补写的引用必须降级为「未在文件中找到」。
+                    from astock.agent.tools.citations import (
+                        finalize_file_answer,
+                        has_file_citation,
+                    )
 
+                    if _uses_file_tools(steps) or has_file_citation(answer):
                         answer = finalize_file_answer(answer, _collect_file_citations(steps))
                     self.session.add_assistant(answer)
                     stop = StopReason.COMPLETED
