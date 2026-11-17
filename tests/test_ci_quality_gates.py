@@ -45,8 +45,8 @@ MYPY_UI_WHITELIST = {
         "recommend_ui",
     )
 }
-# astock 下共 44 个 .py，排除上述 9 个 → 35 个受检 + app.py = CI 日志里的 36 files。
-EXPECTED_CHECKED_MODULES = 35
+# astock 下共 48 个 .py，排除上述 9 个 → 39 个受检 + app.py = CI 日志里的 40 files。
+EXPECTED_CHECKED_MODULES = 39
 
 
 def _ci() -> dict[str, Any]:

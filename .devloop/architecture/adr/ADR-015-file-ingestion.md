@@ -49,9 +49,13 @@
    避免 UI 与工具参数里出现 64 位十六进制。
 2. 原文的 `ExtractedDoc {pages[], tables[]}` 在落盘时拆成两处：`extracted.jsonl`（逐块、带 `bbox`/`cells`）
    与 `tables/<sheet_slug>.parquet`（结构化表格）。`ExtractedDoc` 仅作内存态返回类型，不是持久格式。
-3. FTS5 原文只写字段名，冻结为显式 DDL + `content='file_chunks'` 外部内容表 + `ai/ad/au` 触发器，
-   并要求 `tokenize='unicode61'`（中文按字切分可用，不引入 jieba 依赖）。列名收敛：原文的 `chunk`
-   改名为 `block`（与 `extracted.jsonl` 的 `block` 字段对齐），并新增 `chunk_id` 主键与 `sheet` 列，
+3. FTS5 原文只写字段名，冻结为显式 DDL：`file_chunks` 存原文，`file_chunks_fts`
+   用 ``fts5(tokens, content='', contentless_delete=1, tokenize='unicode61')`` 存检索词。
+   `tokens` 由写入侧 `files.py::fts_tokens()` 生成（英文/数字按词、CJK 按 bigram），
+   2 字中文查询也能命中，且不引入 jieba 依赖；因此不再使用 `ai/ad/au` 触发器，
+   由 `index_chunks()` 与 `extracted.jsonl` 同批写入，旧 `content='file_chunks'` 库在
+   `ensure_index_schema()` 打开时自动重建回填。列名收敛：原文的 `chunk` 改名为 `block`
+   （与 `extracted.jsonl` 的 `block` 字段对齐），并新增 `chunk_id` 主键与 `sheet` 列，
    使文本块能同时索引 PDF 页与 Excel 工作表。
 4. 工具签名冻结（v1 不变）：`file_list()`、`file_search(file_id, query, top_k=5)`、
    `file_read(file_id, page_from=1, page_to=None)`、`table_schema(file_id, sheet)`、
@@ -72,7 +76,7 @@
   给出可读提示；**禁止静默返回空文档**。验收：`tests/test_agent_files.py::test_scan_like_pdf_is_flagged`。
 - **C4 检索与表格查询契约（承接 plan-20261107-004）**：`file_search` 命中必须能回查 `file_id + page + block`；
   `table_query` 只允许单条 `SELECT` + 强制 `LIMIT` + 5 秒超时，写语句/DDL 一律拒绝；DuckDB 只读连接不得落临时文件；
-  文件内容进 prompt 必须包在不可信数据块内（ADR-017 §5）。验收：`tests/test_agent_files.py::test_table_query_rejects_write`。
+  文件内容进 prompt 必须包在不可信数据块内（ADR-017 §5）。验收：`tests/test_agent_tools.py::test_table_query_rejects_unsafe_sql`。
 
 ## 字段与 bbox 订正（2026-11-14）
 
@@ -100,7 +104,7 @@
 
 ## 证据
 
-- 当前对话入口只检索 `events.py`，无文件上传路径；`astock/agent/files.py` 与 `astock/agent/tools/` 均不存在（2026-11-10 核验）
+- `astock/agent/files.py` 与 `astock/agent/tools/` 已实现（2026-11-17，plan-20261107-003/004）
 - 用户 2026-11-07 消息
 - 项目已有 `pandas` / `pyarrow`，DuckDB 为新增轻量依赖
 - 冻结布局：`docs/AStockAgent_interface_freeze_v1.md` §4

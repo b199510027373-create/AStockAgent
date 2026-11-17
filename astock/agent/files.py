@@ -51,6 +51,7 @@ __all__ = [
     "DEFAULT_FILES_DIR",
     "EXTRACTION_WARNING_PREFIX",
     "FILE_CHUNKS_DDL",
+    "FILE_CHUNKS_FTS_DDL",
     "FILE_CHUNKS_TRIGGER_DDL",
     "MAX_CHUNK_CHARS",
     "MAX_FILES_PER_BATCH",
@@ -69,12 +70,16 @@ __all__ = [
     "describe_limits",
     "ensure_index_schema",
     "file_dir",
+    "files_root",
+    "fts_tokens",
     "index_chunks",
+    "index_db_path",
     "ingest_file",
     "ingest_files",
     "iter_chunks",
     "load_meta",
     "load_table",
+    "table_path",
 ]
 
 # ---------------------------------------------------------------------------
@@ -161,26 +166,27 @@ DEFAULT_FILES_DIR = Path(
 )
 
 #: 冻结的 FTS5 建表语句（与《接口冻结清单》§4 字符级一致）。
+#:
+#: ``tokens`` 列由写入侧 :func:`fts_tokens` 生成：英文/数字按词、CJK 按 bigram。
+#: 这样 ``unicode61`` 也能命中中文子串（不依赖 trigram，2 字中文查询同样可检索），
+#: 原文仍完整保存在 ``file_chunks.text``。
+FILE_CHUNKS_FTS_DDL = """CREATE VIRTUAL TABLE IF NOT EXISTS file_chunks_fts USING fts5(
+  tokens, content='', contentless_delete=1, tokenize='unicode61');"""
+
 FILE_CHUNKS_DDL = """CREATE TABLE IF NOT EXISTS file_chunks(
   chunk_id INTEGER PRIMARY KEY, file_id TEXT NOT NULL, page INTEGER,
   sheet TEXT, block INTEGER NOT NULL, text TEXT NOT NULL);
-CREATE VIRTUAL TABLE IF NOT EXISTS file_chunks_fts USING fts5(
-  text, content='file_chunks', content_rowid='chunk_id', tokenize='unicode61');
+""" + FILE_CHUNKS_FTS_DDL + """
 CREATE INDEX IF NOT EXISTS idx_file_chunks_file ON file_chunks(file_id, page);"""
 
-#: ``file_chunks_fts`` 与 ``file_chunks`` 的同步触发器（ADR-015 §5）。
-FILE_CHUNKS_TRIGGER_DDL = """CREATE TRIGGER IF NOT EXISTS file_chunks_ai AFTER INSERT ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(rowid, text) VALUES (new.chunk_id, new.text);
-END;
-CREATE TRIGGER IF NOT EXISTS file_chunks_ad AFTER DELETE ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(file_chunks_fts, rowid, text)
-  VALUES ('delete', old.chunk_id, old.text);
-END;
-CREATE TRIGGER IF NOT EXISTS file_chunks_au AFTER UPDATE ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(file_chunks_fts, rowid, text)
-  VALUES ('delete', old.chunk_id, old.text);
-  INSERT INTO file_chunks_fts(rowid, text) VALUES (new.chunk_id, new.text);
-END;"""
+#: 旧库（``content='file_chunks'`` + unicode61）迁移时需要先摘掉的触发器。
+FILE_CHUNKS_LEGACY_TRIGGERS_DDL = """DROP TRIGGER IF EXISTS file_chunks_ai;
+DROP TRIGGER IF EXISTS file_chunks_ad;
+DROP TRIGGER IF EXISTS file_chunks_au;"""
+
+#: 兼容旧导入；contentless ``tokens`` 布局不再使用 SQL 触发器同步 FTS
+#: （tokens 必须由 Python 侧 :func:`fts_tokens` 计算），保留空串避免旧调用点回退。
+FILE_CHUNKS_TRIGGER_DDL = ""
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
@@ -188,6 +194,9 @@ _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _LEADING_ZERO_RE = re.compile(r"^0\d")
 # sheet_slug 白名单（冻结布局：tables/<sheet_slug>.parquet，见 §4）。
 _SHEET_SLUG_RE = re.compile(r"[a-z0-9_]{1,48}")
+# FTS tokens 切分：CJK 连续片段（bigram）与英文/数字词。
+_CJK_RUN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
+_WORD_RE = re.compile(r"[0-9a-z_]+")
 
 
 def describe_limits() -> str:
@@ -437,7 +446,10 @@ def _ingest(
 
 
 def _files_root(root: str | Path | None) -> Path:
-    return Path(root) if root is not None else DEFAULT_FILES_DIR
+    if root is not None:
+        return Path(root)
+    env_root = os.getenv("AGENT_FILES_DIR")
+    return Path(env_root) if env_root else DEFAULT_FILES_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -820,7 +832,9 @@ def _add_sheet(
                 sheet=name,
                 kind="table",
                 text=text,
-                bbox=[row_number, 1, row_number, len(columns)],
+                # PDF 表格只有整表页面坐标 [x0,y0,x1,y1]（points）；Excel/CSV/DOCX
+                # 才能精确定位到源表格行，写成 [row,1,row,cols]（1 基闭区间）。
+                bbox=bbox if bbox is not None else [row_number, 1, row_number, len(columns)],
                 cells=sum(1 for value in row if value is not None and str(value).strip()),
             )
         )
@@ -1244,10 +1258,55 @@ def _atomic_write_text(target: Path, text: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def fts_tokens(text: str) -> list[str]:
+    """把文本切成 FTS ``tokens`` 列使用的检索词。
+
+    - 英文/数字按词（小写，支持下划线）；
+    - CJK 连续片段按 bigram 切分，单字片段保留单字；
+    - 去重且保持出现顺序。
+
+    中文 bigram 让 ``unicode61`` 分词器也能命中 2 字及以上的中文子串。
+    """
+    lowered = (text or "").lower()
+    tokens: list[str] = []
+    for run in _CJK_RUN_RE.findall(lowered):
+        if len(run) == 1:
+            tokens.append(run)
+        else:
+            tokens.extend(run[index : index + 2] for index in range(len(run) - 1))
+    tokens.extend(_WORD_RE.findall(lowered))
+    return list(dict.fromkeys(tokens))
+
+
+def _fts_tokens_text(text: str) -> str:
+    return " ".join(fts_tokens(text))
+
+
+def _rebuild_fts_table(conn: sqlite3.Connection) -> None:
+    """把旧 unicode61/content 表重建为 tokens(contentless) 布局并回填。"""
+    conn.executescript(FILE_CHUNKS_LEGACY_TRIGGERS_DDL)
+    conn.execute("DROP TABLE IF EXISTS file_chunks_fts")
+    conn.execute(FILE_CHUNKS_FTS_DDL)
+    rows = conn.execute("SELECT chunk_id, text FROM file_chunks").fetchall()
+    for chunk_id, text in rows:
+        tokens = _fts_tokens_text(text)
+        if tokens:
+            conn.execute(
+                "INSERT INTO file_chunks_fts(rowid, tokens) VALUES (?, ?)",
+                (chunk_id, tokens),
+            )
+
+
 def ensure_index_schema(conn: sqlite3.Connection) -> None:
-    """建 ``file_chunks`` / ``file_chunks_fts`` 与同步触发器（幂等）。"""
+    """建 ``file_chunks`` / ``file_chunks_fts``（幂等，并迁移旧 unicode61 表）。"""
     conn.executescript(FILE_CHUNKS_DDL)
-    conn.executescript(FILE_CHUNKS_TRIGGER_DDL)
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='file_chunks_fts'"
+    ).fetchone()
+    existing = (row[0] or "") if row else ""
+    if existing and "contentless_delete" not in existing:
+        _rebuild_fts_table(conn)
+    conn.commit()
 
 
 def index_chunks(
@@ -1264,31 +1323,58 @@ def index_chunks(
     conn = sqlite3.connect(path, timeout=10)
     try:
         ensure_index_schema(conn)
+        old_ids = [
+            item[0]
+            for item in conn.execute(
+                "SELECT chunk_id FROM file_chunks WHERE file_id = ?", (file_id,)
+            )
+        ]
+        for chunk_id in old_ids:
+            conn.execute("DELETE FROM file_chunks_fts WHERE rowid = ?", (chunk_id,))
         conn.execute("DELETE FROM file_chunks WHERE file_id = ?", (file_id,))
-        conn.executemany(
-            "INSERT INTO file_chunks(file_id, page, sheet, block, text) VALUES (?, ?, ?, ?, ?)",
-            [
+        count = 0
+        for row in rows:
+            text = row.get("text") or ""
+            if not text.strip():
+                continue
+            cursor = conn.execute(
+                "INSERT INTO file_chunks(file_id, page, sheet, block, text) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (
                     file_id,
                     row.get("page"),
                     row.get("sheet"),
                     int(row.get("block", 0)),
-                    row.get("text") or "",
+                    text,
+                ),
+            )
+            tokens = _fts_tokens_text(text)
+            if tokens:
+                conn.execute(
+                    "INSERT INTO file_chunks_fts(rowid, tokens) VALUES (?, ?)",
+                    (cursor.lastrowid, tokens),
                 )
-                for row in rows
-                if (row.get("text") or "").strip()
-            ],
-        )
+            count += 1
         conn.commit()
     finally:
         conn.close()
-    return len([row for row in rows if (row.get("text") or "").strip()])
+    return count
 
 
 def _default_db_path() -> Path:
     from .. import ledger  # 延迟导入：避免模块级耦合
 
     return Path(ledger.DB_PATH)
+
+
+def index_db_path() -> Path:
+    """检索索引所在库路径（与 ledger 同库 ``data/astock.db``）。"""
+    return _default_db_path()
+
+
+def files_root(root: str | Path | None = None) -> Path:
+    """文件存储根目录（``AGENT_FILES_DIR`` 可覆盖；工具层与测试复用）。"""
+    return _files_root(root)
 
 
 # ---------------------------------------------------------------------------
@@ -1337,6 +1423,17 @@ def iter_chunks(file_id: str, *, root: str | Path | None = None) -> Iterator[dic
                 yield json.loads(line)
 
 
+def table_path(file_id: str, sheet_slug: str, *, root: str | Path | None = None) -> Path:
+    """定位某张表的 parquet，并拒绝越出 ``tables/`` 的 ``sheet_slug``（AGENT-05）。"""
+    if not isinstance(sheet_slug, str) or not _SHEET_SLUG_RE.fullmatch(sheet_slug):
+        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
+    tables_dir = (file_dir(file_id, root=root) / "tables").resolve()
+    path = (tables_dir / f"{sheet_slug}.parquet").resolve()
+    if not path.is_relative_to(tables_dir):
+        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
+    return path
+
+
 def load_table(
     file_id: str, sheet_slug: str, *, root: str | Path | None = None
 ) -> pd.DataFrame:
@@ -1346,10 +1443,4 @@ def load_table(
     路径仍在 ``tables/`` 内，否则 ``../`` 或绝对路径会越出内容寻址目录
     （AGENT-05）。
     """
-    if not isinstance(sheet_slug, str) or not _SHEET_SLUG_RE.fullmatch(sheet_slug):
-        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
-    tables_dir = (file_dir(file_id, root=root) / "tables").resolve()
-    path = (tables_dir / f"{sheet_slug}.parquet").resolve()
-    if not path.is_relative_to(tables_dir):
-        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
-    return pd.read_parquet(path)
+    return pd.read_parquet(table_path(file_id, sheet_slug, root=root))

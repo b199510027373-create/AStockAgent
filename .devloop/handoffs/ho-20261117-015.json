@@ -1,0 +1,214 @@
+{
+  "id": "ho-20261117-015",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261107-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "文件检索 / 表格查询 + 强制引用（plan-20261107-004 首次交付）",
+  "summary": "按 ADR-015 C4 交付五个只读文件工具（file_list/file_search/file_read/table_schema/table_query）：file_search 走 FTS5 并回查 chunk 得页码/工作表引用；table_query 用 DuckDB 内存临时表、SQL 守卫只放行单条 SELECT/WITH、外层强制 LIMIT、5s interrupt；citations 模块统一引用格式并在无引用时落到「未在文件中找到」，SYSTEM_PROMPT 同步强制引用规则。订正 ADR-015 注册表 summary 与冻结清单：meta 15 字段、PDF 与 Excel/CSV/DOCX 两类 bbox 不混用，并修掉 files.py 中 PDF 数据行误写表格坐标的问题。测试：新增 tests/test_agent_tools.py 34 例（含 15 字段/缺字段、两类 bbox、DOCX 源行号、多 sheet 引用、8 种坏 SQL、超时、10 万行 <3s）；全量 645 passed、coverage 77.33%（≥76.45）、ruff/mypy 通过。",
+  "requirements": [
+    {
+      "id": "A1",
+      "text": "file_search 返回 chunk + 页码，可被回答引用",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "A2",
+      "text": "table_query 仅允许 SELECT 且强制 LIMIT/超时",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "A3",
+      "text": "基于文件的回答必须带文件名 + 页码/工作表引用",
+      "source": "plan-20261107-004 acceptance / 契约 AGENT-04"
+    },
+    {
+      "id": "A4",
+      "text": "无命中的问题明确回答「未在文件中找到」",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "A5",
+      "text": "查询 10 万行 Excel 的响应时间 < 3s",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "A6",
+      "text": "（ADR-015 C4）file_chunks 用 FTS5 全文索引并与抽取同批写入；命中可回查 file_id + 页码/行号",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "A7",
+      "text": "meta 必填字段 15 个，与 ADR-015 和实现一致；有字段数/缺字段测试",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "A8",
+      "text": "PDF 表格 bbox 用 [x0,y0,x1,y1] points；Excel/CSV/DOCX 用 [row_start,col_start,row_end,col_end] 1-based 闭区间；两类不混用",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "A9",
+      "text": "DOCX 表格写回源行号；Excel 多 sheet 的引用含工作表名与单元格范围",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "A10",
+      "text": "冻结清单与 ADR-015 同步更新，旧 13 字段/bbox 表述删除",
+      "source": "plan-20261107-004 acceptance"
+    },
+    {
+      "id": "D1",
+      "text": "实现 file_list / file_search / file_read / table_schema / table_query 五个工具",
+      "source": "plan-20261107-004 description"
+    },
+    {
+      "id": "D2",
+      "text": "开工前订正 ADR-015 meta 15 字段与两类 bbox 旧口径",
+      "source": "plan-20261107-004 description"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/tools/file_tools.py",
+      "summary": "新增五个工具实现：FTS5 检索（LIKE 兜底）、按 page/block 回读、表结构、DuckDB 单条 SELECT 查询（强制 LIMIT + 5s interrupt）、build_file_registry",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/tools/citations.py",
+      "summary": "统一引用格式（《文件》第 N 页 / 工作表「」A1:Dn / 表格「」第 N 行）、finalize_file_answer 无引用时返回「未在文件中找到」",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/tools/sql_guard.py",
+      "summary": "SQL 守卫：单条 SELECT/WITH、禁写语句/DDL/表函数/路径字面量、build_limited_sql 外层强制 LIMIT",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/tools/__init__.py",
+      "summary": "工具包导出",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/files.py",
+      "summary": "PDF 数据行 bbox 不再误用表格坐标；新增 table_path/files_root/index_db_path，load_table 复用 table_path",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "SYSTEM_PROMPT 增加强制引用与「未在文件中找到」规则",
+      "commit": "b057da6"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "新增 34 例：检索/引用/空命中、15 字段与缺字段、两类 bbox、DOCX 源行号、多 sheet、坏 SQL、超时、10 万行 <3s、冻结清单/ADR 同步",
+      "commit": "b057da6"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§4 状态改为已实现；新增 §4.1 五工具与引用/查询约束",
+      "commit": "b057da6"
+    },
+    {
+      "path": "docs/AStockAgent_contract_rule_map_v1.md",
+      "summary": "AGENT-04 落点表同步：文件侧测试已落地，行情侧留给 plan-20261107-005",
+      "commit": "b057da6"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-015-file-ingestion.md",
+      "summary": "C4 验收测试路径订正为 test_table_query_rejects_unsafe_sql",
+      "commit": "b057da6"
+    },
+    {
+      "path": ".devloop/architecture/adrs.json",
+      "summary": "ADR-015 summary 改为 15 字段 + 两类 bbox + C4 已落地（清除旧 13 字段表述）",
+      "commit": "b057da6"
+    },
+    {
+      "path": ".devloop/architecture/contract.json",
+      "summary": "AGENT-04 rationale 同步已落地/待落地测试",
+      "commit": "b057da6"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "受检非 UI 模块数 35→39，纳入 tools 四个新模块",
+      "commit": "b057da6"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_tools.py -q",
+      "result": "34 passed, 1 warning in 13.29s",
+      "passed": true,
+      "evidence": "覆盖 10 条验收：检索命中带页码/工作表引用、空命中精确等于「未在文件中找到」、15 字段与缺字段报错、PDF/Excel/DOCX bbox 两类不混用、DOCX 源行号、多 sheet 引用、8 种坏 SQL 拒绝、超时 <5s、10 万行查询 <3s（引用 A1:C100001）"
+    },
+    {
+      "command": "coverage run -m pytest tests -q -m \"not png\"",
+      "result": "645 passed, 5 deselected, 1 warning, 12 subtests passed in 73.38s",
+      "passed": true,
+      "evidence": "全量回归通过"
+    },
+    {
+      "command": "coverage report -m",
+      "result": "TOTAL 9770 stmts / 2215 miss / 77.33%（fail_under 76.45 未触发失败）",
+      "passed": true,
+      "evidence": "新模块覆盖率：file_tools.py 88.03%、citations.py 90.29%、sql_guard.py 86.29%"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "含 RUF043 修正后的 clean 输出"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 40 source files",
+      "passed": true,
+      "evidence": "修复 file_tools.py 的 list-item 与 permissions 类型"
+    },
+    {
+      "command": "pytest tests/test_architecture_gate.py tests/test_ci_quality_gates.py tests/test_agent_tools.py::test_file_result_requires_source -q",
+      "result": "48 passed, 1 warning in 2.26s",
+      "passed": true,
+      "evidence": "契约落点/文档测试引用/模块数门槛全部同步"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network: git push + gh PR",
+      "reason": "推送分支并创建 PR 以走 CI 评审",
+      "status": "granted"
+    },
+    {
+      "name": "dependency: none new",
+      "reason": "duckdb/pandas/pyarrow/pdfplumber/python-docx/openpyxl 已在 requirements.txt",
+      "status": "granted"
+    },
+    {
+      "name": "gh auth",
+      "reason": "GitHub CLI 已登录 b199510027373-create（repo/workflow scope）",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-004-file-tools",
+    "commit": "b057da6ab3fd61e7048a54197b53c85a1a17746d",
+    "pr": "pending",
+    "ci": "pending",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "1) 创建 PR 并等 CI（ruff/mypy/coverage/png-export）通过后补 update handoff；2) 请评审复核 table_query 的 DuckDB 临时表方案与 5s interrupt 实现；3) 行情侧 AGENT-04 必填校验测试随 plan-20261107-005 落地。",
+  "createdAt": "2026-11-17T01:42:18.223Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-015.md"
+}

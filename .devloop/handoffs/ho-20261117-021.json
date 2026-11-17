@@ -1,0 +1,134 @@
+{
+  "id": "ho-20261117-021",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261107-004 r2 修复：file_list 豁免引用收口、正文引用不进白名单、TRIGGER_DDL 去重",
+  "summary": "针对评审 rev-20261117-002 第 2 轮新增的 3 条（2 P1 + 1 P2）逐条修复：file_list 不再触发 finalize_file_answer；_collect_file_citations 只信 metadata/table 行 citation，删除正文抽取；FILE_CHUNKS_TRIGGER_DDL 只保留空串定义。新增 3 个回归测试，目标测试 79 passed、全量 655 passed（TOTAL 77.51%）、ruff/mypy 干净；PR #28 提交 dfcd286，CI run 44091690423 test/png-export 均 success。上一轮 6 条（iss-mwk1e76b-235fe7 等）已在 r1 修复并被评审标 fixed，本轮未回退。",
+  "requirements": [
+    {
+      "id": "R2-1",
+      "text": "P1：file_list 只返回清单、不含定位引用，不得被 finalize_file_answer 改写成「未在文件中找到」；收口仅对 file_search/file_read/table_schema/table_query 生效。",
+      "source": "devloop_review rev-20261117-002 / iss-mwkoyzkc-cf9ddb"
+    },
+    {
+      "id": "R2-2",
+      "text": "P1：文件正文属 untrusted data，正文中的《…》片段不得进入引用白名单；白名单只取 metadata.citations/metadata.citation/table 行 citation（AGENT-05）。",
+      "source": "devloop_review rev-20261117-002 / iss-mwkoyzlk-7502ab"
+    },
+    {
+      "id": "R2-3",
+      "text": "P2：FILE_CHUNKS_TRIGGER_DDL 不得重复赋值为与新 contentless(tokens) 表冲突的旧触发器脚本；删重复赋值并用断言钉住空串。",
+      "source": "devloop_review rev-20261117-002 / iss-mwkoz2re-30598e"
+    },
+    {
+      "id": "A3",
+      "text": "基于文件的回答必须带文件名 + 页码/工作表引用（r1 已落地，r2 保持）。",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "A4",
+      "text": "无命中的问题明确回答「未在文件中找到」（r1 已落地）。",
+      "source": "plan-20261107-004 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "新增 _CITING_FILE_TOOLS = FILE_TOOL_NAMES - {\"file_list\"}；_uses_file_tools 按它判断；_collect_file_citations 删除 extract_citations(result.text) 分支，只收 metadata citations/citation 与 table 行 citation。",
+      "commit": "dfcd286"
+    },
+    {
+      "path": "astock/agent/files.py",
+      "summary": "删除第二段旧触发器脚本赋值，FILE_CHUNKS_TRIGGER_DDL 仅保留 \"\" 与说明注释。",
+      "commit": "dfcd286"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "FileCitationTests._runtime 支持任意工具名；新增 test_file_list_only_answer_is_not_rewritten 与 test_document_body_citation_is_not_trusted。",
+      "commit": "dfcd286"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "新增 test_trigger_ddl_is_empty_for_contentless_tokens_layout 钉住空串与 contentless tokens DDL。",
+      "commit": "dfcd286"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_tools.py tests/test_agent_runtime.py -q -p no:cacheprovider",
+      "result": "79 passed, 1 warning in 12.38s",
+      "passed": true,
+      "evidence": "含 3 个 r2 新增用例：file_list-only 回答原样保留、正文《虚构.pdf》被拒、TRIGGER_DDL 为空"
+    },
+    {
+      "command": "coverage run -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "655 passed, 5 deselected, 1 warning, 12 subtests passed in 68.01s",
+      "passed": true,
+      "evidence": "全量测试（r1 为 652 passed，本轮 +3）"
+    },
+    {
+      "command": "coverage report -m",
+      "result": "TOTAL 9865 stmts / 2219 miss = 77.51% ≥ fail_under 76.45",
+      "passed": true,
+      "evidence": "file_tools.py 86.69%、citations.py 90.99%、sql_guard.py 86.29%、runtime.py 91.41%、files.py 88.24%"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "无 lint 问题"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 40 source files",
+      "passed": true,
+      "evidence": "类型检查通过"
+    },
+    {
+      "command": "gh pr checks 28 / gh run view 44091690423 --json jobs",
+      "result": "test success, png-export success",
+      "passed": true,
+      "evidence": "PR #28 提交 dfcd286 的 CI 全绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "file:read（data/agent/files 只读）",
+      "reason": "文件检索/读取/表格查询工具仅读上传目录，路径白名单 + resolve 校验",
+      "status": "granted"
+    },
+    {
+      "name": "DuckDB 进程内只读查 Parquet",
+      "reason": "table_query 只允许单条 SELECT、强制 LIMIT、5s interrupt；enable_external_access=false",
+      "status": "granted"
+    },
+    {
+      "name": "PR #28 合并",
+      "reason": "复审通过前保持未合并，由用户/评审执行合并",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-004-file-tools",
+    "commit": "dfcd286",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/28",
+    "ci": "run 44091690423：test success、png-export success",
+    "merge": "未合并（等 rev-20261117-002 复审通过）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-019",
+  "next": "请评审复审 rev-20261117-002 并核对 3 个 issue id：iss-mwkoyzkc-cf9ddb、iss-mwkoyzlk-7502ab、iss-mwkoz2re-30598e。复审通过后由用户合并 PR #28，plan-20261107-004 可标 done；merge 前保持 in_review。",
+  "createdAt": "2026-11-17T13:22:07.019Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-021.md"
+}

@@ -1,0 +1,80 @@
+{
+  "id": "ho-20261117-019",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "文件检索 / 表格查询 + 强制引用",
+  "summary": "相对 ho-20261117-018 的增量：仅开发记录与状态更新，无代码/测试变更。提交 218c055（plan links、calendar、worklog、ho-20261117-018），PR #28 记录提交 CI run 44085061093 全绿（test pass 1m29s、png-export pass 58s）；代码提交 f22057c 的 run 44084772168 亦全绿。任务保持 in_review / progress 95，等待评审复审，PR 未合并。",
+  "requirements": [
+    {
+      "id": "R1-R6",
+      "text": "6 条评审意见已在提交 f22057c 修复并逐条附测试证据，详见 ho-20261117-018；本次为记录提交，无代码变更",
+      "source": "rev-20261117-002"
+    },
+    {
+      "id": "A1-A10",
+      "text": "10 条验收保持通过；PR #28 返工后 CI 全绿",
+      "source": "plan-20261107-004 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/handoffs/ho-20261117-018.json / .md",
+      "summary": "返工交付 handoff（逐条回应 6 个 issue id）",
+      "commit": "218c055"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-004.json",
+      "summary": "links.test / links.ci 更新为返工后证据",
+      "commit": "218c055"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json / worklog/2026-11.jsonl",
+      "summary": "返工开发记录（log-1794919106826-090413）",
+      "commit": "218c055"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 28 --watch",
+      "result": "test pass 1m29s；png-export pass 58s（run 44085061093）",
+      "passed": true,
+      "evidence": "记录提交 218c055 触发"
+    },
+    {
+      "command": "pytest tests/test_agent_tools.py -q（f22057c 提交时）",
+      "result": "39 passed",
+      "passed": true,
+      "evidence": "与上一份 handoff 相同，无代码变更"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "合并 PR #28",
+      "reason": "复审通过前不得合并",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-004-file-tools",
+    "commit": "218c055",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/28",
+    "ci": "代码 f22057c run 44084772168 全绿；记录 218c055 run 44085061093 全绿（test 1m29s、png-export 58s）；本次记录提交后 PR #28 最新 run 见 checks",
+    "merge": "未合并（等待复审通过）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-018",
+  "next": "评审复审 rev-20261117-002 的 6 条；通过后合并 PR #28 并把 plan-20261107-004 标 done。合并前不再改代码。",
+  "createdAt": "2026-11-17T12:40:30.208Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-019.md"
+}

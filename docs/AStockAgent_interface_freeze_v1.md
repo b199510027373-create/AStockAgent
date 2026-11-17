@@ -230,7 +230,7 @@ hline     {y: number, label?: str ≤ 60}   vline {x: str|number, label?}   text
 
 ## 4. 冻结接口四：文件存储布局 v1
 
-代码锚点：待建 `astock/agent/files.py`（plan-20261107-003）。状态：**冻结草案，未实现**。
+代码锚点：`astock/agent/files.py`（plan-20261107-003，已实现）与 `astock/agent/tools/file_tools.py`（plan-20261107-004，已实现）。状态：**已实现，测试见 `tests/test_agent_files.py`、`tests/test_agent_tools.py`**。
 
 ```text
 data/agent/files/<sha256>/            # sha256 为原文 64 位小写十六进制；内容寻址，不可变
@@ -275,16 +275,35 @@ CREATE TABLE IF NOT EXISTS file_chunks(
   chunk_id INTEGER PRIMARY KEY, file_id TEXT NOT NULL, page INTEGER,
   sheet TEXT, block INTEGER NOT NULL, text TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS file_chunks_fts USING fts5(
-  text, content='file_chunks', content_rowid='chunk_id', tokenize='unicode61');
+  tokens, content='', contentless_delete=1, tokenize='unicode61');
 CREATE INDEX IF NOT EXISTS idx_file_chunks_file ON file_chunks(file_id, page);
 ```
 
-`file_chunks_fts` 的 `ai`/`ad`/`au` 触发器与 `file_chunks` 同步（ADR-015 §5）。
+`file_chunks_fts.tokens` 由写入侧 `astock/agent/files.py::fts_tokens()` 生成：英文/数字按词、CJK 连续片段按 bigram，`index_chunks()` 与 `extracted.jsonl` 同批写入，重导入时按 `file_id` 先删后插。不再使用 `ai`/`ad`/`au` 触发器（tokens 无法由 SQL 生成）；旧 `content='file_chunks'`/`unicode61` 库在 `ensure_index_schema()` 打开时自动 DROP 重建并回填 tokens（ADR-015 §5）。
 
 约束（与 ADR-015 一致，此处只复述落点）：单文件 ≤ 20 MiB、单轮 ≤ 5 个文件、PDF ≤ 200 页；
 仅允许 `data/agent/files/` 下的读取，拒绝路径穿越与符号链接；DuckDB 以 `read_only=True` 打开 parquet，
 只允许单条 `SELECT`，强制 `LIMIT` 并 5s 超时；文件与索引 90 天留存（`AGENT_FILE_RETENTION_DAYS`），
 GC 只删目录与索引行，不删 `agent_steps`/`agent_artifacts`。
+
+### 4.1 文件检索与表格查询工具 v1
+
+代码锚点：`astock/agent/tools/file_tools.py`、`astock/agent/tools/citations.py`、`astock/agent/tools/sql_guard.py`（plan-20261107-004，已实现）。状态：**已实现，测试见 `tests/test_agent_tools.py`**。
+
+五个只读工具，权限标签统一 `file:read`：
+
+| 工具 | 输入 | 返回 |
+| --- | --- | --- |
+| `file_list` | `limit` | 文件清单（15 键 meta 摘要） |
+| `file_search` | `query`、`file_id?`、`limit` | FTS5 命中块：`file_id` + 页码/工作表 + 引用 + 原文片段 |
+| `file_read` | `file_id`、`page?`、`block?`、`max_chars` | 按页码/块号回读的原文与引用 |
+| `table_schema` | `file_id`、`sheet?` | 工作表名、行列数、列名、单元格范围引用 |
+| `table_query` | `file_id`、`sheet`、`sql`、`limit` | 查询结果行与整表引用 |
+
+- `file_search` 检索 `file_chunks_fts`（`tokens` 列，CJK bigram + 英文词），命中通过 `block` 回查 `file_chunks` 与 `extracted.jsonl`，因此每条命中都能回到 `file_id` + 页码（PDF/DOCX）或工作表 + 单元格范围（表格）；返回 `metadata.backend="fts5"` 表示走 FTS，索引缺失/旧库未迁移或 FTS 无命中时回退 `extracted.jsonl` 全文 LIKE 扫描（`backend="like"`）。
+- 引用格式固定为：`《文件名》第 N 页`、`《文件名》工作表「名」A2:D10`、`《文件名》第 P 页 表格「table_1」第 R 行`（DOCX 第 R 行为源表格行号）。回答里没有任何文件引用时必须直接回答「未在文件中找到」，不得凭记忆补写文件内容（契约 AGENT-04）。
+- `table_query` 只把该表 parquet 装入内存临时表 `t`，SQL 必须是单条 `SELECT`/`WITH`，拒绝写语句、DDL、`COPY`/`ATTACH`、`read_parquet`/`glob` 等表函数与路径字面量；外层强制 `LIMIT`，DuckDB 连接 `temp_directory=''`、`enable_external_access=false`，装载完成后才对查询启动计时，超过 5s 用 `interrupt()` 打断（装载不计入查询预算）。10 万行 Excel 表格的查询响应目标 < 3s（`tests/test_agent_tools.py::test_table_query_100k_rows_under_three_seconds`）。
+- 运行时装配（plan-20261107-004）：`AgentRuntime` 未显式传入 `registry` 时默认调用 `build_file_registry()` 装配五个文件工具；本轮用过文件工具时，最终回答在 `COMPLETED` 前经 `finalize_file_answer()` 收口——正文没有引用或引用不在工具结果中时回答「未在文件中找到」/仅保留可信引用（`tests/test_agent_runtime.py::test_file_tool_answer_without_citation_becomes_not_found`、`tests/test_agent_tools.py::test_agent_runtime_default_registry_wires_file_tools`）。
 
 ## 5. 冻结接口五：`agent_*` 三表
 

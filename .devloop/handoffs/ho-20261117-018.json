@@ -1,0 +1,175 @@
+{
+  "id": "ho-20261117-018",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "文件检索 / 表格查询 + 强制引用",
+  "summary": "相对 ho-20261117-016 的返工：逐条回应 rev-20261117-002 的 6 条意见（3 P1 + 3 P2），全部修复并补测试，PR #28 返工后 CI 全绿（run 44084772168：test pass 1m5s、png-export pass 1m6s），代码提交 f22057c（12 文件），未合并。R1（iss-mwk1e76b）：runtime COMPLETED 分支收集本轮文件工具引用并调用 finalize_file_answer，新增 FileCitationTests 两例（无引用→「未在文件中找到」；带《年报.pdf》第 2 页→保留）。R2（iss-mwk1e77l）：FTS5 改为 contentless tokens 表 + Python CJK bigram（fts_tokens），index_chunks 显式写 tokens、ensure_index_schema 自动重建旧 unicode61 表并回填，_fts_query 改 AND 词项；新增 backend=fts5 中文 2 字命中测试与旧表迁移测试；ADR-015/冻结清单 DDL 同步。R3（iss-mwk1e78k）：runtime 默认 _default_registry() 装配 build_file_registry，新增 AgentRuntime 集成测试（五工具 schema、file_search 进 steps、回答带引用）。R4（iss-mwk1edh5）：finalize 将正文引用与工具 citations 白名单规范化比对，虚构引用被丢弃，新增 test_file_answer_rejects_citation_outside_tool_results。R5（iss-mwk1edie）：计时器移到 CREATE TEMP TABLE 之后，Lock 同步 done/interrupt，cancel+join 后 close，文案注明「表格装载不计入」，新增装载顺序 spy 测试。R6（iss-mwk1edj4）：去除 BOM，注释改为 48 个 .py / 39 受检 + app.py = 40 files。证据：pytest tests/test_agent_tools.py → 39 passed；全量 coverage run pytest → 652 passed, 5 deselected（73.25s），TOTAL 77.51% ≥ 76.45；ruff All checks passed；mypy Success 40 files；架构门禁 33 passed（修正文档中类名引用为真实函数名）。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "运行时回答装配必须调用 finalize_file_answer：有文件工具结果时收集引用，回答无引用 → 「未在文件中找到」；补两例 FakeModel 运行时测试",
+      "source": "rev-20261117-002 / iss-mwk1e76b-235fe7 (P1)"
+    },
+    {
+      "id": "R2",
+      "text": "FTS5 中文检索必须真正命中（unicode61 不切 CJK）：改用可切分 CJK 的索引方案并支持存量库迁移；测试断言 backend=fts5；同步 ADR-015 与冻结清单 DDL 文本",
+      "source": "rev-20261117-002 / iss-mwk1e77l-f00b8a (P1)"
+    },
+    {
+      "id": "R3",
+      "text": "build_file_registry 必须有生产装配点，AgentRuntime 默认注册表包含五个文件工具；补 AgentRuntime 集成测试（schema 含五工具、file_search 结果进 steps、回答带引用）",
+      "source": "rev-20261117-002 / iss-mwk1e78k-81f44e (P1)"
+    },
+    {
+      "id": "R4",
+      "text": "finalize_file_answer 必须把正文引用与工具返回 citations 白名单比对，虚构引用不得原样返回",
+      "source": "rev-20261117-002 / iss-mwk1edh5-77d236 (P2)"
+    },
+    {
+      "id": "R5",
+      "text": "table_query 超时计时器必须在表格装载完成后启动；Lock 保护 interrupt/done，close 前 cancel/join；超时文案区分装载",
+      "source": "rev-20261117-002 / iss-mwk1edie-9a8ad8 (P2)"
+    },
+    {
+      "id": "R6",
+      "text": "tests/test_ci_quality_gates.py 去 UTF-8 BOM；模块数注释与常量 39 对齐（48 个 .py，40 files）",
+      "source": "rev-20261117-002 / iss-mwk1edj4-cc0172 (P2)"
+    },
+    {
+      "id": "A1-A10",
+      "text": "原 10 条验收标准全部保持通过，本轮不撤回任何验收声明；A3/A4 由 R1 补齐端到端，A6 由 R2 补齐真实 FTS 命中，其余证据不变（39 例工具测试 + 652 全量 + coverage 77.51% + ruff/mypy）",
+      "source": "plan-20261107-004 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/files.py",
+      "summary": "FTS5 改为 contentless tokens 表（contentless_delete=1），Python 侧 CJK bigram 分词 fts_tokens/fts_tokens_text；index_chunks 显式写 tokens 并支持重入；ensure_index_schema 检测旧 unicode61 外部内容表并自动重建回填；_files_root 每次读 AGENT_FILES_DIR",
+      "commit": "f22057c"
+    },
+    {
+      "path": "astock/agent/tools/file_tools.py",
+      "summary": "_fts_query 改用 fts_tokens 的 AND 词项查询（不再 OR/前缀），中文 2 字词可走 FTS；query_table 计时器移到 CREATE TEMP TABLE 装载完成之后，_interrupt_on_timeout 用 Lock 保护 done/interrupt，finally 取消并 join 计时器；超时文案注明「表格装载不计入」",
+      "commit": "f22057c"
+    },
+    {
+      "path": "astock/agent/tools/citations.py",
+      "summary": "finalize_file_answer 增加白名单校验：extract_citations 抽出正文全部引用并与工具返回的 citations 规范化比对，白名单外引用（如《虚构.pdf》第 9 页）丢弃正文、仅返回白名单引用；正文无引用/空回答返回「未在文件中找到」",
+      "commit": "f22057c"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "新增 FILE_TOOL_NAMES、_default_registry（延迟装配 build_file_registry）、_uses_file_tools、_collect_file_citations；COMPLETED 分支在写入 assistant 前对使用过文件工具的回答调用 finalize_file_answer",
+      "commit": "f22057c"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "新增 test_fts5_chinese_bigram_hits_two_char_query（backend=fts5）、test_ensure_index_schema_migrates_legacy_unicode61_table、test_file_answer_rejects_citation_outside_tool_results、test_table_query_starts_timeout_after_loading_table、test_agent_runtime_default_registry_wires_file_tools；更新无引用/超时/grounded 断言；39 passed",
+      "commit": "f22057c"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 FileCitationTests 两例：file_search 后无引用回答 → 「未在文件中找到」；正文带本轮工具返回的《年报.pdf》第 2 页 → 原样保留",
+      "commit": "f22057c"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "去除 UTF-8 BOM；模块数注释改为 48 个 .py / 39 受检 + app.py = 40 files",
+      "commit": "f22057c"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§4 DDL 同步为 contentless tokens + bigram + 旧库自动迁移；§4.1 写明检索后端与「装载完成后计时」，补运行时装配及测试锚点",
+      "commit": "f22057c"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-015-file-ingestion.md",
+      "summary": "预评审结论第 3 条改为 contentless tokens + CJK bigram + 自动重建；验收证据状态更新",
+      "commit": "f22057c"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-004.json",
+      "summary": "status=in_review、progress=95，links.test/ci 更新为返工后证据",
+      "commit": "f22057c"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_tools.py -q",
+      "result": "39 passed",
+      "passed": true,
+      "evidence": "含 FTS bigram 命中（backend=fts5）、旧表迁移、虚构引用拒绝、计时器顺序、AgentRuntime 默认装配等新增用例"
+    },
+    {
+      "command": "coverage run -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "652 passed, 5 deselected, 1 warning, 12 subtests passed in 73.25s",
+      "passed": true,
+      "evidence": "全量回归 + 架构门禁/CI 门槛测试"
+    },
+    {
+      "command": "coverage report -m",
+      "result": "TOTAL 9868 stmts / 2219 miss = 77.51%（fail_under 76.45）",
+      "passed": true,
+      "evidence": "file_tools 86.69% / citations 90.99% / sql_guard 86.29% / files 88.25% / runtime 91.47%"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "本地通过，CI test job 亦通过"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 40 source files",
+      "passed": true,
+      "evidence": "本地通过，CI test job 亦通过"
+    },
+    {
+      "command": "pytest tests/test_architecture_gate.py -q",
+      "result": "33 passed",
+      "passed": true,
+      "evidence": "文档测试锚点修正为 test_file_tool_answer_without_citation_becomes_not_found 后通过"
+    },
+    {
+      "command": "gh pr checks 28 --watch",
+      "result": "test pass 1m5s；png-export pass 1m6s（run 44084772168）",
+      "passed": true,
+      "evidence": "返工提交 f22057c 触发"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push / gh pr checks",
+      "reason": "推送返工提交并等待 PR #28 CI",
+      "status": "granted"
+    },
+    {
+      "name": "合并 PR #28",
+      "reason": "评审规则要求复审通过前不得合并，开发者不自行合并",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-004-file-tools",
+    "commit": "f22057c",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/28",
+    "ci": "run 44084772168：test pass 1m5s、png-export pass 1m6s",
+    "merge": "未合并（等待复审通过）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-016",
+  "next": "1) 请评审对 6 条 issue 逐条复核（rev-20261117-002 → 新一轮 diff 复审）；2) 复审通过后才合并 PR #28，合并后把 plan-20261107-004 标 done；3) 行情侧 AGENT-04 必填校验测试仍随 plan-20261107-005 落地，UI 侧装配点由 plan-20261107-007 承接（runtime 已提供默认装配）。",
+  "createdAt": "2026-11-17T12:38:23.880Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-018.md"
+}
