@@ -9,7 +9,7 @@
   "start": "2026-11-18",
   "due": "2026-11-28",
   "estimateH": 24,
-  "progress": 95,
+  "progress": 97,
   "acceptance": [
     "agent_runs 只记录真实 Agent；直接渲染不创建 run，link.source=render 且 run_id 可空",
     "agent_artifacts 无 run_id；内容寻址、digest 去重；同内容多来源通过 link 保留归属",
@@ -37,16 +37,16 @@
       "ADR-013",
       "ADR-017"
     ],
-    "module": [
-      "agent_store"
-    ],
+    "branch": "feat/plan-20261107-008-v2-audit",
+    "ci": "passed (test 1m48s + png-export; run 44158613454, sha 0c89df6)",
+    "commit": "0c89df6",
     "docs": [
       "docs/AStockAgent_chart_audit_v2_change_spec.md"
     ],
-    "branch": "feat/plan-20261107-008-v2-audit",
+    "module": [
+      "agent_store"
+    ],
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
-    "commit": "pending-r2",
-    "ci": "pending-r2",
     "review": "rev-20261117-003",
     "test": [
       "pytest tests/test_agent_store.py -> 21 passed",
@@ -62,6 +62,6 @@
     ]
   },
   "createdAt": "2026-11-07T14:12:15.935Z",
-  "updatedAt": "2026-11-17T19:26:16.248Z",
+  "updatedAt": "2026-11-17T19:42:22.677Z",
   "devSessionId": "session-98870ec5-3d66-430a-9952-f2cda3728500"
 }
