@@ -143,7 +143,7 @@ def test_line_chart_renders_self_contained_html_and_records_artifact(paths: dict
 
     row = _artifact_row(rendered, paths)
     assert row is not None
-    assert row.kind == "figure"
+    assert row.kind == "chart"
     assert row.path == rendered.path
     assert row.digest == rendered.digest
 
@@ -668,17 +668,17 @@ def test_artifact_replay_recomputes_time_from_snapshot(paths: dict[str, str]) ->
     row = _artifact_row(rendered, paths)
     assert row is not None
 
-    # 篡改 meta 里的时点：回放必须按快照时间列重算，不得信任旧 meta
+    # 篡改 meta 里的时点：回放必须按快照时间列重算，不得信任旧 meta。
+    # v2 的 meta 不可变，修正只能追加版本 + corrections。
     conn = store.connect(paths["db_path"])
     try:
-        meta = dict(row.meta)
-        meta["data_as_of"] = "2020-01-01"
-        meta["data_time"] = "2020-01-01 15:00"
-        conn.execute(
-            "UPDATE agent_artifacts SET meta_json=? WHERE artifact_id=?",
-            (json.dumps(meta, ensure_ascii=False), row.artifact_id),
+        store.correct_artifact(
+            conn,
+            row.artifact_id,
+            {"data_as_of": "2020-01-01", "data_time": "2020-01-01 15:00"},
+            reason="test tamper",
+            actor="pytest",
         )
-        conn.commit()
         spec = {
             "version": 1,
             "kind": "line",

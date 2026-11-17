@@ -843,5 +843,101 @@ class TypeTests(unittest.TestCase):
         self.assertEqual(first.signature(), second.signature())
 
 
+def test_runtime_audits_run_and_steps_into_store(tmp_path: Path) -> None:
+    import json
+
+    from astock.agent import store
+
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel(
+        [ToolCall("lookup_price", {"code": "600519"}), "贵州茅台收盘价 1680.00 元。"]
+    )
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    result = runtime.run("茅台现在什么价？")
+
+    assert result.stop_reason == StopReason.COMPLETED
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        runs = conn.execute(
+            "SELECT run_kind, status, steps, completion_tokens, finished_at "
+            "FROM agent_runs"
+        ).fetchall()
+        assert len(runs) == 1
+        run_kind, status, steps, tokens, finished_at = runs[0]
+        assert run_kind == "agent"
+        assert status == "success"
+        assert steps == 2
+        assert tokens == result.tokens_used
+        assert finished_at
+
+        rows = conn.execute(
+            "SELECT step, kind, tool, args_json, result_digest, latency_ms "
+            "FROM agent_steps ORDER BY step"
+        ).fetchall()
+        assert [(row[0], row[1]) for row in rows] == [(0, "tool"), (1, "final")]
+        tool_args = json.loads(rows[0][3])
+        assert tool_args["arguments"] == {"code": "600519"}
+        assert "1680.00" in tool_args["result_preview"]
+        assert rows[0][2] == "lookup_price"
+        assert rows[0][4]
+        assert rows[0][5] is not None and rows[0][5] >= 0
+    finally:
+        conn.close()
+
+
+def test_runtime_audits_invalid_arguments_as_steps(tmp_path: Path) -> None:
+    from astock.agent import store
+
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel(
+        [ToolCall("lookup_price", {}), ToolCall("lookup_price", {}), "不应到达"]
+    )
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    result = runtime.run("查价格")
+
+    assert result.stop_reason == StopReason.INVALID_ARGUMENTS
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        rows = conn.execute(
+            "SELECT step, kind, tool, args_json FROM agent_steps ORDER BY step"
+        ).fetchall()
+        assert [(row[0], row[1]) for row in rows] == [
+            (0, "tool"),
+            (1, "tool"),
+            (2, "final"),
+        ]
+        tool_rows = [row for row in rows if row[1] == "tool"]
+        assert all(row[2] == "lookup_price" for row in tool_rows)
+        assert all(row[3] for row in tool_rows)
+        status, = conn.execute("SELECT status FROM agent_runs").fetchone()
+        assert status == "partial"
+    finally:
+        conn.close()
+
+
+def test_tool_payload_is_wrapped_as_untrusted_data(tmp_path: Path) -> None:
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel(
+        [ToolCall("lookup_price", {"code": "600519"}), "完成"]
+    )
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    runtime.run("查价格")
+
+    tool_messages = [
+        message for message in model.calls[1]["messages"] if message["role"] == "tool"
+    ]
+    assert len(tool_messages) == 1
+    content = tool_messages[0]["content"]
+    assert content.startswith("<untrusted_data>")
+    assert content.rstrip().endswith("</untrusted_data>")
+    assert "1680.00" in content
+
+
 if __name__ == "__main__":
     unittest.main()

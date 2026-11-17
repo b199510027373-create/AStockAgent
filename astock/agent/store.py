@@ -1,21 +1,18 @@
-"""``agent_*`` 三表与 artifact 内容寻址落盘（《接口冻结清单》§5，ADR-017）。
+"""``agent_*`` 审计表 v2 与 artifact 内容寻址落盘（ADR-017、plan-20261107-008）。
 
-本模块承担 §5 冻结 DDL 的**唯一实现点**：``AGENT_SCHEMA`` 与冻结清单逐字一致，
-建表幂等，与既有五表同库（``data/astock.db``）。artifact 路径布局同样冻结：
+v2 模型把「内容 / 版本 / 引用」拆开（chart_audit_v2_change_spec §4）：
 
-    data/agent/artifacts/<digest[:2]>/<digest>/<filename>
+- ``agent_artifacts``：一行一个逻辑 artifact，**没有 run_id**，不可 UPDATE；
+- ``agent_artifact_versions``：meta 版本，v1 创建、修正追加 v2/v3，不可 UPDATE；
+- ``agent_run_artifacts``：artifact 被谁引用（run / 直接渲染 / 导入），``run_id`` 可空；
+  ``agent_artifact_links`` 是同一引用表的兼容只读视图（规格 §4.2 的旧名）；
+- ``corrections``：字段级修正流水，只追加，actor/理由/时间必填。
 
-当前实现范围 = 图表管线需要的**最小面**（plan-20261107-005）：
+``agent_runs`` 只记录真实 Agent 会话；直接渲染写 ``source='render', run_id=NULL``，
+不再合成 ``run_chart_<artifact_id>``。删 run 只级联删 link，artifact/version 行永久保留；
+文件由 :func:`prune_orphan_blobs` 按「无引用 + 保留期」清理。
 
-- ``connect()`` / ``ensure_schema()``：建表与索引；
-- ``put_content()``：按 sha256 内容寻址写文件，同 digest 复用目录；
-- ``record_artifact()``：插入 ``agent_artifacts`` 行（``artifact_id`` 由 digest+filename 派生，
-  同一份内容重复渲染只保留一行，可凭 ``artifact_id`` 原样复现）；
-- ``get_artifact()`` / ``find_artifacts_by_digest()``：读回记录与相对路径；
-- ``ensure_run()``：为 ``agent_artifacts.run_id`` 的 NOT NULL 外键提供最小 run 行。
-
-``agent_runs``/``agent_steps`` 的完整写入语义、留存清理（GC 不删审计行）由
-plan-20261107-008 扩展；扩展时**不得改表结构**（冻结清单 §8 治理流程）。
+布局沿用冻结约定：``data/agent/artifacts/<digest[:2]>/<digest>/<filename>``。
 """
 
 from __future__ import annotations
@@ -24,12 +21,14 @@ import contextlib
 import hashlib
 import json
 import os
+import platform
 import re
+import shutil
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astock.config import BASE_DIR
@@ -37,27 +36,85 @@ from astock.config import BASE_DIR
 __all__ = [
     "AGENT_SCHEMA",
     "ARTIFACT_ID_RE",
+    "ARTIFACT_KINDS",
+    "CORRECTION_FIELDS",
     "DEFAULT_ARTIFACT_ROOT",
     "DEFAULT_DB_PATH",
+    "LEGACY_KIND_MAP",
+    "PRUNE_RUN_KINDS",
+    "RUN_KINDS",
+    "RUN_STATUSES",
     "STEP_KINDS",
+    "ArtifactDigestMismatch",
+    "ArtifactFileMissing",
+    "ArtifactIdentityConflict",
     "ArtifactRecord",
+    "ArtifactReplayUnavailable",
+    "RunIdentityConflict",
+    "agent_metrics",
     "artifact_id_for",
     "artifact_rel_path",
+    "canonical_json",
+    "compute_env_fingerprint",
     "connect",
+    "correct_artifact",
     "ensure_run",
+    "ensure_schema",
     "fail_run",
     "find_artifacts_by_digest",
+    "finish_run",
     "get_artifact",
+    "load_artifact",
+    "meta_digest",
+    "migrate_v1_to_v2",
+    "normalize_content_digest",
+    "prune_artifacts",
+    "prune_orphan_blobs",
+    "prune_runs",
     "put_content",
     "record_artifact",
     "record_step",
     "record_tool_step",
+    "schema_state",
     "sha256_bytes",
     "utc_now",
 ]
 
-#: 与冻结清单 §5 逐字一致的 DDL（``CREATE TABLE/INDEX IF NOT EXISTS``，建表幂等）。
-AGENT_SCHEMA = """
+ARTIFACT_KINDS = ("chart", "table", "file", "image")
+LEGACY_KIND_MAP = {"figure": "chart", "report": "file"}
+ARTIFACT_ID_RE = re.compile(r"^art_[0-9a-f]{16}$")
+RUN_KINDS = ("agent", "render", "legacy")
+RUN_STATUSES = ("running", "success", "partial", "failed")
+STEP_KINDS = ("tool", "model", "final")
+CORRECTION_FIELDS = (
+    "source",
+    "data_as_of",
+    "data_time",
+    "view_as_of",
+    "view_time",
+    "session",
+    "degraded",
+    "warnings",
+)
+#: 可被保留期清理的 run 类型：真实 Agent 会话（``agent``）永不删除（ADR-017 C3）。
+PRUNE_RUN_KINDS = ("render", "legacy")
+
+# 渲染器 PNG 导出降级时的告警前缀；记录新版本时靠它识别「已有 PNG 不应被降级覆盖」。
+PNG_DEGRADED_WARNING_PREFIX = "PNG 导出降级"
+_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+_TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S"
+
+DEFAULT_DB_PATH = Path(os.getenv("ASTOCK_DB_PATH") or (BASE_DIR / "data" / "astock.db"))
+DEFAULT_ARTIFACT_ROOT = Path(
+    os.getenv("AGENT_ARTIFACT_DIR") or (BASE_DIR / "data" / "agent")
+)
+
+# ---------------------------------------------------------------------------
+# 冻结 DDL（schema_state / 迁移脚本共用同一份语句）
+# ---------------------------------------------------------------------------
+
+_SCHEMA_STATEMENTS: tuple[str, ...] = (
+    """
 CREATE TABLE IF NOT EXISTS agent_runs(
   run_id           TEXT PRIMARY KEY,
   session_id       TEXT NOT NULL,
@@ -67,14 +124,17 @@ CREATE TABLE IF NOT EXISTS agent_runs(
   seed             INTEGER,
   code_version     TEXT,
   status           TEXT NOT NULL CHECK(status IN ('running','success','partial','failed')),
+  run_kind         TEXT NOT NULL DEFAULT 'agent'
+                   CHECK(run_kind IN ('agent','render','legacy')),
   started_at       TEXT NOT NULL,
   finished_at      TEXT,
   steps            INTEGER NOT NULL DEFAULT 0,
   prompt_tokens    INTEGER NOT NULL DEFAULT 0,
   completion_tokens INTEGER NOT NULL DEFAULT 0,
   error            TEXT
-);
-
+)
+""",
+    """
 CREATE TABLE IF NOT EXISTS agent_steps(
   run_id        TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
   step          INTEGER NOT NULL,
@@ -85,35 +145,130 @@ CREATE TABLE IF NOT EXISTS agent_steps(
   latency_ms    INTEGER,
   created_at    TEXT NOT NULL,
   PRIMARY KEY(run_id, step)
-);
-
-CREATE TABLE IF NOT EXISTS agent_artifacts(
-  artifact_id TEXT PRIMARY KEY,                 -- art_<16 hex>
-  run_id      TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
-  step        INTEGER,
-  kind        TEXT NOT NULL CHECK(kind IN ('figure','table','file','report')),
-  path        TEXT NOT NULL,                    -- 相对 data/agent/ 的 POSIX 路径
-  digest      TEXT NOT NULL,                    -- 文件内容 sha256
-  meta_json   TEXT NOT NULL DEFAULT '{}',
-  created_at  TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_agent_runs_session    ON agent_runs(session_id, started_at);
-CREATE INDEX IF NOT EXISTS idx_agent_steps_run       ON agent_steps(run_id, step);
-CREATE INDEX IF NOT EXISTS idx_agent_artifacts_run   ON agent_artifacts(run_id, step);
-CREATE INDEX IF NOT EXISTS idx_agent_artifacts_digest ON agent_artifacts(digest);
-"""
-
-ARTIFACT_KINDS = ("figure", "table", "file", "report")
-ARTIFACT_ID_RE = re.compile(r"^art_[0-9a-f]{16}$")
-# 渲染器 PNG 导出降级时的告警前缀；``record_artifact`` 靠它识别「同一 artifact 已补齐 PNG」。
-PNG_DEGRADED_WARNING_PREFIX = "PNG 导出降级"
-_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
-
-DEFAULT_DB_PATH = Path(os.getenv("ASTOCK_DB_PATH") or (BASE_DIR / "data" / "astock.db"))
-DEFAULT_ARTIFACT_ROOT = Path(
-    os.getenv("AGENT_ARTIFACT_DIR") or (BASE_DIR / "data" / "agent")
 )
+""",
+    """
+CREATE TABLE IF NOT EXISTS agent_artifacts(
+  artifact_id     TEXT PRIMARY KEY,
+  kind            TEXT NOT NULL CHECK(kind IN ('chart','table','file','image')),
+  path            TEXT NOT NULL,
+  content_digest  TEXT NOT NULL,
+  env_fingerprint TEXT NOT NULL,
+  created_at      TEXT NOT NULL
+)
+""",
+    """
+CREATE TABLE IF NOT EXISTS agent_artifact_versions(
+  artifact_id  TEXT NOT NULL
+               REFERENCES agent_artifacts(artifact_id) ON DELETE RESTRICT,
+  version      INTEGER NOT NULL CHECK(version >= 1),
+  meta_json    TEXT NOT NULL,
+  meta_digest  TEXT NOT NULL,
+  reason       TEXT NOT NULL,
+  actor        TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  PRIMARY KEY(artifact_id, version)
+)
+""",
+    """
+CREATE TABLE IF NOT EXISTS agent_run_artifacts(
+  link_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  artifact_id      TEXT NOT NULL
+                   REFERENCES agent_artifacts(artifact_id) ON DELETE RESTRICT,
+  artifact_version INTEGER NOT NULL,
+  run_id           TEXT
+                   REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+  step             INTEGER,
+  source           TEXT NOT NULL
+                   CHECK(source IN ('agent','render','import','legacy')),
+  session_id       TEXT,
+  created_at       TEXT NOT NULL,
+  FOREIGN KEY (artifact_id, artifact_version)
+      REFERENCES agent_artifact_versions(artifact_id, version)
+      ON DELETE RESTRICT
+)
+""",
+    """
+CREATE TABLE IF NOT EXISTS corrections(
+  correction_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+  artifact_id      TEXT NOT NULL
+                   REFERENCES agent_artifacts(artifact_id) ON DELETE RESTRICT,
+  artifact_version INTEGER NOT NULL,
+  field            TEXT NOT NULL,
+  old_value        TEXT,
+  new_value        TEXT,
+  reason           TEXT NOT NULL,
+  actor            TEXT NOT NULL,
+  created_at       TEXT NOT NULL,
+  FOREIGN KEY (artifact_id, artifact_version)
+      REFERENCES agent_artifact_versions(artifact_id, version)
+      ON DELETE RESTRICT
+)
+""",
+    "CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id, started_at)",
+    "CREATE INDEX IF NOT EXISTS idx_agent_runs_kind ON agent_runs(run_kind, started_at)",
+    "CREATE INDEX IF NOT EXISTS idx_agent_steps_run ON agent_steps(run_id, step)",
+    "CREATE INDEX IF NOT EXISTS ix_agent_artifacts_digest ON agent_artifacts(content_digest)",
+    "CREATE INDEX IF NOT EXISTS ix_agent_artifacts_created ON agent_artifacts(created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_artifact_links_run ON agent_run_artifacts(run_id)",
+    "CREATE INDEX IF NOT EXISTS ix_artifact_links_artifact ON agent_run_artifacts(artifact_id)",
+    "CREATE INDEX IF NOT EXISTS ix_corrections_artifact ON corrections(artifact_id, artifact_version)",
+    """
+CREATE VIEW IF NOT EXISTS agent_artifact_links AS
+SELECT link_id, artifact_id, artifact_version, run_id, step, source, session_id, created_at
+FROM agent_run_artifacts
+""",
+    """
+CREATE TRIGGER IF NOT EXISTS trg_agent_artifacts_no_update
+BEFORE UPDATE ON agent_artifacts
+BEGIN
+    SELECT RAISE(ABORT, 'agent_artifacts is immutable');
+END
+""",
+    """
+CREATE TRIGGER IF NOT EXISTS trg_agent_artifact_versions_no_update
+BEFORE UPDATE ON agent_artifact_versions
+BEGIN
+    SELECT RAISE(ABORT, 'agent_artifact_versions is append-only');
+END
+""",
+    """
+CREATE TRIGGER IF NOT EXISTS trg_corrections_no_update
+BEFORE UPDATE ON corrections
+BEGIN
+    SELECT RAISE(ABORT, 'corrections is append-only');
+END
+""",
+    """
+CREATE TRIGGER IF NOT EXISTS trg_corrections_no_delete
+BEFORE DELETE ON corrections
+BEGIN
+    SELECT RAISE(ABORT, 'corrections is append-only');
+END
+""",
+)
+
+AGENT_SCHEMA = ";\n\n".join(statement.strip() for statement in _SCHEMA_STATEMENTS) + ";\n"
+
+
+class ArtifactIdentityConflict(RuntimeError):
+    """同一 ``artifact_id`` 出现不同内容/环境身份（内容寻址被破坏）。"""
+
+
+class ArtifactFileMissing(FileNotFoundError):
+    """artifact 行存在但文件缺失；不降级、不返回空内容。"""
+
+
+class ArtifactDigestMismatch(RuntimeError):
+    """文件内容与 ``content_digest`` 不一致（被篡改或写错路径）。"""
+
+
+class ArtifactReplayUnavailable(RuntimeError):
+    """``recomputed`` 回放缺少数据快照，无法重算。"""
+
+
+class RunIdentityConflict(RuntimeError):
+    """同一 ``run_id`` 的 ``run_kind``/``session_id`` 与既有行冲突。"""
 
 
 def utc_now() -> str:
@@ -125,31 +280,127 @@ def sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def canonical_json(value: Any) -> str:
+    """canonical JSON：键排序、无多余空格（digest 稳定性的前提）。"""
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def normalize_content_digest(value: str) -> str:
+    """接受裸 sha256 或 ``sha256:`` 前缀，统一返回 ``sha256:<hex>``。"""
+    text = str(value or "").strip().removeprefix("sha256:")
+    if not _DIGEST_RE.match(text):
+        raise ValueError(f"content_digest 必须是 sha256 hex，实际 {value!r}")
+    return f"sha256:{text}"
+
+
+def meta_digest(meta: Mapping[str, Any]) -> str:
+    return "sha256:" + sha256_bytes(canonical_json(dict(meta)).encode("utf-8"))
+
+
+def compute_env_fingerprint(
+    *,
+    plotly_version: str = "",
+    python_version: str | None = None,
+    code_version: str = "",
+) -> str:
+    """环境指纹：``plotly`` / Python / 代码版本三件套，取 sha256 前 16 位。"""
+    py = python_version or platform.python_version()
+    raw = f"plotly={plotly_version}\npython={py}\ncode={code_version}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
 def artifact_id_for(digest: str, filename: str) -> str:
     """``art_<16 hex>``：由内容 digest + 文件名派生，同一内容稳定复现同一 id。"""
-    seed = f"{digest}\x00{filename}".encode()
+    bare = digest.split(":", 1)[-1]
+    seed = f"{bare}\x00{filename}".encode()
     return "art_" + hashlib.sha256(seed).hexdigest()[:16]
 
 
 def artifact_rel_path(digest: str, filename: str) -> str:
-    """相对 ``data/agent/`` 的 POSIX 路径（冻结布局，§5）。"""
-    return f"artifacts/{digest[:2]}/{digest}/{filename}"
+    """相对 ``data/agent/`` 的 POSIX 路径（冻结布局）。"""
+    bare = digest.split(":", 1)[-1]
+    return f"artifacts/{bare[:2]}/{bare}/{filename}"
+
+
+def _safe_filename(filename: str) -> str:
+    """文件名白名单：只允许单段名称，禁止绝对路径与 ``..`` 穿越。"""
+    text = str(filename or "")
+    if not text or text in (".", "..") or "/" in text or "\\" in text:
+        raise ValueError(f"filename 必须是单段文件名，实际 {filename!r}")
+    if Path(text).name != text:
+        raise ValueError(f"filename 必须是单段文件名，实际 {filename!r}")
+    return text
+
+
+def _validate_rel_path(path: str) -> str:
+    """artifact 路径白名单：POSIX 相对路径，必须位于 ``artifacts/`` 下。"""
+    text = str(path or "")
+    if not text or "\\" in text:
+        raise ValueError(f"artifact path 必须是 POSIX 相对路径，实际 {path!r}")
+    posix = PurePosixPath(text)
+    if posix.is_absolute() or any(part in ("", ".", "..") for part in posix.parts):
+        raise ValueError(f"artifact path 不得包含绝对路径/穿越片段，实际 {path!r}")
+    if not posix.parts or posix.parts[0] != "artifacts":
+        raise ValueError(f"artifact path 必须位于 artifacts/ 下，实际 {path!r}")
+    return posix.as_posix()
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {row[1] for row in rows}
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+    ).fetchone()
+    return row is not None
+
+
+def schema_state(conn: sqlite3.Connection) -> str:
+    """返回 ``empty`` / ``v1`` / ``v2`` / ``unknown``。"""
+    if not _table_exists(conn, "agent_runs") or not _table_exists(conn, "agent_artifacts"):
+        return "empty"
+    columns = _table_columns(conn, "agent_artifacts")
+    if "content_digest" in columns and _table_exists(conn, "agent_artifact_versions"):
+        return "v2"
+    if "run_id" in columns or "digest" in columns:
+        return "v1"
+    return "unknown"
 
 
 def connect(db_path: str | Path | None = None) -> sqlite3.Connection:
-    """打开审计库并确保三表存在（幂等）；``:memory:`` 可用于测试。"""
+    """打开审计库并确保 v2 表存在；旧 v1 库会就地迁移（先备份）。"""
     path = Path(db_path) if db_path is not None else DEFAULT_DB_PATH
-    if str(path) != ":memory:":
+    is_memory = str(path) == ":memory:"
+    if not is_memory:
         path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    state = schema_state(conn)
+    if state == "v1":
+        migrate_v1_to_v2(conn, db_path=None if is_memory else path)
+    elif state == "unknown":
+        raise RuntimeError("agent_* 表结构无法识别：既不是 v1 也不是 v2")
     conn.executescript(AGENT_SCHEMA)
+    conn.commit()
     return conn
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
+    state = schema_state(conn)
+    if state == "v1":
+        migrate_v1_to_v2(conn)
+    elif state == "unknown":
+        raise RuntimeError("agent_* 表结构无法识别：既不是 v1 也不是 v2")
     conn.executescript(AGENT_SCHEMA)
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# 真实 Agent run
+# ---------------------------------------------------------------------------
 
 
 def ensure_run(
@@ -162,25 +413,27 @@ def ensure_run(
     temperature: float | None = None,
     seed: int | None = None,
     code_version: str | None = None,
-    status: str = "success",
+    status: str = "running",
+    run_kind: str = "agent",
     started_at: str | None = None,
 ) -> str:
-    """确保 ``agent_runs`` 有这一行（存在则不动），返回 run_id。
+    """确保 ``agent_runs`` 有这一行；已存在时不覆盖，但校验身份一致。
 
-    渲染管线在独立调用（没有 Agent 循环）时也需要落 artifact；这里只补齐外键所需
-    的最小 run 行，完整生命周期由 plan-20261107-008 接管。
-
-    ``status="running"`` 的 run 不写 ``finished_at``（运行中不能被当成已结束）。
+    v2 起 ``agent_runs`` 只服务真实 Agent（``run_kind='agent'``）；直接渲染不调用本函数。
     """
+    if status not in RUN_STATUSES:
+        raise ValueError(f"status 必须是 {RUN_STATUSES} 之一，实际 {status!r}")
+    if run_kind not in RUN_KINDS:
+        raise ValueError(f"run_kind 必须是 {RUN_KINDS} 之一，实际 {run_kind!r}")
     now = utc_now()
     started = started_at or now
     finished = None if status == "running" else now
-    conn.execute(
+    cursor = conn.execute(
         """
         INSERT INTO agent_runs(
             run_id, session_id, provider, model, temperature, seed, code_version,
-            status, started_at, finished_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            status, run_kind, started_at, finished_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(run_id) DO NOTHING
         """,
         (
@@ -192,10 +445,57 @@ def ensure_run(
             seed,
             code_version,
             status,
+            run_kind,
             started,
             finished,
         ),
     )
+    if cursor.rowcount == 0:
+        row = conn.execute(
+            "SELECT run_kind, session_id FROM agent_runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        if row is not None and (
+            row["run_kind"] != run_kind or row["session_id"] != session_id
+        ):
+            raise RunIdentityConflict(
+                f"run_id={run_id!r} 已存在且身份不一致："
+                f"run_kind={row['run_kind']!r}/{run_kind!r}, "
+                f"session_id={row['session_id']!r}/{session_id!r}"
+            )
+    conn.commit()
+    return run_id
+
+
+def finish_run(
+    conn: sqlite3.Connection,
+    run_id: str,
+    *,
+    status: str,
+    finished_at: str | None = None,
+    token_usage: int = 0,
+    step_count: int | None = None,
+    error: str | None = None,
+) -> str:
+    """结束 run：写 status/finished_at/token/步数，禁止留下永久 ``running``。"""
+    if status not in RUN_STATUSES or status == "running":
+        raise ValueError(f"finish_run 的 status 必须是 {RUN_STATUSES[:-1]}/failed 之一")
+    now = finished_at or utc_now()
+    assignments = [
+        "status = ?",
+        "finished_at = ?",
+        "completion_tokens = ?",
+        "error = ?",
+    ]
+    values: list[Any] = [status, now, max(int(token_usage), 0), error]
+    if step_count is not None:
+        assignments.append("steps = ?")
+        values.append(max(int(step_count), 0))
+    values.append(run_id)
+    cursor = conn.execute(
+        f"UPDATE agent_runs SET {', '.join(assignments)} WHERE run_id = ?", tuple(values)
+    )
+    if cursor.rowcount == 0:
+        raise KeyError(f"run 不存在：{run_id!r}")
     conn.commit()
     return run_id
 
@@ -207,13 +507,7 @@ def fail_run(
     error: str | None = None,
     finished_at: str | None = None,
 ) -> str:
-    """把 run 显式置为 ``failed``，返回 run_id。
-
-    ``ensure_run`` 对已存在的 run 是 ``ON CONFLICT DO NOTHING``（不覆盖既有生命周期），
-    因此「硬失败」语义（例如 ``png_mode='require'`` 导出失败）必须单独落状态：已预建
-    的 ``running``/``success`` run 也要被改成 ``failed``，否则 meta 与 ops 文档的表述
-    互相矛盾。
-    """
+    """把 run 显式置为 ``failed``（PNG require 失败等硬失败）。"""
     now = finished_at or utc_now()
     conn.execute(
         "UPDATE agent_runs SET status = 'failed', finished_at = ?, error = ? WHERE run_id = ?",
@@ -223,6 +517,11 @@ def fail_run(
     return run_id
 
 
+# ---------------------------------------------------------------------------
+# artifact 内容 / 版本 / 引用
+# ---------------------------------------------------------------------------
+
+
 def put_content(
     payload: bytes | str,
     filename: str,
@@ -230,9 +529,10 @@ def put_content(
     root: str | Path | None = None,
 ) -> tuple[str, str, Path]:
     """内容寻址写文件，返回 ``(digest, 相对路径, 绝对路径)``；同 digest 复用目录。"""
+    name = _safe_filename(filename)
     data = payload.encode("utf-8") if isinstance(payload, str) else payload
     digest = sha256_bytes(data)
-    rel = artifact_rel_path(digest, filename)
+    rel = artifact_rel_path(digest, name)
     base = Path(root) if root is not None else DEFAULT_ARTIFACT_ROOT
     absolute = base / rel
     absolute.parent.mkdir(parents=True, exist_ok=True)
@@ -244,13 +544,20 @@ def put_content(
 @dataclass(frozen=True)
 class ArtifactRecord:
     artifact_id: str
-    run_id: str
-    step: int | None
     kind: str
     path: str
-    digest: str
-    meta: dict[str, Any]
+    content_digest: str
+    env_fingerprint: str
     created_at: str
+    version: int
+    meta: dict[str, Any]
+    run_id: str | None = None
+    step: int | None = None
+
+    @property
+    def digest(self) -> str:
+        """裸 sha256（兼容旧调用方；库内 ``content_digest`` 带 ``sha256:`` 前缀）。"""
+        return self.content_digest.split(":", 1)[-1]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -260,6 +567,9 @@ class ArtifactRecord:
             "kind": self.kind,
             "path": self.path,
             "digest": self.digest,
+            "content_digest": self.content_digest,
+            "env_fingerprint": self.env_fingerprint,
+            "version": self.version,
             "meta": dict(self.meta),
             "created_at": self.created_at,
         }
@@ -276,22 +586,16 @@ def _load_meta(raw: Any) -> dict[str, Any]:
 def _merge_artifact_meta(
     existing: Mapping[str, Any], newest: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """同一 ``artifact_id`` 重写时以最新一次为准，但成功态只升不降。
+    """成功态只升不降：新版本没出 PNG 时沿用旧 PNG 与 provenance。
 
-    HTML 内容寻址，``artifact_id`` 相同即 HTML 字节相同，此前导出的 PNG 仍描述同一张图；
-    因此最新一次写入若没能出 PNG（``png_path=None``/``degraded=True``），不得把已有
-    ``png_path`` 与 ``degraded=False`` 覆盖掉（§3.4 的「升级」语义，评审 P1）。
-
-    复用旧 PNG 时同时修正 provenance（评审 P2）：``png_reused=True``、``png_source_mode``
-    记录产出该 PNG 的模式、本次失败原因移到 ``png_last_attempt_error`` 且 ``png_error``
-    归 None——否则 ``png_path`` 与 ``png_error`` 会同时声称「有 PNG」和「本次导出失败」。
+    v2 把每次 meta 写成新版本，但「先降级、后补齐 PNG」和「已成功、后失败」不能
+    让最新版本丢掉可用 PNG；这里保持 v1 评审 P1 的升级语义。
     """
     merged = dict(newest)
     previous_png = existing.get("png_path")
     if previous_png and not merged.get("png_path"):
         merged["png_path"] = previous_png
         merged["degraded"] = False
-        # PNG 追溯字段一起沿用，否则 meta 会出现「有 png_path 却无 digest/字体/版本」的半截记录。
         for key in (
             "png_rel_path",
             "png_digest",
@@ -315,7 +619,6 @@ def _merge_artifact_meta(
         merged["png_error"] = None
         warnings = merged.get("warnings")
         if isinstance(warnings, list):
-            # 沿用了旧 PNG，就不能再留「本次 PNG 降级」的告警，否则 meta 自相矛盾。
             merged["warnings"] = [
                 item
                 for item in warnings
@@ -324,43 +627,352 @@ def _merge_artifact_meta(
     return merged
 
 
+def _normalize_kind(kind: str) -> str:
+    mapped = LEGACY_KIND_MAP.get(kind, kind)
+    if mapped not in ARTIFACT_KINDS:
+        raise ValueError(f"kind 必须是 {ARTIFACT_KINDS} 之一，实际 {kind!r}")
+    return mapped
+
+
+def _find_link(
+    conn: sqlite3.Connection,
+    *,
+    artifact_id: str,
+    version: int,
+    run_id: str | None,
+    source: str,
+    step: int | None,
+) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT * FROM agent_run_artifacts
+        WHERE artifact_id = ? AND artifact_version = ? AND run_id IS ?
+          AND source = ? AND step IS ?
+        ORDER BY link_id LIMIT 1
+        """,
+        (artifact_id, version, run_id, source, step),
+    ).fetchone()
+
+
 def record_artifact(
     conn: sqlite3.Connection,
     *,
-    run_id: str,
     kind: str,
     path: str,
-    digest: str,
+    content_digest: str | None = None,
+    env_fingerprint: str = "",
     meta: Mapping[str, Any] | None = None,
+    artifact_id: str | None = None,
+    run_id: str | None = None,
     step: int | None = None,
+    source: str = "render",
+    session_id: str | None = None,
+    reason: str = "render",
+    actor: str = "system",
     created_at: str | None = None,
-) -> str:
-    """插入 ``agent_artifacts``（同 id 只插一行，meta 以最新一次写入为准），返回 ``artifact_id``。"""
-    if kind not in ARTIFACT_KINDS:
-        raise ValueError(f"kind 必须是 {ARTIFACT_KINDS} 之一，实际 {kind!r}")
-    filename = Path(path).name
-    artifact_id = artifact_id_for(digest, filename)
-    newest = dict(meta or {})
+    digest: str | None = None,
+) -> tuple[str, int]:
+    """写 artifact/version/link 三件套，返回 ``(artifact_id, version)``。
+
+    - artifact 不存在则插入；已存在时校验 ``content_digest``/``env_fingerprint``；
+    - meta_digest 与最新版本相同则复用版本，否则追加 ``version+1``（原版本不动）；
+    - 同一 ``(artifact, version, run_id, source, step)`` 只保留一条 link（幂等）。
+    """
+    if source not in ("agent", "render", "import", "legacy"):
+        raise ValueError(f"source 非法：{source!r}")
+    raw_digest = content_digest if content_digest is not None else digest
+    if raw_digest is None:
+        raise TypeError("record_artifact 缺少 content_digest")
+    digest_value = normalize_content_digest(raw_digest)
+    safe_path = _validate_rel_path(path)
+    artifact_kind = _normalize_kind(kind)
+    if not env_fingerprint:
+        raise ValueError("record_artifact 需要 env_fingerprint（环境身份不可省）")
+    if source == "agent" and run_id is None:
+        raise ValueError("source='agent' 必须提供 run_id")
+    derived_id = artifact_id or artifact_id_for(digest_value, Path(safe_path).name)
+    if not ARTIFACT_ID_RE.match(derived_id):
+        raise ValueError(f"artifact_id 必须是 art_<16 hex>，实际 {derived_id!r}")
+    now = created_at or utc_now()
+
     existing = conn.execute(
-        "SELECT meta_json FROM agent_artifacts WHERE artifact_id = ?", (artifact_id,)
+        "SELECT * FROM agent_artifacts WHERE artifact_id = ?", (derived_id,)
     ).fetchone()
-    if existing is not None:
-        newest = _merge_artifact_meta(_load_meta(existing["meta_json"]), newest)
-    payload = json.dumps(newest, ensure_ascii=False, sort_keys=True)
+    if existing is None:
+        conn.execute(
+            """
+            INSERT INTO agent_artifacts(
+                artifact_id, kind, path, content_digest, env_fingerprint, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (derived_id, artifact_kind, safe_path, digest_value, env_fingerprint, now),
+        )
+    else:
+        if (
+            existing["content_digest"] != digest_value
+            or existing["env_fingerprint"] != env_fingerprint
+        ):
+            raise ArtifactIdentityConflict(
+                f"{derived_id} 身份冲突：content_digest="
+                f"{existing['content_digest']!r}/{digest_value!r}, "
+                f"env_fingerprint={existing['env_fingerprint']!r}/{env_fingerprint!r}"
+            )
+        if existing["path"] != safe_path:
+            raise ArtifactIdentityConflict(
+                f"{derived_id} 路径冲突：{existing['path']!r}/{safe_path!r}"
+            )
+
+    latest = conn.execute(
+        """
+        SELECT version, meta_json FROM agent_artifact_versions
+        WHERE artifact_id = ? ORDER BY version DESC LIMIT 1
+        """,
+        (derived_id,),
+    ).fetchone()
+    newest = dict(meta or {})
+    if latest is not None:
+        merged = _merge_artifact_meta(_load_meta(latest["meta_json"]), newest)
+        newest = merged
+    payload = canonical_json(newest)
+    new_digest = "sha256:" + sha256_bytes(payload.encode("utf-8"))
+    if latest is not None and latest["meta_json"] == payload:
+        version = int(latest["version"])
+    else:
+        version = int(latest["version"]) + 1 if latest is not None else 1
+        conn.execute(
+            """
+            INSERT INTO agent_artifact_versions(
+                artifact_id, version, meta_json, meta_digest, reason, actor, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (derived_id, version, payload, new_digest, reason, actor, now),
+        )
+
+    if _find_link(
+        conn,
+        artifact_id=derived_id,
+        version=version,
+        run_id=run_id,
+        source=source,
+        step=step,
+    ) is None:
+        conn.execute(
+            """
+            INSERT INTO agent_run_artifacts(
+                artifact_id, artifact_version, run_id, step, source, session_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (derived_id, version, run_id, step, source, session_id, now),
+        )
+    conn.commit()
+    return derived_id, version
+
+
+def _latest_version_row(conn: sqlite3.Connection, artifact_id: str) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT * FROM agent_artifact_versions
+        WHERE artifact_id = ? ORDER BY version DESC LIMIT 1
+        """,
+        (artifact_id,),
+    ).fetchone()
+
+
+def _link_row(
+    conn: sqlite3.Connection, artifact_id: str, version: int | None
+) -> sqlite3.Row | None:
+    if version is None:
+        return conn.execute(
+            """
+            SELECT * FROM agent_run_artifacts
+            WHERE artifact_id = ? ORDER BY link_id DESC LIMIT 1
+            """,
+            (artifact_id,),
+        ).fetchone()
+    return conn.execute(
+        """
+        SELECT * FROM agent_run_artifacts
+        WHERE artifact_id = ? AND artifact_version = ?
+        ORDER BY link_id DESC LIMIT 1
+        """,
+        (artifact_id, version),
+    ).fetchone()
+
+
+def _row_to_record(
+    row: sqlite3.Row | None,
+    version_row: sqlite3.Row | None,
+    link_row: sqlite3.Row | None,
+) -> ArtifactRecord | None:
+    if row is None or version_row is None:
+        return None
+    return ArtifactRecord(
+        artifact_id=row["artifact_id"],
+        kind=row["kind"],
+        path=row["path"],
+        content_digest=row["content_digest"],
+        env_fingerprint=row["env_fingerprint"],
+        created_at=row["created_at"],
+        version=int(version_row["version"]),
+        meta=_load_meta(version_row["meta_json"]),
+        run_id=link_row["run_id"] if link_row is not None else None,
+        step=link_row["step"] if link_row is not None else None,
+    )
+
+
+def get_artifact(
+    conn: sqlite3.Connection,
+    artifact_id: str,
+    *,
+    version: int | None = None,
+) -> ArtifactRecord | None:
+    """读取 artifact（默认最新 meta 版本）；``run_id``/``step`` 取对应最新 link。"""
+    row = conn.execute(
+        "SELECT * FROM agent_artifacts WHERE artifact_id = ?", (artifact_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    version_row = (
+        _latest_version_row(conn, artifact_id)
+        if version is None
+        else conn.execute(
+            "SELECT * FROM agent_artifact_versions WHERE artifact_id = ? AND version = ?",
+            (artifact_id, version),
+        ).fetchone()
+    )
+    return _row_to_record(row, version_row, _link_row(conn, artifact_id, version))
+
+
+def find_artifacts_by_digest(
+    conn: sqlite3.Connection, digest: str
+) -> list[ArtifactRecord]:
+    normalized = normalize_content_digest(digest)
+    rows = conn.execute(
+        "SELECT * FROM agent_artifacts WHERE content_digest = ? ORDER BY created_at",
+        (normalized,),
+    ).fetchall()
+    records = []
+    for row in rows:
+        record = get_artifact(conn, row["artifact_id"])
+        if record is not None:
+            records.append(record)
+    return records
+
+
+def correct_artifact(
+    conn: sqlite3.Connection,
+    artifact_id: str,
+    patch: Mapping[str, Any],
+    *,
+    reason: str,
+    actor: str,
+    created_at: str | None = None,
+) -> int:
+    """追加一个修正版本（v+1），原版本不动；每个字段写一条 corrections 流水。"""
+    if not str(reason or "").strip():
+        raise ValueError("correction 必须填写理由（reason）")
+    if not str(actor or "").strip():
+        raise ValueError("correction 必须填写操作者（actor）")
+    unknown = sorted(set(patch) - set(CORRECTION_FIELDS))
+    if unknown:
+        raise ValueError(f"不允许修正字段：{unknown}；允许 {list(CORRECTION_FIELDS)}")
+    latest = _latest_version_row(conn, artifact_id)
+    if latest is None:
+        raise KeyError(f"artifact 不存在：{artifact_id!r}")
+    old_meta = _load_meta(latest["meta_json"])
+    new_meta = {**old_meta, **dict(patch)}
+    payload = canonical_json(new_meta)
+    digest = "sha256:" + sha256_bytes(payload.encode("utf-8"))
+    version = int(latest["version"]) + 1
+    now = created_at or utc_now()
     conn.execute(
         """
-        INSERT INTO agent_artifacts(
-            artifact_id, run_id, step, kind, path, digest, meta_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(artifact_id) DO UPDATE SET meta_json = excluded.meta_json
+        INSERT INTO agent_artifact_versions(
+            artifact_id, version, meta_json, meta_digest, reason, actor, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (artifact_id, run_id, step, kind, path, digest, payload, created_at or utc_now()),
+        (artifact_id, version, payload, digest, reason, actor, now),
     )
+    for field_name, new_value in patch.items():
+        conn.execute(
+            """
+            INSERT INTO corrections(
+                artifact_id, artifact_version, field, old_value, new_value,
+                reason, actor, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                artifact_id,
+                version,
+                field_name,
+                canonical_json(old_meta.get(field_name)),
+                canonical_json(new_value),
+                reason,
+                actor,
+                now,
+            ),
+        )
     conn.commit()
-    return artifact_id
+    return version
 
 
-STEP_KINDS = ("tool", "model", "final")
+def load_artifact(
+    conn: sqlite3.Connection,
+    artifact_id: str,
+    *,
+    version: int | None = None,
+    mode: str = "as_recorded",
+    root: str | Path | None = None,
+) -> dict[str, Any]:
+    """按记录读取 artifact：校验文件存在与 ``content_digest``，不静默降级。
+
+    ``mode='as_recorded'`` 返回落盘字节；``mode='recomputed'`` 只返回数据快照，
+    缺 ``data_digest`` 时抛 :class:`ArtifactReplayUnavailable`。
+    """
+    record = get_artifact(conn, artifact_id, version=version)
+    if record is None:
+        raise KeyError(f"artifact 不存在：{artifact_id!r}")
+    if mode == "recomputed":
+        snapshot = record.meta.get("data_digest")
+        if snapshot is None:
+            raise ArtifactReplayUnavailable(
+                f"{artifact_id} 没有 data_digest 快照，无法 recomputed 回放"
+            )
+        return {
+            "artifact_id": record.artifact_id,
+            "version": record.version,
+            "mode": mode,
+            "data": snapshot,
+            "meta": record.meta,
+        }
+    if mode != "as_recorded":
+        raise ValueError(f"未知 mode：{mode!r}")
+
+    base = Path(root) if root is not None else DEFAULT_ARTIFACT_ROOT
+    absolute = (base / record.path).resolve()
+    if not absolute.is_relative_to(base.resolve()):
+        raise ArtifactFileMissing(f"artifact 路径越界：{record.path!r}")
+    if not absolute.is_file():
+        raise ArtifactFileMissing(f"artifact 文件缺失：{absolute}")
+    payload = absolute.read_bytes()
+    actual = "sha256:" + sha256_bytes(payload)
+    if actual != record.content_digest:
+        raise ArtifactDigestMismatch(
+            f"{artifact_id} 内容校验失败：记录 {record.content_digest}，实际 {actual}"
+        )
+    return {
+        "artifact_id": record.artifact_id,
+        "version": record.version,
+        "mode": mode,
+        "content": payload,
+        "content_digest": record.content_digest,
+        "meta": record.meta,
+    }
+
+
+# ---------------------------------------------------------------------------
+# step / 指标
+# ---------------------------------------------------------------------------
 
 
 def record_step(
@@ -372,13 +984,25 @@ def record_step(
     tool: str | None = None,
     args: Mapping[str, Any] | list[Any] | None = None,
     result_digest: str | None = None,
+    result_preview: str | None = None,
     latency_ms: int | None = None,
     created_at: str | None = None,
 ) -> None:
-    """写 ``agent_steps``（同 ``(run_id, step)`` 幂等），审计流最小落点（§5）。"""
+    """写 ``agent_steps``（同 ``(run_id, step)`` 幂等）。
+
+    带 ``result_preview`` 时 ``args_json`` 是审计信封
+    ``{"arguments": ..., "result_preview": ...}``：参数完整保留，同时留下结果摘要
+    （ADR-017「digest + 截断预览」）；不传预览时仍是纯参数 JSON（兼容旧调用）。
+    """
     if kind not in STEP_KINDS:
         raise ValueError(f"kind 必须是 {STEP_KINDS} 之一，实际 {kind!r}")
-    payload = json.dumps(args if args is not None else {}, ensure_ascii=False, sort_keys=True)
+    value: Any = args if args is not None else {}
+    if result_preview is not None:
+        value = {
+            "arguments": value,
+            "result_preview": str(result_preview)[:500],
+        }
+    payload = canonical_json(value)
     conn.execute(
         """
         INSERT INTO agent_steps(
@@ -408,10 +1032,11 @@ def record_tool_step(
     args: Mapping[str, Any] | list[Any] | None = None,
     *,
     result_digest: str | None = None,
+    result_preview: str | None = None,
     latency_ms: int | None = None,
     created_at: str | None = None,
 ) -> None:
-    """工具调用落一行 ``kind='tool'`` 的 step（参数 JSON 原样留痕）。"""
+    """工具调用落一行 ``kind='tool'`` 的 step（参数 + 结果摘要 + 耗时）。"""
     record_step(
         conn,
         run_id,
@@ -420,76 +1045,96 @@ def record_tool_step(
         tool=tool,
         args=args,
         result_digest=result_digest,
+        result_preview=result_preview,
         latency_ms=latency_ms,
         created_at=created_at,
     )
 
 
-def _row_to_record(row: sqlite3.Row | None) -> ArtifactRecord | None:
-    if row is None:
-        return None
-    try:
-        meta = json.loads(row["meta_json"])
-    except (TypeError, ValueError):
-        meta = {}
-    return ArtifactRecord(
-        artifact_id=row["artifact_id"],
-        run_id=row["run_id"],
-        step=row["step"],
-        kind=row["kind"],
-        path=row["path"],
-        digest=row["digest"],
-        meta=meta if isinstance(meta, dict) else {},
-        created_at=row["created_at"],
-    )
-
-
-def get_artifact(
-    conn: sqlite3.Connection, artifact_id: str
-) -> ArtifactRecord | None:
+def agent_metrics(
+    conn: sqlite3.Connection,
+    *,
+    since: str | None = None,
+    until: str | None = None,
+    include_render: bool = False,
+) -> dict[str, int]:
+    """token/步数指标；默认只统计 ``run_kind='agent'``，排除渲染合成 run。"""
+    clauses = ["status IN ('success','partial')"]
+    params: list[Any] = []
+    if not include_render:
+        clauses.append("run_kind = 'agent'")
+    if since is not None:
+        clauses.append("started_at >= ?")
+        params.append(since)
+    if until is not None:
+        clauses.append("started_at <= ?")
+        params.append(until)
     row = conn.execute(
-        "SELECT * FROM agent_artifacts WHERE artifact_id = ?", (artifact_id,)
+        f"""
+        SELECT COUNT(*) AS runs,
+               COALESCE(SUM(steps), 0) AS steps,
+               COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens
+        FROM agent_runs WHERE {' AND '.join(clauses)}
+        """,
+        tuple(params),
     ).fetchone()
-    return _row_to_record(row)
+    return {"runs": int(row["runs"]), "steps": int(row["steps"]), "tokens": int(row["tokens"])}
 
 
-def find_artifacts_by_digest(
-    conn: sqlite3.Connection, digest: str
-) -> list[ArtifactRecord]:
-    rows = conn.execute(
-        "SELECT * FROM agent_artifacts WHERE digest = ? ORDER BY created_at", (digest,)
-    ).fetchall()
-    return [record for record in (_row_to_record(row) for row in rows) if record]
+# ---------------------------------------------------------------------------
+# GC：只删文件，不删审计行
+# ---------------------------------------------------------------------------
 
 
-def _path_digest(value: Any) -> str | None:
-    """从 artifact 路径中取出内容寻址目录名（绝对路径与相对路径都适用）。"""
-    if not isinstance(value, str) or not value:
-        return None
-    for part in Path(value).parts:
-        if _DIGEST_RE.match(part):
-            return part
-    return None
-
-
-def _protected_digests(conn: sqlite3.Connection, keep: set[str]) -> set[str]:
-    """仍被引用的 digest 目录：行 ``digest`` + ``meta_json.png_path`` 所在目录 + ``keep_digests``。
-
-    PNG 与 HTML 分属不同 digest 目录，且 PNG 不单独落行（``kind='figure'`` 只记 HTML）；
-    只看 ``agent_artifacts.digest`` 会把仍被存活 artifact 引用的 PNG 一起删掉（评审 P1）。
-    """
-    protected = set(keep)
-    protected |= {
-        row["digest"]
-        for row in conn.execute("SELECT DISTINCT digest FROM agent_artifacts")
+def _protected_paths(conn: sqlite3.Connection, base: Path) -> set[str]:
+    """仍被引用的 artifact 相对路径（行 path + 所有版本 meta 的 PNG 路径）。"""
+    protected = {
+        row["path"] for row in conn.execute("SELECT DISTINCT path FROM agent_artifacts")
     }
-    for row in conn.execute("SELECT meta_json FROM agent_artifacts"):
+    for row in conn.execute("SELECT meta_json FROM agent_artifact_versions"):
         meta = _load_meta(row["meta_json"])
-        # png_path 是绝对路径，取内容寻址目录名；png_digest 本身就是 digest。
-        for value in (_path_digest(meta.get("png_path")), meta.get("png_digest")):
-            if isinstance(value, str) and value:
-                protected.add(value)
+        for key in ("png_rel_path", "png_path"):
+            value = meta.get(key)
+            if not isinstance(value, str) or not value:
+                continue
+            if key == "png_path":
+                with contextlib.suppress(ValueError):
+                    protected.add(Path(value).resolve().relative_to(base.resolve()).as_posix())
+            else:
+                protected.add(PurePosixPath(value).as_posix())
     return protected
+
+
+def _remove_empty_dirs(base: Path) -> int:
+    removed = 0
+    artifacts_root = base / "artifacts"
+    if not artifacts_root.is_dir():
+        return 0
+    for directory in sorted(
+        (path for path in artifacts_root.rglob("*") if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    ):
+        try:
+            directory.rmdir()
+            removed += 1
+        except OSError:
+            pass
+    with contextlib.suppress(OSError):
+        artifacts_root.rmdir()
+        removed += 1
+    return removed
+
+
+def _cutoff_datetime(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value).strip()
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(text)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def prune_artifacts(
@@ -500,82 +1145,274 @@ def prune_artifacts(
     root: str | Path | None = None,
     delete_files: bool = True,
 ) -> dict[str, int]:
-    """删除 ``created_at < before`` 的 artifact 行，并按需清理不再被引用的文件。
-
-    参数
-    ----
-    before:
-        ISO 时间下界（与 ``created_at`` 同格式，UTC ISO 字符串）。
-    keep_digests:
-        命中这些 digest 的行一律保留（例如最近一次回答引用的图）。
-    root:
-        artifact 根目录，默认 :data:`DEFAULT_ARTIFACT_ROOT`。
-    delete_files:
-        ``True`` 时删除没有其他行引用的文件与空目录；仅删行时传 ``False``。
-
-    返回 ``{"rows": 删除行数, "files": 删除文件数, "pruned_digests": 目录清理数}``。
-    只用 ``Path.unlink``/``Path.rmdir``（架构门禁禁止 ``shutil.rmtree``）。
-    """
+    """只删「创建早于 before 且已无引用」的文件；artifact/version/link 行永久保留。"""
     base = Path(root) if root is not None else DEFAULT_ARTIFACT_ROOT
-    keep = {digest for digest in keep_digests if digest}
-    rows = conn.execute(
-        "SELECT artifact_id, digest FROM agent_artifacts WHERE created_at < ? ORDER BY created_at",
-        (before,),
-    ).fetchall()
-    targets = [row for row in rows if row["digest"] not in keep]
-    removed_rows = 0
+    keep = {
+        normalize_content_digest(digest).split(":", 1)[1]
+        for digest in keep_digests
+        if digest
+    }
+    protected = _protected_paths(conn, base)
+    cutoff = _cutoff_datetime(before)
+    artifacts_root = base / "artifacts"
     removed_files = 0
-    pruned_dirs = 0
-    stale_digests: set[str] = set()
-    for row in targets:
-        conn.execute(
-            "DELETE FROM agent_artifacts WHERE artifact_id = ?", (row["artifact_id"],)
-        )
-        removed_rows += 1
-        stale_digests.add(row["digest"])
-    if delete_files:
-        protected = _protected_digests(conn, keep)
-        for digest in stale_digests:
-            if digest in protected:
+    if delete_files and artifacts_root.is_dir():
+        for path in sorted(artifacts_root.rglob("*")):
+            if not path.is_file():
                 continue
-            remaining = conn.execute(
-                "SELECT COUNT(*) AS n FROM agent_artifacts WHERE digest = ?", (digest,)
-            ).fetchone()["n"]
-            if remaining:
+            rel = path.resolve().relative_to(base.resolve()).as_posix()
+            if rel in protected:
                 continue
-            directory = base / "artifacts" / digest[:2] / digest
-            if not directory.is_dir():
+            parts = PurePosixPath(rel).parts
+            if len(parts) >= 3 and parts[2] in keep:
                 continue
-            for entry in sorted(directory.iterdir()):
-                if entry.is_file():
-                    entry.unlink()
-                    removed_files += 1
-            try:
-                directory.rmdir()
-                pruned_dirs += 1
-            except OSError:
-                # 目录非空或已被占用：保留目录，不影响行删除结果。
-                pass
-        artifacts_root = base / "artifacts"
-        if artifacts_root.is_dir():
-            # 二次渲染/降级升级会留下没有 DB 行的 digest 目录（例如 PNG），一并清掉；
-            # 但仍被存活 artifact 引用的目录（行 digest / png_path / keep_digests）必须保留。
-            for shard in sorted(artifacts_root.iterdir()):
-                if not shard.is_dir():
-                    continue
-                for directory in sorted(shard.iterdir()):
-                    if not directory.is_dir() or directory.name in protected:
-                        continue
-                    for entry in sorted(directory.iterdir()):
-                        if entry.is_file():
-                            entry.unlink()
-                            removed_files += 1
-                    try:
-                        directory.rmdir()
-                        pruned_dirs += 1
-                    except OSError:
-                        pass
-                with contextlib.suppress(OSError):
-                    shard.rmdir()
+            mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+            if mtime >= cutoff:
+                continue
+            path.unlink()
+            removed_files += 1
+    removed_dirs = _remove_empty_dirs(base) if delete_files else 0
+    return {"rows": 0, "files": removed_files, "pruned_digests": removed_dirs}
+
+
+def prune_orphan_blobs(
+    conn: sqlite3.Connection,
+    *,
+    older_than_days: int = 90,
+    root: str | Path | None = None,
+    dry_run: bool = True,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """清理无 artifact 行引用、且超过保留期的文件（默认 90 天、默认 dry-run）。"""
+    if older_than_days < 0:
+        raise ValueError("older_than_days 不能为负")
+    base = Path(root) if root is not None else DEFAULT_ARTIFACT_ROOT
+    artifacts_root = base / "artifacts"
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=older_than_days)
+    protected = _protected_paths(conn, base)
+    candidates: list[str] = []
+    deleted = 0
+    if artifacts_root.is_dir():
+        for path in sorted(artifacts_root.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.resolve().relative_to(base.resolve()).as_posix()
+            if rel in protected:
+                continue
+            mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+            if mtime >= cutoff:
+                continue
+            candidates.append(rel)
+            if not dry_run:
+                path.unlink()
+                deleted += 1
+    removed_dirs = 0 if dry_run else _remove_empty_dirs(base)
+    return {
+        "dry_run": dry_run,
+        "candidates": candidates,
+        "deleted": deleted,
+        "pruned_digests": removed_dirs,
+        "older_than_days": older_than_days,
+    }
+
+
+def prune_runs(
+    conn: sqlite3.Connection,
+    *,
+    older_than_days: int = 90,
+    run_kinds: Sequence[str] = PRUNE_RUN_KINDS,
+    now: datetime | None = None,
+) -> int:
+    """删旧 run（只级联 link/steps）；默认真实 Agent run 永不删除（ADR-017 C3）。"""
+    if older_than_days < 0:
+        raise ValueError("older_than_days 不能为负")
+    kinds = tuple(dict.fromkeys(run_kinds))
+    unknown = [kind for kind in kinds if kind not in RUN_KINDS]
+    if unknown:
+        raise ValueError(f"run_kinds 非法：{unknown}")
+    cutoff = ((now or datetime.now(UTC)) - timedelta(days=older_than_days)).isoformat(
+        timespec="seconds"
+    )
+    placeholders = ",".join("?" for _ in kinds)
+    cursor = conn.execute(
+        f"DELETE FROM agent_runs WHERE started_at < ? AND run_kind IN ({placeholders})",
+        (cutoff, *kinds),
+    )
     conn.commit()
-    return {"rows": removed_rows, "files": removed_files, "pruned_digests": pruned_dirs}
+    return int(cursor.rowcount or 0)
+
+
+# ---------------------------------------------------------------------------
+# v1 → v2 迁移
+# ---------------------------------------------------------------------------
+
+
+def _backup_database(conn: sqlite3.Connection, db_path: Path) -> Path | None:
+    if not db_path.exists() or str(db_path) == ":memory:":
+        return None
+    with contextlib.suppress(sqlite3.DatabaseError):
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    backup = db_path.with_name(
+        f"{db_path.name}.bak-{datetime.now(UTC).strftime(_TIMESTAMP_FORMAT)}"
+    )
+    shutil.copy2(db_path, backup)
+    return backup
+
+
+def migrate_v1_to_v2(
+    conn: sqlite3.Connection,
+    *,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """把 v1 三表迁移到 v2；空库直接建表，已迁移库幂等返回。
+
+    步骤：``wal_checkpoint`` → 备份 → 单事务内 ``foreign_keys=OFF`` →
+    旧表改名 → 建 v2 表 → 拷贝（合成 run 标 ``run_kind='render'``）→
+    校验行数 → 删旧表 → ``foreign_key_check`` → 提交 → 恢复 ``foreign_keys=ON``。
+    """
+    state = schema_state(conn)
+    if state == "v2":
+        conn.executescript(AGENT_SCHEMA)
+        conn.commit()
+        return {"status": "already_v2", "backup": None}
+    if state == "empty":
+        conn.executescript(AGENT_SCHEMA)
+        conn.commit()
+        return {"status": "created", "backup": None}
+    if state != "v1":
+        raise RuntimeError("无法识别的 agent_* 表结构，拒绝迁移")
+
+    path = Path(db_path) if db_path is not None else DEFAULT_DB_PATH
+    backup = _backup_database(conn, path)
+    old_runs = conn.execute("SELECT * FROM agent_runs").fetchall()
+    old_artifacts = conn.execute("SELECT * FROM agent_artifacts").fetchall()
+    old_steps = conn.execute("SELECT * FROM agent_steps").fetchall()
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("ALTER TABLE agent_steps RENAME TO agent_steps_v1")
+        conn.execute("ALTER TABLE agent_artifacts RENAME TO agent_artifacts_v1")
+        conn.execute("ALTER TABLE agent_runs RENAME TO agent_runs_v1")
+        conn.execute("DROP VIEW IF EXISTS agent_artifact_links")
+        for statement in _SCHEMA_STATEMENTS:
+            conn.execute(statement)
+        conn.execute(
+            """
+            INSERT INTO agent_runs(
+                run_id, session_id, provider, model, temperature, seed, code_version,
+                status, run_kind, started_at, finished_at, steps,
+                prompt_tokens, completion_tokens, error
+            )
+            SELECT run_id, session_id, provider, model, temperature, seed, code_version,
+                   status,
+                   CASE WHEN run_id LIKE 'run_chart\\_%' ESCAPE '\\' THEN 'render' ELSE 'agent' END,
+                   started_at, finished_at, steps, prompt_tokens, completion_tokens, error
+            FROM agent_runs_v1
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO agent_steps(
+                run_id, step, kind, tool, args_json, result_digest, latency_ms, created_at
+            )
+            SELECT run_id, step, kind, tool, args_json, result_digest, latency_ms, created_at
+            FROM agent_steps_v1
+            """
+        )
+        for row in old_artifacts:
+            digest = str(row["digest"] or "")
+            content_digest = (
+                digest if digest.startswith("sha256:") else f"sha256:{digest}"
+            )
+            kind = LEGACY_KIND_MAP.get(str(row["kind"]), str(row["kind"]))
+            if kind not in ARTIFACT_KINDS:
+                kind = "file"
+            conn.execute(
+                """
+                INSERT INTO agent_artifacts(
+                    artifact_id, kind, path, content_digest, env_fingerprint, created_at
+                ) VALUES (?, ?, ?, ?, 'legacy', ?)
+                """,
+                (
+                    row["artifact_id"],
+                    kind,
+                    row["path"],
+                    content_digest,
+                    row["created_at"],
+                ),
+            )
+            meta = _load_meta(row["meta_json"])
+            meta["schema_version"] = "legacy"
+            payload = canonical_json(meta)
+            conn.execute(
+                """
+                INSERT INTO agent_artifact_versions(
+                    artifact_id, version, meta_json, meta_digest, reason, actor, created_at
+                ) VALUES (?, 1, ?, ?, 'migration', 'migration', ?)
+                """,
+                (
+                    row["artifact_id"],
+                    payload,
+                    "sha256:" + sha256_bytes(payload.encode("utf-8")),
+                    row["created_at"],
+                ),
+            )
+            run_id = row["run_id"]
+            run_row = conn.execute(
+                "SELECT session_id FROM agent_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if run_row is None:
+                run_id = None
+            conn.execute(
+                """
+                INSERT INTO agent_run_artifacts(
+                    artifact_id, artifact_version, run_id, step, source, session_id, created_at
+                ) VALUES (?, 1, ?, ?, 'legacy', ?, ?)
+                """,
+                (
+                    row["artifact_id"],
+                    run_id,
+                    row["step"],
+                    run_row["session_id"] if run_row is not None else None,
+                    row["created_at"],
+                ),
+            )
+        counts = {
+            "runs": conn.execute("SELECT COUNT(*) FROM agent_runs").fetchone()[0],
+            "steps": conn.execute("SELECT COUNT(*) FROM agent_steps").fetchone()[0],
+            "artifacts": conn.execute("SELECT COUNT(*) FROM agent_artifacts").fetchone()[0],
+            "versions": conn.execute(
+                "SELECT COUNT(*) FROM agent_artifact_versions"
+            ).fetchone()[0],
+            "links": conn.execute("SELECT COUNT(*) FROM agent_run_artifacts").fetchone()[0],
+        }
+        if counts["runs"] != len(old_runs) or counts["steps"] != len(old_steps):
+            raise RuntimeError(f"迁移行数不一致：{counts}")
+        if counts["artifacts"] != len(old_artifacts) or counts["versions"] != len(
+            old_artifacts
+        ):
+            raise RuntimeError(f"迁移 artifact 行数不一致：{counts}")
+        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError(f"迁移后外键校验失败：{violations[:5]}")
+        conn.execute("DROP TABLE agent_artifacts_v1")
+        conn.execute("DROP TABLE agent_steps_v1")
+        conn.execute("DROP TABLE agent_runs_v1")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        conn.execute("PRAGMA foreign_keys = ON")
+        raise
+    conn.execute("PRAGMA foreign_keys = ON")
+    integrity = conn.execute("PRAGMA integrity_check").fetchone()
+    if integrity is not None and integrity[0] != "ok":
+        raise RuntimeError(f"迁移后 integrity_check 失败：{integrity[0]}")
+    return {
+        "status": "migrated",
+        "backup": str(backup) if backup is not None else None,
+        "counts": counts,
+        "render_runs": conn.execute(
+            "SELECT COUNT(*) FROM agent_runs WHERE run_kind = 'render'"
+        ).fetchone()[0],
+    }

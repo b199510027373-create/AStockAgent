@@ -17,7 +17,9 @@ from __future__ import annotations
 import json
 import threading
 import time
+import uuid
 from collections.abc import Callable, Iterable, Mapping
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from astock.agent.registry import (
@@ -150,6 +152,7 @@ class AgentRuntime:
         validation_retries: int = DEFAULT_VALIDATION_RETRIES,
         spin_limit: int = DEFAULT_SPIN_LIMIT,
         auto_save: bool = True,
+        db_path: str | Path | None = None,
     ) -> None:
         if max_steps < 1:
             raise ValueError("max_steps 必须 >= 1")
@@ -170,6 +173,9 @@ class AgentRuntime:
         self.validation_retries = validation_retries
         self.spin_limit = spin_limit
         self.auto_save = auto_save
+        # 审计库为可选依赖：不传 db_path 时不落 agent_runs/agent_steps（测试与
+        # 纯内存调用无副作用）；生产入口应显式传入 data/astock.db。
+        self.db_path = Path(db_path) if db_path is not None else None
         self._clock: Clock = clock or time.monotonic
         self._interrupt = threading.Event()
         self._cancel_event: threading.Event | None = None
@@ -199,6 +205,7 @@ class AgentRuntime:
             self.session.add_user(question)
 
         started = self._clock()
+        audit = self._start_audit()
         steps: list[StepRecord] = []
         tokens_used = 0
         answer = ""
@@ -433,6 +440,7 @@ class AgentRuntime:
                         save_error = f"{type(exc).__name__}: {exc}"
             finally:
                 self._interrupt.clear()
+                self._finish_audit(audit, steps, tokens_used, stop, error, answer)
 
         if stop is None:
             stop = StopReason.MAX_STEPS
@@ -452,6 +460,90 @@ class AgentRuntime:
             error=error,
         )
 
+    # ---- 审计（ADR-017 C3）-----------------------------------------------
+
+    def _start_audit(self) -> tuple[Any, str] | None:
+        """开一条 ``run_kind='agent'`` 的真实 run；审计故障不阻断对话。"""
+        if self.db_path is None:
+            return None
+        from astock.agent import store
+
+        conn = None
+        try:
+            conn = store.connect(self.db_path)
+            run_id = f"run_{uuid.uuid4().hex[:16]}"
+            store.ensure_run(
+                conn,
+                run_id,
+                session_id=self.session.session_id,
+                provider=str(getattr(self.model, "provider", "unknown")),
+                model=str(getattr(self.model, "model", type(self.model).__name__)),
+                status="running",
+                run_kind="agent",
+            )
+            return conn, run_id
+        except Exception:  # noqa: BLE001 - 审计不可用不应打断 Agent
+            if conn is not None:
+                conn.close()
+            return None
+
+    def _finish_audit(
+        self,
+        audit: tuple[Any, str] | None,
+        steps: list[StepRecord],
+        tokens_used: int,
+        stop: StopReason | None,
+        error: str | None,
+        answer: str,
+    ) -> None:
+        """落全部步骤（含失败/非法参数）并 finish_run，禁止永久 running。"""
+        if audit is None:
+            return
+        conn, run_id = audit
+        from astock.agent import store
+
+        if stop is StopReason.COMPLETED:
+            status = "success"
+        elif stop is None or stop is StopReason.MODEL_ERROR:
+            status = "failed"
+        else:
+            status = "partial"
+        try:
+            for step in steps:
+                observation = step.observation or ""
+                store.record_step(
+                    conn,
+                    run_id,
+                    step.index,
+                    "tool",
+                    tool=step.tool,
+                    args=step.arguments,
+                    result_digest=store.sha256_bytes(observation.encode("utf-8")),
+                    result_preview=observation,
+                    latency_ms=int(max(step.elapsed, 0.0) * 1000),
+                )
+            final_text = str(answer or "")
+            store.record_step(
+                conn,
+                run_id,
+                len(steps),
+                "final",
+                result_digest=store.sha256_bytes(final_text.encode("utf-8")),
+                result_preview=final_text,
+            )
+            store.finish_run(
+                conn,
+                run_id,
+                status=status,
+                token_usage=tokens_used,
+                step_count=len(steps) + 1,
+                error=error,
+            )
+        except Exception:  # noqa: BLE001, S110 - 落库失败只影响审计，不影响回答
+            pass
+        finally:
+            conn.close()
+
     # ---- 内部 -------------------------------------------------------------
 
     def _guard(self, started: float, tokens_used: int) -> StopReason | None:
@@ -469,10 +561,18 @@ class AgentRuntime:
         return None
 
     def _build_messages(self) -> list[dict[str, Any]]:
-        return [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            *self.session.recent_messages(),
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT}
         ]
+        for message in self.session.recent_messages():
+            if message.get("role") == "tool":
+                # 文件/网页/工具正文是不可信数据：显式包裹，模型只能引用不能执行。
+                message = dict(message)
+                message["content"] = (
+                    "<untrusted_data>\n" + str(message.get("content") or "") + "\n</untrusted_data>"
+                )
+            messages.append(message)
+        return messages
 
     def _format_observation(self, tool_name: str, result: ToolResult) -> str:
         payload: dict[str, Any] = {"tool": tool_name, "ok": result.ok}

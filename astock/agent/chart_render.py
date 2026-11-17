@@ -53,6 +53,7 @@ from astock.agent.store import (
     DEFAULT_ARTIFACT_ROOT,
     PNG_DEGRADED_WARNING_PREFIX,
     artifact_id_for,
+    compute_env_fingerprint,
     connect,
     ensure_run,
     fail_run,
@@ -220,6 +221,17 @@ def _runtime_versions() -> dict[str, str]:
         "font_family": font_family(),
     }
 
+
+def _env_fingerprint(code_version: str) -> str:
+    """v2 artifact 环境身份：plotly + python + code_version（ADR-017 §4.4）。"""
+    versions = _runtime_versions()
+    return compute_env_fingerprint(
+        plotly_version=str(versions.get("plotly_version") or ""),
+        python_version=str(versions.get("python_version") or ""),
+        code_version=code_version,
+    )
+
+
 #: 数据方来源解析器：签名 ``(data_section) -> DataFrame``，供工具层注入自定义取数。
 DataResolver = Callable[[Mapping[str, Any]], pd.DataFrame]
 
@@ -245,7 +257,7 @@ class RenderedFigure:
     spec: dict[str, Any] = field(default_factory=dict)
     params: dict[str, Any] = field(default_factory=dict)
     degraded: bool = False
-    run_id: str = ""
+    run_id: str | None = ""
     code_version: str = CODE_VERSION
     #: 时点语义：``market``=未被 transforms 裁剪的行情时点；``view``=图上前端视图时点；
     #: ``unknown``=取不到时点（决策记录 D2/Q1）。
@@ -387,7 +399,7 @@ def _load_artifact_frame(
         raise ChartSpecError(
             [SpecIssue("$.data.ref", f"artifact {data['ref']} 不存在")]
         )
-    if record.kind not in ("figure", "table"):
+    if record.kind not in ("chart", "table"):
         raise ChartSpecError(
             [
                 SpecIssue(
@@ -1426,7 +1438,20 @@ def render(
         }
         degraded = False
         png_error: str | None = None
-        run_key = run_id or f"run_chart_{artifact_id}"
+        # 直接渲染（Agent 之外）不再合成 run_chart_* run；只有真实 Agent 传入 run_id 时
+        # 才确保 run 行存在，并等待运行时在会话结束时 finish_run（ADR-017 C3、规格 §7.1）。
+        if run_id is not None:
+            ensure_run(
+                connection,
+                run_id,
+                session_id=session_id,
+                provider="local",
+                model="chart_render",
+                code_version=version,
+                status="running",
+                run_kind="agent",
+            )
+        env_fingerprint = _env_fingerprint(version)
         width = int(figure.layout.width or 960)
         height = int(figure.layout.height or 520)
 
@@ -1435,23 +1460,13 @@ def render(
             payload, reason = _try_png(figure, width=width, height=height)
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             if payload is None:
-                # 显式请求不得静默降级：run 记 failed，且不落 artifact 行（不留半成品）。
-                ensure_run(
-                    connection,
-                    run_key,
-                    session_id=session_id,
-                    provider="local",
-                    model="chart_render",
-                    code_version=version,
-                    status="failed",
-                )
-                # ensure_run 对已存在的 run 不覆盖状态（Agent 循环可能已预建 running），
-                # 这里再显式落 failed，保证 meta 与 ops 文档语义一致（评审 P2）。
-                fail_run(
-                    connection,
-                    run_key,
-                    error=f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}",
-                )
+                # 显式请求不得静默降级：真实 Agent 的 run 记 failed，且不落 artifact 行。
+                if run_id is not None:
+                    fail_run(
+                        connection,
+                        run_id,
+                        error=f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}",
+                    )
                 raise PNGExportError(
                     f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}"
                 )
@@ -1493,16 +1508,6 @@ def render(
                         elapsed_ms=elapsed_ms,
                     )
 
-        ensure_run(
-            connection,
-            run_key,
-            session_id=session_id,
-            provider="local",
-            model="chart_render",
-            code_version=version,
-            status="partial" if degraded else "success",
-        )
-
         params = _params(
             normalized, code_version=version, include_plotlyjs=include_plotlyjs
         )
@@ -1529,14 +1534,20 @@ def render(
             **png_meta,
             "data": snapshot,
         }
-        artifact_id = record_artifact(
+        artifact_id, _artifact_version = record_artifact(
             connection,
-            run_id=run_key,
+            artifact_id=artifact_id,
+            run_id=run_id,
             kind="figure",
             path=rel_path,
-            digest=digest,
+            content_digest=digest,
+            env_fingerprint=env_fingerprint,
             meta=meta,
             step=step,
+            source="agent" if run_id is not None else "render",
+            session_id=session_id if run_id is not None else None,
+            reason="agent_render" if run_id is not None else "render",
+            actor="agent" if run_id is not None else "system",
         )
     finally:
         if owned:
@@ -1555,7 +1566,7 @@ def render(
         spec=normalized,
         params=params,
         degraded=degraded,
-        run_id=run_key,
+        run_id=run_id,
         code_version=version,
         time_point_scope=scope,
     )
