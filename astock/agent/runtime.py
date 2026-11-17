@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 import time
@@ -136,6 +137,33 @@ class AgentModel(Protocol):
 Clock = Callable[[], float]
 
 
+def _provenance_float(
+    model: object, name: str, fallback: float | None
+) -> float | None:
+    value = getattr(model, name, None)
+    if isinstance(value, bool):
+        return fallback
+    if isinstance(value, (int, float)):
+        return float(value)
+    return fallback
+
+
+def _provenance_int(model: object, name: str, fallback: int | None) -> int | None:
+    value = getattr(model, name, None)
+    if isinstance(value, bool):
+        return fallback
+    if isinstance(value, int):
+        return value
+    return fallback
+
+
+def _provenance_str(model: object, name: str, fallback: str | None) -> str | None:
+    value = getattr(model, name, None)
+    if isinstance(value, str) and value:
+        return value
+    return fallback
+
+
 class AgentRuntime:
     """编排模型与工具，执行带护栏的多步循环。"""
 
@@ -153,6 +181,9 @@ class AgentRuntime:
         spin_limit: int = DEFAULT_SPIN_LIMIT,
         auto_save: bool = True,
         db_path: str | Path | None = None,
+        temperature: float | None = None,
+        seed: int | None = None,
+        code_version: str | None = None,
     ) -> None:
         if max_steps < 1:
             raise ValueError("max_steps 必须 >= 1")
@@ -176,6 +207,10 @@ class AgentRuntime:
         # 审计库为可选依赖：不传 db_path 时不落 agent_runs/agent_steps（测试与
         # 纯内存调用无副作用）；生产入口应显式传入 data/astock.db。
         self.db_path = Path(db_path) if db_path is not None else None
+        # run provenance：模型适配器若暴露同名属性则优先，否则用显式参数；都没有时写 NULL。
+        self.temperature = temperature
+        self.seed = seed
+        self.code_version = code_version
         self._clock: Clock = clock or time.monotonic
         self._interrupt = threading.Event()
         self._cancel_event: threading.Event | None = None
@@ -478,6 +513,13 @@ class AgentRuntime:
                 session_id=self.session.session_id,
                 provider=str(getattr(self.model, "provider", "unknown")),
                 model=str(getattr(self.model, "model", type(self.model).__name__)),
+                temperature=_provenance_float(
+                    self.model, "temperature", self.temperature
+                ),
+                seed=_provenance_int(self.model, "seed", self.seed),
+                code_version=_provenance_str(
+                    self.model, "code_version", self.code_version
+                ),
                 status="running",
                 run_kind="agent",
             )
@@ -508,6 +550,7 @@ class AgentRuntime:
             status = "failed"
         else:
             status = "partial"
+        step_error: str | None = None
         try:
             for step in steps:
                 observation = step.observation or ""
@@ -531,18 +574,36 @@ class AgentRuntime:
                 result_digest=store.sha256_bytes(final_text.encode("utf-8")),
                 result_preview=final_text,
             )
-            store.finish_run(
-                conn,
-                run_id,
-                status=status,
-                token_usage=tokens_used,
-                step_count=len(steps) + 1,
-                error=error,
-            )
-        except Exception:  # noqa: BLE001, S110 - 落库失败只影响审计，不影响回答
-            pass
+        except Exception as exc:  # noqa: BLE001 - 落步骤失败不应跳过 finish_run
+            step_error = f"record_step failed: {type(exc).__name__}: {exc}"
         finally:
-            conn.close()
+            # finish_run 独立于 record_step：任一步骤写入失败也必须结束 run，
+            # 避免永久 running（P1-3）。finish_run 自身失败时做最小 UPDATE 兜底。
+            final_status = "failed" if step_error is not None else status
+            final_error = error or step_error
+            try:
+                store.finish_run(
+                    conn,
+                    run_id,
+                    status=final_status,
+                    token_usage=tokens_used,
+                    step_count=len(steps) + 1,
+                    error=final_error,
+                )
+            except Exception as exc:  # noqa: BLE001
+                with contextlib.suppress(Exception):
+                    conn.execute(
+                        "UPDATE agent_runs SET status='failed', finished_at=?, error=? "
+                        "WHERE run_id=? AND status='running'",
+                        (
+                            store.utc_now(),
+                            f"finish_run failed: {type(exc).__name__}: {exc}",
+                            run_id,
+                        ),
+                    )
+                    conn.commit()
+            finally:
+                conn.close()
 
     # ---- 内部 -------------------------------------------------------------
 

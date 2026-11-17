@@ -326,6 +326,68 @@ def test_artifact_digest_dedupes(tmp_path: Path) -> None:
         conn.close()
 
 
+def test_artifact_identity_ignores_filename_but_includes_env(tmp_path: Path) -> None:
+    conn = _connect(tmp_path)
+    root = tmp_path / "agent"
+    try:
+        first = store.put_content(b"same-bytes", "a.html", root=root)
+        second = store.put_content(b"same-bytes", "b.html", root=root)
+        meta = {"spec": {"kind": "line"}}
+        id_a, _ = store.record_artifact(
+            conn,
+            kind="chart",
+            path=first[1],
+            content_digest=first[0],
+            env_fingerprint="env1",
+            meta=meta,
+        )
+        id_b, _ = store.record_artifact(
+            conn,
+            kind="chart",
+            path=second[1],
+            content_digest=second[0],
+            env_fingerprint="env1",
+            meta=meta,
+        )
+        # 同内容不同文件名：同一 artifact 行，保留首个路径。
+        assert id_a == id_b
+        assert conn.execute("SELECT COUNT(*) FROM agent_artifacts").fetchone()[0] == 1
+        stored = store.get_artifact(conn, id_a)
+        assert stored is not None and stored.path == first[1]
+        # 同内容不同来源：靠 link 保留归属（run/step 不同 → 两条 link）。
+        store.ensure_run(conn, "run_agent", session_id="s1", status="running")
+        third = store.put_content(b"same-bytes", "c.html", root=root)
+        store.record_artifact(
+            conn,
+            kind="chart",
+            path=third[1],
+            content_digest=third[0],
+            env_fingerprint="env1",
+            meta=meta,
+            run_id="run_agent",
+            step=4,
+            source="agent",
+        )
+        assert conn.execute("SELECT COUNT(*) FROM agent_run_artifacts").fetchone()[0] == 2
+
+        env2 = store.put_content(b"same-bytes", "a.html", root=root)
+        id_env2, _ = store.record_artifact(
+            conn,
+            kind="chart",
+            path=env2[1],
+            content_digest=env2[0],
+            env_fingerprint="env2",
+            meta=meta,
+        )
+        # 环境变化：不同 artifact，二者都仍可按 id 读回（P1-1）。
+        assert id_env2 != id_a
+        assert conn.execute("SELECT COUNT(*) FROM agent_artifacts").fetchone()[0] == 2
+        assert store.get_artifact(conn, id_a) is not None
+        assert store.get_artifact(conn, id_env2) is not None
+    finally:
+        conn.close()
+
+
 def test_new_meta_appends_version_and_link_is_idempotent(tmp_path: Path) -> None:
     conn = _connect(tmp_path)
     root = tmp_path / "agent"
@@ -430,12 +492,22 @@ def test_load_artifact_verifies_bytes_and_replays(tmp_path: Path) -> None:
     conn = _connect(tmp_path)
     root = tmp_path / "agent"
     try:
-        artifact_id, _ = _record(conn, root, b"payload", meta={"data_digest": "sha256:abc"})
+        snapshot = {"fields": ["x"], "rows": [{"x": 1}], "row_count": 1}
+        payload = store.canonical_json(snapshot).encode("utf-8")
+        data_digest, data_blob, _ = store.put_content(payload, "data.json", root=root)
+        data_digest = store.normalize_content_digest(data_digest)
+        artifact_id, _ = _record(
+            conn,
+            root,
+            b"payload",
+            meta={"data_digest": data_digest, "data_blob": data_blob},
+        )
         loaded = store.load_artifact(conn, artifact_id, root=root)
         assert loaded["content"] == b"payload"
         assert loaded["version"] == 1
-        recomputed = store.load_artifact(conn, artifact_id, mode="recomputed")
-        assert recomputed["data"] == "sha256:abc"
+        recomputed = store.load_artifact(conn, artifact_id, mode="recomputed", root=root)
+        assert recomputed["data"] == snapshot
+        assert recomputed["data_digest"] == data_digest
 
         absolute = root / store.get_artifact(conn, artifact_id).path  # type: ignore[union-attr]
         absolute.write_bytes(b"tampered")
@@ -511,6 +583,64 @@ def test_run_identity_and_finish_are_enforced(tmp_path: Path) -> None:
         assert row["finished_at"] is not None
         assert row["completion_tokens"] == 42
         assert row["steps"] == 1
+    finally:
+        conn.close()
+
+
+def test_ensure_run_backfills_provenance_and_finish_keeps_failed(
+    tmp_path: Path,
+) -> None:
+    conn = _connect(tmp_path)
+    try:
+        store.ensure_run(conn, "run_1", status="running")
+        row = conn.execute("SELECT * FROM agent_runs WHERE run_id = 'run_1'").fetchone()
+        assert row["temperature"] is None
+        assert row["seed"] is None
+        assert row["code_version"] is None
+        # 后续调用补齐空列，但不覆盖已有非空值（P1-2）。
+        store.ensure_run(
+            conn,
+            "run_1",
+            status="running",
+            temperature=0.2,
+            seed=7,
+            code_version="astock-test",
+        )
+        row = conn.execute("SELECT * FROM agent_runs WHERE run_id = 'run_1'").fetchone()
+        assert row["temperature"] == pytest.approx(0.2)
+        assert row["seed"] == 7
+        assert row["code_version"] == "astock-test"
+
+        store.fail_run(conn, "run_1", error="PNG 导出失败")
+        store.finish_run(conn, "run_1", status="success", token_usage=9)
+        row = conn.execute("SELECT * FROM agent_runs WHERE run_id = 'run_1'").fetchone()
+        # 硬失败不被收尾降级，error 不被清空（P1-4）。
+        assert row["status"] == "failed"
+        assert row["error"] == "PNG 导出失败"
+        assert row["finished_at"] is not None
+        assert row["completion_tokens"] == 9
+    finally:
+        conn.close()
+
+
+def test_finish_run_documents_total_tokens_in_completion(tmp_path: Path) -> None:
+    conn = _connect(tmp_path)
+    try:
+        store.ensure_run(conn, "run_1", status="running")
+        store.finish_run(
+            conn, "run_1", status="success", token_usage=120, prompt_tokens=0
+        )
+        row = conn.execute("SELECT * FROM agent_runs WHERE run_id = 'run_1'").fetchone()
+        # 网关只汇总整轮总 token：未拆分时总数记 completion，prompt 保持 0，
+        # 成本口径 = prompt_tokens + completion_tokens（P2-4）。
+        assert row["completion_tokens"] == 120
+        assert row["prompt_tokens"] == 0
+        store.ensure_run(conn, "run_2", status="running")
+        store.finish_run(
+            conn, "run_2", status="success", token_usage=80, prompt_tokens=20
+        )
+        row = conn.execute("SELECT * FROM agent_runs WHERE run_id = 'run_2'").fetchone()
+        assert (row["prompt_tokens"], row["completion_tokens"]) == (20, 80)
     finally:
         conn.close()
 
@@ -711,3 +841,39 @@ def test_migrate_empty_database_creates_v2(tmp_path: Path) -> None:
         assert conn.execute("SELECT COUNT(*) FROM agent_artifacts").fetchone()[0] == 0
     finally:
         conn.close()
+
+
+def test_ensure_schema_backs_up_using_the_connection_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "custom-location.db"
+    _make_v1_db(db_path, tmp_path / "agent")
+    # 若调用方连接的是自定义库，备份必须挨着它，而不是 DEFAULT_DB_PATH（P2-2）。
+    monkeypatch.setattr(store, "DEFAULT_DB_PATH", tmp_path / "wrong.db")
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        store.ensure_schema(conn)
+        assert store.schema_state(conn) == "v2"
+    finally:
+        conn.close()
+    assert list(tmp_path.glob("custom-location.db.bak-*"))
+    assert not (tmp_path / "wrong.db.bak-1").exists()
+
+
+def test_backup_aborts_when_wal_checkpoint_is_busy(tmp_path: Path) -> None:
+    class _BusyConnection:
+        def execute(self, statement: str):
+            class _Cursor:
+                def fetchone(self):
+                    return (1, 0, 0)
+
+            return _Cursor()
+
+        def backup(self, destination):  # pragma: no cover - 不应被调用
+            raise AssertionError("checkpoint 未完成时不得备份")
+
+    target = tmp_path / "astock.db"
+    target.write_bytes(b"stub")
+    with pytest.raises(RuntimeError, match="wal_checkpoint"):
+        store._backup_database(_BusyConnection(), target)  # type: ignore[arg-type]

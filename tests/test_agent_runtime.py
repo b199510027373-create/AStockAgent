@@ -7,11 +7,14 @@ JSON 落盘。
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 import unittest
 import uuid
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from astock.agent import (
     AgentRuntime,
@@ -937,6 +940,123 @@ def test_tool_payload_is_wrapped_as_untrusted_data(tmp_path: Path) -> None:
     assert content.startswith("<untrusted_data>")
     assert content.rstrip().endswith("</untrusted_data>")
     assert "1680.00" in content
+
+
+def test_runtime_records_model_provenance_in_run(tmp_path: Path) -> None:
+    from astock.agent import store
+
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel([ToolCall("lookup_price", {"code": "600519"}), "完成"])
+    runtime = AgentRuntime(
+        model,
+        registry,
+        db_path=tmp_path / "astock.db",
+        temperature=0.2,
+        seed=11,
+        code_version="astock-test",
+    )
+
+    runtime.run("查价格")
+
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        row = conn.execute(
+            "SELECT temperature, seed, code_version, prompt_tokens, completion_tokens "
+            "FROM agent_runs"
+        ).fetchone()
+        assert abs(row["temperature"] - 0.2) < 1e-9
+        assert row["seed"] == 11
+        assert row["code_version"] == "astock-test"
+        # 整轮总 token 记 completion，prompt 保持 0（P2-4 语义）。
+        assert row["prompt_tokens"] == 0
+        assert row["completion_tokens"] >= 0
+    finally:
+        conn.close()
+
+
+def test_step_failure_still_finishes_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from astock.agent import store
+
+    def broken_step(*args: Any, **kwargs: Any) -> None:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(store, "record_step", broken_step)
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel([ToolCall("lookup_price", {"code": "600519"}), "完成"])
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    result = runtime.run("查价格")
+
+    assert result.stop_reason == StopReason.COMPLETED
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        row = conn.execute("SELECT status, finished_at, error FROM agent_runs").fetchone()
+        assert row["status"] == "failed"
+        assert row["finished_at"]
+        assert "record_step" in (row["error"] or "")
+    finally:
+        conn.close()
+
+
+def test_finish_run_failure_falls_back_to_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from astock.agent import store
+
+    def broken_finish(*args: Any, **kwargs: Any) -> str:
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(store, "finish_run", broken_finish)
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel([ToolCall("lookup_price", {"code": "600519"}), "完成"])
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    runtime.run("查价格")
+
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        row = conn.execute("SELECT status, finished_at, error FROM agent_runs").fetchone()
+        assert row["status"] == "failed"
+        assert row["finished_at"]
+        assert "finish_run failed" in (row["error"] or "")
+    finally:
+        conn.close()
+
+
+def test_failed_run_is_not_downgraded_by_runtime_finish(tmp_path: Path) -> None:
+    from astock.agent import store
+
+    db_path = tmp_path / "astock.db"
+
+    def explode(*, code: str) -> ToolResult:
+        del code
+        conn = store.connect(db_path)
+        try:
+            run_id = conn.execute("SELECT run_id FROM agent_runs").fetchone()[0]
+            store.fail_run(conn, run_id, error="PNG 导出失败（png_mode=require）")
+        finally:
+            conn.close()
+        raise RuntimeError("PNG 导出失败（png_mode=require）")
+
+    registry = ToolRegistry()
+    registry.register(price_spec(explode))
+    model = FakeModel([ToolCall("lookup_price", {"code": "600519"}), "失败后继续"])
+    runtime = AgentRuntime(model, registry, db_path=db_path)
+
+    runtime.run("画图")
+
+    conn = store.connect(db_path)
+    try:
+        row = conn.execute("SELECT status, error FROM agent_runs").fetchone()
+        assert row["status"] == "failed"
+        assert "PNG 导出失败" in (row["error"] or "")
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

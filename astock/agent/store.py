@@ -23,7 +23,6 @@ import json
 import os
 import platform
 import re
-import shutil
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -309,10 +308,22 @@ def compute_env_fingerprint(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def artifact_id_for(digest: str, filename: str) -> str:
-    """``art_<16 hex>``：由内容 digest + 文件名派生，同一内容稳定复现同一 id。"""
-    bare = digest.split(":", 1)[-1]
-    seed = f"{bare}\x00{filename}".encode()
+def artifact_id_for(
+    digest: str,
+    filename: str | None = None,
+    *,
+    env_fingerprint: str = "",
+    canonical_spec: str = "",
+) -> str:
+    """``art_<16 hex>``：按冻结规格 §4.4 由 spec + 数据 digest + 环境派生。
+
+    文件名不参与逻辑身份（只决定落盘路径）：同内容换文件名仍指向同一 artifact
+    行；环境变化（plotly/python/code_version）则生成新 artifact 而不是撞身份。
+    ``filename`` 仅为兼容旧调用保留，不再进入种子。
+    """
+    del filename  # 身份与文件名无关（见规格 §4.4）
+    data_digest = normalize_content_digest(digest)
+    seed = f"{canonical_spec}\n{data_digest}\n{env_fingerprint}".encode()
     return "art_" + hashlib.sha256(seed).hexdigest()[:16]
 
 
@@ -388,10 +399,24 @@ def connect(db_path: str | Path | None = None) -> sqlite3.Connection:
     return conn
 
 
+def _connection_db_path(conn: sqlite3.Connection) -> Path | None:
+    """从 ``PRAGMA database_list`` 取 main 库文件路径；内存库返回 None。"""
+    try:
+        rows = conn.execute("PRAGMA database_list").fetchall()
+    except sqlite3.DatabaseError:
+        return None
+    for row in rows:
+        name, file = row[1], row[2]
+        if name == "main" and file:
+            return Path(file)
+    return None
+
+
 def ensure_schema(conn: sqlite3.Connection) -> None:
     state = schema_state(conn)
     if state == "v1":
-        migrate_v1_to_v2(conn)
+        # 自定义连接没有 db_path 参数：从连接本身取，避免备份 DEFAULT_DB_PATH（P2-2）。
+        migrate_v1_to_v2(conn, db_path=_connection_db_path(conn))
     elif state == "unknown":
         raise RuntimeError("agent_* 表结构无法识别：既不是 v1 也不是 v2")
     conn.executescript(AGENT_SCHEMA)
@@ -452,7 +477,7 @@ def ensure_run(
     )
     if cursor.rowcount == 0:
         row = conn.execute(
-            "SELECT run_kind, session_id FROM agent_runs WHERE run_id = ?", (run_id,)
+            "SELECT * FROM agent_runs WHERE run_id = ?", (run_id,)
         ).fetchone()
         if row is not None and (
             row["run_kind"] != run_kind or row["session_id"] != session_id
@@ -461,6 +486,24 @@ def ensure_run(
                 f"run_id={run_id!r} 已存在且身份不一致："
                 f"run_kind={row['run_kind']!r}/{run_kind!r}, "
                 f"session_id={row['session_id']!r}/{session_id!r}"
+            )
+        # 冲突时补齐创建方当时不知道的列（provider/model/temperature/seed/
+        # code_version），已有非空值不覆盖（P1-2）。
+        if row is not None:
+            conn.execute(
+                """
+                UPDATE agent_runs SET
+                    provider = COALESCE(provider, ?),
+                    model = COALESCE(model, ?),
+                    temperature = COALESCE(temperature, ?),
+                    seed = COALESCE(seed, ?),
+                    code_version = COALESCE(code_version, ?)
+                WHERE run_id = ? AND (
+                    provider IS NULL OR model IS NULL OR temperature IS NULL
+                    OR seed IS NULL OR code_version IS NULL
+                )
+                """,
+                (provider, model, temperature, seed, code_version, run_id),
             )
     conn.commit()
     return run_id
@@ -473,20 +516,44 @@ def finish_run(
     status: str,
     finished_at: str | None = None,
     token_usage: int = 0,
+    prompt_tokens: int = 0,
     step_count: int | None = None,
     error: str | None = None,
 ) -> str:
-    """结束 run：写 status/finished_at/token/步数，禁止留下永久 ``running``。"""
+    """结束 run：写 status/finished_at/token/步数，禁止留下永久 ``running``。
+
+    ``token_usage`` 记入 ``completion_tokens``。当前网关只汇总整轮总 token、
+    不拆 prompt/completion，因此未拆分时这里记总数、``prompt_tokens`` 保持 0；
+    成本口径统一用 ``prompt_tokens + completion_tokens`` 求和（P2-4）。
+    已标记 ``failed`` 的 run 不会被降级为 success/partial，也不会清空 error（P1-4）。
+    """
     if status not in RUN_STATUSES or status == "running":
         raise ValueError(f"finish_run 的 status 必须是 {RUN_STATUSES[:-1]}/failed 之一")
+    row = conn.execute(
+        "SELECT status, error FROM agent_runs WHERE run_id = ?", (run_id,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"run 不存在：{run_id!r}")
     now = finished_at or utc_now()
+    final_status = status
+    final_error = error
+    if row["status"] == "failed" and status != "failed":
+        final_status = "failed"
+        final_error = row["error"] or error
     assignments = [
         "status = ?",
         "finished_at = ?",
         "completion_tokens = ?",
+        "prompt_tokens = ?",
         "error = ?",
     ]
-    values: list[Any] = [status, now, max(int(token_usage), 0), error]
+    values: list[Any] = [
+        final_status,
+        now,
+        max(int(token_usage), 0),
+        max(int(prompt_tokens), 0),
+        final_error,
+    ]
     if step_count is not None:
         assignments.append("steps = ?")
         values.append(max(int(step_count), 0))
@@ -690,7 +757,20 @@ def record_artifact(
         raise ValueError("record_artifact 需要 env_fingerprint（环境身份不可省）")
     if source == "agent" and run_id is None:
         raise ValueError("source='agent' 必须提供 run_id")
-    derived_id = artifact_id or artifact_id_for(digest_value, Path(safe_path).name)
+    meta_map = dict(meta or {})
+    if artifact_id is not None:
+        derived_id = artifact_id
+    else:
+        spec_snapshot = meta_map.get("spec")
+        canonical_spec = (
+            canonical_json(spec_snapshot) if spec_snapshot is not None else ""
+        )
+        data_digest = str(meta_map.get("data_digest") or digest_value)
+        derived_id = artifact_id_for(
+            data_digest,
+            env_fingerprint=env_fingerprint,
+            canonical_spec=canonical_spec,
+        )
     if not ARTIFACT_ID_RE.match(derived_id):
         raise ValueError(f"artifact_id 必须是 art_<16 hex>，实际 {derived_id!r}")
     now = created_at or utc_now()
@@ -717,10 +797,7 @@ def record_artifact(
                 f"{existing['content_digest']!r}/{digest_value!r}, "
                 f"env_fingerprint={existing['env_fingerprint']!r}/{env_fingerprint!r}"
             )
-        if existing["path"] != safe_path:
-            raise ArtifactIdentityConflict(
-                f"{derived_id} 路径冲突：{existing['path']!r}/{safe_path!r}"
-            )
+        # 同内容不同文件名：保留首行路径，link 仍指向同一 artwork 行（规格 §4.4）。
 
     latest = conn.execute(
         """
@@ -916,6 +993,47 @@ def correct_artifact(
     return version
 
 
+def data_snapshot_digest(snapshot: Mapping[str, Any]) -> str:
+    """数据快照的 ``sha256:`` digest（canonical JSON，供 data_digest/data_blob 校验）。"""
+    return "sha256:" + sha256_bytes(canonical_json(snapshot).encode("utf-8"))
+
+
+def load_data_snapshot(
+    meta: Mapping[str, Any],
+    *,
+    root: str | Path | None = None,
+    allow_legacy: bool = True,
+) -> dict[str, Any]:
+    """从独立 blob 读回数据快照，并校验 ``data_digest``。
+
+    新版 artifact 的 ``meta`` 只存 ``data_digest``/``data_blob``/``data_rows``/
+    ``data_truncated``，完整 rows 落在 content-addressed blob（data.json）。
+    ``allow_legacy`` 时兼容 v1/迁移前把快照塞进 ``meta['data']`` 的旧行。
+    """
+    blob = meta.get("data_blob")
+    digest = meta.get("data_digest")
+    if blob:
+        base = Path(root) if root is not None else DEFAULT_ARTIFACT_ROOT
+        absolute = (base / str(blob)).resolve()
+        if not absolute.is_relative_to(base.resolve()):
+            raise ArtifactFileMissing(f"数据快照路径越界：{blob!r}")
+        if not absolute.is_file():
+            raise ArtifactFileMissing(f"数据快照缺失：{absolute}")
+        payload = absolute.read_bytes()
+        actual = "sha256:" + sha256_bytes(payload)
+        if digest is not None and actual != digest:
+            raise ArtifactDigestMismatch(
+                f"数据快照校验失败：记录 {digest}，实际 {actual}"
+            )
+        value = json.loads(payload.decode("utf-8"))
+        if not isinstance(value, Mapping):
+            raise ValueError("数据快照不是 JSON object")
+        return dict(value)
+    if allow_legacy and isinstance(meta.get("data"), Mapping):
+        return dict(meta["data"])
+    raise ArtifactReplayUnavailable("没有 data_digest/data_blob 快照，无法回放")
+
+
 def load_artifact(
     conn: sqlite3.Connection,
     artifact_id: str,
@@ -933,16 +1051,13 @@ def load_artifact(
     if record is None:
         raise KeyError(f"artifact 不存在：{artifact_id!r}")
     if mode == "recomputed":
-        snapshot = record.meta.get("data_digest")
-        if snapshot is None:
-            raise ArtifactReplayUnavailable(
-                f"{artifact_id} 没有 data_digest 快照，无法 recomputed 回放"
-            )
+        snapshot = load_data_snapshot(record.meta, root=root)
         return {
             "artifact_id": record.artifact_id,
             "version": record.version,
             "mode": mode,
             "data": snapshot,
+            "data_digest": record.meta.get("data_digest"),
             "meta": record.meta,
         }
     if mode != "as_recorded":
@@ -1248,14 +1363,35 @@ def prune_runs(
 
 
 def _backup_database(conn: sqlite3.Connection, db_path: Path) -> Path | None:
+    """在迁移前做一致性备份；WAL 未落盘或备份不可用时直接中止（P2-1）。"""
     if not db_path.exists() or str(db_path) == ":memory:":
         return None
-    with contextlib.suppress(sqlite3.DatabaseError):
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    try:
+        checkpoint = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    except sqlite3.DatabaseError as exc:
+        raise RuntimeError(f"迁移前 wal_checkpoint 失败：{exc}") from exc
+    if checkpoint is not None and int(checkpoint[0]) != 0:
+        raise RuntimeError(
+            "迁移前 wal_checkpoint 未完成（数据库仍被占用），拒绝在 WAL 未落盘时备份"
+        )
     backup = db_path.with_name(
         f"{db_path.name}.bak-{datetime.now(UTC).strftime(_TIMESTAMP_FORMAT)}"
     )
-    shutil.copy2(db_path, backup)
+    dest = sqlite3.connect(str(backup))
+    try:
+        conn.backup(dest)
+        integrity = dest.execute("PRAGMA integrity_check").fetchone()
+        if integrity is None or integrity[0] != "ok":
+            raise RuntimeError(f"备份校验失败：{integrity!r}")
+    except Exception:
+        dest.close()
+        with contextlib.suppress(OSError):
+            backup.unlink()
+        raise
+    finally:
+        dest.close()
+    if not backup.is_file() or backup.stat().st_size == 0:
+        raise RuntimeError(f"备份文件不可用：{backup}")
     return backup
 
 

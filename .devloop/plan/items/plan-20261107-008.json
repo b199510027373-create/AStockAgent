@@ -9,7 +9,7 @@
   "start": "2026-11-18",
   "due": "2026-11-28",
   "estimateH": 24,
-  "progress": 90,
+  "progress": 95,
   "acceptance": [
     "agent_runs 只记录真实 Agent；直接渲染不创建 run，link.source=render 且 run_id 可空",
     "agent_artifacts 无 run_id；内容寻址、digest 去重；同内容多来源通过 link 保留归属",
@@ -44,17 +44,24 @@
       "docs/AStockAgent_chart_audit_v2_change_spec.md"
     ],
     "branch": "feat/plan-20261107-008-v2-audit",
-    "commit": "pending",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
+    "commit": "pending-r2",
+    "ci": "pending-r2",
+    "review": "rev-20261117-003",
     "test": [
       "pytest tests/test_agent_store.py -> 21 passed",
       "pytest tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py -> 106 passed",
       "pytest tests/test_agent_store.py tests/test_agent_chart_render.py tests/test_agent_runtime.py tests/test_architecture_gate.py -> 136 passed",
-      "pytest tests -m 'not png' --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 662 passed, 5 deselected, 12 subtests",
+      "pytest tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 662 passed, 5 deselected, 12 subtests passed in 47.10s",
       "mypy astock -> Success: no issues found in 39 source files",
-      "ruff check astock/agent/{store,runtime,chart_render}.py tests/test_agent_{store,runtime,chart_render}.py -> All checks passed"
+      "ruff check astock/agent/store.py astock/agent/runtime.py astock/agent/chart_render.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py -> All checks passed",
+      "r2 rev-20261117-003: .dsh_pytest.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py tests/test_architecture_gate.py -> 150 passed in 13.04s",
+      "r2 rev-20261117-003: .dsh_pytest.py tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 673 passed, 5 deselected, 12 subtests passed in 51.29s",
+      "r2 rev-20261117-003: mypy astock -> Success: no issues found in 39 source files",
+      "r2 rev-20261117-003: ruff check (同上 6 文件) -> All checks passed"
     ]
   },
   "createdAt": "2026-11-07T14:12:15.935Z",
-  "updatedAt": "2026-11-17T14:15:09.717Z",
+  "updatedAt": "2026-11-17T19:26:16.248Z",
   "devSessionId": "session-98870ec5-3d66-430a-9952-f2cda3728500"
 }
