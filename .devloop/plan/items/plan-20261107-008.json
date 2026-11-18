@@ -2,14 +2,14 @@
   "id": "plan-20261107-008",
   "title": "Agent 审计表与安全限额（v2：内容/版本/引用）",
   "description": "依据 ADR-017 与 docs/AStockAgent_chart_audit_v2_change_spec.md §7 实现 astock/agent/store.py v2 模型：agent_runs 只放真实 Agent；agent_artifacts 去 run_id，存内容寻址 path/content_digest/kind/env/created_at；新增 agent_artifact_versions（meta_json/meta_digest/env/created_at）与 agent_run_artifacts 引用表（link_id/artifact_id/run_id 可空/artifact_version/step/source=agent|render|import/session_id/created_at）；corrections 追加表。直接渲染写 link 且 run_id=NULL，不再合成 run；删 run 只删 link，artifact/version 行永久保留，孤儿文件按引用计数+保留期 GC；指标查询默认排除 run_kind=render。含旧三表幂等迁移、备份、回滚。安全：路径白名单、上传校验、提示注入包裹、工具权限、步数/token/时长限额。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-18",
   "due": "2026-11-28",
   "estimateH": 24,
-  "progress": 0,
+  "progress": 98,
   "acceptance": [
     "agent_runs 只记录真实 Agent；直接渲染不创建 run，link.source=render 且 run_id 可空",
     "agent_artifacts 无 run_id；内容寻址、digest 去重；同内容多来源通过 link 保留归属",
@@ -37,13 +37,29 @@
       "ADR-013",
       "ADR-017"
     ],
+    "branch": "feat/plan-20261107-008-v2-audit",
+    "ci": "passed (run 44236085726, sha 81ecb81, 1m52s)",
+    "commit": "bfe4e65",
+    "docs": [
+      "docs/AStockAgent_chart_audit_v2_change_spec.md"
+    ],
     "module": [
       "agent_store"
     ],
-    "docs": [
-      "docs/AStockAgent_chart_audit_v2_change_spec.md"
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
+    "review": "rev-20261117-003",
+    "test": [
+      "r1: pytest store -> 21 passed; store+runtime+chart -> 106 passed; +architecture_gate -> 136 passed",
+      "r1: pytest tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 662 passed, 5 deselected, 12 subtests passed",
+      "r1: mypy astock -> Success: no issues found in 39 source files; ruff check 6 touched files -> All checks passed",
+      "r2 (rev-20261117-003): store+runtime+chart+architecture_gate -> 150 passed; full -> 673 passed; mypy 39 files ok; ruff ok",
+      "r3 (rev-20261117-003): .dsh_pytest.py tests/test_agent_store.py tests/test_agent_chart_render.py -> 73 passed in 12.26s",
+      "r3: .dsh_pytest.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py tests/test_architecture_gate.py -> 153 passed in 16.20s",
+      "r3: .dsh_pytest.py tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 676 passed, 5 deselected, 12 subtests passed in 58.13s",
+      "r3: mypy astock -> Success: no issues found in 39 source files; ruff check 6 touched files -> All checks passed"
     ]
   },
   "createdAt": "2026-11-07T14:12:15.935Z",
-  "updatedAt": "2026-11-13T19:09:12.935Z"
+  "updatedAt": "2026-11-18T04:28:36.807Z",
+  "devSessionId": "session-98870ec5-3d66-430a-9952-f2cda3728500"
 }

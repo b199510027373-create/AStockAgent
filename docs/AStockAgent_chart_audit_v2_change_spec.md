@@ -223,7 +223,25 @@ CREATE INDEX ix_artifact_links_run
     ON agent_artifact_links(run_id);
 CREATE INDEX ix_artifact_links_artifact
     ON agent_artifact_links(artifact_id);
+
+CREATE TABLE corrections (
+    correction_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    artifact_id      TEXT NOT NULL
+                     REFERENCES agent_artifacts(artifact_id) ON DELETE RESTRICT,
+    artifact_version INTEGER NOT NULL,
+    field            TEXT NOT NULL,
+    old_value        TEXT,
+    new_value        TEXT,
+    reason           TEXT NOT NULL,
+    actor            TEXT NOT NULL,
+    created_at       TEXT NOT NULL,
+    FOREIGN KEY (artifact_id, artifact_version)
+        REFERENCES agent_artifact_versions(artifact_id, version)
+        ON DELETE RESTRICT
+);
 ```
+
+> 实现名（plan-20261107-008）：冻结表名为 `agent_run_artifacts`；`agent_artifact_links` 保留为列完全相同的只读兼容视图，规格/旧代码按旧名查询仍可读。
 
 说明：
 

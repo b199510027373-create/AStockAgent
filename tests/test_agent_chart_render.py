@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -143,7 +145,7 @@ def test_line_chart_renders_self_contained_html_and_records_artifact(paths: dict
 
     row = _artifact_row(rendered, paths)
     assert row is not None
-    assert row.kind == "figure"
+    assert row.kind == "chart"
     assert row.path == rendered.path
     assert row.digest == rendered.digest
 
@@ -175,7 +177,9 @@ def test_artifact_meta_records_spec_params_time_points_source_version(
     assert meta["code_version"] == chart_render.CODE_VERSION
     assert meta["spec"]["kind"] == "line"
     assert meta["params"]["kind"] == "line"
-    assert meta["data"]["rows"][0]["day"].startswith("2024-01-02")
+    assert store.load_data_snapshot(meta, root=paths["artifact_root"])["rows"][
+        0
+    ]["day"].startswith("2024-01-02")
     # 复现前提：记录运行时版本，避免「同 spec 同数据却字节不同」无从追查。
     assert meta["params"]["plotly_version"]
     assert meta["params"]["python_version"]
@@ -205,12 +209,125 @@ def test_rerender_upgrades_stale_degraded_meta(paths: dict[str, str], monkeypatc
     row = _artifact_row(second, paths)
     assert row.meta["degraded"] is False
     assert row.meta["png_path"] == second.png_path
+    # 版本追加：首版降级、二版补齐，旧版本不变（评审 P2-3）。
+    assert first.artifact_version == 1
+    assert second.artifact_version == 2
+    assert second.metadata()["artifact_version"] == 2
+    assert second.meta_digest == store.meta_digest(row.meta)
+    assert second.metadata()["meta_digest"] == second.meta_digest
     conn = store.connect(paths["db_path"])
     try:
         count = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+        versions = conn.execute(
+            "SELECT COUNT(*) AS n FROM agent_artifact_versions"
+        ).fetchone()["n"]
     finally:
         conn.close()
     assert count == 1
+    assert versions == 2
+
+
+def test_render_meta_stores_snapshot_blob_instead_of_rows(paths: dict[str, str]) -> None:
+    """真实 render 不把完整 rows 塞进 meta，回放走独立 blob（评审 P1-5）。"""
+    rendered = _render(inline_line_spec(), paths)
+    row = _artifact_row(rendered, paths)
+    assert row is not None
+    assert "data" not in row.meta
+    assert row.meta["data_digest"].startswith("sha256:")
+    assert row.meta["data_blob"].endswith("/data.json")
+    assert row.meta["data_rows"] == 3
+    assert row.meta["data_truncated"] is False
+
+    conn = store.connect(paths["db_path"])
+    try:
+        loaded = store.load_artifact(
+            conn,
+            rendered.artifact_id,
+            mode="recomputed",
+            root=paths["artifact_root"],
+        )
+    finally:
+        conn.close()
+    assert loaded["data"]["row_count"] == 3
+    assert [item["close"] for item in loaded["data"]["rows"]] == [10.0, 10.6, 10.4]
+
+
+def test_env_change_renders_second_artifact_without_conflict(paths: dict[str, str]) -> None:
+    """环境指纹变化 → 新 artifact，同内容同环境不重复建行（评审 P1-1）。"""
+    first = _render(inline_line_spec(), paths, code_version="astock-env-a")
+    second = _render(inline_line_spec(), paths, code_version="astock-env-b")
+    assert first.artifact_id != second.artifact_id
+
+    conn = store.connect(paths["db_path"])
+    try:
+        rows = conn.execute(
+            "SELECT artifact_id, env_fingerprint FROM agent_artifacts ORDER BY artifact_id"
+        ).fetchall()
+        assert len(rows) == 2
+        assert len({row["env_fingerprint"] for row in rows}) == 2
+        for rendered in (first, second):
+            loaded = store.load_artifact(conn, rendered.artifact_id, root=paths["artifact_root"])
+            assert loaded["meta"]["code_version"] == rendered.code_version
+    finally:
+        conn.close()
+
+
+def test_plotlyjs_mode_is_part_of_artifact_identity(paths: dict[str, str]) -> None:
+    """同一 spec/data/env 下 inline 与 cdn 的 HTML 不同，必须生成两个 artifact（评审 r2 P1）。"""
+    inline = _render(inline_line_spec(), paths, include_plotlyjs="inline")
+    cdn = _render(inline_line_spec(), paths, include_plotlyjs="cdn")
+    assert inline.artifact_id != cdn.artifact_id
+
+    conn = store.connect(paths["db_path"])
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM agent_artifacts").fetchone()[0] == 2
+        for rendered in (inline, cdn):
+            loaded = store.load_artifact(
+                conn, rendered.artifact_id, root=paths["artifact_root"]
+            )
+            assert b"plotly" in loaded["content"].lower()
+    finally:
+        conn.close()
+    assert len(inline.html) > len(cdn.html)  # inline 内嵌 plotly.js，CDN 只留引用
+
+
+def test_gc_keeps_data_blob_referenced_by_versions(paths: dict[str, str]) -> None:
+    """GC 必须保护 meta.data_blob；无引用 blob 仍会被删（评审 r2 P1）。"""
+    rendered = _render(inline_line_spec(), paths)
+    row = _artifact_row(rendered, paths)
+    assert row is not None
+    data_blob = row.meta["data_blob"]
+    base = Path(paths["artifact_root"])
+    blob_path = base / data_blob
+    assert blob_path.is_file()
+    old = (datetime.now(UTC) - timedelta(days=100)).timestamp()
+    os.utime(blob_path, (old, old))
+    orphan = base / "artifacts" / "zz" / "orphan.html"
+    orphan.parent.mkdir(parents=True, exist_ok=True)
+    orphan.write_bytes(b"orphan")
+    os.utime(orphan, (old, old))
+
+    conn = store.connect(paths["db_path"])
+    try:
+        result = store.prune_orphan_blobs(
+            conn,
+            older_than_days=90,
+            root=paths["artifact_root"],
+            dry_run=False,
+        )
+        assert blob_path.is_file()
+        assert not orphan.exists()
+        assert data_blob in store._protected_paths(conn, base)
+        loaded = store.load_artifact(
+            conn,
+            rendered.artifact_id,
+            mode="recomputed",
+            root=paths["artifact_root"],
+        )
+        assert loaded["data"]["row_count"] == 3
+    finally:
+        conn.close()
+    assert result["deleted"] >= 1
 
 
 def test_empty_transform_result_reports_unknown_time_points(paths: dict[str, str]) -> None:
@@ -526,7 +643,7 @@ def test_transforms_filter_sort_limit_on_inline_rows(paths: dict[str, str]) -> N
     )
     rendered = _render(spec, paths)
     row = _artifact_row(rendered, paths)
-    rows = row.meta["data"]["rows"]
+    rows = store.load_data_snapshot(row.meta, root=paths["artifact_root"])["rows"]
     assert len(rows) == 1
     assert rows[0]["close"] == pytest.approx(10.6)
 
@@ -631,7 +748,9 @@ def test_market_branch_unadjusted_caption_and_snapshot_agree(
     assert "不复权" in rendered.caption
     # 渲染图注、artifact meta 与快照价格同源（都是 data 层返回的原始价）
     assert rendered.source == "market"
-    assert row.meta["data"]["rows"][-1]["close"] == pytest.approx(raw["close"].iloc[-1])
+    assert store.load_data_snapshot(
+        row.meta, root=paths["artifact_root"]
+    )["rows"][-1]["close"] == pytest.approx(raw["close"].iloc[-1])
 
 
 # ---------------------------------------------------------------- 时点与快照一致性（评审 P1）
@@ -650,7 +769,9 @@ def test_time_point_follows_transformed_rows(paths: dict[str, str]) -> None:
     assert rendered.data_as_of == "2024-01-03"
     assert rendered.data_time == "2024-01-03 15:00"
     assert row.meta["data_as_of"] == "2024-01-03"
-    assert row.meta["data_as_of"] == row.meta["data"]["rows"][-1]["day"]
+    assert row.meta["data_as_of"] == store.load_data_snapshot(
+        row.meta, root=paths["artifact_root"]
+    )["rows"][-1]["day"]
     assert "2024-01-03" in rendered.caption
 
 
@@ -668,17 +789,17 @@ def test_artifact_replay_recomputes_time_from_snapshot(paths: dict[str, str]) ->
     row = _artifact_row(rendered, paths)
     assert row is not None
 
-    # 篡改 meta 里的时点：回放必须按快照时间列重算，不得信任旧 meta
+    # 篡改 meta 里的时点：回放必须按快照时间列重算，不得信任旧 meta。
+    # v2 的 meta 不可变，修正只能追加版本 + corrections。
     conn = store.connect(paths["db_path"])
     try:
-        meta = dict(row.meta)
-        meta["data_as_of"] = "2020-01-01"
-        meta["data_time"] = "2020-01-01 15:00"
-        conn.execute(
-            "UPDATE agent_artifacts SET meta_json=? WHERE artifact_id=?",
-            (json.dumps(meta, ensure_ascii=False), row.artifact_id),
+        store.correct_artifact(
+            conn,
+            row.artifact_id,
+            {"data_as_of": "2020-01-01", "data_time": "2020-01-01 15:00"},
+            reason="test tamper",
+            actor="pytest",
         )
-        conn.commit()
         spec = {
             "version": 1,
             "kind": "line",

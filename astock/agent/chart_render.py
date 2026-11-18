@@ -53,10 +53,16 @@ from astock.agent.store import (
     DEFAULT_ARTIFACT_ROOT,
     PNG_DEGRADED_WARNING_PREFIX,
     artifact_id_for,
+    canonical_json,
+    compute_env_fingerprint,
     connect,
+    data_snapshot_digest,
     ensure_run,
     fail_run,
     get_artifact,
+    load_data_snapshot,
+    meta_digest,
+    normalize_content_digest,
     put_content,
     record_artifact,
     sha256_bytes,
@@ -220,6 +226,17 @@ def _runtime_versions() -> dict[str, str]:
         "font_family": font_family(),
     }
 
+
+def _env_fingerprint(code_version: str) -> str:
+    """v2 artifact 环境身份：plotly + python + code_version（ADR-017 §4.4）。"""
+    versions = _runtime_versions()
+    return compute_env_fingerprint(
+        plotly_version=str(versions.get("plotly_version") or ""),
+        python_version=str(versions.get("python_version") or ""),
+        code_version=code_version,
+    )
+
+
 #: 数据方来源解析器：签名 ``(data_section) -> DataFrame``，供工具层注入自定义取数。
 DataResolver = Callable[[Mapping[str, Any]], pd.DataFrame]
 
@@ -245,11 +262,14 @@ class RenderedFigure:
     spec: dict[str, Any] = field(default_factory=dict)
     params: dict[str, Any] = field(default_factory=dict)
     degraded: bool = False
-    run_id: str = ""
+    run_id: str | None = ""
     code_version: str = CODE_VERSION
     #: 时点语义：``market``=未被 transforms 裁剪的行情时点；``view``=图上前端视图时点；
     #: ``unknown``=取不到时点（决策记录 D2/Q1）。
     time_point_scope: str = "view"
+    #: 本次写入/复用的 ``agent_artifact_versions.version`` 与 meta digest（P2-3）。
+    artifact_version: int | None = None
+    meta_digest: str | None = None
 
     @property
     def caption(self) -> str:
@@ -281,6 +301,8 @@ class RenderedFigure:
             "run_id": self.run_id,
             "code_version": self.code_version,
             "time_point_scope": self.time_point_scope,
+            "artifact_version": self.artifact_version,
+            "meta_digest": self.meta_digest,
         }
 
     def metadata(self) -> dict[str, Any]:
@@ -296,6 +318,8 @@ class RenderedFigure:
             "degraded": self.degraded,
             "warnings": list(self.warnings),
             "code_version": self.code_version,
+            "artifact_version": self.artifact_version,
+            "meta_digest": self.meta_digest,
         }
 
 
@@ -331,8 +355,10 @@ def _frame_from_inline(data: Mapping[str, Any]) -> pd.DataFrame:
     return frame
 
 
-def _frame_from_snapshot(meta: Mapping[str, Any]) -> pd.DataFrame:
-    snapshot = meta.get("data") or {}
+def _frame_from_snapshot(
+    meta: Mapping[str, Any], *, root: str | Path | None = None
+) -> pd.DataFrame:
+    snapshot = load_data_snapshot(meta, root=root)
     rows = snapshot.get("rows") or []
     fields = list(snapshot.get("fields") or [])
     return pd.DataFrame(rows, columns=fields)
@@ -380,14 +406,17 @@ def _load_market_frame(data: Mapping[str, Any]) -> pd.DataFrame:
 
 
 def _load_artifact_frame(
-    data: Mapping[str, Any], conn: sqlite3.Connection
+    data: Mapping[str, Any],
+    conn: sqlite3.Connection,
+    *,
+    root: str | Path | None = None,
 ) -> pd.DataFrame:
     record = get_artifact(conn, str(data["ref"]))
     if record is None:
         raise ChartSpecError(
             [SpecIssue("$.data.ref", f"artifact {data['ref']} 不存在")]
         )
-    if record.kind not in ("figure", "table"):
+    if record.kind not in ("chart", "table"):
         raise ChartSpecError(
             [
                 SpecIssue(
@@ -396,7 +425,7 @@ def _load_artifact_frame(
                 )
             ]
         )
-    frame = _frame_from_snapshot(record.meta)
+    frame = _frame_from_snapshot(record.meta, root=root)
     if frame.empty:
         raise ChartSpecError(
             [SpecIssue("$.data.ref", f"artifact {data['ref']} 没有数据快照（v1 只回放快照）")]
@@ -414,6 +443,7 @@ def _resolve_frame(
     frame: pd.DataFrame | None,
     resolver: DataResolver | None,
     conn: sqlite3.Connection,
+    artifact_root: str | Path | None = None,
 ) -> tuple[pd.DataFrame, str, list[str]]:
     warnings: list[str] = []
     source = str(data.get("source"))
@@ -427,7 +457,7 @@ def _resolve_frame(
     elif source == "market":
         resolved = _load_market_frame(data)
     else:
-        resolved = _load_artifact_frame(data, conn)
+        resolved = _load_artifact_frame(data, conn, root=artifact_root)
     return resolved, source, warnings
 
 
@@ -1364,7 +1394,11 @@ def render(
         data = normalized["data"]
         period = str(data.get("period", "day"))
         frame_resolved, source, resolve_warnings = _resolve_frame(
-            data, frame=frame, resolver=resolver, conn=connection
+            data,
+            frame=frame,
+            resolver=resolver,
+            conn=connection,
+            artifact_root=artifact_root,
         )
         warnings.extend(resolve_warnings)
 
@@ -1392,7 +1426,17 @@ def render(
         figure = _build_figure(transformed, normalized, caption=caption, period=period)
 
         version = code_version or CODE_VERSION
+        env_fingerprint = _env_fingerprint(version)
         snapshot = data_snapshot(transformed)
+        snapshot_bytes = canonical_json(snapshot).encode("utf-8")
+        data_digest, data_blob, _data_absolute = put_content(
+            snapshot_bytes,
+            filename="data.json",
+            root=artifact_root,
+        )
+        if normalize_content_digest(data_digest) != data_snapshot_digest(snapshot):
+            raise RuntimeError("数据快照 digest 不一致")
+        data_digest = normalize_content_digest(data_digest)
         # div id 由 spec + 数据快照派生：同 spec 同数据字节稳定（artifact_id 可复现），
         # 不同图不共享 id（同页多图不会互相覆盖）。
         div_id = figure_div_id(normalized, snapshot)
@@ -1408,7 +1452,17 @@ def render(
             filename="chart.html",
             root=artifact_root,
         )
-        artifact_id = artifact_id_for(digest, "chart.html")
+        # 身份 = canonical_spec + data_digest + env_fingerprint（规格 §4.4）；
+        # 文件名与 include_plotlyjs 不参与“spec”，但后者决定 HTML 字节，
+        # 必须进入身份种子，否则 inline/CDN 会撞同一 id 后 content_digest 冲突。
+        identity_spec = canonical_json(
+            {"spec": normalized, "include_plotlyjs": include_plotlyjs}
+        )
+        artifact_id = artifact_id_for(
+            data_digest,
+            env_fingerprint=env_fingerprint,
+            canonical_spec=identity_spec,
+        )
 
         png_path: str | None = None
         png_meta: dict[str, Any] = {
@@ -1426,7 +1480,19 @@ def render(
         }
         degraded = False
         png_error: str | None = None
-        run_key = run_id or f"run_chart_{artifact_id}"
+        # 直接渲染（Agent 之外）不再合成 run_chart_* run；只有真实 Agent 传入 run_id 时
+        # 才确保 run 行存在，并等待运行时在会话结束时 finish_run（ADR-017 C3、规格 §7.1）。
+        if run_id is not None:
+            ensure_run(
+                connection,
+                run_id,
+                session_id=session_id,
+                provider="local",
+                model="chart_render",
+                code_version=version,
+                status="running",
+                run_kind="agent",
+            )
         width = int(figure.layout.width or 960)
         height = int(figure.layout.height or 520)
 
@@ -1435,23 +1501,13 @@ def render(
             payload, reason = _try_png(figure, width=width, height=height)
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             if payload is None:
-                # 显式请求不得静默降级：run 记 failed，且不落 artifact 行（不留半成品）。
-                ensure_run(
-                    connection,
-                    run_key,
-                    session_id=session_id,
-                    provider="local",
-                    model="chart_render",
-                    code_version=version,
-                    status="failed",
-                )
-                # ensure_run 对已存在的 run 不覆盖状态（Agent 循环可能已预建 running），
-                # 这里再显式落 failed，保证 meta 与 ops 文档语义一致（评审 P2）。
-                fail_run(
-                    connection,
-                    run_key,
-                    error=f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}",
-                )
+                # 显式请求不得静默降级：真实 Agent 的 run 记 failed，且不落 artifact 行。
+                if run_id is not None:
+                    fail_run(
+                        connection,
+                        run_id,
+                        error=f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}",
+                    )
                 raise PNGExportError(
                     f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}"
                 )
@@ -1493,16 +1549,6 @@ def render(
                         elapsed_ms=elapsed_ms,
                     )
 
-        ensure_run(
-            connection,
-            run_key,
-            session_id=session_id,
-            provider="local",
-            model="chart_render",
-            code_version=version,
-            status="partial" if degraded else "success",
-        )
-
         params = _params(
             normalized, code_version=version, include_plotlyjs=include_plotlyjs
         )
@@ -1527,17 +1573,30 @@ def render(
             # 复用旧 PNG 时保留本次失败原因，png_error 归 None，避免 provenance 自相矛盾。
             "png_last_attempt_error": None,
             **png_meta,
-            "data": snapshot,
+            # 完整数据快照落独立 content-addressed blob（data.json），meta 只留摘要，
+            # 避免每次渲染把 5000 行 rows 写进版本表（P1-5）。
+            "data_digest": data_digest,
+            "data_blob": data_blob,
+            "data_rows": int(snapshot.get("row_count", 0)),
+            "data_truncated": bool(snapshot.get("truncated", False)),
         }
-        artifact_id = record_artifact(
+        artifact_id, artifact_version = record_artifact(
             connection,
-            run_id=run_key,
+            artifact_id=artifact_id,
+            run_id=run_id,
             kind="figure",
             path=rel_path,
-            digest=digest,
+            content_digest=digest,
+            env_fingerprint=env_fingerprint,
             meta=meta,
             step=step,
+            source="agent" if run_id is not None else "render",
+            session_id=session_id if run_id is not None else None,
+            reason="agent_render" if run_id is not None else "render",
+            actor="agent" if run_id is not None else "system",
         )
+        stored = get_artifact(connection, artifact_id, version=artifact_version)
+        stored_meta_digest = meta_digest(stored.meta) if stored is not None else None
     finally:
         if owned:
             connection.close()
@@ -1555,9 +1614,11 @@ def render(
         spec=normalized,
         params=params,
         degraded=degraded,
-        run_id=run_key,
+        run_id=run_id,
         code_version=version,
         time_point_scope=scope,
+        artifact_version=artifact_version,
+        meta_digest=stored_meta_digest,
     )
 
 

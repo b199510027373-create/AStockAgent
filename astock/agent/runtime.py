@@ -14,10 +14,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 import time
+import uuid
 from collections.abc import Callable, Iterable, Mapping
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from astock.agent.registry import (
@@ -134,6 +137,33 @@ class AgentModel(Protocol):
 Clock = Callable[[], float]
 
 
+def _provenance_float(
+    model: object, name: str, fallback: float | None
+) -> float | None:
+    value = getattr(model, name, None)
+    if isinstance(value, bool):
+        return fallback
+    if isinstance(value, (int, float)):
+        return float(value)
+    return fallback
+
+
+def _provenance_int(model: object, name: str, fallback: int | None) -> int | None:
+    value = getattr(model, name, None)
+    if isinstance(value, bool):
+        return fallback
+    if isinstance(value, int):
+        return value
+    return fallback
+
+
+def _provenance_str(model: object, name: str, fallback: str | None) -> str | None:
+    value = getattr(model, name, None)
+    if isinstance(value, str) and value:
+        return value
+    return fallback
+
+
 class AgentRuntime:
     """编排模型与工具，执行带护栏的多步循环。"""
 
@@ -150,6 +180,10 @@ class AgentRuntime:
         validation_retries: int = DEFAULT_VALIDATION_RETRIES,
         spin_limit: int = DEFAULT_SPIN_LIMIT,
         auto_save: bool = True,
+        db_path: str | Path | None = None,
+        temperature: float | None = None,
+        seed: int | None = None,
+        code_version: str | None = None,
     ) -> None:
         if max_steps < 1:
             raise ValueError("max_steps 必须 >= 1")
@@ -170,6 +204,13 @@ class AgentRuntime:
         self.validation_retries = validation_retries
         self.spin_limit = spin_limit
         self.auto_save = auto_save
+        # 审计库为可选依赖：不传 db_path 时不落 agent_runs/agent_steps（测试与
+        # 纯内存调用无副作用）；生产入口应显式传入 data/astock.db。
+        self.db_path = Path(db_path) if db_path is not None else None
+        # run provenance：模型适配器若暴露同名属性则优先，否则用显式参数；都没有时写 NULL。
+        self.temperature = temperature
+        self.seed = seed
+        self.code_version = code_version
         self._clock: Clock = clock or time.monotonic
         self._interrupt = threading.Event()
         self._cancel_event: threading.Event | None = None
@@ -199,6 +240,7 @@ class AgentRuntime:
             self.session.add_user(question)
 
         started = self._clock()
+        audit = self._start_audit()
         steps: list[StepRecord] = []
         tokens_used = 0
         answer = ""
@@ -433,6 +475,7 @@ class AgentRuntime:
                         save_error = f"{type(exc).__name__}: {exc}"
             finally:
                 self._interrupt.clear()
+                self._finish_audit(audit, steps, tokens_used, stop, error, answer)
 
         if stop is None:
             stop = StopReason.MAX_STEPS
@@ -452,6 +495,116 @@ class AgentRuntime:
             error=error,
         )
 
+    # ---- 审计（ADR-017 C3）-----------------------------------------------
+
+    def _start_audit(self) -> tuple[Any, str] | None:
+        """开一条 ``run_kind='agent'`` 的真实 run；审计故障不阻断对话。"""
+        if self.db_path is None:
+            return None
+        from astock.agent import store
+
+        conn = None
+        try:
+            conn = store.connect(self.db_path)
+            run_id = f"run_{uuid.uuid4().hex[:16]}"
+            store.ensure_run(
+                conn,
+                run_id,
+                session_id=self.session.session_id,
+                provider=str(getattr(self.model, "provider", "unknown")),
+                model=str(getattr(self.model, "model", type(self.model).__name__)),
+                temperature=_provenance_float(
+                    self.model, "temperature", self.temperature
+                ),
+                seed=_provenance_int(self.model, "seed", self.seed),
+                code_version=_provenance_str(
+                    self.model, "code_version", self.code_version
+                ),
+                status="running",
+                run_kind="agent",
+            )
+            return conn, run_id
+        except Exception:  # noqa: BLE001 - 审计不可用不应打断 Agent
+            if conn is not None:
+                conn.close()
+            return None
+
+    def _finish_audit(
+        self,
+        audit: tuple[Any, str] | None,
+        steps: list[StepRecord],
+        tokens_used: int,
+        stop: StopReason | None,
+        error: str | None,
+        answer: str,
+    ) -> None:
+        """落全部步骤（含失败/非法参数）并 finish_run，禁止永久 running。"""
+        if audit is None:
+            return
+        conn, run_id = audit
+        from astock.agent import store
+
+        if stop is StopReason.COMPLETED:
+            status = "success"
+        elif stop is None or stop is StopReason.MODEL_ERROR:
+            status = "failed"
+        else:
+            status = "partial"
+        step_error: str | None = None
+        try:
+            for step in steps:
+                observation = step.observation or ""
+                store.record_step(
+                    conn,
+                    run_id,
+                    step.index,
+                    "tool",
+                    tool=step.tool,
+                    args=step.arguments,
+                    result_digest=store.sha256_bytes(observation.encode("utf-8")),
+                    result_preview=observation,
+                    latency_ms=int(max(step.elapsed, 0.0) * 1000),
+                )
+            final_text = str(answer or "")
+            store.record_step(
+                conn,
+                run_id,
+                len(steps),
+                "final",
+                result_digest=store.sha256_bytes(final_text.encode("utf-8")),
+                result_preview=final_text,
+            )
+        except Exception as exc:  # noqa: BLE001 - 落步骤失败不应跳过 finish_run
+            step_error = f"record_step failed: {type(exc).__name__}: {exc}"
+        finally:
+            # finish_run 独立于 record_step：任一步骤写入失败也必须结束 run，
+            # 避免永久 running（P1-3）。finish_run 自身失败时做最小 UPDATE 兜底。
+            final_status = "failed" if step_error is not None else status
+            final_error = error or step_error
+            try:
+                store.finish_run(
+                    conn,
+                    run_id,
+                    status=final_status,
+                    token_usage=tokens_used,
+                    step_count=len(steps) + 1,
+                    error=final_error,
+                )
+            except Exception as exc:  # noqa: BLE001
+                with contextlib.suppress(Exception):
+                    conn.execute(
+                        "UPDATE agent_runs SET status='failed', finished_at=?, error=? "
+                        "WHERE run_id=? AND status='running'",
+                        (
+                            store.utc_now(),
+                            f"finish_run failed: {type(exc).__name__}: {exc}",
+                            run_id,
+                        ),
+                    )
+                    conn.commit()
+            finally:
+                conn.close()
+
     # ---- 内部 -------------------------------------------------------------
 
     def _guard(self, started: float, tokens_used: int) -> StopReason | None:
@@ -469,10 +622,18 @@ class AgentRuntime:
         return None
 
     def _build_messages(self) -> list[dict[str, Any]]:
-        return [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            *self.session.recent_messages(),
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT}
         ]
+        for message in self.session.recent_messages():
+            if message.get("role") == "tool":
+                # 文件/网页/工具正文是不可信数据：显式包裹，模型只能引用不能执行。
+                message = dict(message)
+                message["content"] = (
+                    "<untrusted_data>\n" + str(message.get("content") or "") + "\n</untrusted_data>"
+                )
+            messages.append(message)
+        return messages
 
     def _format_observation(self, tool_name: str, result: ToolResult) -> str:
         payload: dict[str, Any] = {"tool": tool_name, "ok": result.ok}
