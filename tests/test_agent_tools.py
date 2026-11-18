@@ -24,15 +24,18 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pandas as pd
 import pytest
 from docx import Document
 from openpyxl import Workbook
 
+from astock import data as market
 from astock.agent import AgentRuntime, FakeModel, StopReason, ToolCall
 from astock.agent import files as F
-from astock.agent.registry import ToolArgumentError
+from astock.agent.registry import Permission, ToolArgumentError
 from astock.agent.tools import citations as C
 from astock.agent.tools import file_tools as T
+from astock.agent.tools import market_tools as M
 from astock.agent.tools.sql_guard import SqlGuardError, build_limited_sql, ensure_select
 
 UPLOADED_AT = "2026-11-16T00:00:00+08:00"
@@ -736,3 +739,148 @@ def test_agent_runtime_default_registry_wires_file_tools(
     assert result.steps[0].result is not None
     assert "《公告.txt》第 1 页" in result.answer
     assert result.answer == answer
+
+
+# ---------------------------------------------------------------------------
+# 行情/指标工具（plan-20261107-006，ADR-018 C1/C2）
+# ---------------------------------------------------------------------------
+
+MARKET_CODE = "600519.SH"
+
+
+def _market_daily() -> pd.DataFrame:
+    rows = []
+    for index, day in enumerate(("2024-01-02", "2024-01-03", "2024-01-04")):
+        close = 100.0 + index
+        rows.append(
+            {
+                "ts_code": MARKET_CODE,
+                "trade_date": pd.Timestamp(day),
+                "open": close - 0.5,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "close": close,
+                "pre_close": close - 1.0,
+                "change": 1.0,
+                "pct_chg": 1.0,
+                "vol": 1000.0,
+                "amount": 5000.0,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _market_minute() -> pd.DataFrame:
+    rows = []
+    for index, minute in enumerate(("09:31", "09:32")):
+        close = 101.0 + index * 0.1
+        rows.append(
+            {
+                "ts_code": MARKET_CODE,
+                "trade_date": pd.Timestamp("2024-01-04"),
+                "trade_time": pd.Timestamp(f"2024-01-04 {minute}"),
+                "open": close - 0.05,
+                "high": close + 0.1,
+                "low": close - 0.1,
+                "close": close,
+                "pre_close": close - 0.1,
+                "change": 0.1,
+                "pct_chg": 0.1,
+                "vol": 10.0,
+                "amount": 100.0,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _market_registry(clock: str = "2024-01-04 16:30") -> Any:
+    """盘中/盘后都固定的行情注册表：不触网、不写 artifact。"""
+    daily = _market_daily()
+    minute = _market_minute()
+    calendar = pd.DataFrame(
+        {
+            "cal_date": pd.bdate_range("2024-01-01", "2024-03-31"),
+            "is_open": 1,
+        }
+    )
+    deps = M.MarketDeps(
+        daily=lambda ts_code, *, start, end, adj: daily.copy(),
+        index_daily=lambda ts_code, *, start, end: daily.copy(),
+        minute=lambda ts_code, *, freq, days, adj: minute.copy(),
+        resample=market.resample_ohlcv,
+        bar_time=market.latest_bar_time,
+        trade_cal=lambda: calendar,
+        clock=lambda: pd.Timestamp(clock),
+    )
+    return M.build_market_registry(deps=deps)
+
+
+def test_market_result_requires_both_timestamps() -> None:
+    """C2：quote / kline / indicator 都必须同时带 data_as_of 与 data_time。"""
+    registry = _market_registry()
+    calls = {
+        "quote": {"ts_code": MARKET_CODE},
+        "kline": {"ts_code": MARKET_CODE, "period": "day", "limit": 5},
+        "indicator": {"ts_code": MARKET_CODE, "indicators": ["ma5"], "limit": 3},
+    }
+    for name, arguments in calls.items():
+        validated = registry.validate(name, arguments)
+        result = registry.invoke(name, validated)
+        assert result.ok, (name, result.error)
+        assert result.data_as_of == "2024-01-04", name
+        assert result.data_time == "2024-01-04 15:00", name
+        assert result.data_time[:10] == result.data_as_of, name
+        assert result.metadata["session"] in M.SESSIONS, name
+        assert result.metadata["freshness"] in M.FRESHNESS, name
+        assert result.source.startswith("market:"), name
+
+
+def test_market_tools_are_registered_with_permissions() -> None:
+    registry = _market_registry()
+    names = registry.names()
+    assert {"quote", "kline", "indicator"} <= set(names)
+
+    specs = {name: registry.tool(name) for name in ("quote", "kline", "indicator")}
+    assert specs["quote"].permissions == frozenset({Permission.MARKET_READ})
+    assert Permission.CHART_RENDER in specs["kline"].permissions
+    assert Permission.INDICATOR_COMPUTE in specs["indicator"].permissions
+
+    # 默认值来自 schema（period=day / adj=qfq / limit=120）。
+    validated = registry.validate("kline", {"ts_code": MARKET_CODE})
+    assert validated["period"] == "day"
+    assert validated["adj"] == "qfq"
+    assert validated["limit"] == M.DEFAULT_KLINE_LIMIT
+
+
+def test_default_registry_includes_market_tools() -> None:
+    """不传 registry 的 AgentRuntime 也必须能调用 quote / kline / indicator。"""
+    from astock.agent.runtime import _default_registry
+
+    names = _default_registry().names()
+    assert {"quote", "kline", "indicator"} <= set(names)
+
+
+def test_market_registry_rejects_invalid_arguments() -> None:
+    registry = _market_registry()
+    with pytest.raises(ToolArgumentError):
+        registry.validate("kline", {"ts_code": MARKET_CODE, "limit": 500})
+    with pytest.raises(ToolArgumentError):
+        registry.validate("quote", {"ts_code": MARKET_CODE, "bogus": 1})
+
+    result = registry.invoke("quote", {"ts_code": "600519.XX"})
+    assert not result.ok
+    assert "ValueError" in str(result.error)
+    assert "ts_code" in str(result.error)
+
+
+def test_quote_via_registry_reports_price_and_freshness() -> None:
+    registry = _market_registry(clock="2024-01-04 09:33")
+    result = registry.invoke("quote", registry.validate("quote", {"ts_code": MARKET_CODE}))
+
+    assert result.ok, result.error
+    assert "最新价" in result.text
+    row = result.table[0]
+    assert row["ts_code"] == MARKET_CODE
+    assert row["session"] == "open"
+    assert row["freshness"] == "live"
+    assert result.data_time == "2024-01-04 09:32"
