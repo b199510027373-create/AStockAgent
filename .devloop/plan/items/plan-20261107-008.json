@@ -9,7 +9,7 @@
   "start": "2026-11-18",
   "due": "2026-11-28",
   "estimateH": 24,
-  "progress": 97,
+  "progress": 98,
   "acceptance": [
     "agent_runs 只记录真实 Agent；直接渲染不创建 run，link.source=render 且 run_id 可空",
     "agent_artifacts 无 run_id；内容寻址、digest 去重；同内容多来源通过 link 保留归属",
@@ -38,8 +38,8 @@
       "ADR-017"
     ],
     "branch": "feat/plan-20261107-008-v2-audit",
-    "ci": "passed (test 1m43s + png-export 1m31s; run 44161487849, sha 8978dd8)",
-    "commit": "8978dd8",
+    "ci": "passed (run 44161487849, sha 8978dd8)",
+    "commit": "bfe4e65",
     "docs": [
       "docs/AStockAgent_chart_audit_v2_change_spec.md"
     ],
@@ -49,19 +49,17 @@
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
     "review": "rev-20261117-003",
     "test": [
-      "pytest tests/test_agent_store.py -> 21 passed",
-      "pytest tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py -> 106 passed",
-      "pytest tests/test_agent_store.py tests/test_agent_chart_render.py tests/test_agent_runtime.py tests/test_architecture_gate.py -> 136 passed",
-      "pytest tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 662 passed, 5 deselected, 12 subtests passed in 47.10s",
-      "mypy astock -> Success: no issues found in 39 source files",
-      "ruff check astock/agent/store.py astock/agent/runtime.py astock/agent/chart_render.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py -> All checks passed",
-      "r2 rev-20261117-003: .dsh_pytest.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py tests/test_architecture_gate.py -> 150 passed in 13.04s",
-      "r2 rev-20261117-003: .dsh_pytest.py tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 673 passed, 5 deselected, 12 subtests passed in 51.29s",
-      "r2 rev-20261117-003: mypy astock -> Success: no issues found in 39 source files",
-      "r2 rev-20261117-003: ruff check (同上 6 文件) -> All checks passed"
+      "r1: pytest store -> 21 passed; store+runtime+chart -> 106 passed; +architecture_gate -> 136 passed",
+      "r1: pytest tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 662 passed, 5 deselected, 12 subtests passed",
+      "r1: mypy astock -> Success: no issues found in 39 source files; ruff check 6 touched files -> All checks passed",
+      "r2 (rev-20261117-003): store+runtime+chart+architecture_gate -> 150 passed; full -> 673 passed; mypy 39 files ok; ruff ok",
+      "r3 (rev-20261117-003): .dsh_pytest.py tests/test_agent_store.py tests/test_agent_chart_render.py -> 73 passed in 12.26s",
+      "r3: .dsh_pytest.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py tests/test_architecture_gate.py -> 153 passed in 16.20s",
+      "r3: .dsh_pytest.py tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -> 676 passed, 5 deselected, 12 subtests passed in 58.13s",
+      "r3: mypy astock -> Success: no issues found in 39 source files; ruff check 6 touched files -> All checks passed"
     ]
   },
   "createdAt": "2026-11-07T14:12:15.935Z",
-  "updatedAt": "2026-11-17T19:45:47.871Z",
+  "updatedAt": "2026-11-18T04:15:23.555Z",
   "devSessionId": "session-98870ec5-3d66-430a-9952-f2cda3728500"
 }
