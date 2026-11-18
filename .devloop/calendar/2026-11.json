@@ -711,6 +711,16 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-rev-20261117-003-r3",
+      "type": "review",
+      "title": "评审：评审：Agent 审计表与安全限额（v2：内容/版本/引用）",
+      "start": "2026-11-18T04:30:56.969Z",
+      "end": "2026-11-18T04:32:11.950Z",
+      "planItemId": "plan-20261107-008",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261110-007-planned",
       "type": "planned",
       "title": "ADR-018 实时口径：data_as_of/data_time 生产者与降级标注",
