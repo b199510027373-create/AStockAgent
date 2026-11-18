@@ -45,8 +45,9 @@ MYPY_UI_WHITELIST = {
         "recommend_ui",
     )
 }
-# astock 下共 48 个 .py，排除上述 9 个 → 39 个受检 + app.py = CI 日志里的 40 files。
-EXPECTED_CHECKED_MODULES = 39
+# astock 下共 49 个 .py，排除上述 9 个 → 40 个受检 + app.py = CI 日志里的 41 files。
+# plan-20261107-006 新增 astock/agent/tools/market_tools.py（非 UI，必须受 mypy 检查）。
+EXPECTED_CHECKED_MODULES = 40
 
 
 def _ci() -> dict[str, Any]:

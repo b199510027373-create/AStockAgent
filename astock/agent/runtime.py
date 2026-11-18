@@ -53,6 +53,9 @@ DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_VALIDATION_RETRIES = 1
 DEFAULT_SPIN_LIMIT = 2
 
+#: 超过该长度的图表 HTML 不写进模型 observation（只留 artifact 句柄）。
+MAX_FIGURE_CHARS = 2000
+
 #: 全部文件类工具（file_list 只返回清单，不产生定位引用）。
 FILE_TOOL_NAMES = frozenset(
     {"file_list", "file_search", "file_read", "table_schema", "table_query"}
@@ -62,14 +65,17 @@ _CITING_FILE_TOOLS = FILE_TOOL_NAMES - {"file_list"}
 
 
 def _default_registry() -> ToolRegistry:
-    """默认注册表：装配只读文件工具（ADR-015 C4）。
+    """默认注册表：文件工具（ADR-015 C4）+ 行情/指标工具（ADR-018）。
 
-    UI/CLI 未显式传入 registry 时，``AgentRuntime`` 也能直接调用文件检索与
-    表格查询工具；市场/图表等工具由后续计划项继续注册。
+    UI/CLI 未显式传入 registry 时，``AgentRuntime`` 也能直接调用
+    ``quote`` / ``kline`` / ``indicator``；这些工具的结果都带
+    ``data_as_of`` + ``data_time``，``metadata`` 固定 ``session`` /
+    ``freshness`` 两键（ADR-018 C1/C2）。
     """
     from astock.agent.tools.file_tools import build_file_registry  # 延迟导入，避免循环
+    from astock.agent.tools.market_tools import register_market_tools
 
-    return build_file_registry()
+    return register_market_tools(build_file_registry())
 
 
 def _uses_file_tools(steps: Iterable[StepRecord]) -> bool:
@@ -664,7 +670,13 @@ class AgentRuntime:
                 table["truncated"] = True
             payload["table"] = table
         if result.figure:
-            payload["figure"] = result.figure
+            figure = result.figure
+            if len(figure) > MAX_FIGURE_CHARS:
+                # 图表 HTML 是给人看的（几千~几 MB），不进模型上下文：
+                # 只留 artifact 句柄，UI 从 ToolResult.figure 取完整 HTML。
+                payload["figure"] = _figure_handle(result)
+            else:
+                payload["figure"] = figure
         if result.metadata:
             payload["metadata"] = result.metadata
         return json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
@@ -724,6 +736,20 @@ def _estimate_tokens(text: str) -> int:
     return (len(text) + 3) // 4
 
 
+def _figure_handle(result: ToolResult) -> dict[str, Any]:
+    """图表 HTML 的 artifact 句柄（observation 与部分答案共用同一口径）。"""
+    chart_meta = result.metadata.get("chart")
+    if not isinstance(chart_meta, Mapping):
+        chart_meta = {}
+    return {
+        "chars": len(result.figure or ""),
+        "artifact_id": result.metadata.get("artifact_id")
+        or chart_meta.get("artifact_id"),
+        "artifact_path": result.metadata.get("artifact_path")
+        or chart_meta.get("artifact_path"),
+    }
+
+
 def _summarize_result(result: ToolResult) -> str:
     if result.text:
         text = " ".join(result.text.split())
@@ -734,5 +760,13 @@ def _summarize_result(result: ToolResult) -> str:
     if result.table is not None:
         return f"表格 {len(result.table)} 行"
     if result.figure:
-        return f"图表 {result.figure}"
+        figure = result.figure
+        if len(figure) <= MAX_FIGURE_CHARS:
+            return f"图表 {figure}"
+        handle = _figure_handle(result)
+        artifact_id = handle["artifact_id"] or "未知"
+        return (
+            f"图表（artifact_id={artifact_id}，{handle['chars']} 字符，"
+            "完整 HTML 已落 agent_artifacts）"
+        )
     return "无文本结果"
