@@ -674,14 +674,7 @@ class AgentRuntime:
             if len(figure) > MAX_FIGURE_CHARS:
                 # 图表 HTML 是给人看的（几千~几 MB），不进模型上下文：
                 # 只留 artifact 句柄，UI 从 ToolResult.figure 取完整 HTML。
-                chart_meta = result.metadata.get("chart") or {}
-                payload["figure"] = {
-                    "chars": len(figure),
-                    "artifact_id": result.metadata.get("artifact_id")
-                    or chart_meta.get("artifact_id"),
-                    "artifact_path": result.metadata.get("artifact_path")
-                    or chart_meta.get("artifact_path"),
-                }
+                payload["figure"] = _figure_handle(result)
             else:
                 payload["figure"] = figure
         if result.metadata:
@@ -743,6 +736,20 @@ def _estimate_tokens(text: str) -> int:
     return (len(text) + 3) // 4
 
 
+def _figure_handle(result: ToolResult) -> dict[str, Any]:
+    """图表 HTML 的 artifact 句柄（observation 与部分答案共用同一口径）。"""
+    chart_meta = result.metadata.get("chart")
+    if not isinstance(chart_meta, Mapping):
+        chart_meta = {}
+    return {
+        "chars": len(result.figure or ""),
+        "artifact_id": result.metadata.get("artifact_id")
+        or chart_meta.get("artifact_id"),
+        "artifact_path": result.metadata.get("artifact_path")
+        or chart_meta.get("artifact_path"),
+    }
+
+
 def _summarize_result(result: ToolResult) -> str:
     if result.text:
         text = " ".join(result.text.split())
@@ -753,5 +760,13 @@ def _summarize_result(result: ToolResult) -> str:
     if result.table is not None:
         return f"表格 {len(result.table)} 行"
     if result.figure:
-        return f"图表 {result.figure}"
+        figure = result.figure
+        if len(figure) <= MAX_FIGURE_CHARS:
+            return f"图表 {figure}"
+        handle = _figure_handle(result)
+        artifact_id = handle["artifact_id"] or "未知"
+        return (
+            f"图表（artifact_id={artifact_id}，{handle['chars']} 字符，"
+            "完整 HTML 已落 agent_artifacts）"
+        )
     return "无文本结果"

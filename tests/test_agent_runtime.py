@@ -1093,5 +1093,28 @@ def test_runtime_observation_keeps_chart_html_out_of_context() -> None:
     assert json.loads(runtime._format_observation("kline", small))["figure"] == "<svg/>"
 
 
+def test_summarize_result_keeps_chart_html_out_of_partial_answer() -> None:
+    """部分答案的图表摘要与 observation 同口径：超长 HTML 只留 artifact 句柄。"""
+    from astock.agent.runtime import _summarize_result
+
+    big = "<html>" + "x" * 5000 + "</html>"
+    result = ToolResult(
+        figure=big,
+        metadata={
+            "chart": {
+                "artifact_id": "art_0123456789abcdef",
+                "artifact_path": "artifacts/kline.html",
+            }
+        },
+    )
+    summary = _summarize_result(result)
+    assert "art_0123456789abcdef" in summary
+    assert str(len(big)) in summary
+    assert "<html>" not in summary
+
+    # 短图（内联 SVG 等）保持原样，避免把正常小图也抽象掉。
+    assert _summarize_result(ToolResult(figure="<svg/>")) == "图表 <svg/>"
+
+
 if __name__ == "__main__":
     unittest.main()

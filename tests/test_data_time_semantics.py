@@ -1,4 +1,4 @@
-﻿"""行情工具的时点与新鲜度语义（plan-20261107-006，ADR-018 C1/C2）。
+"""行情工具的时点与新鲜度语义（plan-20261107-006，ADR-018 C1/C2）。
 
 覆盖验收标准：
 
@@ -126,16 +126,18 @@ class _Deps:
         self.latency = latency
         self.bar_time_calls: list[str] = []
         self.minute_calls: list[dict[str, Any]] = []
+        self.index_calls: list[dict[str, Any]] = []
 
     def daily(self, ts_code: str, *, start: str, end: str, adj: str | None) -> pd.DataFrame:
         frame = self.daily_frame.copy()
         mask = pd.to_datetime(frame["trade_date"]).dt.strftime("%Y%m%d")
         return frame.loc[(mask >= start) & (mask <= end)].reset_index(drop=True)
 
-    def index_daily(
-        self, ts_code: str, *, start: str, end: str
-    ) -> pd.DataFrame:  # pragma: no cover - 指数路径由 chart 测试覆盖
-        return self.daily_frame.copy()
+    def index_daily(self, ts_code: str, *, start: str, end: str) -> pd.DataFrame:
+        self.index_calls.append({"ts_code": ts_code, "start": start, "end": end})
+        frame = self.daily_frame.copy()
+        mask = pd.to_datetime(frame["trade_date"]).dt.strftime("%Y%m%d")
+        return frame.loc[(mask >= start) & (mask <= end)].reset_index(drop=True)
 
     def minute(
         self, ts_code: str, *, freq: str, days: int, adj: str | None
@@ -538,6 +540,196 @@ def test_kline_without_chart_has_no_figure() -> None:
     result = M.kline(CODE, now=context.clock, deps=context.deps())
     assert not result.figure
     assert "chart" not in result.metadata
+
+
+# ---------------------------------------------------------------------------
+# 周 / 月重采样、指数分支与图表窗口上限（评审 rev-20261118-001）
+# ---------------------------------------------------------------------------
+
+
+def test_kline_week_resamples_and_marks_eod_intraday() -> None:
+    """周线走 ``resample_ohlcv("W-FRI")``，时点取周期内最后实际交易日的 15:00。"""
+    days = [
+        "2024-01-02",
+        "2024-01-03",
+        "2024-01-04",
+        "2024-01-05",
+        "2024-01-08",
+        "2024-01-09",
+        "2024-01-10",
+    ]
+    context = _Deps(daily=_daily_frame(days, start=50.0), clock="2024-01-10 10:00")
+    result = M.kline(CODE, period="week", limit=10, now=context.clock, deps=context.deps())
+    _assert_contract(result)
+
+    rows = _table(result)
+    assert len(rows) == 2
+    assert rows[-1]["trade_date"] == "2024-01-10 00:00"
+    assert result.data_time == "2024-01-10 15:00"
+    assert result.metadata["period"] == "week"
+    assert result.metadata["requested_period"] == "week"
+    # 盘中请求周线：周/月线收盘后才更新，必须 eod 并写明原因。
+    assert result.metadata["freshness"] == "eod"
+    assert any("收盘后更新" in note for note in result.metadata["notes"])
+
+
+def test_kline_month_resamples_and_runs_real_render(tmp_path: Any) -> None:
+    """月线重采样 + 真实渲染管线：range 钳到 ChartSpec 10 年上限后仍能出图。"""
+    from astock.agent import chart_render
+    from astock.agent.chart_spec import MAX_RANGE_YEARS, validate_chart_spec
+
+    frames: list[pd.DataFrame] = []
+
+    def spy(spec: dict[str, Any], **kwargs: Any) -> Any:
+        frames.append(kwargs["frame"])
+        return chart_render.render(spec, **kwargs)
+
+    days = pd.bdate_range("2010-01-04", "2021-12-31").strftime("%Y-%m-%d").tolist()
+    context = _Deps(daily=_daily_frame(days, start=10.0), clock="2024-01-03 16:30")
+    result = M.kline(
+        CODE,
+        period="month",
+        limit=200,
+        chart=True,
+        now=context.clock,
+        deps=context.deps(),
+        db_path=str(tmp_path / "agent.db"),
+        artifact_root=str(tmp_path / "artifacts"),
+        renderer=spy,
+    )
+    _assert_contract(result)
+
+    assert result.metadata["period"] == "month"
+    assert result.data_time == "2021-12-31 15:00"
+    # 真实渲染成功：有 HTML、有落盘 artifact，且窗口没有越过 10 年上限。
+    assert result.figure and "<html" in result.figure.lower()
+    chart = result.metadata["chart"]
+    assert chart["artifact_id"].startswith("art_")
+    assert chart["data_time"] == result.data_time
+    assert any("10 年上限" in warning for warning in chart["warnings"])
+    assert "10 年上限" in result.text
+
+    spec = chart["spec"]
+    validate_chart_spec(spec)  # 不抛 ChartSpecError
+    start, end = spec["data"]["range"].split(":")
+    span_days = (pd.Timestamp(end) - pd.Timestamp(start)).days
+    assert span_days <= MAX_RANGE_YEARS * 366
+    # 图上只画 10 年内的 bar，表格仍是完整 limit 根。
+    assert len(_table(result)) == 144
+    assert len(frames[0]) < len(_table(result))
+    assert pd.to_datetime(frames[0]["trade_date"]).min() >= pd.Timestamp(start)
+
+
+def test_kline_index_uses_index_daily() -> None:
+    """指数走 ``load_index_daily``：source=index_daily，双时点齐全。"""
+    context = _Deps(
+        daily=_daily_frame(["2024-01-02", "2024-01-03"]), clock="2024-01-03 16:30"
+    )
+    result = M.kline(
+        "000300.SH", period="day", limit=2, now=context.clock, deps=context.deps()
+    )
+    _assert_contract(result)
+
+    assert context.index_calls and context.index_calls[0]["ts_code"] == "000300.SH"
+    assert result.metadata["source"] == "index_daily"
+    assert result.source == "market:kline:index_daily"
+    assert result.data_as_of == "2024-01-03"
+    assert result.data_time == "2024-01-03 15:00"
+
+
+def test_index_minute_is_rejected() -> None:
+    """指数分钟线属 v1 明确不支持的能力，报错文案要写明。"""
+    context = _Deps()
+    with pytest.raises(ValueError, match="暂无分钟线"):
+        M.kline("000300.SH", period="1min", now=context.clock, deps=context.deps())
+
+
+def test_kline_chart_spec_error_degrades_to_table() -> None:
+    """出图被 ChartSpec 拒绝时降级成表格结果，不把工具打成错误。"""
+    from astock.agent.chart_spec import ChartSpecError
+
+    def broken(spec: dict[str, Any], **kwargs: Any) -> Any:
+        raise ChartSpecError(
+            [{"field": "$.data.range", "reason": "窗口跨度超过 10 年"}]
+        )
+
+    context = _Deps(clock="2024-01-03 16:30")
+    result = M.kline(
+        CODE, chart=True, limit=2, now=context.clock, deps=context.deps(), renderer=broken
+    )
+    _assert_contract(result)
+
+    assert not result.figure
+    assert "图表未生成" in result.metadata["chart"]["warning"]
+    assert "图表未生成" in result.text
+    assert _table(result)
+
+
+def test_kline_reports_layers_missing_from_chart() -> None:
+    """ema/atr 只能进表格：不上图要在 warnings 与文本里说明，不能静默丢线。"""
+    days = pd.bdate_range("2023-12-01", "2024-01-03").strftime("%Y-%m-%d").tolist()
+    context = _Deps(daily=_daily_frame(days, start=20.0), clock="2024-01-03 16:30")
+    renderer = _StubRenderer()
+    result = M.kline(
+        CODE,
+        layers=["ema12", "atr14", "ma5"],
+        chart=True,
+        limit=len(days),
+        now=context.clock,
+        deps=context.deps(),
+        renderer=renderer,
+    )
+    _assert_contract(result)
+
+    spec, _ = renderer.calls[0]
+    assert spec["layers"] == [{"type": "ma", "window": 5}]
+    warnings = result.metadata["chart"]["warnings"]
+    assert any("ema12" in warning for warning in warnings)
+    assert any("atr14" in warning for warning in warnings)
+    assert "仅表格展示" in result.text
+    row = _table(result)[-1]
+    assert "ema12" in row and "atr14" in row
+
+
+def test_kline_reports_truncated_chart_layers() -> None:
+    """超过 ChartSpec ``MAX_LAYERS`` 的图层要被截断并说明。"""
+    from astock.agent.chart_spec import MAX_LAYERS
+
+    layers = [f"ma{window}" for window in range(5, 5 + MAX_LAYERS + 2)]
+    context = _Deps(clock="2024-01-03 16:30")
+    renderer = _StubRenderer()
+    result = M.kline(
+        CODE,
+        layers=layers,
+        chart=True,
+        limit=2,
+        now=context.clock,
+        deps=context.deps(),
+        renderer=renderer,
+    )
+    _assert_contract(result)
+
+    spec, _ = renderer.calls[0]
+    assert len(spec["layers"]) == MAX_LAYERS
+    warnings = result.metadata["chart"]["warnings"]
+    assert any(f"超过 {MAX_LAYERS} 层上限" in warning for warning in warnings)
+
+
+def test_quote_handles_long_suspension() -> None:
+    """长停牌（最后一根 bar 在窗口之外）也要返回 suspended，而不是「无行情数据」。"""
+    days = pd.bdate_range("2023-11-01", "2023-12-15").strftime("%Y-%m-%d").tolist()
+    context = _Deps(
+        daily=_daily_frame(days, start=100.0, suspended=("2023-12-15",)),
+        clock="2024-01-04 16:30",
+    )
+    result = M.quote(CODE, now=context.clock, deps=context.deps())
+    _assert_contract(result)
+
+    assert result.metadata["freshness"] == "suspended"
+    assert result.metadata["suspended"] is True
+    assert result.data_as_of == "2023-12-15"
+    assert "停牌" in result.text and "无成交" in result.text
+    assert _table(result)[0]["vol"] == 0.0
 
 
 # ---------------------------------------------------------------------------

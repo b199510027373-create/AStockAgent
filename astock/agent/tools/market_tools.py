@@ -53,9 +53,12 @@ from astock import indicators as ta
 from astock.agent.chart_spec import (
     ADJ_VALUES,
     INDEX_REF_RE,
+    MAX_LAYERS,
+    MAX_RANGE_YEARS,
     MINUTE_PERIODS,
     PERIODS,
     STOCK_REF_RE,
+    ChartSpecError,
 )
 from astock.agent.registry import Permission, ToolRegistry, ToolSpec
 from astock.agent.types import MAX_TEXT_CHARS, ToolResult
@@ -104,6 +107,10 @@ DEFAULT_INDICATOR_LIMIT = 30
 #: 指标预热：MA250 / EMA26 / 长周期指标需要更长的历史才能与
 #: :mod:`astock.indicators` 逐值一致（工具只展示最近 ``limit`` 根）。
 INDICATOR_WARMUP_BARS = 260
+
+#: ``quote`` 的日线回看根数：停牌股要能取到「最后一根 bar」才判得出 suspended
+#: （ADR-018 §4），窗口太短会让长停牌标的直接报「无行情数据」。
+QUOTE_LOOKBACK_BARS = 60
 
 #: 冻结周期 → ``latest_bar_time(freq=...)`` 的取值。
 PERIOD_FREQ = {
@@ -681,7 +688,8 @@ def quote(
     adj = _validate_adj(adj)
     stamp = _now(now, deps)
     session = trading_session(stamp, deps=deps)
-    daily = load_series(code, "day", adj=adj, bars=5, now=stamp, deps=deps)
+    # 日线窗口要覆盖停牌期：太长停牌时也要拿到最后一根 bar 才能标 suspended。
+    daily = load_series(code, "day", adj=adj, bars=QUOTE_LOOKBACK_BARS, now=stamp, deps=deps)
     series = daily
     notes: list[str] = []
     if session == "open":
@@ -889,6 +897,9 @@ def kline(
             renderer=renderer,
         )
         metadata["chart"] = chart_meta
+        chart_warnings = [str(item) for item in chart_meta.get("warnings") or []]
+        if chart_warnings:
+            text = f"{text}；" + "；".join(chart_warnings)
 
     return ToolResult(
         text=_clip(text),
@@ -911,24 +922,62 @@ def _bounded_limit(value: Any) -> int:
     return limit
 
 
-def _chart_layers(layer_names: Sequence[str]) -> list[dict[str, Any]]:
-    """工具层名 → ChartSpec 图层（只保留 chart_spec 支持的 6 类）。"""
-    out: list[dict[str, Any]] = []
+def _chart_layers(layer_names: Sequence[str]) -> tuple[list[dict[str, Any]], list[str]]:
+    """工具层名 → (ChartSpec 图层, 未上图说明)。
+
+    ChartSpec 只支持 ma/boll/volume/macd/rsi/kdj 六类且最多 ``MAX_LAYERS`` 层：
+    ema/atr 只能算在表里，超限的层会被截断——这两种情况都要显式告知调用方，
+    不能画少线却什么都不说（评审 iss-mwm6tv83）。
+    """
+    built: list[tuple[str, dict[str, Any]]] = []
+    dropped: list[str] = []
     for name in layer_names:
         base = name.split("@")[0]
         match = re.match(r"^(ma|ema|rsi|boll|atr|macd|kdj|volume)(\d{1,3})?$", base)
         if not match:
+            dropped.append(f"{name}（无法识别的图层名，未上图）")
             continue
         kind, window = match.group(1), match.group(2)
+        if kind in ("ema", "atr"):
+            dropped.append(f"{name}（ChartSpec 暂不支持 {kind} 图层，仅表格展示）")
+            continue
         if kind == "volume":
-            out.append({"type": "volume"})
+            layer: dict[str, Any] = {"type": "volume"}
         elif kind == "ma":
-            out.append({"type": "ma", "window": int(window) if window else 20})
+            layer = {"type": "ma", "window": int(window) if window else 20}
         elif kind == "boll":
-            out.append({"type": "boll", "window": int(window) if window else 20})
-        elif kind in ("rsi", "macd", "kdj"):
-            out.append({"type": kind})
-    return out[:8]
+            layer = {"type": "boll", "window": int(window) if window else 20}
+        else:
+            layer = {"type": kind}
+        built.append((name, layer))
+    if len(built) > MAX_LAYERS:
+        overflow = "、".join(name for name, _ in built[MAX_LAYERS:])
+        dropped.append(f"{overflow}（超过 {MAX_LAYERS} 层上限，未上图）")
+        built = built[:MAX_LAYERS]
+    return [layer for _, layer in built], dropped
+
+
+def _chart_range(
+    display: pd.DataFrame,
+) -> tuple[str, str | None, pd.Timestamp | None]:
+    """落图窗口的 ``range``，并钳到 ChartSpec 的 ``MAX_RANGE_YEARS`` 上限。
+
+    月线 ``limit=200`` 能覆盖十几年，直接拼首尾日期会被 ``validate_chart_spec``
+    判「窗口跨度超过 10 年」并让整个工具失败（评审 iss-mwm6tovm）。
+    返回的第三项是裁剪下限：调用方据此裁掉图上更早的 bar，让图注与图上内容一致。
+    """
+    stamps = pd.to_datetime(display["trade_date"])
+    first = pd.Timestamp(stamps.iloc[0]).normalize()
+    last = pd.Timestamp(stamps.iloc[-1]).normalize()
+    floor = last - pd.DateOffset(years=MAX_RANGE_YEARS)
+    if first >= floor:
+        return f"{first:%Y-%m-%d}:{last:%Y-%m-%d}", None, None
+    shown = int((stamps >= floor).sum())
+    warning = (
+        f"图表窗口超过 {MAX_RANGE_YEARS} 年上限，已裁到 {floor:%Y-%m-%d} 之后"
+        f"（图上 {shown} 根，表格仍返回 {len(display)} 根）"
+    )
+    return f"{floor:%Y-%m-%d}:{last:%Y-%m-%d}", warning, floor
 
 
 def _render_kline(
@@ -942,16 +991,28 @@ def _render_kline(
     db_path: str | None,
     artifact_root: str | None,
     renderer: Callable[..., Any] | None,
-) -> tuple[str, dict[str, Any]]:
-    """用渲染管线出图；图题写明 freshness 提示（ADR-018 §4「图上有提示」）。"""
+) -> tuple[str | None, dict[str, Any]]:
+    """用渲染管线出图；图题写明 freshness 提示（ADR-018 §4「图上有提示」）。
+
+    出图失败不把工具打成错误：``ChartSpecError`` 收成 ``figure=None`` +
+    ``metadata['chart']['warning']``，表格数据仍然可用（评审 iss-mwm6tovm）。
+    """
     if renderer is None:
         from astock.agent import chart_render as renderer_module
 
         renderer = renderer_module.render
     label = _freshness_label(series.freshness, series.session, series.data_time)
     chart_title = title or f"{series.code} {PERIOD_LABELS[period]} K线 · {label}"
-    first = _as_day_text(display["trade_date"].iloc[0])
-    last = _as_day_text(display["trade_date"].iloc[-1])
+    layer_spec, layer_warnings = _chart_layers(layers)
+    chart_range, range_warning, floor = _chart_range(display)
+    plot = display
+    if floor is not None:
+        plot = display.loc[pd.to_datetime(display["trade_date"]) >= floor].reset_index(
+            drop=True
+        )
+    warnings = list(layer_warnings)
+    if range_warning:
+        warnings.append(range_warning)
     spec: dict[str, Any] = {
         "version": 1,
         "kind": "candlestick",
@@ -960,30 +1021,37 @@ def _render_kline(
             "source": "market",
             "ref": series.code,
             "period": period,
-            "range": f"{first}:{last}",
+            "range": chart_range,
             "adj": adj,
         },
         "encode": {"x": "trade_time" if period in MINUTE_PERIODS else "trade_date"},
-        "layers": _chart_layers(layers),
+        "layers": layer_spec,
     }
-    rendered = renderer(
-        spec,
-        frame=display.copy(),
-        db_path=db_path,
-        artifact_root=artifact_root,
-        data_as_of=series.data_as_of,
-        data_time=series.data_time,
-        export_png=False,
-        session_id="market_tools",
-    )
+    meta: dict[str, Any] = {"title": chart_title, "freshness_label": label}
+    try:
+        rendered = renderer(
+            spec,
+            frame=plot.copy(),
+            db_path=db_path,
+            artifact_root=artifact_root,
+            data_as_of=series.data_as_of,
+            data_time=series.data_time,
+            export_png=False,
+            session_id="market_tools",
+        )
+    except ChartSpecError as exc:
+        warning = f"图表未生成（{exc}），K 线表仍可读"
+        warnings.append(warning)
+        meta.update({"warning": warning, "warnings": warnings, "spec": spec})
+        return None, meta
     return rendered.html, {
+        **meta,
         "artifact_id": rendered.artifact_id,
         "artifact_path": rendered.path,
         "data_as_of": rendered.data_as_of,
         "data_time": rendered.data_time,
-        "warnings": list(rendered.warnings),
-        "title": chart_title,
-        "freshness_label": label,
+        "warnings": warnings + list(rendered.warnings),
+        "spec": spec,
     }
 
 
