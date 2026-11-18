@@ -751,6 +751,16 @@
       "notes": "第 3 轮 · approve"
     },
     {
+      "id": "cal-rev-20261118-001-r4",
+      "type": "review",
+      "title": "评审：评审：行情/指标工具：实时 K 线与指标",
+      "start": "2026-11-18T16:27:36.256Z",
+      "end": "2026-11-18T16:27:59.204Z",
+      "planItemId": "plan-20261107-006",
+      "source": "reviewer-agent",
+      "notes": "第 4 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261110-007-planned",
       "type": "planned",
       "title": "ADR-018 实时口径：data_as_of/data_time 生产者与降级标注",

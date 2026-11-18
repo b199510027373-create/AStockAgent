@@ -47,9 +47,10 @@
     "module": "agent_tools",
     "pr": "31",
     "review": [
-      "rev-20261118-001 (approved, r1→r3)",
-      "ho-20261119-001",
-      "ho-20261119-003"
+      "rev-20261118-001 (approved, r1→r4)",
+      "ho-20261119-003",
+      "ho-20261119-004",
+      "ho-20261119-006"
     ],
     "test": [
       "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread -> 714 passed, 1 warning, 12 subtests passed in 85.22s（commit 74d3687，P2 修复后）",
@@ -58,12 +59,12 @@
       "mypy astock -> Success: no issues found in 40 source files；mypy tests/test_data_time_semantics.py -> Success",
       "ruff check astock tests -> All checks passed",
       "gh pr checks 31（commit 74d3687）-> run 44343766378 test pass 1m44s / png-export pass 1m21s（commit 266538d 的 run 44338507167 中 png-export 首跑因 apt-get 字体安装超 job timeout 失败，rerun --failed 后 pass）",
-      "main 上 merge commit a855b37 的 CI run 44344659084 -> completed success",
-      "main 上记账提交 9114b4e 的 CI run 44345604730 -> completed success",
+      "main merge commit a855b37 CI run 44344659084 / 记账 9114b4e run 44345604730 / 收尾 6498ef7 run 44346188257 -> all completed success",
+      "第 4 轮评审 rev-20261118-001-r4（scope=diff，base 266538d → 74d3687）-> verdict=approve，本轮 0 条新问题，iss-mwmb8h5m 标 fixed",
       "历史轮次：commit 3fc1ddf -> 711 passed（run 44328403133 双 job pass）；commit 92b4b62 -> 702 passed（run 44258867189 双 job pass）"
     ]
   },
   "createdAt": "2026-11-07T14:12:10.292Z",
-  "updatedAt": "2026-11-18T16:20:44.779Z",
+  "updatedAt": "2026-11-18T16:30:44.004Z",
   "devSessionId": "session-604a4898-03c2-4f30-90ad-1559cb54410e"
 }
