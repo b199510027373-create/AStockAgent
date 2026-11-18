@@ -26,6 +26,8 @@ freshness 判定（ADR-018 §4，冻结口径）：
   「最近交易日收盘」，不把昨日收盘当实时；
 - 交易时段内最后一根 bar 超过 ``MINUTE_STALE_SECONDS``（2 分钟）未更新，
   一律 ``delayed``：写明延迟秒数并退回 ``stk_mins`` / 日线；
+- ``rt_min`` 单次响应超过 ``MINUTE_LATENCY_SECONDS``（2 秒）同样降级为
+  ``delayed`` 并在 notes 写明耗时；
 - 最新交易日成交量为 0（停牌 / 无成交）一律 ``suspended``，回答写明
   「停牌/无成交」，指标仍按最后一根 bar 计算。
 
@@ -37,6 +39,7 @@ from __future__ import annotations
 
 import math
 import re
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import time as clock_time
@@ -63,6 +66,7 @@ __all__ = [
     "DEFAULT_KLINE_LIMIT",
     "FRESHNESS",
     "MAX_LIMIT",
+    "MINUTE_LATENCY_SECONDS",
     "MINUTE_STALE_SECONDS",
     "SESSIONS",
     "MarketDeps",
@@ -82,6 +86,9 @@ __all__ = [
 
 #: rt_min 超过该秒数未更新即判 ``delayed``（ADR-018 §4 的「2 分钟」）。
 MINUTE_STALE_SECONDS = 120.0
+
+#: rt_min 单次响应超过该秒数（2 秒预算）即按 ``delayed`` 降级（ADR-018 §4）。
+MINUTE_LATENCY_SECONDS = 2.0
 
 #: 元数据 ``session`` 的冻结取值（ADR-018 C2）。
 SESSIONS = ("pre", "open", "lunch", "closed", "non_trading_day")
@@ -167,6 +174,7 @@ class MarketDeps:
     trade_cal: Callable[..., pd.DataFrame] = market.load_trade_cal
     clock: Callable[[], Any] = pd.Timestamp.now
     minute_stale_seconds: float = MINUTE_STALE_SECONDS
+    minute_latency_seconds: float = MINUTE_LATENCY_SECONDS
 
 
 DEFAULT_DEPS = MarketDeps()
@@ -425,17 +433,22 @@ def load_series(
     requested_period = period
     source = "daily"
     degraded = False
+    slow = False
+    elapsed: float | None = None
 
     if period in MINUTE_PERIODS:
         if is_index:
             raise ValueError(f"指数 {code} 暂无分钟线（v1 指数只支持 day/week/month）")
         try:
+            started = time.perf_counter()
             frame = deps.minute(
                 code,
                 freq=period,
                 days=max(1, min(30, math.ceil(bars / BARS_PER_DAY[period]))),
                 adj=adj_arg,
             )
+            elapsed = time.perf_counter() - started
+            slow = elapsed > deps.minute_latency_seconds
             source = "minute"
         except TushareError as exc:
             notes.append(f"{period} 分钟线不可用（{exc}），已回退日线")
@@ -488,11 +501,19 @@ def load_series(
             notes.append(
                 "日线/周线/月线在收盘后更新：盘中该周期不是实时价，实时行情请用分钟周期"
             )
+    # rt_min 响应超预算同样按 delayed 降级（ADR-018 §4 的 2 秒预算）。
+    if slow and not suspended:
+        freshness = "delayed"
 
     if session != "open" and freshness == "eod":
         notes.append("非交易时段：以下为最近交易日收盘数据，不是实时价")
     if freshness == "delayed":
-        if lag is not None and lag > 0:
+        if slow:
+            notes.append(
+                f"rt_min 响应 {elapsed:.2f} 秒，超过 {deps.minute_latency_seconds:.0f} 秒"
+                "延迟预算，按 delayed 降级"
+            )
+        elif lag is not None and lag > 0:
             notes.append(
                 f"实时行情延迟：最后一根 bar 为 {data_time}，距今 {lag:.0f} 秒"
                 f"（阈值 {deps.minute_stale_seconds:.0f} 秒），按 delayed 降级并退回最近已完成 bar"

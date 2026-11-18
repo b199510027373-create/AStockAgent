@@ -1,4 +1,4 @@
-"""行情工具的时点与新鲜度语义（plan-20261107-006，ADR-018 C1/C2）。
+﻿"""行情工具的时点与新鲜度语义（plan-20261107-006，ADR-018 C1/C2）。
 
 覆盖验收标准：
 
@@ -10,6 +10,7 @@
 - 非交易时段（收盘后 / 周末）返回最近收盘 bar，``freshness=eod``，回答写
   「最近交易日收盘」，不得把昨日收盘当实时；
 - ``rt_min`` 超过 2 分钟未更新 → ``freshness=delayed`` 并写明延迟；
+- ``rt_min`` 响应超过 2 秒预算 → 同样 ``delayed``（ADR-018 §4）；
 - ``rt_min`` 失败 → 回退日线并在 notes 留痕；
 - 停牌 / 无成交 → ``freshness=suspended``，回答写明「停牌/无成交」；
 - 指标值与 :mod:`astock.indicators` 对同一序列逐值一致；
@@ -114,6 +115,7 @@ class _Deps:
         minute: pd.DataFrame | Exception | None = None,
         clock: str = "2024-01-03 10:00",
         calendar: pd.DataFrame | None = None,
+        latency: float | None = None,
     ) -> None:
         self.daily_frame = daily if daily is not None else _daily_frame(
             ["2024-01-02", "2024-01-03"]
@@ -121,6 +123,7 @@ class _Deps:
         self.minute_frame = minute
         self.clock = pd.Timestamp(clock)
         self.calendar = calendar if calendar is not None else _trade_cal()
+        self.latency = latency
         self.bar_time_calls: list[str] = []
         self.minute_calls: list[dict[str, Any]] = []
 
@@ -156,6 +159,9 @@ class _Deps:
         return market.latest_bar_time(frame, freq=freq, strict=strict, notes=notes)
 
     def deps(self) -> M.MarketDeps:
+        kwargs: dict[str, Any] = {}
+        if self.latency is not None:
+            kwargs["minute_latency_seconds"] = self.latency
         return M.MarketDeps(
             daily=self.daily,
             index_daily=self.index_daily,
@@ -164,7 +170,14 @@ class _Deps:
             bar_time=self.bar_time,
             trade_cal=lambda: self.calendar,
             clock=lambda: self.clock,
+            **kwargs,
         )
+
+
+def _table(result: Any) -> list[dict[str, Any]]:
+    """取出工具结果表格（None 视为契约失败）。"""
+    assert result.table is not None and result.table, "工具结果应带表格"
+    return result.table
 
 
 def _assert_contract(result: Any) -> None:
@@ -255,6 +268,42 @@ def test_stale_rt_min_marks_delayed() -> None:
     assert "盘中实时" in fresh_result.text
 
 
+def test_slow_rt_min_marks_delayed() -> None:
+    """rt_min 响应超 2 秒预算 → 即便 bar 新鲜也按 delayed 降级（ADR-018 §4）。"""
+    minute = _minute_frame("2024-01-03", ["09:31", "09:34"])
+    context = _Deps(minute=minute, clock="2024-01-03 09:35", latency=0.0)
+    result = M.kline(CODE, period="1min", limit=2, now=context.clock, deps=context.deps())
+
+    _assert_contract(result)
+    assert result.data_time == "2024-01-03 09:34"
+    assert result.metadata["session"] == "open"
+    assert result.metadata["freshness"] == "delayed"
+    notes = " ".join(result.metadata["notes"])
+    assert "延迟预算" in notes and "按 delayed 降级" in notes
+    assert "延迟" in result.text
+
+    # 图题同样带延迟提示（ADR-018「图上有提示」）。
+    rendered = SimpleNamespace(
+        html="<html>chart</html>",
+        artifact_id="art_deadbeefdeadbeef",
+        path=None,
+        data_as_of=result.data_as_of,
+        data_time=result.data_time,
+        warnings=[],
+    )
+    charted = M.kline(
+        CODE,
+        period="1min",
+        limit=2,
+        chart=True,
+        now=context.clock,
+        deps=context.deps(),
+        renderer=lambda spec, **kwargs: rendered,
+    )
+    assert charted.ok
+    assert "延迟" in charted.metadata["chart"]["title"]
+
+
 def test_suspended_marks_freshness_and_note() -> None:
     """停牌 / 无成交显式标注 suspended，指标仍按最后一根 bar 计算。"""
     daily = _daily_frame(
@@ -273,7 +322,7 @@ def test_suspended_marks_freshness_and_note() -> None:
         CODE, indicators=["ma5"], limit=3, now=context.clock, deps=context.deps()
     )
     assert indicators.metadata["freshness"] == "suspended"
-    assert indicators.table[-1]["ma5"] is not None
+    assert _table(indicators)[-1]["ma5"] is not None
 
 
 def test_minute_failure_falls_back_to_daily() -> None:
@@ -360,7 +409,7 @@ def test_indicator_matches_astock_indicators() -> None:
         **{column: ta.kdj(daily)[column] for column in ("k", "d", "j")},
         "atr14": ta.atr(daily, 14),
     }
-    row = result.table[-1]
+    row = _table(result)[-1]
     assert set(expected) <= set(row)
     for column, series in expected.items():
         assert row[column] == pytest.approx(float(series.iloc[-1]), rel=1e-9, abs=1e-9), column
@@ -401,7 +450,7 @@ def test_intraday_overlay_uses_only_completed_daily_bars() -> None:
         # 2024-01-04 的 bar 只能看到 2024-01-03 及更早的日线。
         "2024-01-04": float(ma5.iloc[day_positions["2024-01-03"]]),
     }
-    for row in result.table:
+    for row in _table(result):
         day = row["trade_time"][:10]
         assert row["ma5_day"] == pytest.approx(expected_by_day[day], rel=1e-9, abs=1e-9), day
 
@@ -504,5 +553,5 @@ def test_no_pseudo_realtime_fields() -> None:
 
     context = _Deps(minute=_minute_frame("2024-01-03", ["09:31", "09:32"]), clock="2024-01-03 09:32")
     result = M.quote(CODE, now=context.clock, deps=context.deps())
-    assert not banned & set(result.table[0])
+    assert not banned & set(_table(result)[0])
     assert not banned & set(result.metadata)
