@@ -38,6 +38,27 @@ from astock.agent.types import (
     ToolResult,
 )
 
+
+class _StepList(list):
+    """``list[StepRecord]`` 的旁路通知版本：追加时同步通知 UI 钩子。
+
+    运行时里步骤追加点分散在十余个分支，用列表子类集中拦截比逐点插入回调
+    更不容易漏。钩子异常被吞掉，保证审计/界面都不能破坏 Agent 主流程。
+    """
+
+    def __init__(self, on_step: Callable[[StepRecord], None] | None = None) -> None:
+        super().__init__()
+        self._on_step = on_step
+
+    def append(self, step: StepRecord) -> None:
+        super().append(step)
+        if self._on_step is None:
+            return
+        # UI 回调故障（渲染/推送）不得打断 Agent 主流程。
+        with contextlib.suppress(Exception):
+            self._on_step(step)
+
+
 __all__ = [
     "DEFAULT_MAX_STEPS",
     "DEFAULT_TIMEOUT_SECONDS",
@@ -232,7 +253,11 @@ class AgentRuntime:
         self._interrupt.set()
 
     def run(
-        self, question: str = "", *, cancel_event: threading.Event | None = None
+        self,
+        question: str = "",
+        *,
+        cancel_event: threading.Event | None = None,
+        on_step: Callable[[StepRecord], None] | None = None,
     ) -> AgentRunResult:
         """执行一轮 Agent 循环。
 
@@ -240,6 +265,10 @@ class AgentRuntime:
         正在阻塞的 ``model.complete()`` 或工具 handler。模型适配器应为 HTTP
         客户端设置 read timeout，具体工具应自行约束数据源超时；否则单个阻塞
         调用可能突破 ``timeout_seconds``，待其返回后才会返回部分结果。
+
+        ``on_step`` 是给 UI 用的可选步骤钩子：每个 :class:`StepRecord` 落进
+        结果列表后立即回调一次（含失败/非法参数步骤）。回调在运行时线程里
+        同步执行，异常一律吞掉——界面渲染故障不得打断 Agent 主流程。
         """
         self._cancel_event = cancel_event
         if question:
@@ -247,7 +276,7 @@ class AgentRuntime:
 
         started = self._clock()
         audit = self._start_audit()
-        steps: list[StepRecord] = []
+        steps: list[StepRecord] = _StepList(on_step)
         tokens_used = 0
         answer = ""
         error: str | None = None
