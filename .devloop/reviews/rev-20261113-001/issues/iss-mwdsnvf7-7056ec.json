@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwdsnvf7-7056ec",
+  "threadId": "rev-20261113-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_scheduler_ledger.py",
+  "lines": "127-358",
+  "title": "调度执行链 loop() 无测试覆盖（pending→running→success 与失败重试）",
+  "evidence": "tests/test_scheduler_ledger.py（127-358）覆盖 ledger 状态机、legacy 迁移、recover_interrupted_jobs、sync_due_job、heartbeat_check、acceptance_report 与 --report/--heartbeat CLI，但没有任何用例驱动 scheduler.loop()（scheduler.py:514-545）。loop 内 `sync_due_job` → `ledger.get_job` → `run_once(slot=\"close\")` → `heartbeat_check` 的接线（529-536）以及 result 为 None 时 `stop.wait(600)` 的重试分支（534-535）只靠人工阅读；这两条正是「迁移完成后调度器是否还会真的跑、失败后是否会重试」的唯一证据，且删除 534-535 或把 529-536 的条件写反时现有 39 个用例全部仍会通过。",
+  "suggestion": "补一条 loop 集成测试：patch `scheduler.datetime` 到某个交易日 16:41、patch `_run_time`/`_is_trading_day`/`run_recommendation`，用一个预先 set 的 threading.Event 让循环在首次 run 后退出，断言 jobs 行由 pending 变 success 且 run_recommendation 只调用一次；再加一条 run_recommendation 返回 stale 的用例，patch `stop.wait` 记录入参，断言调用了 600 且该交易日内没有第二次 run_once。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T07:42:25.122Z"
+  },
+  "createdAt": "2026-11-12T17:00:48.211Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T07:42:25.122Z"
+    }
+  ]
+}

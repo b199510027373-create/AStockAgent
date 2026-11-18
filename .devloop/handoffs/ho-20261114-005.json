@@ -1,0 +1,106 @@
+{
+  "id": "ho-20261114-005",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-005",
+  "threadId": null,
+  "sessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063",
+  "title": "状态补记：CI 43485213612 success、PR #12 head=3eca51e 可合并",
+  "summary": "补记 PR/CI 状态变化：代码提交 b8736a8 的 CI run 43484888881 success 之后，plan 证据提交 3eca51e（仅改 .devloop/plan/items/plan-20261107-005.json）的 CI run 43485213612 也 success；PR #12 当前 head=3eca51e、state=OPEN、mergeable=MERGEABLE，唯一 check「test」SUCCESS。本轮未改代码，测试结论沿用 ho-20261114-004（目标 125 passed、全量 482 passed/2 skipped、mypy 34 files、门禁 32 passed/1 skipped、ruff 通过）。等待 reviewer 第 4 轮复审 rev-20261113-003 的 7 条（4 P1 + 3 P2）。",
+  "requirements": [
+    {
+      "id": "R-31",
+      "text": "（P1 iss-mwfa24ir-5a767e）删除 panes/style/adj=raw 别名，schema/校验/文档/测试一致。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-32",
+      "text": "（P1 iss-mwfa281h-2be589）data.ref 改 anyOf，jsonschema 实校验指数/个股/北交所通过。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-33",
+      "text": "（P1 iss-mwfa2hib-1f519f）验收第 9 条改为 002 迁移并记录 chart_service 目标形态。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-34",
+      "text": "（P1 iss-mwfa38a2-e20f69）record_artifact meta upsert，降级后再补 PNG 可升级。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-35",
+      "text": "（P2 iss-mwfa2ak6-9f265f）params 记 include_plotlyjs。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-36",
+      "text": "（P2 iss-mwfa2dot-8aa9b2）prune_artifacts 清理孤儿 digest 目录。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-37",
+      "text": "（P2 iss-mwfa2o0p-6ff259）空 transforms 时点为空并写「时点未知」。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-005.json",
+      "summary": "仅记录 b8736a8 的 CI 链接与测试证据、验收第 9 条改写；无代码改动。",
+      "commit": "3eca51e"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr view 12 --json state,mergeable,headRefOid,statusCheckRollup",
+      "result": "state=OPEN, mergeable=MERGEABLE, headRefOid=3eca51e, test check SUCCESS",
+      "passed": true,
+      "evidence": "PR #12 唯一 check 对应 CI run 43485213612 success"
+    },
+    {
+      "command": "gh run view 43485213612",
+      "result": "conclusion=success（head 3eca51e）",
+      "passed": true,
+      "evidence": "doc-only commit 的 CI 全步骤通过"
+    },
+    {
+      "command": "gh run view 43484888881",
+      "result": "conclusion=success（head b8736a8，代码提交）",
+      "passed": true,
+      "evidence": "含 Lint/type-check、pytest 与 coverage gate"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub 写权限（push / PR / CI 触发）",
+      "reason": "推送 3eca51e 并读取 PR #12 的 check 状态",
+      "status": "granted"
+    },
+    {
+      "name": "kaleido 安装（真实 PNG 导出）",
+      "reason": "本机未安装 kaleido；真实 PNG 导出由 plan-20261114-001 保障",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chart-pipeline",
+    "commit": "3eca51e",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43485213612",
+    "merge": "未合并（等待 reviewer 第 4 轮复审后批准）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261114-004",
+  "next": "1) reviewer 复审 rev-20261113-003：以 b8736a8 的代码为准（3eca51e 只改 plan json），逐条核对 7 条后给出 verdict。2) 批准后合并 PR #12 并把 plan-20261107-005 转 done。3) 后续 plan-20261114-002（chart_service/ArtifactReader 边界）与 plan-20261114-001（PNG 基础设施）从 main 新开分支，不在本 PR 内继续。4) 架构若要求 005 保留别名（反转 Q4=B）需重新下发裁决，当前实现按删除执行。",
+  "createdAt": "2026-11-13T18:58:10.727Z",
+  "markdownPath": ".devloop/handoffs/ho-20261114-005.md"
+}

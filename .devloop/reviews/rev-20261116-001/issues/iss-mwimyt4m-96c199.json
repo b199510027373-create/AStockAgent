@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwimyt4m-96c199",
+  "threadId": "rev-20261116-001",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "ci",
+  "file": ".github/workflows/ci.yml",
+  "lines": "16,29-33,38,62",
+  "title": "主 test job 也被绑到真实 PNG 导出：无 per-test timeout，Chrome/kaleido 抖动会拖红整个主流水线",
+  "evidence": "requirements.txt:7 把 kaleido==1.5.1 放进运行依赖，于是 ci.yml:38 的 `pip install -r requirements.txt` 让主 job 具备真实导出能力；ci.yml:29-33 又在主 job 装 fonts-noto-cjk；ci.yml:62 `coverage run -m pytest tests -q` 无 -m/-k/--deselect、也无 --timeout，会收集并真实执行 tests/test_agent_chart_png_export.py 与 tests/test_agent_chart_png_zh.py。zh 用例用 png_mode=\"require\"（tests/test_agent_chart_png_zh.py:88），Chrome/kaleido 不可用时直接抛 PNGExportError 让主 job 变红；Chrome 卡死时没有 per-test 超时，只能等 ci.yml:16 的 `timeout-minutes: 15` 把整个 job 杀掉，主 job 的全部测试与覆盖率门禁一起丢失。docs/AStockAgent_png_export_ops.md:117-118 也自认「主 job…PNG 用例此时也会真实执行」。验收第 4 条要求「失败/超时可观测，不拖垮主测试流水线」，当前实现只做到了「新增独立 job」，没有做到解耦：ubuntu-latest 镜像换代、Chrome 升级或 kaleido 抖动都会同时打掉主 job。",
+  "suggestion": "把真实导出彻底隔离到一个 job：1) 给两个 PNG 模块加 `pytestmark = pytest.mark.png`（或在 pytest.ini/pyproject 注册 marker）；2) 主 job 改成 `coverage run -m pytest tests -q -m \"not png\"`（或 `--deselect tests/test_agent_chart_png_export.py --deselect tests/test_agent_chart_png_zh.py`），并删掉主 job 的 fonts-noto-cjk 安装步骤（省 ~30s，字体只在 png-export 需要）；3) png-export job 用 `-m png --timeout=180` 保持现状。改完在 PR 贴一次新的 CI run：test job 不再依赖 Chrome、png-export 仍绿；同步更新 docs/AStockAgent_png_export_ops.md:117-118 的「主 job 也真实执行」表述。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:34:45.214Z"
+  },
+  "createdAt": "2026-11-16T02:20:11.638Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:34:45.214Z"
+    }
+  ]
+}

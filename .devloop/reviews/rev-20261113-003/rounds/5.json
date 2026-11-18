@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261113-003-r5",
+  "threadId": "rev-20261113-003",
+  "roundNo": 5,
+  "scope": "diff",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 5 轮（scope=diff，base b8736a8 → main 07f4af7）。本轮确认：自 r4 以来 astock/agent/chart_render.py、chart_spec.py、store.py 零改动；r4 的 P1（prune_artifacts 删除活跃 artifact 引用的 PNG）与 P2（record_artifact upsert 把 success 降级）被标 fixed 但代码未修，PR #12 在 openP1=1 时 squash 合并（351c66b），plan-005 被置 done，handoff ho-20261114-007 的\"491 passed / 完全解决\"证据不成立。r4 的 P2 决策文档已加\"已被取代、不再作为实现依据\"横幅，可结案。另发现 docs/AStockAgent_interface_freeze_v1.md 被就地改成未实现的 v2 口径，与 main 的 v1 代码、plan-005 验收 #6 及\"升版需新 ADR\"的自述冲突。结论：request_changes，2 条 P1 未闭环（openP0=0）。修复责任在图表模块开发者：1) 新开 fix 分支改 store.py:432-452 保护集合加入 meta.png_path 目录与 keep_digests，改 :256-264 upsert 不降级 success，并在 tests/test_agent_store.py 补\"保留 HTML + png_path PNG 仍存在\"\"success 后 degraded 写入不丢 png_path\"回归，附 pytest 输出后才可把 iss-mwfciv9a/iss-mwfciyhq 改回 fixed；2) 恢复冻结清单 v1 的 §3.4/§5/§7 原文，v2 内容拆到单独草案文件并标\"未实现、目标 plan-20261114-002\"，或等 002 代码与测试合入后按 ADR 正式升版。3) plan-20261107-005 应从 done 退回 in_review，等上述两项进入 main 并重跑全量 pytest/mypy/门禁/CI 后再提交复审。完全解决判定：本轮 2 条 P1 关闭、openP0=0 且 openP1=0、证据与代码一致，下一轮复审 approve 时才算完全解决。",
+  "startedAt": "2026-11-16T00:41:35.883Z",
+  "finishedAt": "2026-11-16T00:42:07.527Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 0,
+    "total": 2
+  }
+}

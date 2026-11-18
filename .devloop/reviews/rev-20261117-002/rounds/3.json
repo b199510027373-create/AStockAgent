@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261117-002-r3",
+  "threadId": "rev-20261117-002",
+  "roundNo": 3,
+  "scope": "full",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "第 3 轮（scope=full，提交 dfcd286 / 记录 b1b9799，PR #28 run 44091690423）复审结论：approve。P0=0、P1=0，本轮仅 2 条 P2 加固项（非阻断）。前两轮 9 条问题全部闭环且未回归。\n\n一、上一轮 3 条逐条核实（均已在 dfcd286 修复并带测试）\n- iss-mwkoyzkc-cf9ddb（P1 file_list 被误收口）：已修。astock/agent/runtime.py:58 `_CITING_FILE_TOOLS = FILE_TOOL_NAMES - {\"file_list\"}`，:75 `if step.tool in _CITING_FILE_TOOLS`；file_list 的 source 是 `files:local`（astock/agent/tools/file_tools.py:221），不命中 runtime.py:77 的 `startswith(\"file:\")` 兜底，豁免成立。证据测试 tests/test_agent_runtime.py:777-792 `test_file_list_only_answer_is_not_rewritten`（断言 run.answer 原样保留）。\n- iss-mwkoyzlk-7502ab（P1 正文引用污染白名单）：已修。runtime.py:82-109 `_collect_file_citations` 只取 `metadata[\"citations\"]`、`metadata[\"citation\"]` 与 table 行 `citation`，原 :103 的 `extract_citations(result.text)` 分支已删除。证据测试 tests/test_agent_runtime.py:794-809 `test_document_body_citation_is_not_trusted`（正文含《虚构.pdf》第 9 页 → answer == \"引用：《公告.txt》第 1 页\"，断言不含「虚构」）。\n- iss-mwkoz2re-30598e（P2 TRIGGER_DDL 两次赋值）：已修（台账 status 仍显示 open，建议按 fixed 结案）。astock/agent/files.py:187-189 仅剩 `FILE_CHUNKS_TRIGGER_DDL = \"\"` 一次赋值，旧 ai/ad/au 脚本已删，仅保留 :182-185 `FILE_CHUNKS_LEGACY_TRIGGERS_DDL` 供迁移 drop；证据测试 tests/test_agent_tools.py:240-245 `test_trigger_ddl_is_empty_for_contentless_tokens_layout`（断言空串 + DDL 含 tokens/contentless_delete + 3 条 DROP TRIGGER）。\n\n二、前两轮 6 条未回归（抽查确认）\n- 运行时收口仍在：runtime.py:238-246 COMPLETED 前 `finalize_file_answer(answer, _collect_file_citations(steps))`；citations.py:193-213 白名单比对与「引用：…」重建逻辑未变。\n- FTS5 中文：files.py:173-174 contentless tokens 表 + files.py:198-199 CJK bigram 常量仍在；tests/test_agent_tools.py:234 `assert found.metadata[\"backend\"] == \"fts5\"`、:248 旧库迁移用例仍在。\n- 默认装配：runtime.py:61-69 `_default_registry()` + :161 默认使用；tests/test_agent_runtime.py:703-730 集成用例仍在。\n- table_query 计时器：file_tools.py:497 CREATE TEMP TABLE → :500 才启动计时器，:510-516 `with lock: state[\"done\"]=True` → cancel → join(1.0) → close；:448-468 fire() 持锁检查 done；:507 文案「（表格装载不计入）」。安全侧未变：:498 `SET enable_external_access=false` 在用户语句前，sql_guard 与 table_path 校验未改。\n- 文档同步（A10）与 15 字段/bbox 两类口径未变；tools/__init__.py 导出面无新增缺口。\n\n三、验收 A1–A10 复核：A1/A2/A3/A4 现已端到端可达（默认注册表装配 + 运行时收口 + 白名单 + 无引用兜底）；A5 查询 <3s 口径与证据一致；A6 有 backend=fts5 命中与迁移测试；A7 15 字段与缺字段拒绝测试仍在；A8/A9 bbox 两类与 DOCX 源行号、Excel 多 sheet 引用测试仍在；A10 冻结清单/ADR-015 已与 contentless tokens 布局一致。\n\n四、测试充分性：pytest tests/test_agent_tools.py tests/test_agent_runtime.py → 79 passed；全量 coverage run pytest → 655 passed / 5 deselected（68.01s）、TOTAL 77.51% ≥ 76.45；ruff / mypy（40 files）干净；架构门禁通过；PR #28 提交 dfcd286 的 CI（test、png-export）全绿。测试执行由开发负责，本轮未复跑，结论基于代码与测试静态证据。新增 3 个用例正好覆盖本轮 3 条修复路径，覆盖面无新增缺口。\n\n五、本轮 2 条 P2（非阻断，可合并后跟进，均已在 issue 里给出具体改法）\n- iss-mwkq6seh-07fa38（runtime.py:238-246）：零工具调用但回答自带「《X》第 N 页」时不进收口，凭记忆补写仍可落库；改法是条件加 `or has_file_citation(answer)`（file_list 清单回答不含页码，不会误伤豁免），并补一例 FakeModel。\n- iss-mwkq6sfo-5ffa17（docs/AStockAgent_interface_freeze_v1.md:306 + docs/AStockAgent_contract_rule_map_v1.md:41）：r2 的 file_list 豁免与「正文不进白名单」未回写，且规则映射 :41 与 :103 自相矛盾；属文档回写遗漏，不影响代码行为。\n\n六、完全解决判定与后续（明确责任与条件）\n- 本轮 approve 后，plan-20261107-004 可由承担人合并 PR #28 并标 done；合并前不再改代码，合并后 planItem 置 done。\n- 上述 2 条 P2 由 plan-20261107-004 承担人在合并后 3 个工作日内以一个小提交（代码 1 行 + 1 个测试 + 2 处文档）处理，或书面接受并登记到后续计划项；任选其一即视为完全解决。若选择修复，改完只需 PR #28 追加 CI 全绿，无需重新开评审轮次——除非改动超出这两条的范围（超出则必须开新一轮复审）。\n- 本条线程不再要求开发重新提交 reviewer 复审；如后续有跨计划项的装配/行情引用改动（plan-20261107-005/-006），在新线程评审。",
+  "startedAt": "2026-11-17T13:25:05.586Z",
+  "finishedAt": "2026-11-17T13:26:04.426Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 2,
+    "total": 2
+  }
+}

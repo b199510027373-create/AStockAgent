@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwixznmz-2f393e",
+  "threadId": "rev-20261116-002",
+  "roundNo": 3,
+  "severity": "P1",
+  "category": "test-sufficiency",
+  "file": "astock/data.py",
+  "lines": "812-815,795-811",
+  "title": "分钟路径新增的 _check_factor_coverage 断言不可达，两个新用例实际走的仍是缺因子分支",
+  "evidence": "ac23253 在分钟路径补的断言实际不可能触发，两个新测试也没走到它——上一轮 P2 的\\\"双管修\\\"只有一根管子是通的：(1) astock/data.py:783-811 先算 `missing = merged[\"adj_factor\"].isna()`，只要有缺行就构造 `intraday = missing & (days == today) & (last_factor_day < today)`，`unexpected = missing & ~intraday`，`if unexpected.any(): raise DataContractError(...)`（astock/data.py:795-811），再给 intraday 行填上 `fct[\"adj_factor\"].iloc[-1]`。走到 astock/data.py:812 之后，凡不在 intraday 的行都已有非空因子，而因子只可能来自 `fct` 的某个 `trade_date`——于是 astock/data.py:813 的 `covered = merged[~intraday]` 里每个 `trade_date` 都必在 `fct` 中，`_check_factor_coverage`（astock/data.py:290-316）的 `first_fct > first_raw` / `last_fct < last_raw` 两个条件恒为 False。换言之 hfq/qfq 的截断在分钟路径上永远由 astock/data.py:795-811 的缺因子分支拦下，`_check_factor_coverage` 这一行是死代码（删掉后测试照样全绿）。(2) 两个新用例恰好证明这一点：tests/test_data_adj_caliber.py:345-358 的 test_minute_hfq_factor_history_truncated_at_start_raises 用 `_factors().iloc[[1, 2]]`（缺 01-02）配 `_minute_frame()`（含 01-02），异常来自缺因子分支，断言 `ctx.exception.contract == \"AdjFactor\"` 无法区分来源——两个分支用的是同一个契约名 AdjFactor；tests/test_data_adj_caliber.py:360-372 的 qfq 用例同样（缺 01-06，`_today`=2025-01-10，走的是缺因子分支而不是末日覆盖断言）。docstring 里\\\"分钟路径与日线路径同一把尺子\\\"与实际不符。(3) ADR-008 第 8 条（.devloop/architecture/adr/ADR-008-price-adjustment-limits.md:37）首句仍写\\\"日线与分钟线…并用 `_check_factor_coverage` 校验覆盖\\\"，紧接着的\\\"可观测边界\\\"段落却如实说明截断早于窗口时由缺因子硬失败拦下——同一段文字前后自相矛盾。",
+  "suggestion": "按\\\"代码不撒谎、文档不超卖\\\"收尾，三步都很小：(1) 删掉 astock/data.py:812-815 的死调用（保留 astock/data.py:768-771 docstring 里\\\"分钟路径由缺因子硬失败兜底、当日盘中例外\\\"的说法），或若想留作防御，就把注释改成\\\"不可达：缺因子分支已保证 covered 内每行都有因子\\\"并加 `# pragma: no cover`，不要写成\\\"分钟路径同样要防\\\"；(2) 两个用例改为如实描述——test_minute_hfq_factor_history_truncated_at_start_raises / test_minute_qfq_factor_history_truncated_at_end_raises 保留（它们是有效的分钟截断回归），但 docstring 改成\\\"分钟路径缺因子硬失败\\\"，并断言消息来自缺因子分支（例如 `self.assertIn(\"分钟线以下交易日缺少 adj_factor\", str(ctx.exception))`），另外 attr 断言不要只看 `contract`，避免两个分支共用 AdjFactor 名字造成混淆；(3) ADR-008 第 8 条首句改成\\\"日线路径用 `_check_factor_coverage` 校验覆盖；分钟路径由缺因子硬失败（第 3 条，盘中当日例外）拦下、截断早于窗口、窗口内每天都有因子时依赖 `query_all` 完整性\\\"，与后面的\\\"可观测边界\\\"段落合成一句话，别再出现\\\"日线与分钟线都用 `_check_factor_coverage`\\\"的表述。做完这三处后再把 iss-mwixbcyf-8383d6 标 resolved 才是名副其实的。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T07:41:28.789Z"
+  },
+  "createdAt": "2026-11-16T07:28:46.955Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T07:41:28.789Z"
+    }
+  ]
+}

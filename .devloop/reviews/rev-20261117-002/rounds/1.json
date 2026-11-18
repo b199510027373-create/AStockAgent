@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261117-002-r1",
+  "threadId": "rev-20261117-002",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮（scope=full）评审 6 条：P0 0、P1 3、P2 3。结论 request_changes，openP1=3 不满足 approve 条件。\n\n一、已核对通过的部分（无需返工）\n- A5 性能：tests/test_agent_tools.py:463 test_table_query_100k_rows_under_three_seconds 只计查询耗时的口径在 handoff 里如实说明（整例约 35s 主要是生成/导入），可接受。\n- A7：15 字段顺序 + 缺字段用例存在（:145、:171），load_meta 缺字段报「meta.json 字段不符合冻结规范」不静默降级。\n- A8/A9：PDF 表格 bbox 走页面坐标、Excel/CSV/DOCX 走 [row_start,col_start,row_end,col_end] 1-based，两类不混用；DOCX 写回源行号、Excel 多 sheet 引用含工作表名与单元格范围，均有对应用例（:507、:523、:538、:483）。\n- 安全侧（AGENT-01/AGENT-05）：五工具权限统一 file:read；table_path 做 _SHEET_SLUG_RE 校验 + is_relative_to；用户 SQL 执行前已 SET enable_external_access=false；sql_guard 拒多条语句、DDL/DML、表函数与路径字面量；未发现 shell / 任意 HTTP / 文件删除调用。未发现 P0。\n- A10 部分：docs/AStockAgent_interface_freeze_v1.md §4/§4.1 与 docs/AStockAgent_contract_rule_map_v1.md AGENT-04 行已更新，旧 13 字段/单一 bbox 表述已删。\n\n二、阻断项（开发修，逐条闭环后复审）\n- P1 回答级强制引用未落到运行时（astock/agent/runtime.py:180-184，finalize_file_answer 生产零调用点）：A3/A4 目前只有 SYSTEM_PROMPT 文本，AGENT-04 声明的 enforcement=test 落点不存在。修法见 iss-mwk1e76b-235fe7。\n- P1 FTS5 中文检索无测试证据（astock/agent/files.py:170-171 + astock/agent/tools/file_tools.py:125-129）：中文查询实际靠 LIKE 全量扫描，A6 在证据上不成立。修法见 iss-mwk1e77l-f00b8a。\n- P1 五工具未接入运行时（astock/agent/tools/file_tools.py:528-536，build_file_registry 无生产调用点；runtime.py:107 默认空注册表）：A1/A2 端到端不可达，ho-20261117-016 的 A1–A10 完成声明需修正。修法见 iss-mwk1e78k-81f44e。\n\n三、应修提示（可与阻断项同批提交）\n- P2 finalize_file_answer 不校验引用白名单（citations.py:184-186）——模型自造引用会被放行。\n- P2 table_query 计时器覆盖装载阶段 + done/close 与计时器线程无同步（file_tools.py:477-497）——超时文案会误导模型。\n- P2 tests/test_ci_quality_gates.py 首行被写 UTF-8 BOM，且 :48 注释仍写 35 个受检/36 files（实际 39/40）。\n\n四、完全解决的判定条件\n开发者（plan-20261107-004 承担人）在 feat/plan-20261107-004-file-tools 上完成上述 6 条修复——其中 3 条 P1 必须各有对应测试证据（运行时回答装配两例、metadata[\"backend\"]==\"fts5\" 的 FTS 命中例、AgentRuntime 集成例）——并重跑 pytest tests/test_agent_tools.py、pytest tests -q -m \"not png\" + coverage、ruff、mypy（PR #28 CI 全绿），提交新的 developer handoff 逐条回应 6 个 issue id；若某项改为由 plan-20261107-005/007 承接，则必须在 docs/AStockAgent_interface_freeze_v1.md §4.1 写明承接受理项与测试锚点并同步撤回本轮验收声明。下一轮复审确认 openP0=0 且 openP1=0、P2 已修或书面接受后，才可 approve 并标记完全解决；在此之前 PR #28 不得合并。",
+  "startedAt": "2026-11-17T01:48:40.851Z",
+  "finishedAt": "2026-11-17T01:52:06.058Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 3,
+    "P2": 3,
+    "total": 6
+  }
+}

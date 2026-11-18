@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwblx5t1-04a826",
+  "threadId": "rev-20261111-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/recommend.py",
+  "lines": "798-800",
+  "title": "「技术分位」两条写入路径基准不同：live 只对 15 只候选池排名，backfill 对全池排名，却写进同一 ledger 列并同屏展示",
+  "evidence": "live：astock/recommend.py:745 `candidates = rows[:candidate_n]`（candidate_n 默认 15，上限 30），第 798-800 行 `for row, pct in zip(candidates, pool_percentile([r[\"composite\"] for r in candidates]))`——分位只在 15 只候选内排名，最终 top5 的分位必然落在 73.3–100，用户看到的「池内分位」其实与股票池无关。backfill：astock/backfill.py:103-106 先对当日全池（数十到数百只）`rows.sort(...)` 再 `pool_percentile([r[\"composite\"] for r in rows])`，随后只取 `_pick_diverse(rows, top_n)`，存下的是全池分位（99.x）。两条路径都经 astock/ledger.py:179-191 写入同一个 `items.percentile` 列（DDL 见 ledger.py:43），astock/ledger.py:328 以「技术分位」读出，astock/use_cases.py 的台账视图与 astock/recommend.py:461-464 的「池内分位」文案同屏展示；docs 目录 grep「分位」零命中，没有任何文档定义基准。结果是同一台账里不同批次的「技术分位」不可比，且 live 标签「池内」与实际 15 只候选池不符。",
+  "suggestion": "由开发在 astock/recommend.py + astock/backfill.py 统一口径并写进文档（docs/AStockAgent_interface_freeze_v1.md 新增一节，或 ADR-010 的 C1 口径说明）：任选其一——(a) 两条路径都用「全池综合分分位」（live 需要为全池算 composite，事件分成本高，若不接受则选 b）；(b) 明确标注基准为「候选池分位（N=candidate_n）」，backfill 也先截断到同样的 candidate_n 再算分位，UI/报告统一写「技术分位（候选池 N=15）」或类似文案；删除 recommend.py:462 的「池内分位」措辞或让它带上 N。并补测试：断言 live 与 backfill 的分位分别等于其文档化基准上的 pool_percentile，且展示文案包含基准/N。完全解决标准：同一列在任意批次都能按文档口径复算一致，且界面文案不再暗示全池。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:32:11.604Z"
+  },
+  "createdAt": "2026-11-11T04:16:31.909Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:32:11.604Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwiwbdit-0bdd57",
+  "threadId": "rev-20261116-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "data-integrity",
+  "file": "astock/data.py",
+  "lines": "350-358,681-686",
+  "title": "adj_factor 全历史单次非分页拉取：触到服务端行数上限时 hfq 基准可能静默取错",
+  "evidence": "为了让 hfq 基准固定为\"该证券最早因子\"，_fetch_daily 与 load_adj_factors 都改成从 ADJ_HISTORY_START 起一次拉全历史：data.py:350-358 与 data.py:681-686 均为 `client.query(\"adj_factor\", ts_code=..., start_date=ADJ_HISTORY_START, end_date=end)`。但 astock/tushare_client.py:50 的 query 没有分页（无 limit/offset 循环），项目自己认为长区间必须分页——tushare_client.py:117-143 的 query_all 默认 `limit: int = 5000`、`max_rows: int = 200_000`，astock/events.py:453、astock/events.py:489 就是这么用的。ADJ_HISTORY_START=\"19900101\"（data.py:25-27），1990 年代初上市的股票（如 000001.SZ）到 2026 年交易日数已超过 8000 行，属于服务端\"单次最大行数\"量级。_clean_adj_factors（data.py:224-268）只校验因子值本身（空表/缺列/NaN/inf/<=0），不校验因子表是否覆盖到该证券的最早交易日；_fetch_daily 的 missing 检查（data.py:365 附近 `if missing.any()`）只覆盖\"raw 里某天没有因子\"的方向。于是截断方向决定后果：若截掉最新行会被 missing 检查拦下（响亮失败，可接受）；若截掉最早行，则 _adj_base（data.py:271-280 `row = factors.iloc[0]`）拿到的是被截断后的\"最早\"因子，hfq 全序列整体缩放错误，且没有任何异常或告警——违反 ADR-008 D1\"基准必须是该证券最早因子\"的语义。本条不要求你现在就改代码，但要求先用 000001.SZ（1991 上市）从 19900101 起的实际返回行数把事实钉死。",
+  "suggestion": "两种改法任选其一，并把验证结果写进 handoff：(1) 改用 astock/tushare_client.py:117 的 query_all 拉 adj_factor（limit=5000 分页，天然规避上限），两处调用点 data.py:350-358、data.py:681-686 都换；(2) 保持单次 query，但在 _clean_adj_factors 之后加覆盖断言：hfq 需要 `fct[\"trade_date\"].min() <= raw[\"trade_date\"].min()`，qfq 需要 `fct[\"trade_date\"].max() >= raw[\"trade_date\"].max()`（或 >= end_eff），任一不满足则抛 DataContractError（沿用 data.py:721-726 的 code=\"AdjFactor\" 风格，消息写明\"因子历史疑似被截断，未覆盖 19xx-xx-xx\"）。验证方式：在 handoff 记录一次 `client.query(\"adj_factor\", ts_code=\"000001.SZ\", start_date=\"19900101\", end_date=<今天>)` 的 `len(df)` 与首末 trade_date；若行数已明显小于该股票实际交易日数（或接近服务端上限），本条即必须按 (1)+(2) 修复；若确认服务端不截断，可降级为仅补 (2) 的防御性断言。修复后请补一条测试：构造因子表首日晚于 raw 首日，断言 hfq 报错而不是静默取错基准。",
+  "confidence": 0.6,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T07:07:51.808Z"
+  },
+  "createdAt": "2026-11-16T06:41:54.485Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T07:07:51.808Z"
+    }
+  ]
+}

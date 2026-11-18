@@ -1,0 +1,225 @@
+{
+  "id": "ho-20261117-016",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261107-004 文件检索/表格查询 + 强制引用（PR #28 已开、CI 通过）",
+  "summary": "相对 ho-20261117-015 的增量：PR 已创建、CI 已跑完并全绿、devloop 记录已单独提交，任务保持 in_review（progress 90），等待评审；未合并。代码提交 b057da6（13 文件）之后补提交 ecdb5e0（plan 项、calendar、worklog、本 handoff 的 initial 版本）。PR #28：https://github.com/b199510027373-create/AStockAgent/pull/28 。CI run 43997640831：test pass 1m43s、png-export pass 1m2s。无新增代码改动；唯一后续动作是评审。证据复核：34 个新测试全绿、全量 645 passed、coverage 77.33% ≥ 76.45、ruff/mypy 干净。",
+  "requirements": [
+    {
+      "id": "A1",
+      "text": "file_search 返回 chunk + 页码，可被回答引用",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "A2",
+      "text": "table_query 仅允许 SELECT 且强制 LIMIT/超时",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "A3",
+      "text": "基于文件的回答必须带文件名 + 页码/工作表引用",
+      "source": "plan-20261107-004 验收标准 / 契约 AGENT-04"
+    },
+    {
+      "id": "A4",
+      "text": "无命中的问题明确回答「未在文件中找到」",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "A5",
+      "text": "查询 10 万行 Excel 的响应时间 < 3s",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "A6",
+      "text": "file_chunks 用 FTS5 与抽取同批写入；命中可回查 file_id + 页码/行号",
+      "source": "ADR-015 C4"
+    },
+    {
+      "id": "A7",
+      "text": "meta 必填字段 15 个，与 ADR-015 和实现一致；有字段数/缺字段测试",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "A8",
+      "text": "PDF 表格 bbox 用 [x0,y0,x1,y1] points；Excel/CSV/DOCX 用 [row_start,col_start,row_end,col_end] 1-based 闭区间；两类不混用",
+      "source": "plan-20261107-004 验收标准 / ADR-015"
+    },
+    {
+      "id": "A9",
+      "text": "DOCX 表格写回源行号；Excel 多 sheet 引用含工作表名与单元格范围",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "A10",
+      "text": "冻结清单与 ADR-015 同步更新，旧 13 字段/bbox 表述删除",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "D1",
+      "text": "五个工具 file_list / file_search / file_read / table_schema / table_query 实现并注册为只读工具（file:read）",
+      "source": "任务描述"
+    },
+    {
+      "id": "D2",
+      "text": "订正 ADR-015 两处旧口径（15 字段、两类 bbox）",
+      "source": "任务描述"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/tools/file_tools.py",
+      "summary": "五个工具 + build_file_registry；FTS5 检索回查 bbox/页码，DuckDB 内存临时表查询",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/tools/citations.py",
+      "summary": "引用格式化与「未在文件中找到」兜底",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/tools/sql_guard.py",
+      "summary": "单条 SELECT/WITH 守卫 + 外层强制 LIMIT",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/tools/__init__.py",
+      "summary": "工具模块导出",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/files.py",
+      "summary": "PDF 数据行不再写表格坐标；新增 files_root/index_db_path/table_path",
+      "commit": "b057da6"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "SYSTEM_PROMPT 加强制文件引用与「未在文件中找到」规则",
+      "commit": "b057da6"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "新增 34 个测试（含 test_file_result_requires_source）",
+      "commit": "b057da6"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "EXPECTED_CHECKED_MODULES 35→39",
+      "commit": "b057da6"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§4 状态改为已实现并新增 §4.1 检索/查询工具说明",
+      "commit": "b057da6"
+    },
+    {
+      "path": "docs/AStockAgent_contract_rule_map_v1.md",
+      "summary": "AGENT-04 落地映射同步到 test_file_result_requires_source",
+      "commit": "b057da6"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-015-file-ingestion.md",
+      "summary": "验收测试路径更新",
+      "commit": "b057da6"
+    },
+    {
+      "path": ".devloop/architecture/adrs.json",
+      "summary": "ADR-015 summary 订正为 15 字段 + 两类 bbox，删除误建的 adr-0015 重复条目",
+      "commit": "b057da6"
+    },
+    {
+      "path": ".devloop/architecture/contract.json",
+      "summary": "AGENT-04 rationale 指向已存在的文件侧测试",
+      "commit": "b057da6"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-004.json / calendar / worklog / handoffs",
+      "summary": "in_review + 进度 90 + links.test/PR/CI；开发记录与 handoff",
+      "commit": "ecdb5e0"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_tools.py -q",
+      "result": "34 passed in 13.29s",
+      "passed": true,
+      "evidence": "新增/更新测试全部通过"
+    },
+    {
+      "command": "coverage run -m pytest tests -q -m \"not png\"",
+      "result": "645 passed, 5 deselected, 12 subtests passed in 73.38s",
+      "passed": true,
+      "evidence": "全量非 PNG 套件"
+    },
+    {
+      "command": "coverage report -m",
+      "result": "TOTAL 77.33%（9770 stmts / 2215 miss），fail_under 76.45 通过",
+      "passed": true,
+      "evidence": "file_tools 88.03% / citations 90.29% / sql_guard 86.29% / tools/__init__ 100%"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "本地与 CI 均通过"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 40 source files",
+      "passed": true,
+      "evidence": "本地与 CI 均通过"
+    },
+    {
+      "command": "tests/test_agent_tools.py::test_table_query_100k_rows_under_three_seconds",
+      "result": "passed；查询本身 elapsed < 3.0s（整例 35.34s 主要是生成/导入 10 万行 xlsx）",
+      "passed": true,
+      "evidence": "断言只对 DuckDB 查询计时"
+    },
+    {
+      "command": "gh pr checks 28 --watch",
+      "result": "test pass 1m43s；png-export pass 1m2s",
+      "passed": true,
+      "evidence": "CI run 43997640831 全绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push / gh pr create",
+      "reason": "已推送分支并创建 PR #28",
+      "status": "granted"
+    },
+    {
+      "name": "直接编辑 .devloop/architecture/adrs.json",
+      "reason": "adr_write 只接受小写 adr-0004 形式 id，无法更新 id 为 ADR-015 的既有条目，需直接订正 summary 并删除误建重复项",
+      "status": "granted"
+    },
+    {
+      "name": "合并 PR",
+      "reason": "等待评审通过后再合并，开发者不自行合并",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-004-file-tools",
+    "commit": "ecdb5e0",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/28",
+    "ci": "run 43997640831：test pass 1m43s、png-export pass 1m2s",
+    "merge": "未合并（等待评审）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-015",
+  "next": "等待评审；收到 findings 后按 devloop_review 逐条修复并补 update handoff。评审通过后可合并 PR #28，合并后把 plan 标 done。",
+  "createdAt": "2026-11-17T01:45:11.492Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-016.md"
+}

@@ -1,0 +1,70 @@
+{
+  "id": "ho-20261111-005",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261110-003",
+  "threadId": null,
+  "sessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7",
+  "title": "架构契约评审门禁：ADR-002/010/013–018 与接口冻结",
+  "summary": "PR #7 在修复提交 eee619e 上 CI 通过：GitHub Actions run 42952579147，job test 1m13s pass，mergeStateStatus=CLEAN、mergeable=MERGEABLE。相对上一份交付（ho-20261111-004）的修改痕迹仅为：plan-20261110-003 的 links.ci 回填为本次 run，并把状态说明从「CI 待触发」改为「已通过」。代码与文档未再改动。等待评审角色复验 7 条 issue 后 approve。",
+  "requirements": [
+    {
+      "id": "ISS-ALL-7",
+      "text": "7 条评审意见均已修复，并已通过远端 CI 验证",
+      "source": "rev-20261111-001 第 1 轮（复验判据：7 条 issue 全部 fixed、openP0=0、openP1=0）"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/test_architecture_gate.py",
+      "summary": "相对 ho-20261111-004：无代码改动，仅 CI 回填",
+      "commit": "eee619e"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-003.json",
+      "summary": "links.ci 回填为 run 42952579147（head eee619e）test pass 1m13s",
+      "commit": "eee619e"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "268 passed, 1 skipped",
+      "passed": true,
+      "evidence": "本地 268 passed, 1 skipped；远端 CI 42952579147 同分支同 head 同样通过（test 1m13s）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py",
+      "result": "success",
+      "passed": true,
+      "evidence": "Success: no issues found in 32 source files"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "gh-cli 查 CI",
+      "reason": "回填 PR #7 CI 结果",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze",
+    "commit": "eee619e",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/7",
+    "ci": "GitHub Actions run 42952579147（head eee619e）→ test pass 1m13s；pr checks 无 pending，mergeStateStatus=CLEAN",
+    "merge": "未合并：PR #7 OPEN / MERGEABLE / CLEAN，等评审复验 approve 后合入 main",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261111-004",
+  "next": "1) 评审角色按复验判据复核 7 条 issue（openP0=0、openP1=0）；2) approve 后合入 main 并把 plan-20261110-003 置 done；3) 07-003（11-15）与 07-008（11-18）按冻结清单与条件号开工。",
+  "createdAt": "2026-11-11T03:26:23.161Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-005.md"
+}

@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261111-003-r1",
+  "threadId": "rev-20261111-003",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮全量评审（rev-20261111-003-r1，5 个文件，feature commit 5d17184，HEAD 8828a8c docs 提交）。\n\n验收核对：4 条全部满足。generate/latest/run 三条路径都经 _ledger_view 从 ledger 读回（use_cases.py:505-563）；页面有 run_id/data_as_of/tradable_from/诊断块（use_cases.py:220-253、recommend_ui.py:139-145）；生成后台账缺记录走 failed + `ledger sync` 提示、明确不回退 JSON（use_cases.py:541-547）；JSON 仍可下载并标注「仅归档」（use_cases.py:245-251）。ARCH-01/02、LEDGER-01 未发现违反。\n\n测试充分性：开发提供的 45/68/305 passed + mypy 证据可信；tests/test_core_paths.py:56-103 是真实 generate→ledger 集成，tests/test_use_cases.py 覆盖 mock 渲染、缺记录、读错误、空列表、所选 run_id 与 UI 6 元组消费；build_recommend_tab 在 tests/test_alpha_banner.py:248/272 被构建。缺口：没有测试锁定生成页的报告内容与行情列（当前测试甚至把 6 行台账摘要写成断言）；未做浏览器手工 smoke（非阻断，建议合并前手工走一遍生成→列表刷新→加载所选批次）。\n\n未解决问题：1×P1 + 2×P2。\n- P1 iss-mwbp12uh-d09875：生成后「报告」区只剩 6 行台账摘要，`recommend._report_markdown` 结果被丢弃且未进 JSON 归档（不可恢复），`Recommendation.status` 生成摘要也不再展示。\n- P2 iss-mwbp1809-bdee9a：生成页表格少 收盘/20日%/RSI 三列（ledger items 无此三列，仅 CSV/JSON 归档可下载）。\n- P2 iss-mwbp1a4j-79492d：`now` 的 docstring 声称生成时传给流水线，但 generate_recommendation 无 now 形参且生成分支未传。\n另有未单独开单的提示（单文件 P2 配额已满）：use_cases.py:615 历史文案「台账共 N 个批次（最多显示 50 个）」在 LIMIT 截断时不是台账总数，建议顺手改为「已显示最近 N 个（上限 50）」。\n\n结论 request_changes：plan-20261103-003 开发者在合并前修复 P1（优先在 runs 增 report_md/status_line 持久化并在页面读回，或经架构确认降级并留痕；补 report 内容断言），P2 按建议二选一留痕；修复后提交第 2 轮，reviewer 只评审 diff（ledger schema/迁移、报告读回、列集合/文案测试）。当 openP0=0 且 openP1=0 且第 2 轮 approve 时，该评审线程才算完全解决。评审期间未修改任何代码、测试或计划。",
+  "startedAt": "2026-11-11T05:39:24.311Z",
+  "finishedAt": "2026-11-11T05:43:53.977Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 2,
+    "total": 3
+  }
+}

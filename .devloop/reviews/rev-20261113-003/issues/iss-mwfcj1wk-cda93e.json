@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfcj1wk-cda93e",
+  "threadId": "rev-20261113-003",
+  "roundNo": 4,
+  "severity": "P2",
+  "category": "docs",
+  "file": "docs/AStockAgent_chart_pipeline_decisions_v1.md",
+  "lines": "31,53,109-124,275",
+  "title": "决策记录仍写“保留 panes/style/raw 别名、删除动作在 plan-002”，与已删除别名的代码和冻结清单冲突",
+  "evidence": "b8736a8 已从 astock/agent/chart_spec.py 删除 `FIELD_ALIASES`/`ADJ_ALIASES`，schema 顶层也不再声明 `panes`/`style`；docs/AStockAgent_interface_freeze_v1.md §3.2.1 已改成“别名已删除”。但 docs/AStockAgent_chart_pipeline_decisions_v1.md:31 仍把渲染层写成 `none`/`raw`，:53 仍写 `adj` 映射含 `raw`，:109-124 的 D5 仍称 `panes`/`style` 折叠、schema 同时声明别名、冻结清单记录兼容别名，:275 仍写“本轮保留别名（v1 现状）……删除动作在 plan-20261114-002”。这会让后续实现者按旧契约恢复别名，和验收第 6/8 条及当前代码直接矛盾。tests/test_agent_chart_spec.py:586-591 的 `test_freeze_doc_records_alias_removal` 只检查冻结清单，没有覆盖这份决策记录。",
+  "suggestion": "把 D5 整节改为“Q4=B 已随 plan-20261107-005 删除别名”，删除 `raw` 映射描述；把 :275 的 Q4 行改为“已落地（b8736a8）；plan-20261114-002 只承接渲染/审计边界”，并同步 :31/:53 的 `raw` 表述。若保留历史决策，请显式标注“已被 2026-11-14 裁决取代”，不要继续用“本轮保留”的现在时。可把 `test_freeze_doc_records_alias_removal` 扩展为同时断言决策记录含“已删除/已取代”且不含“保留别名”。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T00:38:52.625Z"
+  },
+  "createdAt": "2026-11-13T19:04:41.828Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T00:38:52.625Z"
+    }
+  ]
+}

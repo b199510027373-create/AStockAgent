@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261118-001-r3",
+  "threadId": "rev-20261118-001",
+  "roundNo": 3,
+  "scope": "diff",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "第 3 轮（scope=diff，base a0c8ecd → 266538d）复核结果：iss-mwma8thg 已实质修复，裁决 approve（openP0=0、openP1=0，余 1 条 P2 提示）。\n\n一、iss-mwma8thg 复核通过（停牌改按开市日缺口判）\n- 新增 `_missing_open_days(calendar, stamp, data_as_of) -> int`（astock/agent/tools/market_tools.py:407-432）：口径为 `last_bar < day < today` 的开市日计数，恰好满足 docs 里「真实停牌日没有行」的语义，并且在 docstring 里明确排除今天（收盘后当日日线常未发布，不能把正常股票判成停牌）。\n- load_series 接线正确：`suspended = _is_suspended(frame)` 之后 `missing_days = 0 if is_index else _missing_open_days(deps.trade_cal(), stamp, data_as_of)`，`if missing_days > 0: suspended = True`（:520-525）；指数跳过停牌判据合理；生产依赖真实可用（MarketDeps.trade_cal 默认 market.load_trade_cal，:181；默认区间 20150101 起，能覆盖长停牌缺口）。\n- 文案可审计：缺行分支写「停牌/无成交：最后一根 bar 为 {data_as_of}，其后 {missing_days} 个交易日无行情，指标按最后一根 bar 计算」，0 量分支保留原文案（:565-574）；`_freshness_label` 的 suspended →「停牌/无成交」（:297-298）不变，ADR-018 C2 的 freshness 冻结键与「回答写明停牌/无成交」均满足。\n- 用例覆盖到位：test_quote_marks_suspended_when_bars_are_missing（收盘后 16:30、最后一根 bar vol>0 仍标 suspended）、test_suspended_missing_bars_intraday_is_not_just_delayed（盘中 10:00 不得退化成单纯 delayed、不得出现「盘中实时」）、test_closed_session_without_today_bar_is_eod_not_suspended（今天 bar 未发布 → eod 而非停牌）、test_non_trading_day_answer_never_claims_realtime 加断言 freshness==\"eod\" 且 suspended is False。正反两面都锁住了，不再依赖 0 量行这个假形态。\n- 无回归面：本 commit 只改 `_missing_open_days` 与 load_series 的 suspended 分支，未触碰上轮已修好的 `_chart_range` / `_chart_layers` / `_render_kline` / `runtime._figure_handle`；已关闭的 4 条（iss-mwm6tovm、iss-mwm6towg、iss-mwm6tv83、iss-mwm6tv92）维持 fixed。\n\n二、接受的已知取舍（不记问题）\n- 数据源整体落后恰好 1 个完整开市日时会被标 suspended——与「停牌 1 天」在仅有日线的条件下本质不可区分，开发者已在 docstring 说明今天的排除规则，且 note 写的是「其后 N 个交易日无行情」，用户可据数字自行判断。\n- 当日盘中临时停牌、且分钟取数失败回退日线时，因 today 被排除会判 eod/delayed 而不是 suspended：同为上述不可区分性，属可接受的上界，不追加要求。\n\n三、CI 说明\nho-20261119-001 记录 png-export 首跑 10m14s 失败，原因是 Install CJK fonts 步骤 apt-get update 卡住并触发 job 的 timeout-minutes:10，`gh run rerun --failed` 后 pass；属流水线环境问题，与本 diff 无关，不作为评审问题。\n\n四、唯一遗留 P2（iss-mwmb8h5m-ec84a1，不阻断）\ntest_data_time_semantics.py 的 `_trade_cal()` 默认从 2024-01-01 起，而 _missing_bar_frame() 的缺口从 2023-12-15 开始，导致用例里 note 只数到 2 天、真实应为 12 天，且断言只匹配「个交易日无行情」子串，不校验这行面向用户的审计数字。\n\n五、完全解决判定\n- 责任与条件：该 P2 由开发者在后续任意一次提交里补齐（给 _Deps 传 calendar=_trade_cal(\"2023-11-01\",\"2024-01-31\")，断言精确天数，收盘后与盘中两条用例同改）；补完并重跑 pytest tests -q 与 mypy astock 全绿、更新 links.test 即视为完全解决。\n- 在此之前：本线程的验收项与 ADR-018 契约要求已全部满足，iss-mwma8thg 及前 4 条关闭项不再需要复核；PR #31 可以合并，P2 可作为独立小改动或下个迭代补上，不阻塞合并。",
+  "startedAt": "2026-11-18T16:01:19.069Z",
+  "finishedAt": "2026-11-18T16:02:59.572Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 1,
+    "total": 1
+  }
+}

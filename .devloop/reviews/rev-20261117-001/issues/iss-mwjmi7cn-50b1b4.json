@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwjmi7cn-50b1b4",
+  "threadId": "rev-20261117-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-gap",
+  "file": "mypy.ini",
+  "lines": "4",
+  "title": "mypy.ini 的 exclude 白名单无守护测试：新增非 UI 模块塞进 exclude 仍 Success",
+  "evidence": "mypy.ini:4 用正则排除 9 个 UI/图表模块：\n`exclude = (?x)(astock/(ui|charts|backtest_chart|backtest_ui|optimize_ui|factor_ui|strategy_ui|track_ui|recommend_ui)\\.py$)`\n`mypy astock app.py` 因此得到 36 files Success，这是 acceptance[0]「mypy 覆盖全部非 UI 模块」的唯一证据。\n\n但 tests/ 下 grep `mypy.ini|ignore_missing_imports` 无任何命中，test_ci_runs_mypy_over_package_entrypoint 只断言命令行字符串 \"mypy astock app.py\" 存在。后果：新增一个非 UI 模块 astock/foo.py 时，只要把它加进这条 exclude 正则，mypy 依旧 Success（文件数还可能从 36 减少），CI 全绿，而「覆盖全部非 UI 模块」已被静默破坏；文件数变少也不会引起任何人注意。",
+  "suggestion": "在 tests/test_ci_quality_gates.py 增加一条守护：读取 mypy.ini，把 exclude 正则展开后断言其匹配集合 == 固定白名单（ui / charts / backtest_chart / 其余 *_ui 共 9 个文件），并断言 `astock` 目录下除白名单外的所有 .py 都落在检查范围内（可用 glob 比对数量，或断言白名单之外新增文件必然使 matched 集合变化）。\n\n完全解决标准：把一个非 UI 模块加入 mypy.ini 的 exclude 时该用例变红。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T19:19:37.718Z"
+  },
+  "createdAt": "2026-11-16T18:55:03.095Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T19:19:37.718Z"
+    }
+  ]
+}

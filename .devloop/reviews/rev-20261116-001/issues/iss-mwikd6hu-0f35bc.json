@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwikd6hu-0f35bc",
+  "threadId": "rev-20261116-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "docs",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "227",
+  "title": "缺少 Chrome/中文字体/版本升级的部署与 CI 文档，验收第 7 条无对应文档",
+  "evidence": "docs/ 下 13 个 md 没有任何部署/运维文档覆盖 Chrome/Chromium、中文字体或版本升级清单；docs/AStockAgent_interface_freeze_v1.md:227 只写「版本锁定/Chrome/字体/CI 真实导出由 plan-20261114-001 落地」（即把问题转走），docs/AStockAgent_chart_pipeline_decisions_v1.md:152-156 只是风险与建议，不含安装命令、字体包名、chrome 路径、超时阈值或升级检查步骤。验收第 7 条（部署与 CI 文档写明 Chrome/Chromium、中文字体、版本升级检查清单）未实现。",
+  "suggestion": "新增 docs/AStockAgent_png_export_ops.md 并在 README、docs/AStockAgent_interface_freeze_v1.md:227 处链过去，至少包含：a) Windows 开发机：kaleido 版本、Chrome 安装位置/`BROWSER_PATH`、字体（Microsoft YaHei/SimHei）验证命令；b) Linux CI：`apt-get install fonts-noto-cjk`、Chrome 安装 action 与版本、容器内 `fc-list :lang=zh` 自检；c) 超时与降级判定（多久算超时、超时后 run 状态、告警文案）；d) 版本升级检查清单：改 plotly/kaleido/chrome 任一 → 重跑 png-export job → 对比 PNG 尺寸/字体/耗时 → 更新冻结清单与 tests 断言；e) 常见故障排查（方块字、chrome not found、kaleido 0.2/1.x API 差异）。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:21:32.124Z"
+  },
+  "createdAt": "2026-11-16T01:07:23.298Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:21:32.124Z"
+    }
+  ]
+}

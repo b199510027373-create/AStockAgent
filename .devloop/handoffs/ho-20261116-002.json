@@ -1,0 +1,149 @@
+{
+  "id": "ho-20261116-002",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261114-003",
+  "threadId": null,
+  "sessionId": "session-a32e1f19-8de7-4baf-9957-8359ff6b3bbf",
+  "title": "plan-20261114-003 初版交付：复权口径收口（hfq 基准/硬失败/分钟标注）",
+  "summary": "按 ADR-008 D1（2026-11-14 用户裁决，plan-20261114-003）收口复权口径：adj_factor 改为从 19900101 全历史取，hfq 基准取该证券最早可用交易日因子（base_factor 置 1.0），qfq 仍以最新因子为基准；新增 contracts.DataContractError 并在 _clean_adj_factors / BarFrame.validate 中硬失败空表、缺列、缺失、NaN、inf、<=0，删除 ffill/bfill 与回退 qfq；日线与分钟线结果统一在 attrs[\"adjustment\"] 暴露 adj/adj_base/base_factor/adj_source=daily；load_daily 缓存按 base_factor/adj_base 重检（旧 hfq meta 直接失效重拉），raw_* 与 vol/amount 保持原始口径。新增 tests/test_data_adj_caliber.py 覆盖 hfq/qfq/raw 对照、基准与请求区间无关、因子异常、分钟 attrs、缓存失效。本地目标/全量/门禁/ruff/mypy 全绿，PR #15 已开，CI 在 13ef4f6、3a19ed5、06fb118 三个 head 上均通过。计划项已标 in_review、progress=95。验收第 6 条（行情工具与图表图注展示复权口径）属 plan-20261107-006 / plan-20261114-002，本次仅保证数据层 attrs 可被消费。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "2026-11-14 用户裁决 D1：hfq 为“标准后复权，基准 1.0”，以该证券最早可用交易日 adj_factor 为 1.0，价格 = raw * adj_factor / base_factor；不得把最新因子当 1.0；因子缺失/空/<=0/非有限一律抛 DataContractError，禁止静默回退 qfq 或填充 1.0；分钟线按交易日日线因子复权并标注 metadata；涨跌停/成交额/绝对价位仍用 raw；同步 ADR-008 与 data.py 测试。",
+      "source": "plan-20261114-003 描述 / 用户消息 m00044"
+    },
+    {
+      "id": "R2",
+      "text": "验收①：hfq 基准 1.0 公式与最早可用交易日 base_factor 写入 ADR-008 和 data.py 注释。",
+      "source": "plan-20261114-003 acceptance[0]"
+    },
+    {
+      "id": "R3",
+      "text": "验收②：构造已知因子序列验证 hfq 价格与收益率；qfq 仍以最新因子为基准，二者不混用。",
+      "source": "plan-20261114-003 acceptance[1]"
+    },
+    {
+      "id": "R4",
+      "text": "验收③：adj_factor 缺失/空/<=0/NaN/inf 抛 DataContractError，禁止回退 qfq 或填充 1.0。",
+      "source": "plan-20261114-003 acceptance[2]"
+    },
+    {
+      "id": "R5",
+      "text": "验收④：分钟线使用当日日线 adj_factor，metadata 带 adj/adj_base/adj_source=daily；缺因子报错。",
+      "source": "plan-20261114-003 acceptance[3]"
+    },
+    {
+      "id": "R6",
+      "text": "验收⑤：涨跌停、成交额、绝对价位判断仍用 raw；缓存 meta 的 base_factor 变化视为失效。",
+      "source": "plan-20261114-003 acceptance[4]"
+    },
+    {
+      "id": "R7",
+      "text": "验收⑥：plan-20261107-006 的行情工具与 plan-20261114-002 的图表图注展示复权口径（本次仅保证数据层 attrs 暴露，展示侧属其他计划，未完成）。",
+      "source": "plan-20261114-003 acceptance[5]"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/contracts.py",
+      "summary": "新增 DataContractError(ContractError)；BarFrame.validate(require_adj=True) 对缺失/NaN/inf/<=0 硬失败（invalid=[adj_factor]）。",
+      "commit": "13ef4f6"
+    },
+    {
+      "path": "astock/data.py",
+      "summary": "新增 ADJ_HISTORY_START=19900101、_clean_adj_factors、_adj_base、_adjustment_meta、_cache_base_valid；_fetch_daily 全历史取因子并 ratio=adj_factor/base_factor，缺因子抛错；load_daily 缓存校验 base_factor/adj_base 并写 meta/attrs；load_adj_factors 空因子改抛 DataContractError；_apply_minute_adj 逐日复权并写 attrs；load_minute 透传 ts_code 并在 validate 后回挂 attrs。",
+      "commit": "13ef4f6"
+    },
+    {
+      "path": "tests/test_data_adj_caliber.py",
+      "summary": "新增 14 个用例：DailyAdjCaliberTests(7)/MinuteAdjCaliberTests(4)/DailyCacheBaseInvalidationTests(3)，覆盖 hfq/qfq/raw 对照、基准不受请求区间影响、因子异常与缺行、分钟 attrs、缓存篡改与旧 hfq meta 失效。",
+      "commit": "13ef4f6"
+    },
+    {
+      "path": "tests/test_data_pit_events.py",
+      "summary": "hfq 测试改名为 against_earliest_factor 并断言 attrs；空因子用例改期望 data.DataContractError。",
+      "commit": "13ef4f6"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-008-price-adjustment-limits.md",
+      "summary": "追加「落地（plan-20261114-003，2026-11-16）」7 条与证据（contracts/data/新测试）；adrs.json 摘要同步 D1 与落地。",
+      "commit": "13ef4f6"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-003.json",
+      "summary": "计划项 doing→in_review，progress=95，links 增 branch/pr/test（保留 adr/module）。",
+      "commit": "3a19ed5"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py tests/test_data_pit_events.py -q",
+      "result": "37 passed, 10 subtests passed",
+      "passed": true,
+      "evidence": "目标测试（含新增 14 用例与复权相关回归）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "505 passed, 2 skipped, 12 subtests passed, 32.70s",
+      "passed": true,
+      "evidence": "全量测试"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "32 passed, 1 skipped",
+      "passed": true,
+      "evidence": "ADR/契约/冻结清单门禁（ADR-008 编辑后复跑）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同款 lint 子集"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 35 source files",
+      "passed": true,
+      "evidence": "CI 同款类型检查"
+    },
+    {
+      "command": "GitHub Actions PR #15 checks",
+      "result": "run 43782366648 (13ef4f6) pass 1m13s; run 43782567956 (3a19ed5) pass 1m25s; run 43782859155 (06fb118) pass 1m25s",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/pull/15/checks"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub push / PR（repo scope）",
+      "reason": "推送分支并创建 PR #15",
+      "status": "granted"
+    },
+    {
+      "name": "本地 git 代理 http://127.0.0.1:7890",
+      "reason": "该代理当前未监听，push 使用 git -c http.https://github.com.proxy= 绕过；不影响 CI 与实际交付",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "fix/data-adj-caliber",
+    "commit": "13ef4f6（实现+ADR）、3a19ed5（plan in_review）、06fb118（plan 记录 CI run）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/15",
+    "ci": "pass：43782366648 / 43782567956 / 43782859155（head 06fb118, 1m25s）",
+    "merge": "未合并，等待评审",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "1) 评审 PR #15；重点看 _fetch_daily 全历史取因子对 Tushare 调用的影响、hfq 缓存旧 meta 失效路径。2) 合并后复跑 main CI 并补一份 update handoff。3) plan-20261107-006 行情工具与 plan-20261114-002 图注消费 attrs[\"adjustment\"]（验收⑥）。4) 注意当前工作区还有不属于本交付的未提交改动（astock/agent/chart_render.py、astock/agent/store.py、docs/AStockAgent_interface_freeze_v1.md、tests/test_agent_chart_spec.py、tests/test_agent_store.py、.devloop/plan/items/plan-20261114-001.json、plan-20261107-005.json、calendar/worklog），不要混入本分支。",
+  "createdAt": "2026-11-16T00:53:41.640Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-002.md"
+}

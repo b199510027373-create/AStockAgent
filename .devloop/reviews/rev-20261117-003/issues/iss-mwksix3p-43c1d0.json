@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksix3p-43c1d0",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/store.py",
+  "lines": "312-316, 711-719",
+  "title": "artifact_id 仍由 digest+文件名派生，环境变化会撞身份、同内容不同文件名会重复建行",
+  "evidence": "artifact_id_for 的种子是 `f\"{bare}\\x00{filename}\"`（store.py:315），chart_render.py:1423 固定传 \"chart.html\"，而 env_fingerprint 在 chart_render.py:1454 才计算、没有进入 artifact_id。record_artifact 在已存在分支发现 env_fingerprint 不同就直接抛 ArtifactIdentityConflict（store.py:711-719）。因此 code_version 或 plotly 升级后若 HTML 字节相同，渲染会硬失败；同一内容换一个文件名则会生成第二个 artifact 行，违反 AC2 的“内容寻址、digest 去重”和 ADR-017 C3 的“同 digest 复用目录并只插一行”。spec §4.4 规定的 id 种子是 canonical_spec+data_digest+env_fingerprint，当前实现两者都不符。tests/test_agent_store.py:299-326 只覆盖同 filename、同 env 的重复写入，未覆盖 env 变化或文件名变化。",
+  "suggestion": "把 artifact 身份改为内容+环境寻址：至少将 env_fingerprint 纳入 artifact_id 种子，并按 spec §4.4 使用 canonical_spec+data_digest+env_fingerprint；文件名只作为落盘路径的一部分，不参与逻辑身份。若同一 digest 已存在但 env 不同，应生成新 artifact（新 id/新路径），而不是抛 ArtifactIdentityConflict。补两个测试：同一 HTML 在 env1→env2 下渲染得到两个 artifact 且都可用；同 digest 不同 filename 只保留一行 artifact、link 指向同一行。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:00:16.756Z"
+  },
+  "createdAt": "2026-11-17T14:31:20.341Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:00:16.756Z"
+    }
+  ]
+}

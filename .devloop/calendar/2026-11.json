@@ -731,6 +731,26 @@
       "notes": "第 1 轮 · request_changes"
     },
     {
+      "id": "cal-rev-20261118-001-r2",
+      "type": "review",
+      "title": "评审：评审：行情/指标工具：实时 K 线与指标",
+      "start": "2026-11-18T15:33:35.049Z",
+      "end": "2026-11-18T15:35:16.308Z",
+      "planItemId": "plan-20261107-006",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261118-001-r3",
+      "type": "review",
+      "title": "评审：评审：行情/指标工具：实时 K 线与指标",
+      "start": "2026-11-18T16:01:19.069Z",
+      "end": "2026-11-18T16:02:59.572Z",
+      "planItemId": "plan-20261107-006",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261110-007-planned",
       "type": "planned",
       "title": "ADR-018 实时口径：data_as_of/data_time 生产者与降级标注",

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwesomkm-e708a1",
+  "threadId": "rev-20261113-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "error-contract",
+  "file": "astock/agent/chart_spec.py",
+  "lines": "497-505",
+  "title": "日期窗口匹配正则但日期非法时，date.fromisoformat 抛未捕获 ValueError，绕过 ChartSpecError 结构化错误",
+  "evidence": "`RANGE_RE`（chart_spec.py:126）只校验 `YYYY-MM-DD:YYYY-MM-DD` 的外形，`_validate_data` 在 :504-505 直接调用 `date.fromisoformat(match.group(1/2))`，没有 try/except。`2026-13-01:2026-12-01`、`2026-02-30:2026-12-01` 都能通过正则，但会抛 `ValueError`；`check_chart_spec`（:846-851）只捕获 `ChartSpecError`，所以 ValueError 直接逃逸，调用方拿不到 `{ok:false, errors, hint}`，违反“非法 spec 返回结构化错误（字段+原因）”。`tests/test_agent_chart_spec.py` 目前只覆盖合法日期和 start>end，没有非法日期用例。",
+  "suggestion": "把日期解析收敛到一个 `_parse_range_date(text, path, issues)`：`try: date.fromisoformat(...) except ValueError: issues.add(f\"{path}.range\", f\"日期非法：{text!r}\")`，解析失败后不要继续做 start/end 比较。补测试至少覆盖 `2026-13-01:2026-12-01` 与 `2026-02-30:2026-12-01`，断言 `check_chart_spec` 返回 `ok=False`、`errors` 里有 `$.data.range`，并且不抛异常。",
+  "confidence": 0.98,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T16:44:15.768Z"
+  },
+  "createdAt": "2026-11-13T09:49:09.574Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T16:44:15.768Z"
+    }
+  ]
+}

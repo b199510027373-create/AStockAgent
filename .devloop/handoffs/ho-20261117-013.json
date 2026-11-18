@@ -1,0 +1,136 @@
+{
+  "id": "ho-20261117-013",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-012",
+  "threadId": null,
+  "sessionId": "",
+  "title": "修正文档基线数字并加守护（评审 r2 P2）",
+  "summary": "相对 ho-20261117-011 的增量：关闭评审第 2 轮唯一新增 P2（iss-mwjnea54-cbaf29，文档基线漏改）。\n\n- 文档：development_status:143 由 9247/2155 改为 9248/2157 = 76.68%（算术自洽，与 .coveragerc:17 一致）；README:23/:223 的 606 → 610；.coveragerc、CI 日历、product snapshot 的计数 608/607 → 610/609（本轮新增 2 条守护测试，本地 610 passed、CI 609 passed + 2 skipped）。\n- 防复发：新增文档基线守护测试，以 .coveragerc 注释为唯一数据源——校验两条基线的 stmts/miss/百分比算术自洽，四处文档 + README 不得残留 9247 statements / 2155 miss / 606 passed / 50%，README 用例数必须等于 .coveragerc 记录值。变异验证把文档改回 9247/2155 会红。\n- 顺带根治本地 ruff 假阳性：ruff.toml 的 [lint.isort] 固定 known-third-party = [\"gradio\"]。此前测试运行在仓库根生成 gradio/ 目录，Ruff 把 import gradio 判成 first-party，本地报 9 条 I001 而 CI 干净检出全绿（CI 首轮红灯根因）；现在本地与 CI 判定一致，无需每次跑测试前手动清理目录。\n- 无运行时行为改动；覆盖率语句数不变（source=astock，测试不计入）。CI 全绿：PR #26 两次 attempt 均 success，合并 3078048，main run 43939999492 success；PR #27（证据）两次 success，合并 bb4f807，main run 43941051281 success。",
+  "requirements": [
+    {
+      "id": "iss-mwjnea54-cbaf29",
+      "text": "development_status:143 的 9247/2155 与 76.68% 算术不自洽、README 606 passed 过时；四处 docs + README 的语句数/未覆盖数/百分比必须与 .coveragerc 本地实测 9248/2157=76.68% 和 CI 实测 9248/2178=76.45% 一致，grep 不再出现 9247/2155 或 606 passed",
+      "source": "devloop_review rev-20261117-001 r2（P2 docs）"
+    },
+    {
+      "id": "A2",
+      "text": "记录最新 coverage 实测值，门槛按实测重设且不低于当前；分阶段提升目标写入 CI 注释",
+      "source": "plan-20261103-012 验收标准"
+    },
+    {
+      "id": "A7",
+      "text": "清理旧文档中的 22 文件/57 tests/50% 门槛表述（本轮补齐上一轮漏改的基线行与 README 用例数）",
+      "source": "plan-20261103-012 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": "docs/AStockAgent_development_status_2026-11-08.md",
+      "summary": "L143 基线行改为 9248 statements / 2157 miss = 76.68%（CI Linux 9248/2178 = 76.45%，门槛 76.45%）",
+      "commit": "0a4b80d"
+    },
+    {
+      "path": "README.md",
+      "summary": "L23/:223 用例数 606 → 610（新增 2 条守护测试后的本地实测）",
+      "commit": "0a4b80d"
+    },
+    {
+      "path": ".coveragerc, docs/AStockAgent_CI_work_calendar.md, docs/AStockAgent_product_snapshot_v1.3.md",
+      "summary": "局部计数 608/607 → 610/609，与 .coveragerc 基线注释和新的本地/CI 实测一致",
+      "commit": "0a4b80d"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "新增 test_coveragerc_baseline_arithmetic_is_self_consistent 与 test_docs_baseline_matches_measured_numbers（.coveragerc 注释为唯一数据源，校验算术自洽、stale 标记、README 用例数）；在既有 isort 断言中补 known-third-party 检查",
+      "commit": "0a4b80d"
+    },
+    {
+      "path": "ruff.toml",
+      "summary": "[lint.isort] 新增 known-third-party = [\"gradio\"]，根治测试生成 gradio/ 目录导致的本地 9 条 I001 假阳性（CI 首轮红灯根因）",
+      "commit": "0a4b80d"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-012.json, .devloop/calendar/2026-11.json, .devloop/worklog/2026-11.jsonl",
+      "summary": "记录 r2 修复证据：links.test 18 条、pr 列表 #21/#22/#24/#26、branch 追加 fix/docs-baseline-numbers、progress 96",
+      "commit": "0441eed"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\"",
+      "result": "608 → 610 passed（新增 2 条文档守护测试）",
+      "passed": true,
+      "evidence": "610 passed, 1 skipped, 5 deselected, 12 subtests passed in 36.19s（本地 Windows，Python 3.13.5）"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests --no-cache",
+      "result": "0 条",
+      "passed": true,
+      "evidence": "All checks passed!（仓库根存在测试生成的 gradio/ 目录时也通过，known-third-party 已钉死）"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "通过",
+      "passed": true,
+      "evidence": "Success: no issues found in 36 source files"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && coverage report -m",
+      "result": "76.68% ≥ 76.45",
+      "passed": true,
+      "evidence": "TOTAL 9248 2157 76.68%（门槛 76.45）"
+    },
+    {
+      "command": "变异验证：把 development_status 基线行改回 9247 statements / 2155 miss 后跑 pytest tests/test_ci_quality_gates.py -k docs_baseline",
+      "result": "守护用例能捕获文档漂移",
+      "passed": true,
+      "evidence": "1 failed（test_docs_baseline_matches_measured_numbers），恢复后 14 passed"
+    },
+    {
+      "command": "GitHub CI PR #26 run 43939394936（attempt1 + 重跑 attempt2）",
+      "result": "连续两次通过",
+      "passed": true,
+      "evidence": "两次均 test success / png-export success；日志 609 passed, 2 skipped, 5 deselected, 12 subtests；TOTAL 9248 2178 76.45%；ruff 0.17.3 All checks passed!；mypy 2.4.1 36 files Success"
+    },
+    {
+      "command": "GitHub CI main run 43939999492（3078048）",
+      "result": "合并后 main 绿",
+      "passed": true,
+      "evidence": "test success / png-export success"
+    },
+    {
+      "command": "grep 残留旧数字：README.md 与 docs/*.md",
+      "result": "旧基线表述已清零",
+      "passed": true,
+      "evidence": "无 9247 statements / 2155 miss / 606 passed / 606 个 / 608 passed / 607 passed 命中"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub push / PR / merge / 重跑 CI",
+      "reason": "用于 PR #26/#27 与两次 CI 重跑后合并",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "fix/docs-baseline-numbers (merged) / chore/plan-20261103-012-r2-evidence (merged)；本地 main = bb4f807",
+    "commit": "bb4f807 (main merge; 提交 0a4b80d 修复、0441eed 记录)",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/26, https://github.com/b199510027373-create/AStockAgent/pull/27",
+    "ci": "PR #26 run 43939394936 attempt1 success、attempt2 success；main run 43939999492（3078048）success；PR #27 run 43940445367 attempt1+attempt2 success；main run 43941051281（bb4f807）success",
+    "merge": "PR #26 → 3078048；PR #27 → bb4f807",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-011",
+  "next": "请 reviewer 复核 iss-mwjnea54-cbaf29 是否可关闭并决定 plan-20261103-012 置 done。后续排期不变：观察期（2026-11-21）后删 scheduler/jobs per-file-ignores（含 RUF100/SIM105）并按 ruff.toml 审计结论清理存量、覆盖率 P2 80% / P3 85%、app.py 移出 exclude、评估 RUF001-003/B905。注意：本地跑 ruff 已不再需要清理 gradio/（known-third-party 已钉死），但该目录仍在 .gitignore 中。",
+  "createdAt": "2026-11-16T19:37:56.378Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-013.md"
+}

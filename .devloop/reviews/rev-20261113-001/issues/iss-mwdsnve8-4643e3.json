@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwdsnve8-4643e3",
+  "threadId": "rev-20261113-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/scheduler.py",
+  "lines": "29, 233-257, 330-336",
+  "title": "空台账首次启动即产生 60 日连续漏跑告警",
+  "evidence": "HEARTBEAT_LOOKBACK_DAYS=60（scheduler.py:29），heartbeat_check 从最近 60 个交易日倒序累计 missed 直到遇到第一条 success（236-254）；新库/新装用户没有任何 close 行时 streak=60 ≥ 阈值 2，startup_maintenance（330-336）在首次启动就写 ALERT 并把 scheduler.log 标成告警。tests/test_scheduler_ledger.py:350-358 已把「空库 + 16:45 → heartbeat.ok=False、alerted=True」写成断言，说明这是稳定行为而非偶发，会让刚部署的用户立刻收到无缘由的漏跑告警，也让「连续 N 日未 success」的语义失去意义。",
+  "suggestion": "区分「尚无历史」与「连续漏跑」：若窗口内除当天 pending 行外不存在任何 close 行（last_success 为 None 且无更早 job 记录），返回 ok=True 并带 initialized=False，不写告警、日志注明「尚无调度历史」；streak 以窗口内最早一条 job 的 trade_date 为下界截断。同步调整 test_startup_maintenance_marks_due_job_and_heartbeat_state 的断言，并新增「空库首次启动不告警」用例。",
+  "confidence": 0.72,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T07:42:07.594Z"
+  },
+  "createdAt": "2026-11-12T17:00:48.176Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T07:42:07.594Z"
+    }
+  ]
+}

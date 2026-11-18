@@ -1,0 +1,143 @@
+{
+  "id": "ho-20261119-001",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "行情/指标工具：实时 K 线与指标",
+  "summary": "iss-mwma8thg 修复完成并全绿：停牌判定新增「缺 bar」判据 _missing_open_days（data_as_of 之后、今天之前的开市日缺口，今天排除以免收盘后未发布当日 bar 被误判），load_series 据此置 suspended 并输出可审计 note，指数跳过；补 3 条用例（收盘后缺行/盘中缺行不得只报 delayed/当日 bar 未发布是 eod）并修正周末 eod 用例 fixture。本机 714 passed（评审预期 ≥713）、test_data_time_semantics 26 passed、mypy 40 files、ruff 全绿。PR #31 run 44338507167：test pass 1m38s；png-export 首次因 apt-get 字体安装卡住被 job 级 10 分钟 timeout 取消（与本 PR 改动无关），gh run rerun --failed 后 pass 1m27s，双 job 全绿。",
+  "requirements": [
+    {
+      "id": "iss-mwma8thg-10656a",
+      "text": "长停牌在真实数据上仍不会标 suspended：_is_suspended 只认 vol=0 行，而停牌是缺 bar。要求在 load_series 用 trade_cal 开市日与 data_as_of 比较（缺口 ≥1 个交易日即 suspended），note 写成可审计形态「停牌/无成交：最后一根 bar 为 X，其后 N 个交易日无行情」，保留 vol/amount 双 0 判据，并补收盘后/盘中两条缺行用例。",
+      "source": "devloop_review rev-20261118-001 第 2 轮（reviewer）"
+    },
+    {
+      "id": "AC-10",
+      "text": "（ADR-018）停牌/无成交标的显式标注；指标在复权价上计算，MA 类前向填充但 metadata 记 ffill 段。",
+      "source": "plan-20261107-006 验收标准（m00001）"
+    },
+    {
+      "id": "AC-8",
+      "text": "（ADR-018）非交易时段返回最近收盘 bar，data_time 取最后一根 bar 时间并在 metadata 标 freshness=eod，不得把昨日收盘当实时。",
+      "source": "plan-20261107-006 验收标准（m00001）"
+    },
+    {
+      "id": "AC-9",
+      "text": "（ADR-018）rt_min 失败或超 2s 未返回时降级并标注 freshness=delayed，退回 stk_mins/日线。",
+      "source": "plan-20261107-006 验收标准（m00001）"
+    },
+    {
+      "id": "AC-7",
+      "text": "（ADR-018 C2）行情/指标工具返回值必须同时带 data_as_of（YYYY-MM-DD）与 data_time（YYYY-MM-DD HH:MM），缺一即按契约失败处理。",
+      "source": "plan-20261107-006 验收标准（m00001）"
+    },
+    {
+      "id": "iss-mwm6tovm",
+      "text": "月线 chart 跨 >10 年触发 ChartSpecError 导致 ok=False；要求 range 钳到 10 年 + ChartSpecError 兜底 + 真渲染回归。（第 2 轮已复核通过，本轮无改动）",
+      "source": "devloop_review rev-20261118-001 第 1 轮"
+    },
+    {
+      "id": "iss-mwm6towg",
+      "text": "周/月 resample、指数 index_daily、指数分钟拒绝零覆盖；要求 4 个用例。（第 2 轮已复核通过，本轮无改动）",
+      "source": "devloop_review rev-20261118-001 第 1 轮"
+    },
+    {
+      "id": "iss-mwm6tv83",
+      "text": "未上图的层被静默丢弃；要求写进 metadata chart warnings 并拼进 text。（第 2 轮已复核通过，本轮无改动）",
+      "source": "devloop_review rev-20261118-001 第 1 轮"
+    },
+    {
+      "id": "iss-mwm6tv92",
+      "text": "_summarize_result 仍把完整图表 HTML 拼进 partial answer；要求复用 artifact 句柄逻辑。（第 2 轮已复核通过，本轮无改动）",
+      "source": "devloop_review rev-20261118-001 第 1 轮"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "新增 _missing_open_days()：统计 data_as_of 之后、今天之前的开市日数（今天的 bar 缺属延迟语义，排除以免 15:00-16:00 误判停牌）；load_series 在 _is_suspended 之外用该缺口置 suspended（指数跳过），note 改为「停牌/无成交：最后一根 bar 为 X，其后 N 个交易日无行情」",
+      "commit": "266538d"
+    },
+    {
+      "path": "tests/test_data_time_semantics.py",
+      "summary": "新增 _missing_bar_frame()（真实停牌形态：最后一根 bar 之后无行）与 3 个用例：收盘后缺行 suspended、盘中缺行不得只报 delayed、当日 bar 未发布是 eod 而非 suspended；test_non_trading_day_answer_never_claims_realtime 的 fixture 补到 4 根日线",
+      "commit": "266538d"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread",
+      "result": "pass",
+      "passed": true,
+      "evidence": "714 passed, 1 warning, 12 subtests passed in 99.68s（本机 .venv；上一轮 711 passed）"
+    },
+    {
+      "command": "pytest tests/test_data_time_semantics.py -q -p no:cacheprovider",
+      "result": "pass",
+      "passed": true,
+      "evidence": "26 passed in 2.08s（新增 3 条缺行/守卫用例 + ADR-018 指定的 3 个测试名）"
+    },
+    {
+      "command": "mypy astock",
+      "result": "pass",
+      "passed": true,
+      "evidence": "Success: no issues found in 40 source files"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "pass",
+      "passed": true,
+      "evidence": "All checks passed"
+    },
+    {
+      "command": "gh pr checks 31（commit 266538d, run 44338507167）",
+      "result": "pass",
+      "passed": true,
+      "evidence": "test pass 1m38s；png-export 首次 fail 10m14s（Install CJK fonts 步骤 apt-get 卡住，job timeout-minutes:10 取消），gh run rerun 44338507167 --failed 后 png-export pass 1m27s、test pass 1m38s，双 job 全绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "market:read",
+      "reason": "quote/kline/indicator 需要读取行情（日线/分钟线/指数日线）",
+      "status": "granted"
+    },
+    {
+      "name": "indicator:compute",
+      "reason": "indicator 工具声明 indicator:compute 权限（计算在 astock.indicators 本地完成）",
+      "status": "granted"
+    },
+    {
+      "name": "chart:render",
+      "reason": "kline(chart=true) 声明 chart:render 权限，落盘 agent_artifacts",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub push / PR 评论",
+      "reason": "sandbox 下 gh credential helper 不可用，改用以 gh auth token 生成的 Authorization 头推送（openssl 后端）；GraphQL 端点间歇 TLS timeout 时改走 REST /issues/31/comments",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/market-tools",
+    "commit": "266538d",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/31",
+    "ci": "run 44338507167 双 job 全绿：test pass 1m38s / png-export pass 1m27s（png-export 首次因 apt-get 字体安装卡住被 job 级 timeout 取消，rerun --failed 后通过）",
+    "merge": "未合并（等第 3 轮评审 scope=diff；openP0=0/openP1=0 后合并 PR #31）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261118-014",
+  "next": "请评审按 scope=diff 复核 iss-mwma8thg 与已关闭 4 条（iss-mwm6tovm / iss-mwm6towg / iss-mwm6tv83 / iss-mwm6tv92）无回归：本轮 diff 仅 market_tools.py 的 _missing_open_days + load_series suspended 判定，以及 test_data_time_semantics.py 的 3 个新用例 + 1 个 fixture 调整。openP0/openP1 归零后可合并 PR #31；合并后我可把 plan-20261107-006 置 done 并补最终 handoff。",
+  "createdAt": "2026-11-18T16:00:40.557Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-001.md"
+}

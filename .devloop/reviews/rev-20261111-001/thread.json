@@ -1,0 +1,17 @@
+{
+  "id": "rev-20261111-001",
+  "title": "评审：架构契约评审门禁：ADR-002/010/013–018 与接口冻结",
+  "planItemId": "plan-20261110-003",
+  "sourceDevSessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7",
+  "branch": "feat/adr-gate-freeze",
+  "base": "main",
+  "files": [
+    "docs/AStockAgent_contract_rule_map_v1.md",
+    "docs/AStockAgent_interface_freeze_v1.md",
+    "tests/test_architecture_gate.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-11T03:13:33.688Z",
+  "updatedAt": "2026-11-11T03:46:20.514Z",
+  "reviewSessionId": "session-367f9f6c-09d6-44f9-8d4b-56e3e5499c3a"
+}

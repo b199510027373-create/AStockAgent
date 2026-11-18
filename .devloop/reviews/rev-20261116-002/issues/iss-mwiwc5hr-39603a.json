@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwiwc5hr-39603a",
+  "threadId": "rev-20261116-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-sufficiency",
+  "file": "tests/test_data_adj_caliber.py",
+  "lines": "120-130,241-265",
+  "title": "分钟路径未断言因子查询起点为 ADJ_HISTORY_START，另有重复断言削弱用例可读性",
+  "evidence": "两点都在本轮被评审的测试文件里，且都是\"看起来覆盖了、实际没覆盖\"：(1) 重复断言——tests/test_data_adj_caliber.py:120-130 的 test_hfq_base_ignores_requested_window 在 :127-130 连着写了两次完全相同的 ADJ_HISTORY_START 断言（同样的 spy/断言对象各调一次），说明该用例是复制粘贴后没有合并，第二份不增加任何保护。(2) 分钟路径的因子起点没断言——验收要求\"因子查询从 ADJ_HISTORY_START 开始\"，日线侧靠 spy 校验了 _fetch_daily 的 start_date，但 load_minute 走的是另一条查询路径 load_adj_factors（data.py:681-686），tests/test_data_adj_caliber.py:209-265 的分钟用例 patch 的是 _ADJ_MEM/_MINUTE_MEM 与 _today，只断言了 attrs 里的 adj/adj_base/base_factor，没有任何断言覆盖\"load_minute → load_adj_factors 的 start_date 也是 ADJ_HISTORY_START\"。如果以后有人只改日线侧、把 load_adj_factors 的起点改回 DEFAULT_START（astock/config.py:24 的 \"20150101\"），分钟 hfq 基准会静默退化成 2015 年首日而测试全绿。",
+  "suggestion": "(1) 删掉 :127-130 里重复的那一组断言（保留一组即可），顺手确认该用例断言的是\"两次不同 end 的请求都从 ADJ_HISTORY_START 取因子\"，而不是同一调用断言两遍。(2) 在分钟用例里加一条 spy：patch client.query（或 load_adj_factors 内部用的 query）记录调用参数，调用 load_minute(code, freq=..., days=1, adj=\"hfq\")，断言存在一次 `api_name == \"adj_factor\"` 且 `params[\"start_date\"] == data.ADJ_HISTORY_START`（同时可断言 end_date == _fmt(_today())），把\"分钟路径同样从 19900101 起取因子\"钉进测试。这两处都在你已提交的测试文件内，改动量很小，但能防住上面那条静默退化。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T07:08:06.517Z"
+  },
+  "createdAt": "2026-11-16T06:42:30.735Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T07:08:06.517Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwjjtiu2-739bf2",
+  "threadId": "rev-20261116-003",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "test-gap",
+  "file": "tests/test_sw_crosswalk.py",
+  "lines": "430-469",
+  "title": "分布产物缓存只测了换窗口重建，未测同窗口命中（Parquet 往返指纹稳定性）与阈值变化导致 meta 失效",
+  "evidence": "本轮为 P1（分布产物换窗口串缓存）新增的用例 `test_distribution_window_changes_artifact_key_and_rebuilds`（:430-469）只覆盖「换窗口 → 必须重建」这一侧，没有任何用例覆盖「同窗口 refresh=False → 必须命中缓存」这一侧：astock/sw_crosswalk.py:903-941 的命中分支要求 `cached_meta == meta`，其中 meta 含 `edges_fingerprint`（:116-121 `pd.util.hash_pandas_object` 对从 Parquet 读回的 edges 重新计算，而写 meta 时用的是内存中的 edges）。若 Parquet 往返改变 dtype/索引导致指纹不稳定，缓存会永不命中：每次运行都重新读 25 个快照，且没有任何测试会失败——这恰好是本轮修复要保证的核心契约，目前只能靠人工观察日志。另外「阈值改变但窗口不变 → distribution meta 失效」也没有用例（只有 :383-406 覆盖了边表层面的阈值重建）。",
+  "suggestion": "在 tests/test_sw_crosswalk.py 增加两条用例：①`test_distribution_same_window_hits_cache`——patch PIT_DIR 与 `sw.snapshot_window`（让它在第二次调用时抛 AssertionError），先 `refresh=True` 生成窗口 A，再 `refresh=False` 同窗口调用，断言返回的 metrics 与第一次相等、`snapshot_window` 未被调用、meta 文件内容未变，从而证明 `_frame_fingerprint` 跨 Parquet 往返稳定且命中分支有效；②`test_threshold_change_invalidates_distribution_meta`——窗口不变、`old_share=0.60/new_share=0.90` 且 `refresh=False`，断言 distribution/meta 被重建（meta 的 thresholds 变更、metrics 结构性计数随之变化）。两条都应使用现有合成 fixture，不触网。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T17:43:36.317Z"
+  },
+  "createdAt": "2026-11-16T17:39:52.346Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T17:43:36.317Z"
+    }
+  ]
+}

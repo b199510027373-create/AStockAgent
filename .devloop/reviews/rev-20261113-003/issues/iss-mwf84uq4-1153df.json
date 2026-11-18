@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwf84uq4-1153df",
+  "threadId": "rev-20261113-003",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/chart_render.py",
+  "lines": "317-320,543-546,1125-1136",
+  "title": "artifact 源经 transforms 过滤为空时仍回退旧 data_as_of/data_time，空图会标注一个不存在的截止日",
+  "evidence": "apply_transforms 末尾把 frame.attrs 原样复制到 transformed（chart_render.py:317-320）；_load_artifact_frame 会把旧 meta 的 data_as_of/data_time 写入 attrs（:254-257）。render 在 transforms 之后调用 _time_points（:1125-1136），而 _time_points 在 frame.empty 时跳过时间列探测，随后 `snapshot_as_of = frame.attrs.get(\"data_as_of\")`（:543-546）仍返回旧时点并写进图注/artifact。现有 tests/test_agent_chart_render.py 没有“artifact 源 + filter 过滤掉全部行”的用例，因此空态仍显示原数据截止日而非“时点未知”。",
+  "suggestion": "在 _time_points 中先处理 `frame.empty`：无显式 data_as_of/data_time 时直接返回 (\"\",\"\") 并写“数据为空，时点未知”，不要回退 attrs；attrs 兜底仅用于非空但缺时间列的快照。增加回归测试：用 artifact 回放 + `filter` 命中零行，断言 data_as_of==\"\"、data_time==\"\" 且 warning 存在，同时确认 artifact meta 不再写入旧日期。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T17:53:45.076Z"
+  },
+  "createdAt": "2026-11-13T17:01:40.876Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T17:53:45.076Z"
+    }
+  ]
+}

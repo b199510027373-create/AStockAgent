@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbkgxoi-6b397a",
+  "threadId": "rev-20261111-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "文档-冻结布局不一致",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "58",
+  "title": "文件布局「三件/四件产物」与 §4 清单、plan-20261107-003 验收里的 preview.png 三处不一致",
+  "evidence": "docs/AStockAgent_interface_freeze_v1.md:58 写「015 的存储布局（内容寻址 + 三件产物）在 §4 可以逐字写死」，但 §4 的目录树 :212-218 与 ADR-015:44（「目录、四件产物」）、:64（C1「四件产物齐全」）都是四件：`original.<ext>`、`extracted.jsonl`、`tables/<sheet_slug>.parquet`、`meta.json`。第三处冲突来自 .devloop/plan/items/plan-20261107-003.json 的 C1 验收：它声称与「§4 逐字一致」，却把产物列成 `meta.json`、`extracted.jsonl`、原文件、`preview.png`——§4 里没有 `preview.png`（全文 grep 无此 token），而 ADR-015 C1 又要求「四件产物齐全」。三份文件对同一个冻结布局分别给出 3 件 / 4 件 / 4 件+preview.png，plan-20261107-003 将据此写 `test_layout_matches_frozen_spec`，届时验收基准取决于读哪一份，冻结清单失去唯一权威性。",
+  "suggestion": "先定 v1 到底几件：若 `preview.png` 属于 v1，就在 §4 目录树补一行 `preview.png`（并说明尺寸/来源，例如首屏渲染缩略图）、在 §4 末补「四件/五件产物」清单，同步 ADR-015 C1 与 plan-20261107-003 的 C1 验收；若不属于 v1，则从 plan-20261107-003 的 C1 验收删掉 `preview.png`，改为「`original.<ext>` / `extracted.jsonl` / `tables/*.parquet` / `meta.json` 四件齐全」。无论哪种，都把 :58 的「三件产物」改成与 §4 一致的数字，并在 `test_frozen_layout_and_ddl_recorded_for_unbuilt_modules`（:438-447）里加断言：§4 代码块列出的产物条目数与冻结清单文字所写数字一致（例如解析 `## 4.` 段的行尾注释计数）。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:46:13.428Z"
+  },
+  "createdAt": "2026-11-11T03:35:55.266Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:46:13.428Z"
+    }
+  ]
+}

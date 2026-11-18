@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwikda23-310d32",
+  "threadId": "rev-20261116-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "api",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1173,1236-1244",
+  "title": "export_png 只有布尔默认 True，显式请求与默认路径不可区分，失败一律降级",
+  "evidence": "chart_render.py:1173 `export_png: bool = True`，:1236-1244 只要 payload 为 None 就 `degraded=True` 并追加 warning，没有任何「显式要求 PNG 必须成功」的模式；调用方无法区分「用户/上游明确要 PNG」与「默认顺带试一下」。装上 kaleido 后若 Chrome 缺失或超时，默认路径会让每张图都变成 degraded/partial，只靠元数据里的 warning 提示，属于验收第 5 条要防的「默认路径每图降级」风险；目前该条只在文档层面被描述，没有代码语义与用例。",
+  "suggestion": "把 export_png 改成三态 `png_mode: Literal[\"off\",\"auto\",\"require\"] = \"auto\"`（保留 export_png 兼容别名）：`require` 时 `_try_png` 失败直接抛专用 `PNGExportError`（或复用 ChartSpecError 之外的显式异常），run 状态记 failed，不落半成品 meta；`auto` 时首次探测失败后缓存「kaleido/chrome 不可用」并只告警一次，避免每图重复尝试与日志噪声；`off` 完全不尝试。补三条单测（require 失败抛错、auto 首次降级且后续不再尝试、off 不调用 to_image），并把语义写进 ops 文档与冻结清单。",
+  "confidence": 0.72,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:21:39.667Z"
+  },
+  "createdAt": "2026-11-16T01:07:27.915Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:21:39.667Z"
+    }
+  ]
+}

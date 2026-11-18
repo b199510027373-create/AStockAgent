@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksjget-7388e4",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "migration",
+  "file": "astock/agent/store.py",
+  "lines": "391-398",
+  "title": "ensure_schema 调 migrate_v1_to_v2 时未传 db_path，自定义连接迁移会把 DEFAULT_DB_PATH 当备份源",
+  "evidence": "ensure_schema 只接收 conn，调用 `migrate_v1_to_v2(conn)` 时没有 db_path（store.py:391-398）；migrate 内部用 `path = db_path or DEFAULT_DB_PATH`（store.py:1285）定位备份源。若调用方传入的是自定义路径或 `:memory:` 连接，v1 迁移会去复制默认 data/astock.db（可能不存在或复制错库），而不是当前连接对应的库。connect 路径自己传了 path（store.py:372-388），所以这个缺陷只在直接调用 ensure_schema 时暴露，但它是公开 API。",
+  "suggestion": "从连接推导数据库路径（`PRAGMA database_list` 的 file 列）或给 ensure_schema 增加 db_path 参数并透传；`:memory:` 时跳过备份但明确记录/告警。补测试：自定义 tmp 路径建 v1 库后调 ensure_schema，断言备份文件就在该 tmp 路径旁，而不是默认库。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:01:53.115Z"
+  },
+  "createdAt": "2026-11-17T14:31:45.365Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:01:53.115Z"
+    }
+  ]
+}

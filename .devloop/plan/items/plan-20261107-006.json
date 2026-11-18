@@ -2,7 +2,7 @@
   "id": "plan-20261107-006",
   "title": "行情/指标工具：实时 K 线与指标",
   "description": "依据 ADR-018 实现行情/指标工具：quote（最新价/涨跌幅/成交额）、kline（日/周/月 + 1/5/15/30/60 分钟，支持 MA/BOLL/成交量叠加）、indicator（MA/EMA/RSI/MACD/BOLL/KDJ/ATR）。复用 data.load_daily/load_minute 与 indicators.add_all；rt_min 走 30s 缓存；每个结果带 data_as_of + data_time；默认 qfq、涨跌停/成交用 raw；非交易时段、延迟、停牌均显式标注。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
@@ -38,25 +38,30 @@
       "ADR-016",
       "ADR-018"
     ],
+    "branch": "feat/market-tools (merged)",
+    "commit": "a855b37",
+    "mergeCommit": "a855b370a20abc1eae8328357c96d8b1d777126c",
     "mergedFrom": [
       "plan-20261110-007"
     ],
-    "branch": "feat/market-tools",
-    "commit": "3fc1ddf",
-    "pr": "31",
     "module": "agent_tools",
+    "pr": "31",
+    "review": [
+      "rev-20261118-001 (approved, r1→r3)",
+      "ho-20261119-001"
+    ],
     "test": [
-      "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread -> 711 passed, 1 warning, 12 subtests passed in 151.11s（评审第 1 轮修复后全量）",
-      "pytest tests/test_data_time_semantics.py -q -p no:cacheprovider -> 23 passed（含 ADR-018 指定 test_latest_bar_time_is_single_source / test_non_trading_session_marks_eod / test_stale_rt_min_marks_delayed，及周/月 resample、指数 index_daily、指数分钟拒绝、10 年窗口钳制+真实 chart_render.render、ChartSpecError 降级、图层丢弃/截断告警、长停牌 quote）",
-      "pytest tests/test_agent_tools.py -q -> 58 passed（含 ADR-018 指定 test_market_result_requires_both_timestamps、权限/参数校验/quote 新鲜度）",
-      "pytest tests/test_agent_runtime.py::test_summarize_result_keeps_chart_html_out_of_partial_answer tests/test_agent_runtime.py::test_runtime_observation_keeps_chart_html_out_of_context tests/test_agent_tools.py::test_market_result_requires_both_timestamps tests/test_agent_tools.py::test_market_tools_are_registered_with_permissions tests/test_agent_tools.py::test_quote_via_registry_reports_price_and_freshness -q -> 5 passed",
-      "mypy astock -> Success: no issues found in 40 source files；mypy tests/test_data_time_semantics.py tests/test_agent_runtime.py -> Success",
+      "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread -> 714 passed, 1 warning, 12 subtests passed in 85.22s（commit 74d3687，P2 修复后）",
+      "pytest tests/test_data_time_semantics.py -q -p no:cacheprovider -> 26 passed in 3.35s（ADR-018 指定 test_latest_bar_time_is_single_source / test_non_trading_session_marks_eod / test_stale_rt_min_marks_delayed，停牌缺 bar 3 例含精确缺口 12 天断言）",
+      "pytest tests/test_agent_tools.py -q -> 58 passed（含 ADR-018 指定 test_market_result_requires_both_timestamps）",
+      "mypy astock -> Success: no issues found in 40 source files；mypy tests/test_data_time_semantics.py -> Success",
       "ruff check astock tests -> All checks passed",
-      "gh pr checks 31 -> test pass 1m26s / png-export pass 1m5s（run 44328403133, commit 3fc1ddf）",
-      "首轮（commit 92b4b62）证据：pytest tests -q -> 702 passed, 12 subtests passed in 102.11s；gh pr checks 31 -> test pass / png-export pass (run 44258867189)"
+      "gh pr checks 31（commit 74d3687）-> run 44343766378 test pass 1m44s / png-export pass 1m21s（commit 266538d 的 run 44338507167 中 png-export 首跑因 apt-get 字体安装超 job timeout 失败，rerun --failed 后 pass）",
+      "main 上 merge commit a855b37 的 CI run 44344659084 -> completed success",
+      "历史轮次：commit 3fc1ddf -> 711 passed（run 44328403133 双 job pass）；commit 92b4b62 -> 702 passed（run 44258867189 双 job pass）"
     ]
   },
   "createdAt": "2026-11-07T14:12:10.292Z",
-  "updatedAt": "2026-11-18T14:50:47.966Z",
+  "updatedAt": "2026-11-18T16:17:19.283Z",
   "devSessionId": "session-604a4898-03c2-4f30-90ad-1559cb54410e"
 }

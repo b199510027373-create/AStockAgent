@@ -1,0 +1,41 @@
+{
+  "id": "ho-20261118-013",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261118-001",
+  "sessionId": "",
+  "title": "评审：行情/指标工具：实时 K 线与指标",
+  "summary": "第 2 轮（scope=full，复核 ho-20261118-011 / commit 3fc1ddf）结论：5 条首轮问题中 4 条已按建议真正修好并可关闭，1 条（iss-mwm6toxk）只修掉了报错症状、真实数据下的停牌标注仍缺失，改为新 P1 iss-mwma8thg 继续跟踪。因此 openP1=1，不能 approve。\n\n已复核通过（可关闭）：\n1) iss-mwm6tovm（月线 range 超 10 年）→ 新增 `_chart_range`（market_tools.py:938 起）按 `floor = last - DateOffset(years=MAX_RANGE_YEARS)` 钳制并 `plot = display.loc[...]` 真裁；`_render_kline` 用 try/except ChartSpecError 兜底成 figure=None + metadata[\"chart\"][\"warning\"]（market_tools.py:991-1040）。用例 test_kline_month_resamples_and_runs_real_render（tests/test_data_time_semantics.py:600 附近）跑的是真实 chart_render.render，断言 validate_chart_spec 不抛、range 跨度 ≤ MAX_RANGE_YEARS*366、feeding frame 少于表格根数，覆盖到位。另 test_kline_chart_spec_error_degrades_to_table 覆盖降级路径。\n2) iss-mwm6towg（周/月/指数零覆盖）→ 新增 test_kline_week_resamples_and_marks_eod_intraday、test_kline_index_uses_index_daily、test_index_minute_is_rejected，且删掉了 _Deps.index_daily 的 pragma: no cover，index_calls 真实记录入参；断言 data_time/original source/metadata 而非只 pytests 不抛，覆盖到位。\n3) iss-mwm6tv83（ema/atr 静默丢弃）→ `_chart_layers` 改为返回 (layers, dropped)，ema/atr、无法识别层名、超 MAX_LAYERS 三类都进 metadata[\"chart\"][\"warnings\"] 并由 kline 拼进 text（market_tools.py:922-980, 897-901）。test_kline_reports_layers_missing_from_chart / test_kline_reports_truncated_chart_layers 断言 spec.layers 与 warnings 双侧，覆盖到位。\n4) iss-mwm6tv92（_summarize_result 拼全量 HTML）→ 抽出 `_figure_handle(result)`（runtime.py:739-751）供 _format_observation 与 _summarize_result 共用，超限只留 artifact 句柄 + 「完整 HTML 已落 agent_artifacts」。test_summarize_result_keeps_chart_html_out_of_partial_answer 断言 summary 含 artifact_id/字符数、不含 \"<html>\"，短图仍原样返回，无行为回退。\n5) iss-mwm6toxk 的部分修复：QUOTE_LOOKBACK_BARS=60（market_tools.py:111-113, 688-691）确实消除了长停牌时「无 day 行情数据」的 TushareError。\n\n仍需修（新 P1，iss-mwma8thg）：停牌判据本身仍是 vol/amount 双 0（market_tools.py:392-393, 493-497），而本仓库既有语义是「停牌 = 缺 bar」（astock/track.py:688、astock/recommend.py:704 与 723-731 的 open_days 缺口判据）。真实日线上停牌日没有行、最后一根 bar 的 vol>0，于是停牌三周的股票 quote 会得到 eod/「最近交易日收盘」或 delayed/「延迟」，data_as_of 停在停牌前那天，没有 ADR-018 C2 与验收第 10 条要求的「停牌/无成交」。新增的 test_quote_handles_long_suspension 之所以通过，是因为 _daily_frame（tests/test_data_time_semantics.py:51-76）对 halted 日仍造行、只把量置 0，属合成形态，未覆盖真实「缺行」形态。\n\n其余复核无新问题：AST 层 ADR-018 C1 未被破坏（__is_suspended/_chart_range 都不生产 data_as_of/data_time，时点仍只来自 deps.bar_time/market_tools.py:493）；_chart_range 的 floor 在闰年边界仍小于 3660 天（10*366）不会二次触发 ChartSpec；kline 在 figure=None 时仍返回表格与 text 告警；runtime 无权限绕过变化；测试增量 9 例与 702→711 自洽，links.test/PR #31（run 44328403133）与 ho-20261118-012 仅记账提交一致，未发现证据伪造。\n\n完全解决判定（谁、在什么条件下）：由开发在 feat/market-tools 上按 iss-mwma8thg 的改法补齐「缺 bar 即停牌」判据与两条缺行用例，重跑 pytest tests -q（期望 ≥713 通过）、mypy astock、ruff check astock tests 并更新 links.test 与 PR #31；第 3 轮（scope=diff）只复核 iss-mwma8thg 与本次 4 条已关闭项无回归，openP0=0 且 openP1=0 时判完全解决、PR 才可合并。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 2,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 4,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "长停牌在真实数据上仍不会标 suspended：_is_suspended 只认 vol=0 行，而停牌是「缺 bar」（iss-mwm6toxk 残留）",
+        "suggestion": "在 load_series 判停牌时补上「缺 bar」判据：load_series 已经调用 deps.trade_cal（348-369），用最近一个已完成的交易日 open_day 与 data_as_of 比较，若 data_as_of 早于 open_day（缺口 ≥1 个交易日）也置 suspended=True，并把 note 写成可审计的形态，如「停牌/无成交：最后一根 bar 为 {data_as_of}，其后 {n} 个交易日无行情」；vol/amount 双 0 的判据保留（覆盖盘中 0 量 bar）。同时在 tests/test_data_time_semantics.py 补一条「停牌日缺行」的用例：日线 frame 只到 2023-12-15 且该行 vol=1000（真实形态），clock=2024-01-04 16:30，断言 freshness==\"suspended\"、notes/text 含「停牌」、data_as_of==\"2023-12-15\"；再补一条盘中（clock=10:00）同样缺行的用例，断言不会只报 delayed。改完后重跑 pytest tests/test_data_time_semantics.py 与全量 pytest、更新 links.test 与 PR #31，下一轮按此复核即可关闭。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": "ho-20261118-010",
+  "next": "",
+  "createdAt": "2026-11-18T15:35:16.470Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-013.md"
+}

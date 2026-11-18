@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwjnea54-cbaf29",
+  "threadId": "rev-20261117-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "docs",
+  "file": "docs/AStockAgent_development_status_2026-11-08.md",
+  "lines": "143（另见 README.md:23）",
+  "title": "文档基线同步漏改：development_status 仍写 9247/2155，且 76.68% 与算术不自洽；README 仍写 606 passed",
+  "evidence": "本轮把基线从 9247/2176=76.47% 改为 9248/2178=76.45%（.coveragerc、CI step 名、4 份 docs 都改了），但 docs/AStockAgent_development_status_2026-11-08.md:143 仍写着：\n`coverage: 9247 statements / 2155 miss = 76.68%（CI Linux 9248/2178 = 76.45%，门禁 76.45%）`\n\n两个问题：\n1) 算术不成立——9247 - 2155 = 7092，7092/9247 = 76.70%，不是 76.68%；这行把旧语句数（9247/2155，PR #21 那次）与新的百分比（76.68%）拼在一起了。\n2) 与本次实测不一致——本地实测是 9248 stmts / 2157 miss = 76.68%，`.coveragerc:16`（`本地 Windows（Python 3.13.5，同一 commit，608 passed）：9248 / 2157 = 76.68%`）与 docs/AStockAgent_CI_work_calendar.md:191 都已写 9248/2157，只有这一行漏改。\n\n同类漏改：README.md:23 仍写「测试从 18 个增加到 606 个（2026-11-17 实测：606 passed + 1 skipped）」，而本轮 pytest 已是 608 passed（新增 pyyaml pin 参数 + mypy exclude 守护各 1 条，见 ho-20261117-010 的 tests 记录）。\n\n影响：这两处是 A2「记录最新 coverage 实测值」与 A7「清理旧基线表述」的对外记录面，读者按文档复算会得到与门禁不一致的数；ho-20261117-010 声称「4 份文档数字同步」，实际是 4 份中的 1 行 + README 未同步。",
+  "suggestion": "由开发补一个纯文档提交（不改代码/配置）：把 docs/AStockAgent_development_status_2026-11-08.md:143 改为 `coverage: 9248 statements / 2157 miss = 76.68%（CI Linux 9248/2178 = 76.45%，门槛 76.45%）`；README.md:23 的 606 改为 608（或改为「数量以 `pytest` 实测为准」这类不带数字的表述，避免每次加测试都要改）。提交前用一条校验命令确认一致，例如 `grep -rn \"9248\\|9247\\|76\\.4\" docs README.md` 人工核对，或把「四份文档的 stmts/miss/百分比必须等于 .coveragerc 注释基线」加进 tests/test_ci_quality_gates.py。\n\n完全解决标准：四处 docs 与 README 的语句数/未覆盖数/百分比三组数字与 .coveragerc 注释里的本地实测（9248/2157=76.68%）和 CI 实测（9248/2178=76.45%）一致，且 grep 不再出现 9247/2155 或 606 passed。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T19:39:08.959Z"
+  },
+  "createdAt": "2026-11-16T19:19:59.704Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T19:39:08.959Z"
+    }
+  ]
+}

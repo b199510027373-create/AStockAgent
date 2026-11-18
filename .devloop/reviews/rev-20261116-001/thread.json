@@ -1,0 +1,13 @@
+{
+  "id": "rev-20261116-001",
+  "title": "评审：PNG 导出基础设施：Kaleido/Chrome/字体与 CI",
+  "planItemId": "plan-20261114-001",
+  "sourceDevSessionId": "session-a32e1f19-8de7-4baf-9957-8359ff6b3bbf",
+  "branch": "feat/agent-chart-pipeline",
+  "base": "main",
+  "files": [],
+  "status": "approved",
+  "createdAt": "2026-11-16T00:57:44.427Z",
+  "updatedAt": "2026-11-16T02:34:56.535Z",
+  "reviewSessionId": "session-ea48c8cf-6b27-4d47-9842-63adbf3de6ec"
+}

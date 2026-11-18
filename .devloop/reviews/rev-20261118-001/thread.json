@@ -1,0 +1,21 @@
+{
+  "id": "rev-20261118-001",
+  "title": "评审：行情/指标工具：实时 K 线与指标",
+  "planItemId": "plan-20261107-006",
+  "sourceDevSessionId": "session-604a4898-03c2-4f30-90ad-1559cb54410e",
+  "branch": "feat/market-tools",
+  "base": "main",
+  "files": [
+    "astock/agent/runtime.py",
+    "astock/agent/tools/__init__.py",
+    "astock/agent/tools/market_tools.py",
+    "tests/test_agent_runtime.py",
+    "tests/test_agent_tools.py",
+    "tests/test_ci_quality_gates.py",
+    "tests/test_data_time_semantics.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-18T13:54:59.024Z",
+  "updatedAt": "2026-11-18T16:06:13.829Z",
+  "reviewSessionId": "session-b88d8272-deec-471d-ab88-d3937719486b"
+}

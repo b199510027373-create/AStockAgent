@@ -1,0 +1,168 @@
+{
+  "id": "ho-20261113-020",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-005",
+  "threadId": null,
+  "sessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063",
+  "title": "评审修复：复权口径、时点一致性、ChartSpec 与 schema 收紧",
+  "summary": "按 reviewer 交付 ho-20261113-019（rev-20261113-003，1 P0 + 2 P1 + 5 P2）逐条修复并新增回归测试，提交 75c60e3 已推送 PR #12，CI run 43405286628 通过。P0：data 层真正区分 qfq/hfq/none（hfq 以原始因子 1.0 为基准，none 跳过复权），渲染层 none/raw 映射为 adj=None，未知口径报错而非静默前复权，并用 monkeypatch load_daily/load_minute 覆盖真实取数分支。P1：data_as_of/data_time 改在 apply_transforms 之后按实际落图数据重算（显式参数仍优先），截断快照必含最新 bar，artifact 回放按快照时间列重算而非信任旧 meta（并有篡改 meta 的回归用例）。P2：非法日历日期转 $.data.range 结构化错误；JSON Schema 封闭 transforms/layers/annotations item、ref 三 pattern oneOf、range 枚举+日期 pattern、metrics 白名单枚举、声明 panes/style 别名；latest_bar_time 取时间最大值并按 09:30–11:30/13:00–15:00 两段闭区间校验；ensure_run status=running 不写 finished_at；拆分 artifact kind 测试；冻结清单新增 §3.2.1 兼容别名小节并把 §3 状态改为已实现。",
+  "requirements": [
+    {
+      "id": "R-15",
+      "text": "P0 iss-mwesogzh-14310b：raw/none 不得被 data 层当成 qfq；渲染层 none→None，data 层真正实现 qfq/hfq/none，并补真实取数分支回归测试",
+      "source": "ho-20261113-019 / rev-20261113-003"
+    },
+    {
+      "id": "R-16",
+      "text": "P1 iss-mwesok8w-692962：时点在 transforms 后重算，快照截断包含最新 bar，artifact 回放按快照时间列重算；补 data_as_of 与 meta/data.rows 一致性断言",
+      "source": "ho-20261113-019 / rev-20261113-003"
+    },
+    {
+      "id": "R-17",
+      "text": "P1 iss-mwesomkm-e708a1：非法日历日期（2026-13-01 / 2026-02-30）转为 $.data.range 结构化错误，不抛裸 ValueError",
+      "source": "ho-20261113-019 / rev-202613-003"
+    },
+    {
+      "id": "R-18",
+      "text": "P2 iss-mwesop7d-cdcd33：latest_bar_time 取时间最大值不依赖行序，午休 11:31–12:59 判为非法",
+      "source": "ho-20261113-019 / rev-20261113-003"
+    },
+    {
+      "id": "R-19",
+      "text": "P2 iss-mwesorjv-f80e56：ensure_run status=running 时 finished_at 为 NULL，success 不早于 started_at",
+      "source": "ho-20261113-019 / rev-20261113-003"
+    },
+    {
+      "id": "R-20",
+      "text": "P2 iss-mwesotti-15583c：record_artifact 非法 kind 断言拆成独立测试函数",
+      "source": "ho-20261113-019 / rev-20261113-003"
+    },
+    {
+      "id": "R-21",
+      "text": "P2 iss-mwesowrt-d23e68：冻结清单 §3 记录 panes/style/raw 别名语义（规范名 layers/theme/none，别名不得与规范名同现）",
+      "source": "ho-20261113-019 / rev-20261113-003"
+    },
+    {
+      "id": "R-22",
+      "text": "P2 iss-mwesozpx-7d920e：JSON Schema 封闭嵌套 item、ref/range 约束、metrics 白名单与别名声明",
+      "source": "ho-20261113-019 / rev-20261113-003"
+    },
+    {
+      "id": "R-01",
+      "text": "原有验收（六种 kind、结构化错误、HTML artifact 元数据、K 线 MA/BOLL/成交量、artifact_id 可引用、字段/枚举冻结、禁 exec/eval、qfq 默认与 raw 图注、agent_artifacts 六键、双时点与 degraded、period/range 消歧）继续成立，回归测试全绿",
+      "source": "plan-20261107-005 验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/data.py",
+      "summary": "_normalize_adj + qfq/hfq 基准分离 + none 跳过复权；latest_bar_time 取时间最大值并按两段交易时段校验",
+      "commit": "75c60e3"
+    },
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "none/raw→adj=None 映射；时点在 transforms 后重算；快照截断保留最新 bar；apply_transforms 传播 attrs 供回放兜底",
+      "commit": "75c60e3"
+    },
+    {
+      "path": "astock/agent/chart_spec.py",
+      "summary": "_parse_range_date 结构化日期错误；JSON Schema 封闭 item、ref oneOf、range oneOf、metrics 白名单、panes/style 别名",
+      "commit": "75c60e3"
+    },
+    {
+      "path": "astock/agent/store.py",
+      "summary": "ensure_run running 不写 finished_at，started/finished 使用同一 now",
+      "commit": "75c60e3"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§3 状态改为已实现，修正 §3.2 表格错位，新增 §3.2.1 兼容别名",
+      "commit": "75c60e3"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "新增 5 个用例：adj 映射（qfq/hfq/none/raw）、分钟取数 adj、transforms 后时点一致、篡改 meta 的回放、截断快照含最新 bar",
+      "commit": "75c60e3"
+    },
+    {
+      "path": "tests/test_agent_chart_spec.py",
+      "summary": "新增非法日历日期、schema 封闭性、ref/range、别名、冻结文档用例",
+      "commit": "75c60e3"
+    },
+    {
+      "path": "tests/test_agent_store.py",
+      "summary": "拆分 artifact kind 用例，新增 running/success finished_at 用例",
+      "commit": "75c60e3"
+    },
+    {
+      "path": "tests/test_data_pit_events.py",
+      "summary": "新增 AdjCaliberTests（none/hfq/未知口径/分钟 none）与 LatestBarTimeTests（行序、时段边界、午休、空表）",
+      "commit": "75c60e3"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py tests/test_data_pit_events.py -q",
+      "result": "113 passed",
+      "passed": true,
+      "evidence": "目标测试全绿（spec 50、render 30、store 10、data 23）"
+    },
+    {
+      "command": "pytest tests -q",
+      "result": "471 passed, 1 skipped, 2 subtests passed in 26.43s",
+      "passed": true,
+      "evidence": "含新回归用例；根目录 pytest 会误收 release 旧 test_ma.py，统一跑 tests"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 34 source files",
+      "passed": true,
+      "evidence": "类型检查通过"
+    },
+    {
+      "command": "pytest tests/test_architecture_gate.py -q",
+      "result": "32 passed, 1 skipped",
+      "passed": true,
+      "evidence": "契约落点/冻结文档门禁全绿"
+    },
+    {
+      "command": "gh run view 43405286628 --json status,conclusion",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "CI run https://github.com/b199510027373-create/AStockAgent/actions/runs/43405286628 on 75c60e3"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub 仓库写权限（push / PR）",
+      "reason": "gh 已登录 b199510027373-create，推送 75c60e3 到 PR #12 分支",
+      "status": "granted"
+    },
+    {
+      "name": "kaleido（PNG 导出）",
+      "reason": "环境未安装，PNG 路径仍以 monkeypatch 覆盖，真实导出需决定是否新增依赖",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chart-pipeline",
+    "commit": "75c60e3",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43405286628",
+    "merge": "未合并（等待 reviewer 复审批准）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-018",
+  "next": "请 reviewer 按 rev-20261113-003 逐条复核：重点看 data.py 的 hfq 基准与 none 跳过逻辑、chart_render 的 transforms 后时点与快照截断、chart_spec 的日期错误与 schema 封闭性。若批准后合入 main，本项转 done；剩余开放点：panes/style 别名是否要写进正式冻结字段（当前为兼容别名）、chart_render 对 data/indicators 的延迟 import 与 modules.json 缺边应在 plan-20261107-008 补图、kaleido 是否入依赖。",
+  "createdAt": "2026-11-13T10:24:10.872Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-020.md"
+}

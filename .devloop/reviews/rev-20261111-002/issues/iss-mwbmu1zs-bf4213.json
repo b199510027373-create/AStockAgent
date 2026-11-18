@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbmu1zs-bf4213",
+  "threadId": "rev-20261111-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "口径披露",
+  "file": "app.py",
+  "lines": "341-345",
+  "title": "「技术分位」在表格与最新批次摘要中仍不带 N，与 §6.4 的展示要求不一致",
+  "evidence": "冻结文档 §6.4 规定「展示：一律写『候选池分位（N=候选池大小）：92%』…不得只写『池内分位』而不给 N」（docs:376），但两个用户可见出口不带 N：①app.py:341-345 的「最新研究批次摘要」输出 `技术分位{pct}%`（如 `技术分位92.0%`），latest.json 的 `params.candidate_n` 明明可读却没用；②推荐表/CSV 的列名固定为「技术分位」（contracts.py:495-504），页面上只看到 92% 而不知池大小。跨批次 candidate_n 不同（UI 允许 15~30，test_use_cases.py:118 用 8）时，同一列数值无法直观比较，正是上一轮 P1「口径不同」在展示层的残留。",
+  "suggestion": "从 latest.json 读取 `params.candidate_n`（或按表长回退），把摘要改成 `候选池分位(N={n}){pct}%`；推荐表在表头/标题或 report_markdown 顶部统一标注「分位基准：候选池 N=...」，CSV 若不能改列名，就在同目录 JSON 的 params 中保证有 N（已有）并在页面提示。补一个用例断言 app 摘要含 N。修复责任：开发，随 P1 的 N 披露一起收口。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:57:03.400Z"
+  },
+  "createdAt": "2026-11-11T04:42:06.616Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:57:03.400Z"
+    }
+  ]
+}

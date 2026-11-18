@@ -1,0 +1,85 @@
+{
+  "id": "ho-20261117-025",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261107-004：main 记录提交 2997945，CI 全绿",
+  "summary": "收尾：devloop 记录提交 2997945 已推送 main（plan 标 done、ho-022/024 归档、calendar/worklog 更新），main CI run 44094090225 与合并提交 run 44093985278 均 success。代码侧无后续改动；PR #28 / #29 均已合并。",
+  "requirements": [
+    {
+      "id": "A1-A10",
+      "text": "全部验收项随 PR #28 合并交付，r3 复核通过。",
+      "source": "plan-20261107-004 验收标准"
+    },
+    {
+      "id": "P2-1",
+      "text": "零工具调用但回答自带文件引用时降级为「未在文件中找到」。",
+      "source": "rev-20261117-002 r3 / iss-mwkq6seh-07fa38"
+    },
+    {
+      "id": "P2-2",
+      "text": "冻结清单 §4.1 与契约规则映射同步 file_list 豁免与正文不进白名单。",
+      "source": "rev-20261117-002 r3 / iss-mwkq6sfo-5ffa17"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-004.json",
+      "summary": "plan done / progress 100；links 记录 PR #28/#29 合并与全部测试证据",
+      "commit": "2997945"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261117-024.json",
+      "summary": "合并与 P2 收尾 handoff（未提交版本 022/024 一并归档）",
+      "commit": "2997945"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "delivery 日志 log-1794922454767-f2d0c2",
+      "commit": "2997945"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 44094090225 --json status,conclusion",
+      "result": "completed success",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "gh run view 44093985278 --json status,conclusion",
+      "result": "completed success",
+      "passed": true,
+      "evidence": ""
+    }
+  ],
+  "permissions": [
+    {
+      "name": "PR 合并",
+      "reason": "r3 approve 后按交付文档合并",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "2997945",
+    "pr": "PR #28 / PR #29 均 merged",
+    "ci": "main 2997945 run 44094090225 success；merge 提交 run 44093985278 success",
+    "merge": "已合并 main（PR #28 a5a2d97、PR #29 efb3e25）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-024",
+  "next": "无代码待办。如需将 rev-20261117-002 的 iss-mwkq6seh-07fa38 / iss-mwkq6sfo-5ffa17 结案，评审侧标 fixed 即可；plan-20261107-004 已 done。",
+  "createdAt": "2026-11-17T13:36:38.449Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-025.md"
+}

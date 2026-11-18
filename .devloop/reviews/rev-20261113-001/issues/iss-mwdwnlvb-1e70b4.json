@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwdwnlvb-1e70b4",
+  "threadId": "rev-20261113-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/scheduler.py",
+  "lines": "29,114-127,308-334",
+  "title": "长期停摆（>60 个交易日无任何 close 行）会被判成“无历史”，心跳永远不告警",
+  "evidence": "`initialized` 只在 `_recent_trading_days(now, HEARTBEAT_LOOKBACK_DAYS)` 返回的窗口内判断（scheduler.py:308-313），而 `_recent_trading_days` 固定截断到 60 个交易日（scheduler.py:127 `return days[:count]`，HEARTBEAT_LOOKBACK_DAYS=60 见 29 行）。因此当台账里最近 60 个交易日一行 close 记录都没有、但更早存在历史行时（例如机器停机 3 个月以上后重启、或从旧备份恢复 astock.db），循环拿到的 `records` 全是 `job is None`（284-291），`initialized` 为 False，直接走 314-328 返回 `{\"ok\": True, \"initialized\": False, \"reason\": \"no_history\"}`，`python -m astock.jobs --heartbeat` 退出码 0、不写 scheduler_alerts.jsonl。这与 ADR-004 §10 的措辞不符：文档写的是「台账只有当天 pending、**尚无任何历史记录**时才 initialized=false 且不告警」，而实现把“窗口内没有记录”等同于“没有历史记录”。后果恰好落在心跳最该报警的场景：长时间完全停跑时监控静默通过。现有测试也未覆盖（test_startup_maintenance_marks_due_job_without_empty_history_alert 只测空库，tests/test_scheduler_ledger.py:350-370 附近）。",
+  "suggestion": "把“是否有历史”与“窗口”解耦：`initialized` 改为查全表是否存在任意 close 行（如 `ledger.list_jobs(slot=\"close\", limit=1)` 非空即视为已初始化），窗口内没有行时把 `streak` 截断为 `HEARTBEAT_LOOKBACK_DAYS` 并照常告警（signature 用 reference+streak+threshold 即可，天然去重）。补一条用例：库里只有 2026-06-01 一条 success、now=2026-11-06 16:45 → `initialized=True`、`ok=False`、`alerted=True`、`streak==60`。此项为 P2，不阻断本次 approve，可与下一次 scheduler.py 改动一起提交。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T07:42:30.326Z"
+  },
+  "createdAt": "2026-11-12T18:52:34.295Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T07:42:30.326Z"
+    }
+  ]
+}

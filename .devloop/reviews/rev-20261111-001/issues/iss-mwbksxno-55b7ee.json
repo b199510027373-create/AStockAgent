@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbksxno-55b7ee",
+  "threadId": "rev-20261111-001",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "门禁-绕过",
+  "file": "tests/test_architecture_gate.py",
+  "lines": "507-583",
+  "title": "import 级仍可绕过：`from urllib import request`、`import http.client`、`importlib.import_module('subprocess')` 均零命中",
+  "evidence": "tests/test_architecture_gate.py:507 FORBIDDEN_IMPORTS 只按「完整模块串」匹配，:575 对 ImportFrom 只比较 `node.module`；`from urllib import request` 的 module 是 \"urllib\"，既不等于也不以 \"urllib.request.\" 开头，因此不报；随后 :545 把 request 绑定为 \"urllib.request\"，:578-580 把 `request.urlopen('http://x')` 解析成 \"urllib.request.urlopen\"，而 :508-527 的 FORBIDDEN_SYMBOLS 里没有这个符号，`urlopen` 也不在 :529 的删除方法集里，于是整个函数返回 []。同理 `import http.client` / `from http import client; client.HTTPSConnection(...)`（FORBIDDEN_IMPORTS 无 \"http\"）、`importlib.import_module('subprocess')`、`__import__('socket')` 都是零命中——这些正是 AGENT-01「禁止任意 HTTP、禁止 shell」要挡的能力。现有反例 :602 只覆盖 `from urllib.request import urlopen`（模块串恰好命中），恰好漏掉同一能力的另一种写法；:571 的 `alias.name.startswith(bad + \".\")` 也只处理「导入更深模块」，不处理「从父模块导入子模块」。",
+  "suggestion": "把 import 检查改成「全路径归一后再判前缀」：1) ImportFrom 时用 `full = f\"{module}.{alias.name}\"`，对 FORBIDDEN_IMPORTS 的每个根做双向前缀判断（full==root、full.startswith(root+\".\")、root.startswith(full+\".\") 任一成立即命中，可覆盖 `from urllib import request` 与 `from http import client`）；2) FORBIDDEN_IMPORTS 补 \"http.client\"、\"http\"、\"urllib3\"（若允许 white-list，就显式写允许的 http 用法）；3) 对 `__import__(\"x\")` 与 `importlib.import_module(\"x\")` 的常量参数做同样的根前缀判定；4) 在本文件 :598 起补四条断言：`from urllib import request\\nrequest.urlopen('http://x')` → 非空、`import http.client` → 非空、`importlib.import_module('subprocess')` → 非空、`__import__('socket')` → 非空，并保留 :586-595 的无害用法零命中。修好后这条门禁才是 AGENT-01 可依赖的自动化，否则 005/006 建 tools 目录时它仍会给出虚假安全感。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:46:20.514Z"
+  },
+  "createdAt": "2026-11-11T03:45:15.108Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:46:20.514Z"
+    }
+  ]
+}

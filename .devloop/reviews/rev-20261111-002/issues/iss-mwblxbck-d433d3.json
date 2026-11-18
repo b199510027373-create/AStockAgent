@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwblxbck-d433d3",
+  "threadId": "rev-20261111-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "docs",
+  "file": ".devloop/architecture/adr/ADR-010-research-semantics.md",
+  "lines": "25-60",
+  "title": "ADR-010「实现回写」引用不存在的 `_action_research`、行号错位，且「四状态」与代码五状态不一致",
+  "evidence": ".devloop/architecture/adr/ADR-010-research-semantics.md:29 与 :60 都引用 `recommend.py:259-264`（`_action_research`），但代码里没有 `_action_research`：astock/recommend.py:263-269 是 `_action(score: float) -> str`（≥68 强 / ≥52 中性 / 其余弱），259-262 是 `MISSING_PERCENTILE` 常量。`backfill.py:92-94` 指向的是技术分重标那段，action 赋值在 backfill.py:98、分位在 103-105。另外 ADR-010:48-49 写「四状态」，astock/track.py:417-446 实际是五个分支（insufficient / unavailable / positive / negative / 默认 no_alpha），另有独立的错误态 alpha_banner_error_markdown。",
+  "suggestion": "由 ADR 维护者（架构角色）在合并前更新「实现回写」：把符号名改成 `_action`（astock/recommend.py:263-269）、backfill 行号改为 98（action）/103-105（percentile），删掉不存在的 `_action_research`；把 C2 的「四状态」写成「insufficient / unavailable / positive / negative + no_alpha（默认无显著 alpha）」并说明 error 态另走 alpha_banner_error_markdown；再补一句本分支统一后的分位基准（与上一条 issue 的结论一致）。完全解决标准：ADR 里引用的符号与行号都能在代码中 grep 命中，状态数量与 track.py 分支一致。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:32:19.609Z"
+  },
+  "createdAt": "2026-11-11T04:16:39.092Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:32:19.609Z"
+    }
+  ]
+}

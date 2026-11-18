@@ -1,0 +1,141 @@
+{
+  "id": "ho-20261111-026",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "推荐 UI 生成/历史读取统一到 ledger（评审修复更新）",
+  "summary": "按 reviewer handoff ho-20261111-025 修复 rev-20261111-003 第 1 轮的 1×P1 + 2×P2：runs 新增 report_md/status_line 并随生成首次落盘，生成页从台账读回详细报告与生成摘要；items 新增 close/ret20/rsi，恢复生成页 13 列；旧库自动补列；修正 now docstring 与历史列表文案。新增/更新测试后目标 108 passed、全量 305 passed/1 skipped、mypy 30 files 通过；提交 ade4e43，任务转 in_review。PR/CI 仍未创建，浏览器手工 smoke 未做。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "历史批次列表、单批详情、证据链全部从 ledger 读。",
+      "source": "plan-20261103-003 描述"
+    },
+    {
+      "id": "REQ-2",
+      "text": "生成成功后立即写入 ledger，并回到与历史读取相同的读取/渲染路径。",
+      "source": "plan-20261103-003 描述"
+    },
+    {
+      "id": "REQ-3",
+      "text": "推荐页的「生成」与「历史读取」都走 ledger。",
+      "source": "plan-20261103-003 验收标准 1"
+    },
+    {
+      "id": "REQ-4",
+      "text": "页面能看到 run_id / data_as_of / tradable_from / diagnostics。",
+      "source": "plan-20261103-003 验收标准 2"
+    },
+    {
+      "id": "REQ-5",
+      "text": "ledger 缺记录时给出明确空状态，不回退到重新跑流水线。",
+      "source": "plan-20261103-003 验收标准 3"
+    },
+    {
+      "id": "REQ-6",
+      "text": "保留 JSON 归档可读，但不再作为 UI 主读源。",
+      "source": "plan-20261103-003 验收标准 4"
+    },
+    {
+      "id": "REQ-7",
+      "text": "改行为必须新增/更新测试，并运行目标测试、相关全量测试和类型检查；证据写入 links.test 与 handoff。",
+      "source": "本次开发任务说明"
+    },
+    {
+      "id": "REQ-8",
+      "text": "生成后报告区显示详细报告或确认的替代内容，且生成摘要不丢失。",
+      "source": "review rev-20261111-003 P1 iss-mwbp12uh-d09875"
+    },
+    {
+      "id": "REQ-9",
+      "text": "页面恢复 收盘/20日%/RSI 三列，或明确降级并在批次信息提示；补列集合测试。",
+      "source": "review rev-20261111-003 P2 iss-mwbp1809-bdee9a"
+    },
+    {
+      "id": "REQ-10",
+      "text": "run_recommendation 的 now 参数注释与实现一致，不保留误导说明。",
+      "source": "review rev-20261111-003 P2 iss-mwbp1a4j-79492d"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/ledger.py",
+      "summary": "runs 增 report_md/status_line，items 增 close/ret20/rsi；_migrate 对旧库逐列 ALTER；save_run 写入新增列。",
+      "commit": "ade4e43"
+    },
+    {
+      "path": "astock/recommend.py",
+      "summary": "_save 新增 report_md/status_line 参数并写入 JSON/ledger；generate_recommendation 将 report/status 计算前移到 _save 之前，首次落盘即包含详细报告与生成摘要。",
+      "commit": "ade4e43"
+    },
+    {
+      "path": "astock/use_cases.py",
+      "summary": "RECOMMEND_COLUMNS 扩为 13 列；_ledger_view 读回 report_md/status_line/close/ret20/rsi；batch_md 增加生成摘要折叠区；修正 now docstring 与历史列表截断文案。",
+      "commit": "ade4e43"
+    },
+    {
+      "path": "tests/test_core_paths.py",
+      "summary": "集成用例断言 13 列、详细报告内容、batch_md 生成摘要、JSON/ledger 的 report_md 与 status_line、items 行情列。",
+      "commit": "ade4e43"
+    },
+    {
+      "path": "tests/test_research_semantics.py",
+      "summary": "旧库迁移测试覆盖 runs 的 report_md/status_line 与 items 的 percentile/close/ret20/rsi。",
+      "commit": "ade4e43"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "生成读回测试改为断言台账报告与 13 列；历史列表文案断言更新为“已显示最近 N 个批次（上限 N）”。",
+      "commit": "ade4e43"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_use_cases.py tests/test_core_paths.py tests/test_contracts.py tests/test_research_semantics.py -q -p no:cacheprovider",
+      "result": "108 passed, 2 subtests passed",
+      "passed": true,
+      "evidence": "目标测试与相关契约/迁移用例全部通过；涵盖生成读回报告、13 列、旧库迁移与历史列表文案。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "305 passed, 1 skipped, 2 subtests passed",
+      "passed": true,
+      "evidence": "仓库全量测试通过；仅 anyio PytestRemovedIn10Warning，1 个既有 skip。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "类型检查通过。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "danger-full-access",
+      "reason": "workspace-write 下 Python tempfile 创建的临时目录被 ACL 锁死，测试 setUp 报 PermissionError；当前会话已切换为 danger-full-access。",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-003-ledger-ui",
+    "commit": "ade4e43",
+    "pr": "未创建",
+    "ci": "未运行",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261111-024",
+  "next": "1) reviewer 跑第 2 轮 diff 评审，重点看 ledger 迁移、report_md/status_line 读回、13 列恢复与 old-run 回退；2) 创建 PR 并触发 CI；3) 合入后做一次真实浏览器 smoke：生成→历史列表出现新批次→加载所选批次查看报告/证据/13 列→空台账状态。当前测试已覆盖构建与 handler，但未做浏览器手工验证。",
+  "createdAt": "2026-11-11T05:54:32.964Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-026.md"
+}

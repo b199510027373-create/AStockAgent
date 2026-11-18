@@ -1,0 +1,114 @@
+{
+  "id": "ho-20261111-007",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261110-003",
+  "threadId": null,
+  "sessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7",
+  "title": "架构契约评审门禁：ADR-002/010/013–018 与接口冻结",
+  "summary": "按评审第 2 轮的闭环条件完成收尾：修掉 2 条新增 P2，PR #7 已合入 main。iss-mwbkgxnj：把危险符号扫描从「模块名 + 点号链」升级为符号解析——新增 _import_bindings（import 别名表、from-import 映射）、_qualify（沿别名表解析点号链）、FORBIDDEN_SYMBOLS（含 subprocess.run/Popen/check_output、pathlib.Path.unlink/rmdir）与 DELETION_METHODS 兜底；`from os import system`、`import os as o; o.remove()`、`from shutil import rmtree as rm`、`Path('x').unlink()`、`pathlib.Path('x').rmdir()` 均被标记（新增 test_agent_tools_scan_resolves_aliases_and_from_imports，6 条断言），误报守卫补 `urllib.parse.quote` 仍为零命中。iss-mwbkgxoi：v1 布局定为四件产物（original.<ext> / extracted.jsonl / tables/<sheet_slug>.parquet / meta.json），冻结清单「三件产物」改「四件产物」，plan-20261107-003 的 C1 验收删掉 preview.png，新增 test_frozen_layout_artifact_count_is_consistent 守三处口径一致。验证：gate 31 passed/1 skipped、全量 270 passed/1 skipped（13.71s）、mypy 32 文件无问题、ruff 全绿；CI run 42954426539 pass 1m6s。随后按 reviewer「代码合入 main 后开第 3 轮」的条件用 --merge 合并 PR #7（merge commit 1ffaee0），并在 PR 内发逐条 feedback 评论（issuecomment-6786367822）覆盖 9 条 issue；plan-20261110-003 置 done、progress 100。",
+  "requirements": [
+    {
+      "id": "ISS-mwbkgxnj",
+      "text": "危险符号扫描必须能识别 from os import system / import os as o / from shutil import rmtree as rm / pathlib Path().unlink()/rmdir() 等绕过形式，且不得误报 os.path/os.environ/urllib.parse",
+      "source": "rev-20261111-001 第 2 轮 P2"
+    },
+    {
+      "id": "ISS-mwbkgxoi",
+      "text": "文件布局在冻结清单文字、§4 目录树、plan-20261107-003 的 C1 验收三处必须一致（v1 定为四件产物，无 preview.png）",
+      "source": "rev-20261111-001 第 2 轮 P2"
+    },
+    {
+      "id": "REV-R2-CLOSE",
+      "text": "代码合入 main 并在 PR 内逐条反馈第 1 轮 7 条与第 2 轮 2 条的修复证据，供评审开第 3 轮复核",
+      "source": "rev-20261111-001 第 2 轮闭环条件（reviewer 原文：代码合入 main 后回评审线程开第 3 轮）"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/test_architecture_gate.py",
+      "summary": "_dangerous_capabilities 升级为符号解析（_import_bindings/_qualify + FORBIDDEN_SYMBOLS + DELETION_METHODS）；新增 6 条绕过反例测试与误报守卫扩充（urllib.parse.quote）；新增 test_frozen_layout_artifact_count_is_consistent",
+      "commit": "bfcb738"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§0.2 文案「015 存储布局（内容寻址 + 三件产物）」改为「四件产物」，与 §4 目录树/ADR-015 统一",
+      "commit": "bfcb738"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-003.json",
+      "summary": "ADR-015 C1 验收改为四件产物（original.<ext> / extracted.jsonl / tables/<sheet_slug>.parquet / meta.json），删除 preview.png",
+      "commit": "bfcb738"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-003.json",
+      "summary": "任务置 done、progress 100，links 补 ci run 42954426539 与 merge commit 1ffaee0",
+      "commit": "bfcb738"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "31 passed, 1 skipped",
+      "passed": true,
+      "evidence": "31 passed, 1 skipped, 1 warning in 2.04s（新增 2 项：符号解析反例、四件产物一致性）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "270 passed, 1 skipped",
+      "passed": true,
+      "evidence": "270 passed, 1 skipped, 1 warning, 2 subtests passed in 13.71s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py",
+      "result": "success",
+      "passed": true,
+      "evidence": "Success: no issues found in 32 source files"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests/test_architecture_gate.py --select E9,F63,F7,F82",
+      "result": "all checks passed",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -X utf8（临时脚本逐条验证 _dangerous_capabilities 反例，跑完删除）",
+      "result": "6/6 绕过形式被标记，3/3 合法用法零命中",
+      "passed": true,
+      "evidence": "from os import system→os.system()；import os as o→os.remove()；from shutil import rmtree as rm→shutil.rmtree()；import subprocess as sp→import subprocess + subprocess.run()；Path('x').unlink()→.unlink()；pathlib.Path('x').rmdir()→.rmdir()；os.path.join/os.environ/urllib.parse.quote→[]（无误报）"
+    },
+    {
+      "command": "gh pr checks 7（head bfcb738）",
+      "result": "CI pass",
+      "passed": true,
+      "evidence": "test pass 1m6s（run 42954426539 / job 130306033994）；合并前 mergeStateStatus=CLEAN、mergeable=MERGEABLE"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "gh-cli 合并 PR / 发评论",
+      "reason": "按 reviewer 的闭环条件把已 approve 的 PR #7 合入 main，并在 PR 内逐条回复 9 条 issue 的修复证据",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze",
+    "commit": "bfcb738",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/7",
+    "ci": "GitHub Actions run 42954426539（head bfcb738）→ test pass 1m6s",
+    "merge": "已合并：PR #7 merged into main at 2026-11-11T03:43:05Z，merge commit 1ffaee0",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261111-005",
+  "next": "1) 评审角色在合并后的 main（1ffaee0）上开第 3 轮复验：核对第 2 轮 2 条 P2（iss-mwbkgxnj 符号解析、iss-mwbkgxoi 四件产物）并与 PR #7 的逐条 feedback 评论（issuecomment-6786367822）对账，确认 openP0=0、openP1=0、openP2=0 后把线程置 resolved；2) plan-20261107-003（文件导入，11-15 开工）按四件产物与 C1–C3 落地，plan-20261107-008（审计三表，11-18 开工）按 C1–C3 落地；3) 若后续 ADR 新增 proposed，必须同时写「- 追认截止：YYYY-MM-DD」，否则门禁会失败。",
+  "createdAt": "2026-11-11T03:43:37.274Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-007.md"
+}

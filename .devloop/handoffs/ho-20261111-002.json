@@ -1,0 +1,149 @@
+{
+  "id": "ho-20261111-002",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261110-003",
+  "threadId": null,
+  "sessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7",
+  "title": "排期合并：004~007 并入 07 系列，CI 绿",
+  "summary": "按用户「合并」指令完成排期去重。取消 plan-20261110-004~007（status=cancelled，description 注明并入目标），其验收条目逐条并入既有 07 系列：004 → 07-003（存储布局/抽取自检）+ 07-004（FTS5 检索）、005 → 07-005（ChartSpec v1 五条 + ADR-008 价格口径）、006 → 07-008（三表 DDL/步骤落库/digest/GC/七标签/安全负例，起始 11-29→11-18、due 12-04→11-28、8h→20h）、007 → 07-006（data_time 唯一生产者与降级标注，12h→20h）。工时按并入部分上调（07-003 16→22、07-004 12→14、07-005 14→20），links 记 mergedFrom 以便追溯。同步改文档：ADR-012 治理附录新增第 7 节「排期合并记录」，ADR-015/016/017/018 与冻结清单 §0.2/§3–§6、落点表、门禁测试中的承接项 id 全部改指新项（全库已无 plan-20261110-00[4-7] 引用）。提交 c67732f 推送后 CI run 42951057171 通过（1m1s），PR #7 mergeStateStatus=CLEAN。相对上一份 handoff（ho-20261111-001）：新增一次提交与计划表/文档的计划项 id 重定向，ADR 裁决与冻结内容本身未变。",
+  "requirements": [
+    {
+      "id": "REQ-9",
+      "text": "取消 plan-20261110-004~007，验收条目并入同一模块的 plan-20261107-003/004/005/008/006，并调整日期避免同一模块两条计划线。",
+      "source": "用户 m00386「合并」+ 我在上一轮的排期冲突分析"
+    },
+    {
+      "id": "REQ-10",
+      "text": "plan-20261107-008 起始日由 2026-11-29 提前到 2026-11-18，使 ADR-017 条件在 ADR-012「冻结后 2 周内实现」窗口内落地。",
+      "source": "plan-20261110-003 acceptance（ADR-017 条件落地窗口）"
+    },
+    {
+      "id": "REQ-11",
+      "text": "文档与门禁不得留在旧计划项 id：ADR-015/016/017/018、冻结清单、落点表、tests/test_architecture_gate.py 全部改指合并后的 id，且门禁保持绿。",
+      "source": "ADR-012 治理附录 §3 实现回写义务 / 门禁测试"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-003.json",
+      "summary": "并入布局/抽取两条验收（ADR-015 C1/C3），estimateH 16→22，links.mergedFrom=[plan-20261110-004]。",
+      "commit": "c67732f"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-004.json",
+      "summary": "并入 FTS5 检索验收（ADR-015 C2），estimateH 12→14。",
+      "commit": "c67732f"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-005.json",
+      "summary": "并入 ChartSpec v1 五条验收（ADR-016 C1–C3 + ADR-008），estimateH 14→20，links.adr 追加 ADR-008。",
+      "commit": "c67732f"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-008.json",
+      "summary": "并入审计三表六条验收（ADR-017 C1–C3），start 11-29→11-18、due 12-04→11-28、estimateH 8→20，deps 追加 plan-20261107-003。",
+      "commit": "c67732f"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-006.json",
+      "summary": "并入 data_time 六条验收（ADR-018 C1/C2 + 非目标），estimateH 12→20。",
+      "commit": "c67732f"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-004.json",
+      "summary": "status=cancelled，description 尾部注明并入 07-003 + 07-004；005/006/007 同样处理（各自并入 07-005、07-008、07-006）。",
+      "commit": "c67732f"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-012-product-scope-requirements.md",
+      "summary": "治理附录新增第 7 节「排期合并记录（2026-11-11）」；承接项列同步新 id。",
+      "commit": "c67732f"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§0.2 结论表承接项改为 07 系列，并新增「2026-11-11 排期调整（承接项合并）」映射表与窗口说明；§3/§4/§5/§6 代码锚点处的计划项 id 同步。",
+      "commit": "c67732f"
+    },
+    {
+      "path": "docs/AStockAgent_contract_rule_map_v1.md",
+      "summary": "AGENT-02/AGENT-04 缺口承接项与承诺测试表改指 07-008/07-005/07-006。",
+      "commit": "c67732f"
+    },
+    {
+      "path": "tests/test_architecture_gate.py",
+      "summary": "ADR-018 承接项断言由 plan-20261110-007 改为 plan-20261107-006；tools 未实现的 skip 原因文案同步。",
+      "commit": "c67732f"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "21 passed, 1 skipped in 2.66s",
+      "passed": true,
+      "evidence": "合并后重跑；1 skipped 为 astock/agent/tools 未实现（plan-20261107-003/005 范围内）。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "260 passed, 1 skipped, 2 subtests passed in 17.74s",
+      "passed": true,
+      "evidence": "全量回归，含新门禁测试。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py",
+      "result": "Success: no issues found in 32 source files",
+      "passed": true,
+      "evidence": "仅改动注释/断言字符串，类型无变化。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests/test_architecture_gate.py --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "静态检查通过。"
+    },
+    {
+      "command": "python 校验：全库 grep plan-20261110-00[4-7]（ADR/docs/gate 测试）",
+      "result": "0 处残留引用",
+      "passed": true,
+      "evidence": "替换后脚本输出 remaining full-id refs: 0；仅被取消的 4 个计划项文件自身保留。"
+    },
+    {
+      "command": "gh pr checks 7 / gh pr view 7 --json state,mergeable,mergeStateStatus",
+      "result": "test pass 1m1s；OPEN / MERGEABLE / CLEAN",
+      "passed": true,
+      "evidence": "run 42951057171 / job 130295191079。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "gh CLI + GitHub token",
+      "reason": "推送分支、读取 PR #7 的 CI 状态（run 42951057171 pass）",
+      "status": "granted"
+    },
+    {
+      "name": "计划项写权限（.devloop/plan/items）",
+      "reason": "合并与取消计划项需要直接改写 items JSON；已按用户 m00386「合并」授权执行",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze（head c67732f，已推送）",
+    "commit": "c67732f（前接 28a0dc2 / 06af067）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/7",
+    "ci": "CI run 42951057171 → test pass 1m1s；gh pr view → mergeable=MERGEABLE, mergeStateStatus=CLEAN",
+    "merge": "未合并（等评审 approve）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261111-001",
+  "next": "1) 请评审角色对 PR #7 开 review（现已含 c67732f 的排期合并提交）；2) approve 后合入 main，并在 main 复跑 `pytest tests/test_architecture_gate.py -q`；3) 11-13~14 做开工前准备：AGENT_* 环境变量、pdfplumber/python-docx/openpyxl/duckdb 依赖、data/agent/ 入 .gitignore；4) 11-15 起按 plan-20261107-003（文件导入，22h）与 07-005（图表，20h）并行开工，07-008 审计表 11-18 启动。",
+  "createdAt": "2026-11-11T03:12:58.539Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-002.md"
+}

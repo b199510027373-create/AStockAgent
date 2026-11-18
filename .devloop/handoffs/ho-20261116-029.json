@@ -1,0 +1,71 @@
+{
+  "id": "ho-20261116-029",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261116-003",
+  "sessionId": "",
+  "title": "评审：SW2014→SW2021 行业边界校准与 crosswalk",
+  "summary": "第 1 轮全量评审（scope=full，base=main/4b851a3 → head=07173e3，7 个文件）：P0=0、P1=2、P2=4，verdict=request_changes。\n\n一、已核对通过的部分（无需修）\n1. 验收①可审计映射表：docs/sw2014_sw2021_crosswalk.csv 200 条边与 doc §3 明细逐边复算一致（改标签结构性边 36+80+298+26+87+193+94+36+18+11=879，配对数合计 4,194；结构性边 32 条）；仅旧 1 只 / 仅新 4 只清单与 summary.json 一致。\n2. 验收②6+6 快照量化：docs/sw2014_sw2021_distribution_metrics.csv 13 行与 doc §4.1 表逐格一致；前 6 月末均值（13.11%/.077599/6.59%）与后 6 月末均值（12.81%/.074713/1.92%）我独立复算无误；HHI、歧义占比、非 SW 计数均可从 CSV 重现。\n3. 验收④研究结论补写：docs/AStockAgent_research_conclusions_v1.3.md 新增 §4.1，影响范围（31.14%/20.96%/427、沪深300 14.70% 权重、26→28 行业、不可按名称对齐的 7 个行业、长面板写法）与 crosswalk 文档一致，结论表述（分版本陈述、不把行业当跨版本不变量）正确。\n4. 开发自请复核的第 3、4 点：6+6 月末序列符合验收口径；非 SW 回退标签在 snapshot_metrics 中单列、不进入行业数/HHI，处理方向正确（分布 parquet 侧的问题见 P2，不是概念错误）。\n5. 我原以为是缺陷、核对后排除的一点：doc:92「2021-11-30→12-13 与 12-01→12-13 完全一致（42/300）」。cache/pit/sw_crosswalk_bridge_000300.SH.json 的 old_date 确为 \"2021-12-01\"，说明快照中确有该日（switch_bridge_diff 取 pre[-1]，src:611-616），该声明可复现，不记问题。\n6. 架构合规：未改 pit.py 主流程（git files 仅 7 个文件），新增模块独立读写 cache/pit 与 docs，符合 ADR-007/ADR-011 分层与缓存约定；mypy/CI 证据齐全（tests 16 通过 + 549 passed 全量 + CI run 43830495310 双 job pass）。\n\n二、open P1（必须修复后才能 approve，由开发在下一轮之前完成）\n- P1-A sw_crosswalk.py:688-694,702-704,709-713：分布/指标/桥接产物缓存键只含 index_code，`--start/--end` 换窗口不加 --refresh 会静默返回旧窗口产物。修法：产物名含窗口，或写 meta 校验 index/start/end/bridge dates/thresholds/edges 版本，不一致即重建；补「窗口 A → 窗口 B 且 refresh=False 必须重建」的 pytest。\n- P1-B sw_crosswalk.py:311-330,335,343-348,709-714：阈值与桥接日既不能经 build_crosswalk_artifacts/CLI 传入，缓存命中又不比对 summary 里已写入的 thresholds/bridge_old_date/bridge_new_date，与 doc:27「阈值是显式参数，便于复核时改切点重跑」矛盾。修法：阈值/日期参数化 + CLI 开关 + 缓存校验，补两条 pytest（改阈值、改桥接日均须重建）。\n完全解决判定：两条 P1 均有代码改动 → 新增/更新的 pytest 在 CI 通过 → cache/pit 下旧产物可用 `--refresh` 重新生成且 doc §2/§6 复现步骤能重现 docs 下 CSV（由开发交付 ho-…-update 说明，我在下一轮按 diff 复核这两处的缓存校验逻辑与新测试断言）。\n\n三、open P2（4 条，可与 P1 同批修，不阻断 approve 但须在合并前处理）\n- doc §4.1:69 表头「非 SW 标签数」实为成员只数（8 只 = 5 个标签），与 :123「切换后 11 只」口径混用。\n- distribution_table(sw_crosswalk.py:362-382) 未标记回退标签且权重分母为全日，与 snapshot_metrics 口径不同、与 doc:88 表述冲突（industry_version 区分不出来自 stock_business 的回退名）。\n- doc:136-150 复现步骤无法生成入库 CSV（导出脚本未入库），也未说明 CSV 缺 2021-12-01 行的原因。\n- docs/AStockAgent_PIT_data_interfaces.md:230 称 edges.parquet「可逐股回映」，该文件只有行业对级 200 行、无 code 列（另：同句 24+4+2 混排旧侧/新侧计数）。\n\n四、因工具配额未立 issue、但建议同批修的两点（不计入 open 计数）\n- active_industries(sw_crosswalk.py:101) 对同一 code 同 in_date 的并列记录只靠 sort 稳定序 keep=\"last\"，无冲突计数、无测试；建议在 summary 里暴露 duplicate_active_codes 样例，doc:22 写明取舍规则。\n- doc §3.3:48-52 把「休闲服务→社会服务」列进「一对一与改名（24 个）」，而 §3.2:46/§5.3:132 明确 社会服务 是多对一、不参与回映；代码 classify_mapping:196 的 one_to_one 只按旧侧判定，文档应补一句「旧侧唯一后继 ≠ 可回映」，并把 :15 的 24/4/2 写成两侧各自闭合的算法。\n\n五、对开发 4 个自请复核点的答复\n(1) 20%/50% 阈值：口径自洽（旧侧≥20% 或新侧≥50%，可解释「化工→石油石化 6.5% 旧侧但 56.5% 新侧仍算结构性」），同意保留；但「便于改切点重跑」当前不成立（P1-B），建议 P1-B 修完后在 doc §2 补一句新侧门槛更高的理由或一组敏感性（如 10%/40% 时结构边与标签变化数）。\n(2) 1:N/N:1 与 backmap 保守口径：合理——comparable 要求 mapping==\"unique\" 且回映等于旧标签，社会服务/石油石化/美容护理被排除，与 §5.3:132 一致；仅需按 P2/§3.3 提示把「旧侧唯一 ≠ 可回映」写清。\n(3) 6+6 月末：符合验收；仅需在 §6 说明 2021-12-01 快照为何不入表。\n(4) 非 SW 回退标签单独列示：方向正确，但需让 distribution parquet 同步标记（P2），否则两个入库产物口径不一致。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 2,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "分布/指标/桥接产物缓存键漏掉 start/end，换窗口不加 --refresh 会静默复用旧窗口产物",
+        "suggestion": "让缓存键与窗口绑定：①把产物名改为含窗口的形式（如 sw_crosswalk_metrics_{index}_{start}_{end}.parquet，与 pit.py:256 的 snapshot_v2_{index}_{start}_{end} 一致），或②在目录里写一个 meta（index/start/end/bridge_old_date/bridge_new_date/thresholds/edges 的 mtime 或 sha），命中前逐项比对，任一不符即重建，并在 rebuild 时删除过期 bridge json。同时补两条 pytest：先用窗口 A 生成产物，再用窗口 B 且 refresh=False 调用，断言返回的是重建后的行数而不是旧行数。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "结构性阈值/桥接日无法从流水线传入，且缓存命中不校验，doc §2 的「改切点重跑」不成立",
+        "suggestion": "把阈值做成真正的参数：给 build_crosswalk_artifacts 增加 old_share/new_share 形参并透传到 edge_table，CLI 增加 --old-share/--new-share（默认 0.20/0.50）；缓存命中前比对 cached_summary[\"thresholds\"]、bridge_old_date/bridge_new_date 与目标输入（含 sw_l1_members parquet mtime），不一致就重建。补两条 pytest：①阈值改成 0.10/0.40 且 refresh=False 时必须重建并得到更多结构性边；②桥接日改成 2021-12-01 时必须重建、summary 的 bridge_old_date 随之变化。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "§4.1 表头「非 SW 标签数」实为成员只数（8 只 = 5 个标签），与 §5.2 的「11 只」口径混用",
+        "suggestion": "把 :69 表头改为「非 SW 成员数（只）」并新增一列「非 SW 标签数（5/6）」，或在脚注写明「8 只 = 5 个回退标签、11 只 = 6 个回退标签（含 电气设备）」；:123 改为「切换日 8 只（2.67%），2021-12-31 起 11 只（3.67%）」，避免与 §4.1 表头「标签数」互相矛盾。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "distribution parquet 未标记非 SW 回退标签且权重分母口径与 metrics 不同，与 doc:88 表述冲突",
+        "suggestion": "在 distribution_table 输出里加 is_sw 布尔列（industry 是否在该版本的 SW L1 全集内，可由 summary 的 n_sw2014_l1/n_sw2021_l1 与 classify 结果判定）并把 fallback 行显式标 False，或在 doc §6 明确「distribution parquet 含回退标签、权重分母为全日，做跨版本对比请用 metrics parquet」。另外补一条 pytest 覆盖 distribution_table 里 fallback 行的标记与分母。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "入库审计 CSV 缺可复现的导出命令，§6 重跑无法生成已提交的 CSV（且未说明缺失 2021-12-01 行）",
+        "suggestion": "把导出步骤落地：给 CLI 加 `--export-docs`（或新增 scripts/export_crosswalk_docs.py），从 cache/pit 的 edges/summary/metrics 生成 docs 下两个 CSV（含固定小数位与排序），在 §6 复现块里写上该命令；并在 §6 说明 CSV 对 metrics 做了哪些过滤（例如为何不含 2021-12-01 行、只保留 12 个月末 + 12-13），使「重跑得到的 CSV」与入库文件逐字节可比。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "PIT 接口文档称 edges.parquet「可逐股回映」，但该文件只有行业对级 200 行、无 code 列",
+        "suggestion": "把「`cache/pit/sw_crosswalk_edges.parquet` 可逐股回映」改成「`sw_crosswalk_edges.parquet` 给出 200 条行业对映射及其两侧占比，逐股回映需与 PIT 快照的行业列 join」；若要真的提供逐股映射，可让模块额外落一份 code/sw2014_l1/sw2021_l1 的 parquet 并在该处引用。计数句改为「旧侧 24 个一对一（含 4 个改名）+ 4 个一对多 = 28；新侧 28 个回映唯一 + 2 个多对一 + 1 个无旧来源 = 31」。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-16T12:39:07.409Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-029.md"
+}

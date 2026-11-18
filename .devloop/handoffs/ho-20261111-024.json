@@ -1,0 +1,127 @@
+{
+  "id": "ho-20261111-024",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261103-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "推荐 UI 生成/历史读取统一到 ledger（首次交付）",
+  "summary": "按 ADR-003 把推荐页的生成与历史读取收敛到同一条 SQLite 台账读取路径：生成成功后立即从 ledger 读回批次再渲染，新增历史批次列表、所选 run_id 详情、空状态与批次 diagnostics 展示；JSON 仅保留为归档下载。已提交 5d17184，目标测试/相关全量/全量测试与 mypy 均通过，任务转 in_review。未创建 PR、未跑 CI，未做浏览器手工 smoke。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "历史批次列表、单批详情、证据链全部从 ledger 读。",
+      "source": "plan-20261103-003 描述"
+    },
+    {
+      "id": "REQ-2",
+      "text": "生成成功后立即写入 ledger，并回到与历史读取相同的读取/渲染路径。",
+      "source": "plan-20261103-003 描述"
+    },
+    {
+      "id": "REQ-3",
+      "text": "推荐页的「生成」与「历史读取」都走 ledger。",
+      "source": "plan-20261103-003 验收标准 1"
+    },
+    {
+      "id": "REQ-4",
+      "text": "页面能看到 run_id / data_as_of / tradable_from / diagnostics。",
+      "source": "plan-20261103-003 验收标准 2"
+    },
+    {
+      "id": "REQ-5",
+      "text": "ledger 缺记录时给出明确空状态，不回退到重新跑流水线。",
+      "source": "plan-20261103-003 验收标准 3"
+    },
+    {
+      "id": "REQ-6",
+      "text": "保留 JSON 归档可读，但不再作为 UI 主读源。",
+      "source": "plan-20261103-003 验收标准 4"
+    },
+    {
+      "id": "REQ-7",
+      "text": "改行为必须新增/更新测试，并运行目标测试、相关全量测试和类型检查；证据写入 links.test 与 handoff。",
+      "source": "本次开发任务说明"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/ledger.py",
+      "summary": "list_runs 改为 runs LEFT JOIN items 并按 run_id 聚合，返回每个批次的 items 数，供历史列表展示。",
+      "commit": "5d17184"
+    },
+    {
+      "path": "astock/use_cases.py",
+      "summary": "新增 HISTORY_COLUMNS、run_recommendation_history、run_selected_recommendation；生成成功后 ledger.get_run 读回并走 _ledger_view(mode=generate)；新增批次信息/diagnostics Markdown；生成批次采用台账持久化的 stale_data/expected_trade_date 判新鲜度；删除 _generate_view，空台账与缺记录均明确失败/空状态。",
+      "commit": "5d17184"
+    },
+    {
+      "path": "astock/recommend_ui.py",
+      "summary": "输出扩展为 6 项（含 batch_md）；新增历史批次 Dataframe、run_id 下拉、加载所选批次、刷新历史列表及状态；生成/最近/所选均绑定 ledger 详情输出，生成与最近成功后刷新历史列表。",
+      "commit": "5d17184"
+    },
+    {
+      "path": "tests/test_use_cases.py",
+      "summary": "覆盖生成读回台账、台账缺记录/读取异常不回退 JSON、持久化新鲜度、历史列表成功/空/异常、空选择、所选批次转发、batch_md 四字段与 diagnostics、UI 6 元组与历史 handler。",
+      "commit": "5d17184"
+    },
+    {
+      "path": "tests/test_core_paths.py",
+      "summary": "在真实 save_run 后断言 ledger.list_runs 返回 items 计数，覆盖新增 JOIN 查询。",
+      "commit": "5d17184"
+    }
+  ],
+  "tests": [
+    {
+      "command": "$env:TEMP=$env:TMP='C:\\Users\\b1995\\Documents\\AStockAgent\\.tmp-tests'; .\\.venv\\Scripts\\python.exe -m pytest tests\\test_use_cases.py tests\\test_core_paths.py -q -p no:cacheprovider",
+      "result": "45 passed, 2 subtests passed",
+      "passed": true,
+      "evidence": "目标用例全部通过，含生成读回台账、空状态、历史列表与 UI handler。"
+    },
+    {
+      "command": "$env:TEMP=$env:TMP='C:\\Users\\b1995\\Documents\\AStockAgent\\.tmp-tests'; .\\.venv\\Scripts\\python.exe -m pytest tests\\test_core_paths.py tests\\test_alpha_banner.py tests\\test_research_semantics.py tests\\test_hardening.py -q -p no:cacheprovider",
+      "result": "68 passed",
+      "passed": true,
+      "evidence": "相关全量（集成路径、banner 构建、研究语义、硬化）通过，build_recommend_tab 在测试环境可构建。"
+    },
+    {
+      "command": "$env:TEMP=$env:TMP='C:\\Users\\b1995\\Documents\\AStockAgent\\.tmp-tests'; .\\.venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "305 passed, 1 skipped, 2 subtests passed",
+      "passed": true,
+      "evidence": "仓库全量测试通过；1 个 skip 为既有 skip。"
+    },
+    {
+      "command": ".\\\\.venv\\\\Scripts\\\\python.exe -m mypy astock",
+      "result": "Success: no issues found in 30 source files",
+      "passed": true,
+      "evidence": "类型检查通过；修复了 diagnostics dict 值类型与变量重定义两处 mypy 报错。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "danger-full-access",
+      "reason": "workspace-write 沙箱下 Python tempfile 以 mode=0o700 创建的临时目录会被 ACL 锁死，导致 test_core_paths 等 setUp 直接 PermissionError；测试期间使用 full access 运行，随后会话策略已切换为 danger-full-access。",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-003-ledger-ui",
+    "commit": "5d17184",
+    "pr": "未创建",
+    "ci": "未运行",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "1) 创建 PR 并触发 CI；2) reviewer 重点看：生成批次用台账持久化 stale_data 与 latest/run 用当前日历的差异是否符合“同一口径”、ledger.get_run 缺记录/异常是否应回退 JSON（当前明确不回退）、历史下拉 value 刷新策略；3) 合入后做一次真实浏览器手工 smoke（生成→历史列表出现新批次→加载所选批次→空台账状态），当前仅覆盖单元/集成测试。",
+  "createdAt": "2026-11-11T05:28:41.190Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-024.md"
+}

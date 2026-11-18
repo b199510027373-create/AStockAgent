@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwj91enr-5b29d6",
+  "threadId": "rev-20261116-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/sw_crosswalk.py",
+  "lines": "688-694,702-704,709-713",
+  "title": "分布/指标/桥接产物缓存键漏掉 start/end，换窗口不加 --refresh 会静默复用旧窗口产物",
+  "evidence": "产物路径只含 index_code：:688-689 `dist_path = PIT_DIR / f\"sw_crosswalk_distribution_{index_code}.parquet\"`、`metrics_path = ... f\"sw_crosswalk_metrics_{index_code}.parquet\"`，:704 桥接 JSON 用 `BRIDGE_FILE_TEMPLATE.format(index=index_code)`（模板为 \"sw_crosswalk_bridge_{index}.json\"），三者都不含 start/end；:690-694 只要两个 parquet 非空就直接 `return cached_dist, cached_metrics`，:702 的 bridge 也只在重建分支里写。而 CLI :711-713 明确开放 `--start` / `--end`。因此执行 `python -m astock.sw_crosswalk --start 2021-12-01 --end 2022-01-31`（不加 --refresh）时，命令会打印「distribution rows: 13」并返回 2021-06-01..2022-05-31 的旧产物，用户无法从输出察觉窗口被忽略；只有加 --refresh 才会真正换窗口，而桥接 json 还会被用新窗口覆盖旧窗口的 000300.SH 文件。对照 ADR-011「基础口径变化即失效」，这里窗口变化正是口径变化。现有 tests/test_sw_crosswalk.py 的缓存用例（:324-344）只覆盖了 crosswalk edges 的缓存命中，没有任何用例覆盖分布产物缓存与换窗口重建。",
+  "suggestion": "让缓存键与窗口绑定：①把产物名改为含窗口的形式（如 sw_crosswalk_metrics_{index}_{start}_{end}.parquet，与 pit.py:256 的 snapshot_v2_{index}_{start}_{end} 一致），或②在目录里写一个 meta（index/start/end/bridge_old_date/bridge_new_date/thresholds/edges 的 mtime 或 sha），命中前逐项比对，任一不符即重建，并在 rebuild 时删除过期 bridge json。同时补两条 pytest：先用窗口 A 生成产物，再用窗口 B 且 refresh=False 调用，断言返回的是重建后的行数而不是旧行数。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T17:42:54.573Z"
+  },
+  "createdAt": "2026-11-16T12:38:04.407Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T17:42:54.573Z"
+    }
+  ]
+}

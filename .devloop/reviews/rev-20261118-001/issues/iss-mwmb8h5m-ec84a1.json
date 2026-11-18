@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwmb8h5m-ec84a1",
+  "threadId": "rev-20261118-001",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_data_time_semantics.py",
+  "lines": "46-48, 735-760",
+  "title": "缺 bar 停牌用例的日历没覆盖真实缺口，审计句「其后 N 个交易日」的数字无人校验",
+  "evidence": "_trade_cal() 默认 start=\"2024-01-01\"（tests/test_data_time_semantics.py:46-48），而 _missing_bar_frame() 的最后一根 bar 是 2023-12-15（:738-741）；test_quote_marks_suspended_when_bars_are_missing 未传 calendar（:744），于是 _missing_open_days 只能数到 2024-01-01、2024-01-02 两天，note 实际写成「其后 2 个交易日无行情」（astock/agent/tools/market_tools.py:566-570），而真实缺口是 2023-12-18…2024-01-02 共 12 个交易日。测试只断言子串 \"个交易日无行情\"（:755），既不断言天数也不覆盖缺口区间，因此这行给用户看的审计数字若系统性少算（例如多算/少算一天、把 today 算进去），本用例仍然绿。",
+  "suggestion": "在 test_quote_marks_suspended_when_bars_are_missing 里显式传覆盖缺口区间的日历：context = _Deps(daily=_missing_bar_frame(), clock=\"2024-01-03 16:30\", calendar=_trade_cal(\"2023-11-01\", \"2024-01-31\"))，并把断言改成精确天数，例如 expected = len(pd.bdate_range(\"2023-12-18\", \"2024-01-02\"))，然后 assert any(f\"其后 {expected} 个交易日无行情\" in note for note in notes)（同时保留 text 含「停牌」「无成交」的断言）。test_suspended_missing_bars_intraday_is_not_just_delayed（:757-767）同样补 calendar 参数，使盘中与收盘后两条路径都验到同一数字。",
+  "confidence": 0.8,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-18T16:02:51.994Z"
+}

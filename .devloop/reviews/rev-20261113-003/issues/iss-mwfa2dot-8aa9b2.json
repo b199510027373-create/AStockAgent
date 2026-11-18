@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfa2dot-8aa9b2",
+  "threadId": "rev-20261113-003",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "storage-retention",
+  "file": "astock/agent/store.py",
+  "lines": "371-433",
+  "title": "prune_artifacts 只清理已记录 digest，PNG 独立 digest 目录在 HTML artifact 删除后成为孤儿",
+  "evidence": "PNG 通过 `chart_render.py:1236-1239` 的 `put_content(payload, filename=f\"chart_{artifact_id}.png\")` 写入，`put_content`（store.py:197-212）按 PNG 字节生成一个新的 digest，文件落在独立的 `artifacts/<digest[:2]>/<digest>/` 目录；但 `record_artifact` 只记录 HTML figure 行（chart_render.py:1267-1275），PNG 只出现在 HTML 行的 `meta[\"png_path\"]` 里，没有自己的 agent_artifacts 行。`prune_artifacts`（store.py:371-433）只遍历被删除 artifact 行的 digest，删除对应目录；它不会读 `meta[\"png_path\"]`，也不会遍历未被行引用的 digest 目录，因此删除 HTML 行后 PNG 文件永久残留。`tests/test_agent_store.py:240-315` 的 prune 用例只构造 `chart.html`，未构造 PNG，所以未覆盖该路径。",
+  "suggestion": "让 PNG 也有可追踪的引用：1）为 PNG 写一条 `kind=\"file\"` 的 agent_artifacts 行（或把 PNG 的 digest/rel_path 明确写进 HTML meta），`prune_artifacts` 在删除 HTML 行前解析 `meta[\"png_path\"]` 对应 digest 并一并做引用计数；或 2）把 PNG 放进 HTML 同一 digest 目录下（例如 `artifacts/<html_digest>/chart_<artifact_id>.png`），由现有目录删除逻辑覆盖。补测试：render 一份带 PNG 的 artifact（可用 monkeypatch `_try_png` 返回固定字节，避免依赖 kaleido），删除 HTML 行后断言 PNG 文件/目录也不存在；保留时断言仍在。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T00:38:32.479Z"
+  },
+  "createdAt": "2026-11-13T17:55:44.717Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T00:38:32.479Z"
+    }
+  ]
+}

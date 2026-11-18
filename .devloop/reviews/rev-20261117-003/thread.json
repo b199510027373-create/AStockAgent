@@ -1,0 +1,21 @@
+{
+  "id": "rev-20261117-003",
+  "title": "评审：Agent 审计表与安全限额（v2：内容/版本/引用）",
+  "planItemId": "plan-20261107-008",
+  "sourceDevSessionId": "session-98870ec5-3d66-430a-9952-f2cda3728500",
+  "branch": "feat/plan-20261107-008-v2-audit",
+  "base": "main",
+  "files": [
+    "astock/agent/chart_render.py",
+    "astock/agent/runtime.py",
+    "astock/agent/store.py",
+    "docs/AStockAgent_chart_audit_v2_change_spec.md",
+    "tests/test_agent_chart_render.py",
+    "tests/test_agent_runtime.py",
+    "tests/test_agent_store.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-17T14:25:27.387Z",
+  "updatedAt": "2026-11-18T05:02:06.706Z",
+  "reviewSessionId": "session-9ad18ba5-55ff-458f-aa79-e7a6fb4c9e61"
+}

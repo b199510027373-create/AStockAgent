@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwkq6seh-07fa38",
+  "threadId": "rev-20261117-002",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/runtime.py",
+  "lines": "238-246",
+  "title": "未调用任何文件工具但回答自带「《X》第 N 页」时不做收口，凭记忆补写的引用仍可直接落库",
+  "evidence": "收口条件是「本轮用过会产生定位引用的文件工具」（runtime.py:240 `if _uses_file_tools(steps):`，判定见 runtime.py:72-79），因此「完全没调工具、直接凭记忆写页码」的路径不进收口。\\n\\n- astock/agent/runtime.py:238-246：`if reply.tool_call is None: answer = reply.content or \\\"（模型没有给出回答）\\\"; if _uses_file_tools(steps): answer = finalize_file_answer(...)`；steps 为空时 `_uses_file_tools` 为 False，回答原样写库；\\n- astock/agent/tools/citations.py:203-206：若此时调用 finalize_file_answer，cites 为空会直接返回 CITATION_NOT_FOUND，即这条兜底完全有能力拦住，只是没被调用；\\n- 复现：用户问「年报里营收增长多少？」→ FakeModel 第一步直接返回「营业收入同比增长 10%（《年报.pdf》第 2 页）。」且不发 ToolCall → run.answer 原样保留伪造定位，违反 AGENT-04「不得凭记忆补写文件内容」；\\n- 测试缺口：本轮新增的 tests/test_agent_runtime.py:777-809 只覆盖「调用过 file_list / file_read」的路径，测试桩 `_runtime(...)` 里 FakeModel 第一个动作都是 ToolCall，没有「零工具调用 + 带引用回答」的用例。\\n\\n这是本线程最后一条同类缺口，且修复成本极低：`has_file_citation` 已存在（astock/agent/tools/citations.py:173-175），file_list 类清单回答（如「《年报.pdf》、《财务.xlsx》」）不含页码/工作表，不会被 `_CITATION_RE` 命中，因此不会误伤刚修好的 file_list 豁免路径。",
+  "suggestion": "把 runtime.py:240 的条件改为 `if _uses_file_tools(steps) or has_file_citation(answer):`（`has_file_citation` 从 astock.agent.tools.citations 延迟导入，与 finalize_file_answer 同一行导入即可）。这样：① 有文件工具结果 → 走原白名单比对；② 没有任何文件工具结果但回答里出现页码/工作表引用 → 白名单为空 → 返回「未在文件中找到」，拦住凭记忆补写；③ file_list 清单类回答不含页码 → 不受影响。并在 tests/test_agent_runtime.py::FileCitationTests 补一例：FakeModel 只返回一条 `\"营业收入同比增长 10%（《年报.pdf》第 2 页）。\"`、不发 ToolCall，断言 `run.answer == \"未在文件中找到\"`。该条为非阻断的加固项，可随本轮合并前的小提交一起提交，或经评审书面接受后由后续计划项承接。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:39:48.579Z"
+  },
+  "createdAt": "2026-11-17T13:25:55.145Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:39:48.579Z"
+    }
+  ]
+}

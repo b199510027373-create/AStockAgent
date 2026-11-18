@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwk1e78k-81f44e",
+  "threadId": "rev-20261117-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "integration",
+  "file": "astock/agent/tools/file_tools.py",
+  "lines": "528-536",
+  "title": "build_file_registry 无生产调用点：五个文件工具在运行时不可被 Agent 调用",
+  "evidence": "file_tools.py:528-536 定义 `build_file_registry(...)` 并在其中 `registry = ToolRegistry(table_row_limit=table_row_limit)` 注册 file_list/file_search/file_read/table_schema/table_query；但 grep astock/ 下全部 .py，build_file_registry 只出现在 file_tools.py:53,528 与 astock/agent/tools/__init__.py:6,27,44（`__all__` 导出），没有任何装配调用点；astsock 侧唯一构造注册表的地方是 astock/agent/runtime.py:107 `self.registry = registry if registry is not None else ToolRegistry()`（空注册表），除 tests/ 外没有生产代码给 AgentRuntime 传 registry。结论：五个工具在当前代码里无法被 Agent 调用，端到端不可达；验收 A1（file_search 返回 chunk+页码、可被回答引用）、A2（table_query 经 Agent 调用且被 LIMIT/超时约束）只有工具层单测证据（conftest 直接调 T.search_files / T.query_table），不是 Agent 路径。developer handoff ho-20261117-016 把 A1–A10 标为已交付，与实际可达性不符。",
+  "suggestion": "在明确的装配点调用 build_file_registry 并把结果并入传给 AgentRuntime 的 registry（例如对话/Agent 入口构造 AgentRuntime 的位置；后续行情工具按 plan-20261107-005 追加到同一 registry，避免二次拆分），并补一条集成测试：用 FakeModel 走 AgentRuntime，先调 file_search 再返回带引用的回答，断言 tools schema 里含五个工具名且工具结果进入 steps。若装配有意留给后续计划项，则必须在 docs/AStockAgent_interface_freeze_v1.md §4.1 写明承接受理项与测试锚点，并把本轮的 A1/A2/A3 验收方式改为「工具层可达性 + 承接项锚点」，同步修正 handoff 的完成声明；否则本轮不满足 A1。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:15:47.386Z"
+  },
+  "createdAt": "2026-11-17T01:51:50.564Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:15:47.386Z"
+    }
+  ]
+}

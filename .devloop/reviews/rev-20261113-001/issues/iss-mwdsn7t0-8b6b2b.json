@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwdsn7t0-8b6b2b",
+  "threadId": "rev-20261113-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "reliability",
+  "file": "astock/scheduler.py",
+  "lines": "417, 435-443, 514-536",
+  "title": "台账异常会让调度线程静默退出（save_job/_prepare_ledger 在 try 之外）",
+  "evidence": "run_once 的 `_prepare_ledger(now)`（417）、`ledger.get_job(key)`（427）和起始写 `ledger.save_job(..., status=\"running\")`（435-443）都在 `try:`（444）之外；loop 在 532 直接调用 run_once 且没有 except，startup_maintenance()（520）同样裸调用；start_background 的 _target（558-562）只有 try/finally 释放锁。ledger.transaction 的 sqlite 连接只设 timeout=10，并发写入超时抛 OperationalError 属可预期情形，此时 astock-recommend-scheduler 线程直接终止：scheduler.log 无记录、scheduler_alerts.jsonl 无告警，应用侧仍认为自动推荐在运行。改动前 `_atomic_write_state`/`_sync_job` 都是 `except Exception: pass`，本次迁移实际把「写台账失败」升级成了「调度器静默死亡」。",
+  "suggestion": "把 run_once 中台账读写纳入异常处理（写 running 失败时 `_log` 后返回 None，不向外抛）；在 loop 里用 try/except 包住 startup_maintenance() 与 run_once()，捕获后写入 scheduler.log 并 `stop.wait(600)` 后重试，避免线程终止。补测试：patch `ledger.save_job` 抛 sqlite3.OperationalError，断言 startup_maintenance/run_once 不向调用方抛出，且 loop 在下一轮仍会尝试。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T07:41:49.361Z"
+  },
+  "createdAt": "2026-11-12T17:00:17.604Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T07:41:49.361Z"
+    }
+  ]
+}

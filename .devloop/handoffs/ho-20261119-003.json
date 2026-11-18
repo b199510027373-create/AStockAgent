@@ -1,0 +1,150 @@
+{
+  "id": "ho-20261119-003",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "行情/指标工具：实时 K 线与指标",
+  "summary": "收尾交付：按第 3 轮评审（rev-20261118-001-r3，verdict=approve，openP0=0/openP1=0，余 1 P2）补完最后一个 P2 后，PR #31 已合并入 main（merge commit a855b37），main CI 全绿，计划项置 done/100%。本轮改动仅测试：给停牌缺口用例换成覆盖 2023-11-01 起的交易日历，并把「其后 N 个交易日无行情」从子串匹配改为精确 12 天断言（收盘后与盘中两条同改）；提交 74d3687。",
+  "requirements": [
+    {
+      "id": "R-P2-iss-mwmb8h5m",
+      "text": "P2 iss-mwmb8h5m-ec84a1：_trade_cal 默认从 2024-01-01 起，而缺口从 2023-12-15 起，note 只数到 2 天（真实 12 天）且断言只匹配子串；要求用例显式传 calendar=_trade_cal(\"2023-11-01\",\"2024-01-31\") 并断言精确天数（收盘后与盘中两条同改）。",
+      "source": "评审第 3 轮 rev-20261118-001-r3"
+    },
+    {
+      "id": "AC-10",
+      "text": "（ADR-018）停牌/无成交标的显式标注；指标在复权价上计算，MA 类前向填充但 metadata 记 ffill 段。",
+      "source": "plan-20261107-006 acceptance[9]"
+    },
+    {
+      "id": "AC-6",
+      "text": "（ADR-018 C1）data.py 提供唯一 bar 时点生产者 latest_bar_time(df, freq)；行情工具的 data_time 只由它生成。",
+      "source": "plan-20261107-006 acceptance[5]"
+    },
+    {
+      "id": "AC-7",
+      "text": "（ADR-018 C2）行情/指标工具返回值必须同时带 data_as_of 与 data_time，缺一即契约失败。",
+      "source": "plan-20261107-006 acceptance[6]"
+    },
+    {
+      "id": "AC-9",
+      "text": "（ADR-018）rt_min 失败或超 2s 未返回时降级并标注 freshness=delayed，退回 stk_mins/日线。",
+      "source": "plan-20261107-006 acceptance[8]"
+    },
+    {
+      "id": "review-round3-resolution",
+      "text": "第 3 轮 approve 的完全解决判定：P2 补完 + pytest/mypy 全绿 + links.test 更新即完全解决；PR #31 可合并，P2 不阻塞。",
+      "source": "评审第 3 轮 rev-20261118-001-r3"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/test_data_time_semantics.py",
+      "summary": "新增 _SUSPENDED_CALENDAR_START=\"2023-11-01\"、_SUSPENDED_MISSING_DAYS=12、_suspended_calendar()；test_quote_marks_suspended_when_bars_are_missing 与 test_suspended_missing_bars_intraday_is_not_just_delayed 改用覆盖 2023-11-01..2024-01-31 的日历，并按 12 天精确断言 note 文案「最后一根 bar 为 2023-12-15，其后 12 个交易日无行情」（12-18..12-29 共 10 + 01-01、01-02 共 2；今天按设计不计）。",
+      "commit": "74d3687"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-006.json",
+      "summary": "status=done、progress=100、links.commit=a855b37、mergeCommit 全值、branch \"feat/market-tools (merged)\"、review 增加 rev-20261118-001 (approved, r1→r3)，links.test 保留 714 passed / 26 passed / 58 passed / mypy / ruff / run 44343766378 / main run 44344659084 等证据。",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "新增两条 development worklog：iss-mwma8thg 修复（70 min）与合并收尾（25 min）。",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "同步写入本轮 worklog 条目。",
+      "commit": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_data_time_semantics.py -q -p no:cacheprovider",
+      "result": "26 passed",
+      "passed": true,
+      "evidence": "26 passed in 3.35s"
+    },
+    {
+      "command": "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread",
+      "result": "714 passed",
+      "passed": true,
+      "evidence": "714 passed, 1 warning, 12 subtests passed in 85.22s"
+    },
+    {
+      "command": "mypy astock",
+      "result": "clean",
+      "passed": true,
+      "evidence": "Success: no issues found in 40 source files"
+    },
+    {
+      "command": "mypy tests/test_data_time_semantics.py",
+      "result": "clean",
+      "passed": true,
+      "evidence": "Success: no issues found"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "clean",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": "gh pr checks 31（commit 74d3687）",
+      "result": "both jobs pass",
+      "passed": true,
+      "evidence": "run 44343766378: test pass 1m44s / png-export pass 1m21s"
+    },
+    {
+      "command": "gh api repos/b199510027373-create/AStockAgent/actions/runs/44344659084（main merge commit a855b37）",
+      "result": "success",
+      "passed": true,
+      "evidence": "status=completed, conclusion=success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "market:read",
+      "reason": "quote/kline/indicator 通过 load_daily/load_minute/load_index_daily 取行情（工具注册权限）",
+      "status": "granted"
+    },
+    {
+      "name": "indicator:compute",
+      "reason": "indicator 工具转发 astock.indicators 计算指标",
+      "status": "granted"
+    },
+    {
+      "name": "chart:render",
+      "reason": "kline(chart=true) 走 chart_render.render 出图并落 agent_artifacts",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub PR 合并（gh pr merge 31 --merge）",
+      "reason": "第 3 轮评审 approve 且 openP0=0/openP1=0，按流程合并 PR #31",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/market-tools (merged into main)",
+    "commit": "74d3687",
+    "pr": "#31 (merged)",
+    "ci": "PR #31 commit 74d3687 run 44343766378: test pass 1m44s / png-export pass 1m21s；main merge commit a855b37 run 44344659084: completed success",
+    "merge": "merged via merge commit a855b370a20abc1eae8328357c96d8b1d777126c at 2026-11-18T16:13:13Z",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261118-014",
+  "next": "1) 在 main 上提交 `.devloop` 记账（chore(devloop): mark plan-20261107-006 done after PR #31 merge）并推送，等待该 chore 提交的 CI 结果；2) 后续如要让 quote 覆盖「盘中临时停牌 + 分钟取数失败」的细分语义，可另立计划项（评审已接受当前不可区分性取舍）；3) 依赖下游 plan-20261114-002 的图表图注复用同一 freshness/session 元数据键即可，无需再改 market_tools。",
+  "createdAt": "2026-11-18T16:17:48.501Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-003.md"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwiwbu35-8b0929",
+  "threadId": "rev-20261116-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "contract",
+  "file": "astock/data.py",
+  "lines": "320-326",
+  "title": "hfq 缓存失效在生产路径实际不生效，且与 CACHE-01「基准变化即失效」不一致",
+  "evidence": "_cache_base_valid 对 hfq 的自证前提是\"缓存区间覆盖基准日\"：data.py:320-326 `base_date = meta.get(\"adj_base\")` → `row = ordered[ordered[\"trade_date\"] == pd.Timestamp(base_date)]` → `if row.empty: return True  # 缓存区间未覆盖基准日，无法自证，按 meta 采信`。而 hfq 的 adj_base 是\"该证券最早因子日\"（更准确地说是该证券在 ADJ_HISTORY_START 之后的首个因子日），生产缓存是按用户请求的行情区间切片写入的（data.py:479 `_atomic_parquet(result, path)`，result 只含请求区间），几乎不会包含上市首日 → 绝大多数 hfq 缓存都会走 `row.empty → True` 分支，参数里的 base_factor 与缓存数据的对应关系实际上从不校验。也就是说契约 CACHE-01 / ADR-008 §5 的\"基准变化即失效\"对 hfq 生产路径基本不成立，只有 qfq 分支（data.py:318-319）真正生效。测试也没有暴露这一点：tests/test_data_adj_caliber.py:289-306 的失效用例把窗口设成 2025-01-02..2025-01-06、adj_base=2025-01-02，基准日恰好落在窗口内（三个缓存用例都是这种构造），所以\"基准日不在窗口内\"的现实情形没有被测到。docstring（data.py:298-305）已承认这个取舍，但 ADR-008 / CACHE-01 文本没有同步，验收时会让人以为 hfq 也受失效保护。",
+  "suggestion": "不要默默留着这个偏差，二选一并留痕：(a) 接受\"离线无法自证\"——在 ADR-008 §5（或 CACHE-01 的落地说明）补一句明确边界：\"hfq 的基准一致性只在缓存覆盖 adj_base 当日时可自证，否则按 meta 采信；供应商回溯修正最早因子需靠 TTL/手动清缓存发现\"，同时给 hfq 缓存加一个强制重拉周期（例如 fetched_at 超过 N 天即失效），并把 data.py:325 的注释指向该 ADR 条款；(b) 想保留\"基准变化即失效\"的强语义，则对 hfq 把 `row.empty` 改为失效重拉（成本是每次命中都要重拉全历史因子+区间行情，需先确认可接受，或把 hfq 缓存窗口起点固定为 ADJ_HISTORY_START 让它总覆盖基准日）。无论选哪条，请在 tests/test_data_adj_caliber.py 缓存用例里补一条\"adj_base 早于缓存窗口起点\"的 hfq 用例，断言所选策略的行为（(a) 命中并返回 meta 的 adj_base；(b) 失效重拉），避免策略只活在注释里。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T07:07:56.728Z"
+  },
+  "createdAt": "2026-11-16T06:42:15.953Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T07:07:56.728Z"
+    }
+  ]
+}

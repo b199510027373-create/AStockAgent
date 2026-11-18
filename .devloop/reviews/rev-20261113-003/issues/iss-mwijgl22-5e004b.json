@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwijgl22-5e004b",
+  "threadId": "rev-20261113-003",
+  "roundNo": 5,
+  "severity": "P1",
+  "category": "docs-contract",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "9-12, 223-226, 294-297, 357-358",
+  "title": "冻结清单 v1 被就地改成尚未实现的 v2 口径，与 main 上的 v1 代码及 plan-005 done 状态冲突",
+  "evidence": "docs/AStockAgent_interface_freeze_v1.md:9-12 写明\"已就地改为 v2 口径，旧 v1 语义不再作为实现依据……正式升版随 plan-20261114-002\"，:4-5 仍保留 v1 的\"必须先提 ADR 并推进到 v2\"表述，自相矛盾；:223-226 §3.4 改为 meta 不可变 + agent_artifact_versions、data_as_of 为行情时点另加 view_as_of、div_id/embed_html；:294-297 §5、:357-358 §7 改为行永久保留、去 run_id。但 main 代码仍是 v1：astock/agent/store.py:256-264 覆盖 meta、:406-411 删除旧行；astock/agent/chart_render.py:1267 写 \"time_point_scope\"、:1248-1257 每图 ensure_run(run_chart_...)、:562-594 在 transforms 后重算 data_as_of。docs/AStockAgent_chart_audit_v2_change_spec.md 自述\"设计定稿，只写文档，未改代码\"，基线 PR #12/75c60e3；plan-20261107-005 验收 #6 要求 v1 字段与冻结清单 §3 逐字一致且已把 002 迁移登记为遗留项。",
+  "suggestion": "不要就地改写已生效的 v1 冻结清单：恢复 §3.4/§5/§7 的 v1 原文（或把 v1 正文整体归档到 docs/AStockAgent_interface_freeze_v1_archive.md 并在原文件给出指引），v2 内容移到独立的 docs/AStockAgent_interface_freeze_v2_draft.md，顶部明确\"草案、未实现、目标 plan-20261114-002，不作为当前实现依据\"；等 002 的 store.py/chart_render.py 改动与测试合入后，再按 ADR 升版流程把 v1 标 superseded、发布 v2 并把代码逐条对照。在此之前 docs 里任何\"v2 口径已生效\"的措辞必须删除，且 plan-005 的验收证据只能引用 v1 段落。完成后在评审线程引用 commit 与文档 diff 证明 v1 段落恢复或 v2 已随 002 落地。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T01:04:10.363Z"
+  },
+  "createdAt": "2026-11-16T00:42:02.522Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T01:04:10.363Z"
+    }
+  ]
+}

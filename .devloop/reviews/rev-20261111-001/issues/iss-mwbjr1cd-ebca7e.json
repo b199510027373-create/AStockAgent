@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbjr1cd-ebca7e",
+  "threadId": "rev-20261111-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "接口歧义",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "176-177",
+  "title": "ChartSpec 的 `period` 与 `range` 共用 `1m`/`3m` 字面量但单位不同（分钟 vs 月），冻结前需消歧",
+  "evidence": "docs/AStockAgent_interface_freeze_v1.md:176 `period` 取值含 `1m`（分钟线，与 5m/15m/30m/60m 同族），:177 `range` 取值含 `1m`/`3m`/`6m`（月，与 1y/3y/5y 同族）。同一个字面量 `1m` 在相邻两个字段里分别是「1 分钟」和「1 个月」，`3m` 只出现在 range（月），而 period 的 3 分钟必须写 `3m` 却不在白名单里。这份 §3 是要「逐字冻结」给 plan-20261107-005 照抄、并作为模型可生成的 JSON 结构（§3.1 encode/transforms 由 Agent 产出），字段名之外没有任何单位提示；实现者或模型把 `{\"period\":\"1m\"}` 当 1 个月、或把 `{\"range\":\"1m\"}` 当 1 分钟，都会静默取到完全不同的数据，而门禁 tests/test_architecture_gate.py:333-337 只校验文档里出现 `version`/`additionalProperties`/`5000`/`candlestick` 等 token，查不出语义混淆。",
+  "suggestion": "在冻结前消歧，三选一：a) `period` 分钟档改 `1min/5min/15min/30min/60min`（与 `day/week/month` 并列不冲突）；b) `range` 月档改 `1mo/3mo/6mo`；c) 保留现名但把单位写进字段名之外的结构（如 `{\"period\":{\"freq\":\"1m\",\"unit\":\"minute\"}}`）。无论选哪个，都在 §3.2 补一行「`period` 的 m=分钟，`range` 的 m=月，不共享词表」，并在 plan-20261107-005 的测试清单里加 schema 用例：`period=1m` 解析为 1 分钟 bar、`range=1m` 解析为 1 个月窗口，各断言一次。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:41:01.428Z"
+  },
+  "createdAt": "2026-11-11T03:15:46.957Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:41:01.428Z"
+    }
+  ]
+}

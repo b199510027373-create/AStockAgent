@@ -1,0 +1,33 @@
+{
+  "id": "iss-mweov3d3-db2784",
+  "threadId": "rev-20261113-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "test-coverage",
+  "file": "tests/test_agent_files.py",
+  "lines": "454-467",
+  "title": "XLS 解析只有\"缺 xlrd 报错\"的负向测试，没有真实 .xls 通过性证据，验收项「XLS 可解析」未闭合",
+  "evidence": "tests/test_agent_files.py:454-467 的 xls 用例是 `write_bytes(b\"\\xd0\\xcf\\x11\\xe0 dummy\")` 加 monkeypatch `pd.read_excel` 抛 ImportError，只走通 `_parse_excel` 里的缺依赖分支；仓库里没有任何真实 .xls 夹具（tests/ 下只有测试代码）。也就是说 `_parse_excel`（astock/agent/files.py:569-601）的 `.xls` happy path、`_package_version(\"xlrd\")` 进 `meta.parser_version`、sheet 名→`_sheet_slug`、行列 bbox、parquet 落盘这些在 xls 上从未被执行过。planItem 验收第 1 条是\"可解析 PDF / XLSX / XLS / CSV / DOCX / TXT / MD\"，XLS 这一支当前没有任何通过性证据，只有一条\"装不上 xlrd 时报错\"的负向证据。xlrd 2.x 只支持 .xls（不支持 xlsx），一旦 `_parse_excel` 改成显式传 engine 或 pandas 默认引擎选择变化（pandas 2.x 对 .xls 依赖 xlrd，pandas 3 计划移除 xlrd 支持），这条分支会静默退化到 STATUS_UNSUPPORTED，现有测试无法发现。",
+  "suggestion": "补一条真实 xls 通过性测试：用 xlwt（仅开发/测试期依赖，放 requirements-dev 或不入库）生成一个 <20KB 的两 sheet .xls 并作为二进制夹具提交到 tests/fixtures/sample.xls，测试断言 `result.status == \"ok\"`、`meta[\"parser\"] == \"xlrd\"`、`meta[\"sheets\"][0][\"name\"]`/`slug` 正确、`load_table(file_id, slug).shape` 与行列数一致、行 chunk 的 `bbox == [row_no, 1, row_no, n_cols]`。若项目不接受二进制夹具，则在测试内用 base64 内联一个小 xls 字节串，并在 handoff 里注明\"xls 仅覆盖生成夹具\"，同时保留现有 ImportError 分支用例。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T08:25:29.584Z"
+  },
+  "createdAt": "2026-11-13T08:02:12.807Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T08:25:29.584Z"
+    }
+  ]
+}

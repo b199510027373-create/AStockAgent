@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261117-001-r1",
+  "threadId": "rev-20261117-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "## 第 1 轮评审结论：request_changes（P0=0，P1=2，P2=3）\n\n### 已核对且通过的部分\n- **Ruff 门禁（A4/A5/A6）**：ruff.toml 显式 select/ignore、target py313、line-length 120；CI 从 requirements-dev.txt 一次性安装固定版本（ruff==0.17.3）并 `pip check`，`ruff check astock tests` 全仓 blocking，不再有 `--select` 收窄；全仓无 `# ruff: noqa` 或文件级 noqa，A5「禁止全文件级 noqa」满足。\n- **依赖锁定（A3）**：requirements.txt 16 个运行时依赖全部 `==` 精确锁，并覆盖 plotly 6.7.0 / kaleido 1.5.1；requirements-dev.txt 复用 `-r requirements.txt` 并锁 ruff/mypy/coverage/pytest/pytest-timeout；tests/test_requirements_pins.py 用正则逐行校验、禁区间运算符。（唯一缺口是 pyyaml，见 P1-2。）\n- **mypy（A1）**：mypy.ini python_version=3.13，exclude 仅 9 个 UI/图表模块，`mypy astock app.py` = 36 files Success，与 handoff 记录一致。\n- **覆盖率（A2）**：.coveragerc 精确记录了 CI Linux 9247/2176=76.47%、本地 9247/2155=76.70%、改造前 76.68%、旧 main 76.39%，并把 80%/85% 分阶段目标写进注释与 CI 文档。\n- **文档清理（A7 后半）**：docs/README 已无「22 文件 / 57 tests / 50% 门槛」旧表述；CI work calendar、development status、architecture v1.3、product snapshot v1.3 四处基线数字（36 files / 606 passed / 76.47%）与 .coveragerc 自洽。\n- **未发现删测/跳过**：tests/test_hardening.py、tests/test_agent_runtime.py 的 diff 只有 SIM117 合并 with、isort 重排，并新增 `test_load_rejects_non_object_payload_with_type_error`（断言 TypeError 且消息含「顶层必须是 object」），属净增。\n\n### 必须先修的 2 条 P1\n1. **iss-mwjmhnq7-9a1c07 — 观察期内改了 astock/scheduler.py**（acceptance）。`git diff 92f5e47..9d68a47 -- astock/scheduler.py` 有 13 处改动，全部来自本交付的 9d68a47：新增 `import contextlib`、`_release_lock()` 改成 `with contextlib.suppress(Exception)`（scheduler.py:502-503）、并删掉 12 处 `# noqa: BLE001 - <理由>`（scheduler.py:166/358/423-438/555/613/625/639/668）。A7 要求 2026-11-21 前排除 scheduler.py 与 jobs.py；jobs.py 确实为空 diff，scheduler.py 不是，而 handoff ho-20261117-006 写的是「仅按观察期豁免未改动」。\n2. **iss-mwjmhnr6-565a8f — 新测试 import yaml 但 PyYAML 未锁**（dependency）。tests/test_ci_quality_gates.py:17 `import yaml`，两份 requirements 均无 pyyaml，仅靠 gradio==6.15.2 的 `Requires-Dist: pyyaml<7.0,>=5.0` 传递带入（实际 6.0.3，版本不受控），与 A3「精确锁、可复现安装」冲突。\n\n### 谁在什么条件下修、何时算完全解决\n- **修复责任人**：plan-20261103-012 的开发（本交付 author）。评审不做任何代码/配置改动。\n- **P1-1 二选一**：① 若删冗余 noqa 必要，把 12 处 BLE001 审计理由集中写进 ruff.toml 的 per-file-ignores 注释块（不再动 scheduler.py），并在 handoff 更正「未改动」表述；② 若观察期不该动，把 scheduler.py 回退到 92f5e47（per-file-ignores 已在，ruff 仍为 0）。**判定完全解决**：`git diff 92f5e47 -- astock/scheduler.py` 为空，或 ruff.toml/handoff 有与 A7 逐条对应的书面例外说明并评估对 PR #9 观察结论的影响。\n- **P1-2 二选一**：① requirements-dev.txt 加 `pyyaml==6.0.3` 并把它加进 tests/test_requirements_pins.py:80-83 的 pin 参数列表；② 去掉 YAML 依赖，改用 `CI_PATH.read_text()` 子串断言。**判定完全解决**：仅凭 requirements-dev.txt 安装即可导入（或该测试不再 import 清单外包），且锁校验覆盖到它。\n- **P2 建议（不阻断，但请在下一轮一并回应）**：① .coveragerc:21-30 门槛零余量（fail_under=76.47 恰等于实测舍入值，净删已覆盖语句即红）——补处置流程或留余量；② tests/test_ci_quality_gates.py:26 `MIN_COVERAGE_FLOOR = 76.0` 弱于 docstring 意图，应改为 76.47；③ mypy.ini:4 的 exclude 白名单无守护测试，建议在 tests/test_ci_quality_gates.py 断言白名单集合。\n- **何时可 approve**：P1-1、P1-2 关闭且 3 条 P2 有明确答复（修或书面说明不接受理由），第 2 轮按 diff 复评确认无回归后，openP0=0 且 openP1=0 即标记为完全解决。\n\n### 评审局限（请开发知悉）\n本次评审环境无 shell/GitHub CLI 权限，未独立复跑 `pytest` / `ruff` / `mypy` / `coverage`，也未联网校验 CI run id。已做的是：核对 handoff 记录的 run id（PR#21 43929440949、main 43930042354、PR#22 43930603107、main 43931162007、PR#23 43931618188、main 43932111054）与 .coveragerc/docs 中的数字是否自洽，以及提交链 92f5e47→9d68a47→f25a56a→e4102eb→47645c3→2f38bc2→e284a50→4266528→b395483 与「PR 与 main 连续两次通过」的对应关系。测试执行结果采信开发在 ho-20261117-007/008 中的记录。",
+  "startedAt": "2026-11-16T18:52:07.157Z",
+  "finishedAt": "2026-11-16T18:55:12.248Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 3,
+    "total": 5
+  }
+}

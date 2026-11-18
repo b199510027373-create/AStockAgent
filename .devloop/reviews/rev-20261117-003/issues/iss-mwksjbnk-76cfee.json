@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksjbnk-76cfee",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1535, 1207-1234",
+  "title": "chart_render 仍把 5000 行 data 快照写进 meta_json 且不写 data_digest，真实 artifact 的 recomputed 回放不可用",
+  "evidence": "render 的 meta 里仍是 `\"data\": snapshot`（chart_render.py:1535），data_snapshot 只返回 fields/rows/row_count/truncated（chart_render.py:1207-1234），没有 data_digest。store.load_artifact 的 recomputed 分支只读 `record.meta.get(\"data_digest\")`，缺失就抛 ArtifactReplayUnavailable（store.py:936-939）。因此对真实 render 产物调用 `load_artifact(..., mode=\"recomputed\")` 必然失败；只有 tests/test_agent_store.py:429-438 用手工 meta `{\"data_digest\": \"sha256:abc\"}` 的合成记录能通过。spec §3.7/§4.6/§4.7 要求 data 快照落独立 blob（data.parquet/data.json），meta_json 只存 data_digest/data_rows/data_truncated；当前做法还让每个版本行携带最多 5000 行数据，agent_artifact_versions 会随版本迅速膨胀。",
+  "suggestion": "渲染时计算快照的规范 digest（如 sha256(canonical_json(snapshot))），把 data_digest、data_rows、data_truncated 写进 meta，把 rows 落到独立文件（按 spec 的 data.parquet 或现有 blob 布局），并让 `_load_artifact_frame` 与 `load_artifact(mode=\"recomputed\")` 都从该文件读取。补端到端测试：真实 render 后 meta 不含完整 rows，`load_artifact(mode=\"recomputed\")` 能返回快照，回放图与首次渲染的 data_as_of 一致。",
+  "confidence": 0.86,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:01:04.276Z"
+  },
+  "createdAt": "2026-11-17T14:31:39.200Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:01:04.276Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbjqpil-9bb5a8",
+  "threadId": "rev-20261111-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "测试不足-冻结接口",
+  "file": "tests/test_architecture_gate.py",
+  "lines": "260-263",
+  "title": "ChatResult 冻结 11 个字段，门禁只校验 10 个名字存在、漏掉 raw，且完全没校验冻结默认值",
+  "evidence": "docs/AStockAgent_interface_freeze_v1.md:142-144 冻结「ChatResult 冻结字段（11）：content、tool_calls、finish_reason=\"stop\"、prompt_tokens、completion_tokens、total_tokens、model、provider、protocol=\"tools\"、degraded=False、raw」，并规定 total_tokens==0 时由 prompt+completion 补齐。测试第 261–263 行的名单只有 10 项：(\"content\",\"tool_calls\",\"finish_reason\",\"prompt_tokens\",\"completion_tokens\",\"total_tokens\",\"model\",\"provider\",\"protocol\",\"degraded\")，没有 raw；断言方式是 `name in result_fields`（集合包含），不做顺序/全量校验，也不检查 finish_reason==\"stop\"、protocol==\"tools\"、degraded is False。对照 astock/agent/gateway.py:217 class ChatResult、:230 `raw: Mapping[str, Any] = field(default_factory=dict, repr=False)`：删掉 raw 或把 protocol 默认改成别的值，门禁仍然全绿——这正是冻结清单 §8 声称要防的「冻结接口与代码不一致」。同文件对 ToolResult/ToolSpec 用的是 `tuple(__dataclass_fields__) == (...)` 精确断言，这里标准不一致，属实现侧漏项。",
+  "suggestion": "把该断言改成与 ToolResult 同级：`assert tuple(gateway.ChatResult.__dataclass_fields__) == (\"content\",\"tool_calls\",\"finish_reason\",\"prompt_tokens\",\"completion_tokens\",\"total_tokens\",\"model\",\"provider\",\"protocol\",\"degraded\",\"raw\")`；再补默认值断言 `finish_reason == \"stop\"`、`protocol == \"tools\"`、`degraded is False`，以及 `total_tokens==0 时等于 prompt+completion` 的行为断言（构造 ChatResult(prompt_tokens=3, completion_tokens=4) 后检查 total_tokens==7）。若 raw 属于平台私有、不打算冻结，则删掉冻结清单里的 raw 并写明理由，二者不能一边冻结一边不设防。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:41:27.353Z"
+  },
+  "createdAt": "2026-11-11T03:15:31.629Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:41:27.353Z"
+    }
+  ]
+}

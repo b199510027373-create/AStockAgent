@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwaawfsb-8d9628",
+  "threadId": "rev-20261110-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/use_cases.py",
+  "lines": "310-338",
+  "title": "新鲜度校验在 data_as_of 不可解析 / 日历不可用时 fail-open，页面无任何提示",
+  "evidence": "新鲜度判定在两处 fail-open：(1) use_cases.py:331-332 `except Exception: stale = False` —— data_as_of 不是可解析日期（如 \"unknown\"、\"2026/13/40\"）时直接判为新鲜，页面显示 ✅，与同函数 320-324 行\"缺 data_as_of 就 stale\"的规则自相矛盾；(2) use_cases.py:312-316 日历不可用时 expected=None，stale 保持 False，calendar_error 只写进 diagnostics，_render_recommendation（196-203 行）只用 message 拼 status_text，用户看到的就是一个没有前置提示的 ✅。台账是本地 SQLite/JSON，历史文件可由人工或旧版本写入，这两条都不是纯理论路径。",
+  "suggestion": "把\"无法确认新鲜度\"统一收敛成 stale 且可读：解析失败时 `stale = True`，message 写\"该推荐记录 data_as_of=… 无法解析，无法确认数据新鲜度；请重新生成后再使用\"；日历不可用时保留 success 但把 diagnostics[\"calendar_error\"] 也带进 status_text 的一行提示（例如\"⚠️ 交易日历不可用，未校验数据新鲜度\"）。补两条用例：_history_run(data_as_of=\"unknown\") → stale；last_completed_trade_date 抛异常 → status_text 含未校验提示。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-10T06:47:46.361Z"
+  },
+  "createdAt": "2026-11-10T06:20:16.235Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-10T06:47:46.361Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwj91eod-34fec9",
+  "threadId": "rev-20261116-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/sw_crosswalk.py",
+  "lines": "311-330,335,343-348,709-714",
+  "title": "结构性阈值/桥接日无法从流水线传入，且缓存命中不校验，doc §2 的「改切点重跑」不成立",
+  "evidence": "`build_crosswalk_artifacts` 签名（:311-318）只有 refresh/old_members/new_members/old_date/new_date，没有 old_share/new_share；:335 直接 `edges = edge_table(pairs)` 使用模块常量 STRUCTURAL_OLD_SHARE=0.20 / STRUCTURAL_NEW_SHARE=0.50，所以阈值只能绕过整条流水线、手写脚本调 edge_table(pairs, old_share=..., new_share=...) 才能改。缓存侧：:322-330 命中条件只有「edges parquet 非空 + summary.json 可解析」，从不比对 summary 里已写好的 `thresholds`（:345-348）与 `bridge_old_date`/`bridge_new_date`（:343-344），也不比对输入 sw_l1_members parquet 的 mtime。后果一：改了常量后重跑（不加 --refresh）返回旧 edges 与旧 summary，summary 里的 thresholds 会与代码常量不一致而无人察觉；后果二：传 old_date=\"2021-12-01\" 之类的新桥接日，缓存命中时该参数被完全忽略。这与 docs/sw2014_sw2021_crosswalk.md:27「阈值是显式参数，便于复核时改切点重跑」以及验收标准①「可审计映射表」直接冲突——审计者按文档改切点重跑，拿到的还是旧表。",
+  "suggestion": "把阈值做成真正的参数：给 build_crosswalk_artifacts 增加 old_share/new_share 形参并透传到 edge_table，CLI 增加 --old-share/--new-share（默认 0.20/0.50）；缓存命中前比对 cached_summary[\"thresholds\"]、bridge_old_date/bridge_new_date 与目标输入（含 sw_l1_members parquet mtime），不一致就重建。补两条 pytest：①阈值改成 0.10/0.40 且 refresh=False 时必须重建并得到更多结构性边；②桥接日改成 2021-12-01 时必须重建、summary 的 bridge_old_date 随之变化。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T17:43:00.837Z"
+  },
+  "createdAt": "2026-11-16T12:38:04.429Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T17:43:00.837Z"
+    }
+  ]
+}

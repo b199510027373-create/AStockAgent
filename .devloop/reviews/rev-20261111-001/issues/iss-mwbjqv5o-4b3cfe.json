@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbjqv5o-4b3cfe",
+  "threadId": "rev-20261111-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "治理-门禁范围",
+  "file": "tests/test_architecture_gate.py",
+  "lines": "64-67",
+  "title": "全局禁止 proposed ADR 与 ADR-012「7 天内追认」冲突，会让起草中/待追认的 ADR 必然 CI 红",
+  "evidence": "tests/test_architecture_gate.py:66-67 对全表断言 `proposed == []`，即任何 ADR 只要处于 proposed，CI 就红；:31 ALLOWED_STATUS 也不含 proposed。这与它自称实现的治理规则冲突：.devloop/architecture/adr/ADR-012-product-scope-requirements.md:71 写「不允许**长期**存在『代码已实现但 ADR 仍是 proposed』的条目」（限定词是长期、且限定已实现），:75-79 明确允许先行实现并在 7 个自然日内追认——在追认完成前，ADR 的正常状态就是 proposed。可按本门禁，起草中或等待追认的 ADR 一旦进入分支，pytest 就失败，即 §2 的 7 天窗口在流程上无法存在（要么先写 accepted 的 ADR 再补代码，要么代码先行却不带 ADR）。验收标准只要求「8 条 proposed ADR 全部给出结论」，测试范围越过了验收要求，属规则范围放大。",
+  "suggestion": "二选一并在同一 PR 内使 ADR-012 §5（第 96 行「不存在 proposed ADR」）与门禁一致：a) 门禁只对本次裁决集断言 `set(GATED_ADRS) & proposed == set()`，全局规则改为「proposed ADR 必须带 `- 追认截止：YYYY-MM-DD` 且未过期，否则失败」——既守住「不长期挂着」，又保留 7 天追认窗口；b) 若确实禁止 proposed，则删除 ADR-012 §2 的先行实现条款并写明替代流程（如 ADR 与代码同 PR、评审时置 accepted）。并补一条反例测试：临时造一条 proposed ADR，断言门禁按新规则给出「缺追认截止日」之类可读错误，而不是笼统失败。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:41:10.318Z"
+  },
+  "createdAt": "2026-11-11T03:15:38.940Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:41:10.318Z"
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "id": "ho-20261116-013",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "PNG 导出基础设施：Kaleido/Chrome/字体与 CI",
+  "summary": "收尾合并完成：PR #17（评审 round 3 approve）以 merge commit 30ff948 并入 main；随后 PR #18 只提交 plan/calendar/worklog 元数据（plan-20261114-001 → done/progress=100，links 记录 merge 与 CI），以 ac19532 并入 main。main 上两条 CI run（43793125649 30ff948、43793362775 ac19532）均 test + png-export 双绿。本地 main 已同步至 ac19532。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "plotly==6.7.0 / kaleido==1.5.1，requirements 无无上限 >= 漂移",
+      "source": "plan-20261114-001 验收①"
+    },
+    {
+      "id": "R2",
+      "text": "Windows 开发机 + Linux CI 均生成 PNG，spike 环境矩阵已记录",
+      "source": "plan-20261114-001 验收②"
+    },
+    {
+      "id": "R3",
+      "text": "中文标题/坐标轴/图例无方块，中文 K 线 PNG 已产出并目视确认",
+      "source": "plan-20261114-001 验收③"
+    },
+    {
+      "id": "R4",
+      "text": "CI 真实导出独立 job；主 job -m \"not png\" 不依赖 Chrome/字体",
+      "source": "plan-20261114-001 验收④"
+    },
+    {
+      "id": "R5",
+      "text": "png_mode=require 失败抛 PNGExportError 并显式 failed；auto 仅首次告警不重复降级",
+      "source": "plan-20261114-001 验收⑤"
+    },
+    {
+      "id": "R6",
+      "text": "PNG 与 HTML artifact 关联记录（digest/尺寸/字体/版本）",
+      "source": "plan-20261114-001 验收⑥"
+    },
+    {
+      "id": "R7",
+      "text": "ops 文档含 Chrome/字体/升级检查清单",
+      "source": "plan-20261114-001 验收⑦"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "PR #17 合并：真实 PNG 导出、中文图例、png_mode 三态、PNG/HTML artifact 追溯字段",
+      "commit": "30ff948"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "summary": "独立 png-export job（Chrome/fonts-noto-cjk、-m png --timeout=180、artifact 上传）；主 job -m \"not png\"",
+      "commit": "30ff948"
+    },
+    {
+      "path": "docs/AStockAgent_png_export_ops.md",
+      "summary": "部署/CI/字体/版本升级检查清单与故障表",
+      "commit": "30ff948"
+    },
+    {
+      "path": "requirements.txt",
+      "summary": "plotly==6.7.0、kaleido==1.5.1 精确锁定",
+      "commit": "30ff948"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-001.json",
+      "summary": "plan 置 done/progress=100，links 记录 merge 与 main CI",
+      "commit": "bb5e626"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run list --branch main / gh run view",
+      "result": "main 合并提交 CI 全绿",
+      "passed": true,
+      "evidence": "30ff948: test success, png-export success; ac19532: test success, png-export success"
+    },
+    {
+      "command": "pytest tests -q (before merge, e59961d)",
+      "result": "全量回归通过",
+      "passed": true,
+      "evidence": "513 passed, 1 skipped, 2 subtests, 42.66s"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub merge 权限",
+      "reason": "用户确认可收尾合并，PR #17/#18 已合并",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "ac19532",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/17 (merged) ; https://github.com/b199510027373-create/AStockAgent/pull/18 (merged)",
+    "ci": "run 43793362775 (ac19532): test pass, png-export pass; run 43793125649 (30ff948): test pass, png-export pass",
+    "merge": "PR #17 -> 30ff948；PR #18（plan done 元数据）-> ac19532",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261116-011",
+  "next": "无后续开发动作；plan-20261114-001 已 done。后续如升级 plotly/kaleido，按 ops 文档「版本升级检查清单」执行并更新 pin。",
+  "createdAt": "2026-11-16T02:40:06.734Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-013.md"
+}

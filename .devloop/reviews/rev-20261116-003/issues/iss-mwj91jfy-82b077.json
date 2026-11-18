@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwj91jfy-82b077",
+  "threadId": "rev-20261116-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "docs",
+  "file": "docs/sw2014_sw2021_crosswalk.md",
+  "lines": "69-83,88,123",
+  "title": "§4.1 表头「非 SW 标签数」实为成员只数（8 只 = 5 个标签），与 §5.2 的「11 只」口径混用",
+  "evidence": "§4.1 表（docs/sw2014_sw2021_crosswalk.md:69-83）表头写「非 SW 标签数」，列值为 8/8/8/8/8/8/8/11/11/11/11/11/11。但同期 CSV（docs/sw2014_sw2021_distribution_metrics.csv:2）的 non_sw_labels 列只有 5 个名字「医疗保健,半导体,软件服务,运输设备,通信设备」，non_sw_share_count=0.026667 即 8/300，12-31 起 0.036667 即 11/300、标签增至 6 个（增加「电气设备」）。也就是说表里的 8/11 是「非 SW 成员只数」，不是标签数（5/6）。文中 :88 用的是「非 SW 标签 从 8 只增至 11 只」，:123 用「切换后 11 只（3.67%）」，三处口径混用；且 12-13 当天实际是 8 只（2.67%），11 只是 12-31 起的值（因为指数成分变化），:123 的「切换后」容易被读成切换日。",
+  "suggestion": "把 :69 表头改为「非 SW 成员数（只）」并新增一列「非 SW 标签数（5/6）」，或在脚注写明「8 只 = 5 个回退标签、11 只 = 6 个回退标签（含 电气设备）」；:123 改为「切换日 8 只（2.67%），2021-12-31 起 11 只（3.67%）」，避免与 §4.1 表头「标签数」互相矛盾。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T17:43:12.601Z"
+  },
+  "createdAt": "2026-11-16T12:38:10.606Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T17:43:12.601Z"
+    }
+  ]
+}

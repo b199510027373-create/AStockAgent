@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261113-003-r4",
+  "threadId": "rev-20261113-003",
+  "roundNo": 4,
+  "scope": "diff",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 4 轮 diff 评审完成（base 75b5d64 → head b8736a8，3eca51e 仅 plan 证据）。上一轮 7 条已逐条核对并确认真实修复：panes/style/raw 已从校验器/schema/测试删除；data.ref 改 anyOf，jsonschema 指数用例通过；include_plotlyjs 进入 params；空 transforms 直接返回空时点；record_artifact meta 改 upsert；prune_artifacts 增加孤儿扫描；验收第 9 条已改为 v1 直接落库、chart_service 迁移 plan-20261114-002。上述 7 条可结案。\n\n本轮新增 1 条 P1、2 条 P2：\n1) P1 iss-mwfciv9a-8ce571（astock/agent/store.py:432-452）：prune_artifacts 的孤儿目录扫描只把 agent_artifacts.digest 当引用集，不读取保留行 meta[\"png_path\"]，也不受 keep_digests 保护；而 PNG 由 chart_render.py:1243-1246 写入独立 digest 目录、chart_render.py:1276-1284 只记录 HTML 行。因此清理时会把仍被活跃 HTML artifact 引用的 PNG 一并删除。必须修复并补“保留 HTML + 其 PNG”的回归。\n2) P2 iss-mwfciyhq-d889ce（astock/agent/store.py:261）：无条件 latest-wins upsert 会在同一 HTML 二次渲染且本次 PNG 失败时，把已有 degraded=False/有效 png_path 覆盖成 degraded=True/None；冻结清单第 221 行要求 degraded/png_path 升级，tests/test_agent_chart_render.py:186-212 只测 degraded→success。需改单调更新，或同步改契约并补 success→degraded 用例。\n3) P2 iss-mwfcj1wk-cda93e（docs/AStockAgent_chart_pipeline_decisions_v1.md:31,53,109-124,275）：决策记录仍写“保留 panes/style/raw、删除动作在 plan-20261114-002”，与已删除别名的代码和冻结清单冲突；需改为“已随 plan-005 删除/已取代”，并覆盖 raw 映射描述。\n\n修复责任：plan-20261107-005 开发负责 P1 与两条 P2；P2 若延期，须由架构在交付文档中书面承接并说明承接 plan。完全解决条件：下一轮 reviewer 确认 P1 已修、PNG 引用保护回归通过，P2 已修或经架构书面接受；pytest 目标 125+ passed、全量 482 passed/2 skipped、mypy 34 files、architecture gate 32 passed/1 skipped、CI 通过。当前 openP1=1，不能 approve；下一轮只复审本轮 diff 与新增回归。",
+  "startedAt": "2026-11-13T19:01:51.003Z",
+  "finishedAt": "2026-11-13T19:04:51.809Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 2,
+    "total": 3
+  }
+}

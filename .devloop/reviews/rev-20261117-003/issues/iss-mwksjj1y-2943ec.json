@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksjj1y-2943ec",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "API",
+  "file": "astock/agent/chart_render.py",
+  "lines": "298-311, 1537",
+  "title": "RenderedFigure.metadata 缺 artifact_version/meta_digest，record_artifact 返回的版本号被丢弃",
+  "evidence": "chart_render.py:1537 调用 `artifact_id, _artifact_version = record_artifact(...)`，但 `_artifact_version` 之后没有使用；RenderedFigure.metadata 只输出 artifact_id/path/digest/figure_params/data_as_of/data_time/time_point_scope/degraded/warnings/code_version（chart_render.py:298-311），没有 spec §3.4 要求的 artifact_version 和 meta_digest。调用方拿到 RenderedFigure 后无法知道当前是哪一版 meta，也无法在 ToolResult/UI 中展示或校验版本；同 artifact 追加 correction 后只能再查库。",
+  "suggestion": "给 RenderedFigure 增加 artifact_version 和 meta_digest 字段，render 返回时填入 record_artifact 的实际返回值（不要丢弃 _artifact_version）；metadata() 一并输出。补测试：两次渲染同一 artifact，第二次（meta 变化）metadata 的 version=2、meta_digest 与 DB 最新版本一致。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:01:57.226Z"
+  },
+  "createdAt": "2026-11-17T14:31:48.790Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:01:57.226Z"
+    }
+  ]
+}

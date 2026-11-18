@@ -1,0 +1,33 @@
+{
+  "id": "iss-mweov5r6-6cc726",
+  "threadId": "rev-20261113-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "concurrency",
+  "file": "astock/agent/files.py",
+  "lines": "1173-1177",
+  "title": "原子写临时文件名只用 pid，同进程并发导入同一 sha256 时会共用 tmp 路径",
+  "evidence": "`_atomic_write_bytes`（astock/agent/files.py:1173-1177）用 `tmp = target.with_name(f\".{target.name}.tmp-{os.getpid()}\")` 生成临时文件，唯一性只依赖进程号。同一文件目录下的多个目标（original.<ext>、meta.json）各自有 tmp 名所以互不冲突，但同一 sha256 的两次并发 ingest（Gradio 默认线程池里两个上传请求，或一次批量里同一文件被传两次）会在同一进程里落到同一个 tmp 路径：两个线程同时 `tmp.write_bytes()`，`os.replace()` 时可能拿到另一个线程写了一半的内容，且 `_write_original` 里 `others = [p for p in directory.glob(\"original.*\") if p != target]` 逻辑会因 tmp 后缀不同而漏判。ADR-011 与项目既有的原子写约定要求临时文件名唯一（uuid/随机后缀），失败后清理残留。",
+  "suggestion": "tmp 名改为 `f\".{target.name}.tmp-{os.getpid()}-{uuid.uuid4().hex[:8]}\"`（或 `secrets.token_hex(4)`），并用 try/finally 在写入失败时 `tmp.unlink(missing_ok=True)`；补一个用例：monkeypatch 让 `Path.write_bytes` 抛 OSError，断言调用后目录里没有残留 `.tmp-*` 文件且 meta.json 不存在。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T08:25:35.819Z"
+  },
+  "createdAt": "2026-11-13T08:02:15.906Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T08:25:35.819Z"
+    }
+  ]
+}

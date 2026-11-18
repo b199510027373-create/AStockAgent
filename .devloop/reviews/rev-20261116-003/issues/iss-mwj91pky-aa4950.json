@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwj91pky-aa4950",
+  "threadId": "rev-20261116-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "docs",
+  "file": "docs/sw2014_sw2021_crosswalk.md",
+  "lines": "136-150",
+  "title": "入库审计 CSV 缺可复现的导出命令，§6 重跑无法生成已提交的 CSV（且未说明缺失 2021-12-01 行）",
+  "evidence": "doc:136-140 的复现步骤只有 `python -m astock.sw_crosswalk --refresh` 与 pytest，:142-148 的产物列表只有 cache/pit 下的 parquet/json（cache/ 不入库，:150），而入库的审计文件是 docs/sw2014_sw2021_crosswalk.csv（200 行）与 docs/sw2014_sw2021_distribution_metrics.csv（13 行）。:150 只写「审计 CSV 由同一份缓存导出」，但仓库里没有对应命令或脚本（git files 显示本分支只新增 astock/sw_crosswalk.py 与 tests/test_sw_crosswalk.py，无导出入口），导出逻辑当初是临时脚本 .tmp-test/export_audit.py。另外 CSV 只有 13 行、没有 2021-12-01 这一行的原因（缓存里确实存在该快照：cache/pit/sw_crosswalk_bridge_000300.SH.json 的 old_date=\"2021-12-01\"，而该快照只能由快照本身含 12-01 才会被 bridge_diff 选中）也没有记录，审计者按 §6 重跑会得到与入库 CSV 行数不一致的结果。验收标准③要求「PIT 快照可复现」，这一环目前靠口头说明。",
+  "suggestion": "把导出步骤落地：给 CLI 加 `--export-docs`（或新增 scripts/export_crosswalk_docs.py），从 cache/pit 的 edges/summary/metrics 生成 docs 下两个 CSV（含固定小数位与排序），在 §6 复现块里写上该命令；并在 §6 说明 CSV 对 metrics 做了哪些过滤（例如为何不含 2021-12-01 行、只保留 12 个月末 + 12-13），使「重跑得到的 CSV」与入库文件逐字节可比。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T17:43:24.421Z"
+  },
+  "createdAt": "2026-11-16T12:38:18.562Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T17:43:24.421Z"
+    }
+  ]
+}

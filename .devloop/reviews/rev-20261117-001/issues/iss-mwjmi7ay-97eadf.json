@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwjmi7ay-97eadf",
+  "threadId": "rev-20261117-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "gate-design",
+  "file": ".coveragerc",
+  "lines": "21-30",
+  "title": "覆盖率门槛零余量：fail_under 恰等于实测舍入值，无关重构删几行已覆盖代码就红",
+  "evidence": ".coveragerc 的 fail_under=76.47 与 CI Linux 实测显示值完全相等：9247/2176 = 76.468% → precision=2 四舍五入即 76.47。.coveragerc 自己的注释也写明「coverage 按 precision 四舍五入后比对」，即门槛就是当前值本身，容差为 0。\n\n后果：任何与门禁无关的合法重构，只要净删掉几条已被覆盖的语句，比例就掉到门槛下——例如删掉 10 条已覆盖语句 → 7061/9237 = 76.44% < 76.47，CI 直接红；但覆盖率质量并没有下降（这正是 ratchet 想表达的意思之外的情形）。提交历史里 e4102eb「门槛按 CI Linux 实测 76.47 重设为 76.4」→ 2f38bc2「门槛对齐 CI 实测显示值 76.47%」正是在这个零余量边界上来回改过一次。",
+  "suggestion": "保留 ratchet 意图但留一点可解释余量：例如设 fail_under=76.4，并在注释里写清「CI Linux 实测 76.47%（9247/2176），门槛留 0.07pp 余量以容忍删除已覆盖代码导致的比例下降，禁止借此下调门槛」；或者维持 76.47，但在 .coveragerc 注释与 PR 模板中写明处置流程：「若因净删已覆盖语句导致比例下降，需在同一 PR 内补等量断言或说明，并按新实测值显式调整门槛」。\n\n完全解决标准：文档中写明零余量门禁的失败处置流程，或门槛与实测之间留有可解释的余量。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T19:19:25.106Z"
+  },
+  "createdAt": "2026-11-16T18:55:03.034Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T19:19:25.106Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbnbkbm-e288d3",
+  "threadId": "rev-20261111-002",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "测试隔离",
+  "file": "tests/test_research_semantics.py",
+  "lines": "173-186",
+  "title": "新增池快照测试调用 _save 时未隔离 ledger，会把假批次 rec_pool 写进开发机真实 data/astock.db",
+  "evidence": "`PersistedPoolSnapshotTests.test_saved_json_pool_snapshot_reproduces_table_percentiles` 只 `patch.object(recommend, \"REC_DIR\", Path(tmp))`（tests/test_research_semantics.py:173-175），但 `recommend._save` 在 astock/recommend.py:645-651 内 `from .ledger import save_run` 并执行 `save_run(payload, json_path=..., csv_path=...)`；`ledger.save_run` 使用模块级 `DB_PATH = Path(os.getenv(\"ASTOCK_DB_PATH\") or (BASE_DIR / \"data\" / \"astock.db\"))`（astock/ledger.py:15），仓库没有 tests/conftest.py 设置该环境变量，因此该测试会把 run_id=rec_pool、5 条假 items/evidence `INSERT OR REPLACE` 进开发机真实账本（astock/ledger.py:151-193）。同文件 `LedgerCompatTests` 在 tests/test_research_semantics.py:257-261 显式 patch `ledger.DB_PATH`，tests/test_contracts.py:674 也有同样隔离，新测试没有沿用；假批次之后会经 `recommendation_batches`/`_ledger_view` 出现在台账界面与统计里，测试也不再对本地账本无副作用。既有 tests/test_contracts.py:417-451 的 `_save` 用例同样未隔离，可顺带修。",
+  "suggestion": "由开发在本分支给该测试（以及 tests/test_contracts.py:417-451 的 `_save` 用例）增加 `with patch.object(ledger, \"DB_PATH\", Path(tmp) / \"ledger.db\")`，或复用 LedgerCompatTests 的 setUp/tearDown（import astock.ledger）；断言逻辑不变。完全解决标准：连续跑两次目标测试后 `ledger` 的 `runs` 表不新增 `rec_pool`/`run-20250106-abc` 记录，且测试仍断言落盘 JSON 的 candidate_pool 复算等于 table 技术分位。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T05:07:55.501Z"
+  },
+  "createdAt": "2026-11-11T04:55:43.522Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T05:07:55.501Z"
+    }
+  ]
+}

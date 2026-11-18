@@ -1,0 +1,65 @@
+{
+  "id": "ho-20261113-003",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261113-001",
+  "sessionId": "",
+  "title": "评审：调度状态机迁移 jobs 表 + 心跳告警",
+  "summary": "第 1 轮全量评审（scope=full），审阅 README.md、astock/jobs.py、astock/ledger.py、astock/scheduler.py、tests/test_hardening.py、tests/test_scheduler_ledger.py、tools/build_product_doc.py 的 diff 与当前实现，对照 ADR-004、OPS-01、LEDGER-01 与 plan-20261103-007 四条验收标准。\n\n【已完成且认可】jobs 表状态机（pending/running/success/stale/failed + attempts/started_at/finished_at/as_of/late_by_min/run_id）与 ADR-004 一致；save_job/update_job 有 status 与字段白名单校验；as_of 列对老库有 PRAGMA 迁移；scheduler_state.json 已降级为只读迁移源，migrate_legacy_state 只补缺失行不覆盖、非法状态记 failed；run_once 先写 running 再判 success/stale/failed，stale 时不刷新 tracking；--report 5 / --heartbeat 退出码 0/2 有 CLI 级用例；.gitignore 仍忽略 data/*.db 与 data/recommendations/，LEDGER-01 满足；README 与 tools/build_product_doc.py 的口径与实现一致。测试证据（39 passed / 309 passed 1 skipped / mypy 31 files / compileall / ruff E9,F63,F7,F82）足以支撑「测试确实跑过」。\n\n【未通过原因】2 条 P1 + 3 条 P2 仍 open：\n1. P1 iss-mwdsn7s3-6954f5（astock/scheduler.py:229-239, 298-303）：last_completed_trade_date 在 15:00 就返回当天，而 close 任务 16:40 才到期，导致 15:00-16:40 之间 --report 5 稳定 return 2、--heartbeat 提前告警。这直接污染验收项 4 的取证工具。\n2. P1 iss-mwdsn7t0-8b6b2b（astock/scheduler.py:417, 435-443, 514-536）：台账读写不在 try 内、loop 无 except，sqlite 锁超时会让调度线程静默退出且无日志无告警；相比改动前 except: pass 的写法属可靠性回退。\n3. P2 iss-mwdsns2o-7c2e72：告警去重仅靠模块全局 _LAST_ALERT_SIGNATURE，重启后同签名重复落盘。\n4. P2 iss-mwdsnve8-4643e3：空账本首次启动 streak=60，立刻写出 60 日漏跑告警，且测试已把该行为固化为断言。\n5. P2 iss-mwdsnvf7-7056ec：没有任何用例驱动 loop()，pending→running→success 接线与 600s 重试分支无测试保护。\n\n【修复责任与完成条件】由开发者在本分支（feat/plan-20261103-007-scheduler-ledger）上修复：P1 两条必须改代码并各自补测试（15:30 的 report/heartbeat 用例；patch ledger.save_job 抛 sqlite3.OperationalError 的异常隔离用例）；P2 三条可以本轮或下一轮完成，但 issue 2 的去重建议与 issue 4 的空库语义修改需同步更新既有断言，避免测试与实现互相矛盾。完全解决判定：下一轮（diff 复审）确认 5 条 issue 全部 closed、openP0=0 且 openP1=0、`pytest tests/test_scheduler_ledger.py tests/test_hardening.py -q` 与 `pytest tests -q` 仍全绿、mypy 与 compileall 通过，届时 verdict=approve 并由 reviewer 交付文档标记 resolved=true。若只关闭 P1 而把 P2 降级为后续 follow-up，也必须在交付文档里写明跟进计划项，不能默认视为完全解决。\n\n本轮无 P0；未发现安全或数据破坏类问题。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 2,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "心跳/验收报表在 15:00–16:40 把当天未到期的 close 任务计为漏跑",
+        "suggestion": "增加 `_due_reference(now)`：当 `(now.hour, now.minute) < _run_time()` 时用 `datetime.combine(now.date(), time(0, 0))` 作为参考时刻再调 last_completed_trade_date（盘前与周末行为不变，只修正 15:00–16:40），并让 heartbeat_check、acceptance_report、_recent_trading_days 内部统一使用该参考值。补两条测试：15:30 且前 4 天 success 时 `--report 5` 仍 all_success=True；15:30 且昨天 failed 时 streak=1、alerted=False、退出码 0。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "台账异常会让调度线程静默退出（save_job/_prepare_ledger 在 try 之外）",
+        "suggestion": "把 run_once 中台账读写纳入异常处理（写 running 失败时 `_log` 后返回 None，不向外抛）；在 loop 里用 try/except 包住 startup_maintenance() 与 run_once()，捕获后写入 scheduler.log 并 `stop.wait(600)` 后重试，避免线程终止。补测试：patch `ledger.save_job` 抛 sqlite3.OperationalError，断言 startup_maintenance/run_once 不向调用方抛出，且 loop 在下一轮仍会尝试。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "心跳告警去重只在进程内生效，重启后同一签名重复落盘",
+        "suggestion": "把去重签名持久化：写盘前读取 scheduler_alerts.jsonl 最后一行（或维护独立的 name→last_at 表），若与当前 signature 相同且未超过告警间隔则跳过写盘；不在进程内维护可变全局。补一条测试：写行后手动重置 `scheduler._LAST_ALERT_SIGNATURE = None` 模拟重启，再调 heartbeat_check，断言文件仍只有一行。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "空台账首次启动即产生 60 日连续漏跑告警",
+        "suggestion": "区分「尚无历史」与「连续漏跑」：若窗口内除当天 pending 行外不存在任何 close 行（last_success 为 None 且无更早 job 记录），返回 ok=True 并带 initialized=False，不写告警、日志注明「尚无调度历史」；streak 以窗口内最早一条 job 的 trade_date 为下界截断。同步调整 test_startup_maintenance_marks_due_job_and_heartbeat_state 的断言，并新增「空库首次启动不告警」用例。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "调度执行链 loop() 无测试覆盖（pending→running→success 与失败重试）",
+        "suggestion": "补一条 loop 集成测试：patch `scheduler.datetime` 到某个交易日 16:41、patch `_run_time`/`_is_trading_day`/`run_recommendation`，用一个预先 set 的 threading.Event 让循环在首次 run 后退出，断言 jobs 行由 pending 变 success 且 run_recommendation 只调用一次；再加一条 run_recommendation 返回 stale 的用例，patch `stop.wait` 记录入参，断言调用了 600 且该交易日内没有第二次 run_once。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-12T17:00:54.282Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-003.md"
+}

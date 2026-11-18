@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwesok8w-692962",
+  "threadId": "rev-20261113-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness/time-point",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1095-1103,1153",
+  "title": "data_as_of/data_time 在 transforms 之前计算、快照在 transforms 之后生成，图注时点可能与实际数据不一致",
+  "evidence": "`render` 先在 `frame_resolved` 上调用 `_time_points` 得到 as_of/bar_time（chart_render.py:1095-1103），随后才 `apply_transforms`（:1103），快照却取自 `transformed`（:1153），meta 又写回前一步的 as_of（:1157-1158）。`tests/test_agent_chart_render.py:359-371` 的用例正好暴露：inline 三行是 2024-01-02 close=10.0、2024-01-03 close=10.6、2024-01-04 close=10.4；filter close>10、sort desc、limit 1 之后快照只剩 2024-01-03（close=10.6），但图注/meta 的 data_as_of 仍是 2024-01-04。`_load_artifact_frame`（:251-254）回放时又直接信任 meta 里的 data_as_of，于是 artifact 的“数据截止”与快照/图永久不一致。该用例只断言 snapshot 的 close，没有断言 data_as_of，所以没有发现。",
+  "suggestion": "把时点计算移到 `apply_transforms` 之后、`_caption/_build_figure/meta` 之前，用 `transformed` 重新计算；显式传入的 `data_as_of/data_time` 仍优先。`source=artifact` 时，若快照含 trade_date/trade_time/day 等时间列，应优先按快照重算，而不是无条件信任 `attrs`，避免把首次渲染的错误时点固化。回放/截断场景要保证快照包含被引用的最新点（sort desc + tail(5000) 时尤其注意）。补测试：断言 `rendered.data_as_of == \"2024-01-03\"`、`meta[\"data_as_of\"] == meta[\"data\"][\"rows\"][-1][\"day\"]`，并用 artifact 回放再断言一次。",
+  "confidence": 0.96,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T16:44:11.230Z"
+  },
+  "createdAt": "2026-11-13T09:49:06.560Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T16:44:11.230Z"
+    }
+  ]
+}

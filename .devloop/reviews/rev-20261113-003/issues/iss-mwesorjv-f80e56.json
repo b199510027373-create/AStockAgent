@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwesorjv-f80e56",
+  "threadId": "rev-20261113-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "run-lifecycle",
+  "file": "astock/agent/store.py",
+  "lines": "184-185",
+  "title": "ensure_run 对 status=running 也把 finished_at 写成开始时间，运行中的 run 看起来已结束",
+  "evidence": "`ensure_run` 的 INSERT 第 10 个参数 `finished_at` 与第 9 个 `started_at` 使用同一个表达式 `started_at or utc_now()`（store.py:184-185），没有根据 `status` 区分。调用方传 `status=\"running\"` 时，`finished_at` 仍是非空时间；后续按 `finished_at IS NULL` 判断“仍在运行”的查询会得到错误结果。`tests/test_agent_store.py:200-211` 只测默认 `status=\"success\"`，没有 running 用例；chart_render 目前只传 success/partial，但这个公共函数已被计划项 008 作为最小 run 行入口。",
+  "suggestion": "在函数内取一次 `now = utc_now()`，`started = started_at or now`，`finished = None if status == \"running\" else now`，并把两者分别绑定到占位符；或对非终态 status 明确禁止写 finished_at。补测试：`ensure_run(conn, \"run_running\", status=\"running\")` 后 `finished_at IS NULL`，`status=\"success\"` 后 `finished_at` 非空且不早于 `started_at`。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T16:44:24.919Z"
+  },
+  "createdAt": "2026-11-13T09:49:16.027Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T16:44:24.919Z"
+    }
+  ]
+}

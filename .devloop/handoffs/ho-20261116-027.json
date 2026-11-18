@@ -1,0 +1,154 @@
+{
+  "id": "ho-20261116-027",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261103-008",
+  "threadId": null,
+  "sessionId": "",
+  "title": "SW2014→SW2021 行业边界校准与 crosswalk — 初始交付",
+  "summary": "完成 plan-20261103-008：基于 index_member 建立经验 crosswalk（全 A 4,194 只配对，200 条 old→new 边，28→31 分类含 4 个一对多、2 个多对一、美容护理无结构性旧来源），量化沪深300 切换日前后 6+6 个月末行业分布与同一批股票的切换日桥接；映射与指标缓存为 Parquet/JSON，审计表与研究结论 §4.1 落文档。PIT 主流程未改动。目标 16 测试、相关 PIT/契约 111 测试、mypy 均通过，PR #20 的 GitHub Actions test + png-export 均通过，等待评审。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "产出一张 SW2014 L1 ↔ SW2021 L1 的可审计映射表（含未匹配清单）",
+      "source": "plan-20261103-008 验收标准 #1"
+    },
+    {
+      "id": "R2",
+      "text": "2021-12-13 前后各 6 个快照的行业分布差异有量化说明",
+      "source": "plan-20261103-008 验收标准 #2"
+    },
+    {
+      "id": "R3",
+      "text": "映射表落缓存/Parquet，PIT 快照可复现",
+      "source": "plan-20261103-008 验收标准 #3"
+    },
+    {
+      "id": "R4",
+      "text": "研究结论文档补充「跨版本行业不可比」的具体影响范围",
+      "source": "plan-20261103-008 验收标准 #4"
+    },
+    {
+      "id": "R5",
+      "text": "本项不改主流程，只做边界校准；建立 28→31 的 L1 映射（含一对多/多对一/无匹配）",
+      "source": "plan-20261103-008 描述 / m00001"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/sw_crosswalk.py",
+      "summary": "新增独立边界校准模块：active_industries、paired_assignments、edge_table、classify_mapping、backmap_table、snapshot_metrics、bridge_diff、snapshot_window、build_crosswalk_artifacts、build_distribution_artifacts 与 CLI；只读 PIT 缓存，不改主流程。",
+      "commit": "863c374"
+    },
+    {
+      "path": "tests/test_sw_crosswalk.py",
+      "summary": "16 个离线单元测试：out_date 排他、配对/覆盖率、结构阈值、1:N/N:1/改名/未匹配分类、回映、快照指标、切换日桥接、Parquet 缓存命中、分块抓取、6+6 月末日期。",
+      "commit": "863c374"
+    },
+    {
+      "path": "docs/sw2014_sw2021_crosswalk.md",
+      "summary": "可审计说明：方法/阈值、28→31 分类与未匹配清单、6+6 分布表、切换日桥接、影响范围、复现命令。",
+      "commit": "863c374"
+    },
+    {
+      "path": "docs/sw2014_sw2021_crosswalk.csv",
+      "summary": "200 条 old→new 逐边明细（n_stocks、两侧占比、is_structural）。",
+      "commit": "863c374"
+    },
+    {
+      "path": "docs/sw2014_sw2021_distribution_metrics.csv",
+      "summary": "13 行指标表（6 个切换前月末 + 2021-12-13 + 6 个切换后月末）。",
+      "commit": "863c374"
+    },
+    {
+      "path": "docs/AStockAgent_research_conclusions_v1.3.md",
+      "summary": "修正行业来源表述（index_member SW2014/SW2021；bak_basic 仅名称/ST），新增 §4.1 跨版本行业不可比影响范围。",
+      "commit": "863c374"
+    },
+    {
+      "path": "docs/AStockAgent_PIT_data_interfaces.md",
+      "summary": "§5.1 补充 crosswalk 审计文档指针与关键数量，不改变 PIT 接口契约。",
+      "commit": "863c374"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-008.json",
+      "summary": "任务状态 todo→doing→in_review，进度 95，links 增加模块/分支/PR/文档/测试证据。",
+      "commit": "91bb879"
+    }
+  ],
+  "tests": [
+    {
+      "command": "$env:PYTHONPATH='.'; .venv\\Scripts\\python.exe -m pytest tests/test_sw_crosswalk.py -q",
+      "result": "16 passed, 1 warning in ~2s",
+      "passed": true,
+      "evidence": "目标模块新增的 16 个离线单元测试全部通过；无网络/真实数据依赖。"
+    },
+    {
+      "command": "$env:PYTHONPATH='.'; .venv\\Scripts\\python.exe -m pytest tests/test_sw_crosswalk.py tests/test_data_pit_events.py tests/test_hardening.py tests/test_contracts.py tests/test_core_paths.py -q -p no:cacheprovider --basetemp=.tmp-test/pytest2",
+      "result": "111 passed, 1 warning in 6.72s",
+      "passed": true,
+      "evidence": "相关 PIT、契约、加固与核心路径测试全量通过，证明未破坏 PIT-01 与既有接口。"
+    },
+    {
+      "command": "$env:PYTHONPATH='.'; .venv\\Scripts\\python.exe -m mypy astock/sw_crosswalk.py",
+      "result": "Success: no issues found in 1 source file",
+      "passed": true,
+      "evidence": "新增模块通过 mypy 类型检查。"
+    },
+    {
+      "command": "$env:PYTHONPATH='.'; .venv\\Scripts\\python.exe -m pytest -q（仓库根目录全量）",
+      "result": "收集阶段 38 个既有环境错误，且无关集成测试长时间挂起；未作为交付判据",
+      "passed": false,
+      "evidence": "错误均为 repo 根 pip-*/tmp*/pytest-of-b1995 目录 PermissionError 与 release/AStockAgent 重名测试导致的 import mismatch，非本改动引入；同一工作树未改动主流程。CI 的 tests -m 'not png' 已通过。"
+    },
+    {
+      "command": "GitHub Actions run 43830495310（test + png-export）",
+      "result": "两个 job 均 pass（各 1m28s）",
+      "passed": true,
+      "evidence": "PR #20 checks：test pass、png-export pass；coverage gate 50% 通过。"
+    },
+    {
+      "command": "$env:PYTHONPATH='.'; .venv\\Scripts\\python.exe .tmp-test/export_audit.py（真实缓存导出）",
+      "result": "7,500 行/25 日期快照；200 条边；CSV 写出成功",
+      "passed": true,
+      "evidence": "docs/sw2014_sw2021_crosswalk.csv 200 行、distribution_metrics.csv 13 行；cache/pit 下 Parquet/JSON 可复现。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI 推送与创建 PR",
+      "reason": "gh auth status 显示已登录 b199510027373-create，具备 repo/workflow scope；已推送分支并创建 PR #20。",
+      "status": "granted"
+    },
+    {
+      "name": "本地 Tushare 缓存读取",
+      "reason": "复用 cache/pit 既有 sw2014/sw2021 成分与沪深300 快照，未新增外部权限或写入主流程。",
+      "status": "granted"
+    },
+    {
+      "name": "缓存目录写入（cache/pit）",
+      "reason": "crosswalk 产物写入 gitignored 的 cache/pit；未提交运行时数据。",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/sw2014-sw2021-crosswalk",
+    "commit": "91bb879",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/20",
+    "ci": "GitHub Actions run 43830495310: test pass, png-export pass",
+    "merge": "未合并；PR #20 OPEN，等待评审",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "请评审重点核对：(1) 结构性边阈值（旧行业 20% 或新行业 50%）是否与研究口径一致；(2) 1:N/N:1 与 backmap 的“保守可回映”定义；(3) 6+6 月末序列是否满足验收的“切换日前后各 6 个快照”表述（当前为 2021-06-30..11-30 与 2021-12-31..2022-05-31，另附 2021-12-13 切换日）；(4) 是否接受将非 SW 回退标签单独列示而非剔除。评审通过后合并 PR #20。",
+  "createdAt": "2026-11-16T08:22:46.555Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-027.md"
+}

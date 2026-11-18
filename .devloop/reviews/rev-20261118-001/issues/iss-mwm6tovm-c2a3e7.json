@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwm6tovm-c2a3e7",
+  "threadId": "rev-20261118-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/tools/market_tools.py",
+  "lines": "953-968",
+  "title": "kline(period=\"month\", chart=True, limit>~120) 生成的 range 超过 ChartSpec 10 年上限，工具直接返回错误",
+  "evidence": "_render_kline 用落图窗口首尾日期拼 range：`first = _as_day_text(display[\"trade_date\"].iloc[0])`、`last = _as_day_text(display[\"trade_date\"].iloc[-1])`、`\"range\": f\"{first}:{last}\"`（market_tools.py:953-964），display 来自 `series.frame.tail(limit)`（kline:841）。月线 limit=200 时窗口约 16-17 年（A 股 2008 年前上市股票都超过），而 astock/agent/chart_spec.py:512-513 对 YYYY-MM-DD:YYYY-MM-DD 形式且 `(end - start).days > MAX_RANGE_YEARS * 366`（MAX_RANGE_YEARS=10，chart_spec.py:96）会加 issue「窗口跨度超过 10 年」，validate_chart_spec 抛 ChartSpecError。renderer 调用（market_tools.py:969-978）没有任何 try/except，registry.invoke 的 `except Exception`（astock/agent/registry.py:384-390）会把它转成 ok=False 的错误结果，模型只看到内部校验文案「窗口跨度超过 10 年」，无法自行恢复。KLINE_SCHEMA 允许 period=month 且 limit 最大 200，所以这是文档化参数组合的确定性失败；chart 路径在测试里只用 _StubRenderer（tests/test_data_time_semantics.py::test_kline_chart_title_carries_freshness_hint 只断言 spec/标题），从未跑过真实 validate_chart_spec，因此未暴露。",
+  "suggestion": "在 _render_kline 中对 range 做 10 年上限钳制（例如跨度超限时把 first 改为 last 往前 10 年，或周/月直接改用 RANGES 相对窗口 token），并对 ChartSpecError 兜底：捕获后返回 figure=None + metadata[\"chart\"][\"warning\"] 写明「窗口超过 10 年，未出图，可用 limit≤120」，不要让内部校验文案直接变成工具错误。同时补一个使用真实校验的用例：kline(period=\"month\", limit=200, chart=True)，断言构图后 validate_chart_spec(spec) 通过、figure 非空；并把 chart=True 至少跑一次真实 chart_render.render（可用临时 db_path/artifact_root 或对 validate 层的调用）纳入回归，覆盖 encode.x=\"trade_time\"、candlestick + rsi/macd 图层这些只在 stub 下验证过的组合。修完后重跑 pytest tests -q 并更新 planItem.links.test。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T15:37:40.075Z"
+  },
+  "createdAt": "2026-11-18T13:59:23.698Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T15:37:40.075Z"
+    }
+  ]
+}

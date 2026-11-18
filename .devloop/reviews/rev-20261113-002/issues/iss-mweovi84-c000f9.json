@@ -1,0 +1,33 @@
+{
+  "id": "iss-mweovi84-c000f9",
+  "threadId": "rev-20261113-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-coverage",
+  "file": "tests/test_agent_files.py",
+  "lines": "396-430",
+  "title": "索引不可用降级路径（index_chunks 抛错只告警）无测试，ADR-015 C2 的\"不阻断导入\"没有可执行证据",
+  "evidence": "astock/agent/files.py:390-403 在 `_ingest` 里对 `index_chunks` 做了 try/except，失败只追加一条 `extraction_warning:` 并继续写 meta.json，这是 ADR-015 C2\"SQLite/FTS5 索引不可用不阻断导入\"的实现。tests/test_agent_files.py 里索引相关用例只覆盖成功路径与 `index=False`（tests/test_agent_files.py:396-430 附近：幂等性、关闭索引时不建表），没有任何用例让 `index_chunks` 抛 OperationalError/sqlite3.Error 来验证\"仍返回 ok/或带 warning 的 status、extracted.jsonl 与 parquet 已落盘、meta.json 存在\"。这条降级路径如果被后续重构破坏（例如把 index_chunks 挪出 try 块），导入会在索引不可用时整体失败，现有测试全部通过、无法发现。相对 P1-1/P1-2 属于非关键路径，按提示级记录。",
+  "suggestion": "补一条 `test_index_failure_does_not_block_ingest`：monkeypatch `astock.agent.files.index_chunks` 抛 `sqlite3.OperationalError(\"fts5 unavailable\")`，断言 `result.meta[\"warnings\"]` 里含该提示、`load_meta(file_id)` 可读回完整 15 字段、`iter_chunks(file_id)` 块数与 `chunks_count` 一致，且 `status` 没有退化成 unsupported。这样把 ADR-015 C2 的降级条件变成可执行证据。",
+  "confidence": 0.72,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T08:25:50.187Z"
+  },
+  "createdAt": "2026-11-13T08:02:32.068Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T08:25:50.187Z"
+    }
+  ]
+}

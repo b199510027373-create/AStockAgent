@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksju4k-dd7d6d",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "audit",
+  "file": "astock/agent/runtime.py",
+  "lines": "534-540",
+  "title": "runtime 把总 token 作为 completion_tokens 传入 finish_run，prompt_tokens 永远为 0，成本拆分失真",
+  "evidence": "runtime.py:534-540 把整轮 `tokens_used` 作为 `token_usage` 传给 finish_run；store.finish_run 只执行 `completion_tokens = ?`（store.py:486），agent_runs 的 prompt_tokens 没有写入点。因此所有 token 都被记成 completion，prompt_tokens 恒为 0；agent_metrics 用 `SUM(prompt_tokens + completion_tokens)` 虽然总数对，但无法区分输入/输出成本。tests/test_agent_runtime.py:846-943 只断言 `tokens == result.tokens_used`，默认接受这种语义。",
+  "suggestion": "如果模型响应/网关能提供 prompt/completion 拆分，给 finish_run 增加 prompt_tokens 参数并分别写入；如果只能拿到总数，则新增 total_tokens 列或明确把 completion_tokens 文档化为“总 token”，不要保留一个永远为 0 的 prompt_tokens 误导查询。补测试断言两列与模型 usage 一致，或明确 total 语义。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:02:01.861Z"
+  },
+  "createdAt": "2026-11-17T14:32:03.140Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:02:01.861Z"
+    }
+  ]
+}

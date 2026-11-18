@@ -1,0 +1,77 @@
+{
+  "id": "ho-20261116-005",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261116-001",
+  "sessionId": "",
+  "title": "评审：PNG 导出基础设施：Kaleido/Chrome/字体与 CI",
+  "summary": "第 1 轮（scope=full）结论：request_changes，openP0=0 / openP1=6 / openP2=1。\n\n评审范围说明（重要）：线程登记的分支 feat/agent-chart-pipeline 已不存在（devloop_git files base=main head=feat/agent-chart-pipeline 返回「head 不是合法 revision」；ho-20261114-007 记载该分支在 PR #14 合并后已删除），当前工作树在 fix/data-adj-caliber（属 plan-20261114-003）。git log 40 条无任何 kaleido/PNG 基础设施提交，devloop_handoff list(plan-20261114-001)=0，计划项仍 doing/progress=5。因此本轮没有「实现 diff」可逐行审，评审按 main head 06fb118 + 计划项 7 条验收标准核对现状，结论是无交付物、验收全部未达标。\n\n验收与问题的对应（由 chart/PNG 基础设施开发在 fix/agent-chart-png-kaleido 上修复）：\n- 验收①依赖锁定 → iss-mwikcwd4-32c846（P1）：requirements.txt:4 仍 `plotly>=5.0`，kaleido 完全缺席，PNG 用例永远 skip。\n- 验收②Linux CI 能出 PNG + 验收④CI 真实导出 → iss-mwikcwe4-3cff7b（P1）：ci.yml:29-33/51-56 不装 kaleido/Chrome/字体，test_agent_chart_png_export.py:18-21 恒 skip。\n- 验收③中文无方块 → iss-mwikd183-1fc8af（P1）：chart_render.py:550 只设字号不设字体族，无中文 K 线 PNG 用例。\n- 验收⑥路径/尺寸/字体/版本可追溯 → iss-mwikd19c-20b93b（P1）：chart_render.py:1246-1249/1265-1278 只记 png_path。\n- 验收⑦部署与 CI 文档 → iss-mwikd6hu-0f35bc（P1）：无任何 Chrome/字体/升级清单文档。\n- 验收②的 spike 记录与交付证据 → iss-mwikd6g8-8f9fd4（P1）：无分支、无 handoff、无 spike、无真实导出日志。\n- 验收⑤降级语义（不阻断）→ iss-mwikda23-310d32（P2）：export_png 布尔默认 True，显式请求与默认路径不可区分。\n\n已确认没有问题的部分（不重复开单）：现有降级契约本身是自洽的——_try_png 捕获 ValueError/RuntimeError/ImportError/ModuleNotFoundError 后返回 (None, reason)，render 置 degraded=True、warning 用统一 PNG_DEGRADED_WARNING_PREFIX、ensure_run 记 partial，store.prune_artifacts 已能保护 meta.png_path 引用的 PNG；这些属于 plan-20261107-005 的既有成果，本轮不推翻，只需在其上补齐「装得上、跑得通、可追溯、有文档」。\n\n完全解决条件（缺一不可）：\na) 开发从 main 新开 fix/agent-chart-png-kaleido，补齐 6 条 P1：精确锁定 plotly/kaleido 并加解析断言；ci.yml 新增独立 png-export job（装 fonts-noto-cjk、必要时 Chrome，timeout，上传 PNG artifact，失败可观测且不拖主 job）；渲染器设置 CJK font.family 并新增中文 K 线 PNG 用例；meta 增 png_digest/宽高/字体/kaleido/chrome 版本；新增 docs/AStockAgent_png_export_ops.md（Windows/Linux + 升级清单）；提交 spike 记录与 developer initial handoff。\nb) P2 由开发在同一分支或紧随的后续项决定是否采纳三态 png_mode；若不采纳，需在 handoff 中写明理由并由评审确认，不接受静默忽略。\nc) 开发提 handoff 附：目标测试与全量 pytest 输出、mypy/ruff、CI run 链接（含 png-export job 的 PNG 产物）、Windows 本机真实导出路径与尺寸、中文 PNG 目视证据；然后本线程进入第 2 轮复审。\nd) 第 2 轮复审确认 6 条 P1 全部 fixed、P2 已处置、验收 7 条逐条有证据，才可 approve 并判定 plan-20261114-001 完全解决；在此之前该计划项不得置 done。若本计划项暂不排期，请改回 backlog/todo 并关闭线程，不要让无分支线程保持 open。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 6,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "plotly 仍是无上限 >=，kaleido 根本不在依赖里，PNG 真实路径默认永远 skip",
+        "suggestion": "先用 spike 选定版本组合（kaleido 0.2.x 自带 chromium、1.x 需外部 Chrome，二者 API/部署差异大，不能随便挑），然后在 requirements.txt 写死 `plotly==<spike 版本>` 与 `kaleido==<spike 版本>`，并在 requirements-dev.txt 或注释中说明配套的 chromedriver/chrome 需求；新增 tests/test_requirements_pins.py（纯文本解析，不需要安装）断言 plotly/kaleido 两行形如 `==\\d+\\.\\d+\\.\\d+`，CI 再加 `pip check`。升级任一版本时必须同时改这个断言与下方 ops 文档的检查清单。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "CI 没有真实导出用例：不装 kaleido/字体/Chrome，PNG 用例 100% skip",
+        "suggestion": "在 ci.yml 增加独立 job `png-export`（不要塞进现有主 job）：`timeout-minutes: 10`；steps 依次为 checkout → setup-python → 安装 requirements.txt + 锁定版 kaleido → `sudo apt-get install -y fonts-noto-cjk`（kaleido 1.x 再加 browser-actions/setup-chrome 或 `kaleido_get_chrome`）→ `pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q --timeout=120`（pytest-timeout）→ `actions/upload-artifact` 上传生成的 PNG（含 failure 时）。主 job 保持 skip 以免拖慢；`png-export` 先以 `continue-on-error: true` 起步但必须在 PR 描述贴出 run 链接，并在本计划项完成前转为必过（否则会再次静默腐烂）。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "中文无方块无落地：渲染器不设 CJK 字体族，也没有一张中文 K 线 PNG 的证据",
+        "suggestion": "在 spike 中实测并记录可用组合（Windows：Microsoft YaHei/SimHei；Linux：fonts-noto-cjk 的 Noto Sans CJK SC），然后在 _build_figure 的 layout 统一设置 `font.family`（形如 `\"Noto Sans CJK SC, Microsoft YaHei, SimHei, sans-serif\"`，允许通过配置覆盖），不要把字体留成宿主机默认。新增 tests/test_agent_chart_png_zh.py：用 candlestick + 中文 title/axis/legend 的 spec 导出 PNG，断言 PNG 头、尺寸、文件非空；再加一个轻量像素检查（例如统计与背景色不同的像素比例 > 阈值，或用 PIL 比对 tofu 区域），避免「文件存在但字全是方块」也能过。该用例归入上面的独立 CI job，并在 PR 里附 PNG 附件供人工目视。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "PNG artifact 只记路径：尺寸/字体/kaleido 与 Chrome 版本/PNG digest 全缺失，不可追溯",
+        "suggestion": "在 meta 中增加 png 子对象（或平铺键）：`png_path`、`png_rel_path`、`png_digest`（sha256）、`png_width`、`png_height`、`png_scale`、`font_family`、`kaleido_version`、`chrome_version`（kaleido 0.2 写 `\"bundled\"`），并把 kaleido/chrome 版本同时写进 params 以参与 artifact 复现判断。同步扩展 tests/test_agent_chart_png_export.py：断言上述键存在、png_digest == sha256(文件)、宽高与 figure.layout 一致；store.prune_artifacts 的保护集合可改用 png_digest，替代现在从路径反解 digest 的 _path_digest。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "本线程无任何交付物：分支已删除、无 handoff、无 spike 记录，验收 7 条均无证据",
+        "suggestion": "本线程无法评审「实现」是因为没有交付物，请开发按以下顺序补齐再复审：1) 从 main（当前 06fb118）新开 fix/agent-chart-png-kaleido；2) 先写 spike 记录（建议 docs/AStockAgent_png_export_ops.md 的「环境矩阵」一节）：Windows 本机与 ubuntu-latest 各自的 OS 版本、kaleido 0.2.x vs 1.x 选择、Chrome/Chromium 来源与版本、CJK 字体包与族名、导出耗时、中文字符实测截图/PNG；3) 落地依赖锁定、CI job、字体、meta 字段；4) 提 developer initial handoff，附 pytest 输出、CI run 链接、生成的 PNG 路径与尺寸；5) 再回到本线程第 2 轮。若本计划项暂不排期，请把状态改回 backlog/todo 并关闭本线程，不要让一个无分支的线程保持 open。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "缺少 Chrome/中文字体/版本升级的部署与 CI 文档，验收第 7 条无对应文档",
+        "suggestion": "新增 docs/AStockAgent_png_export_ops.md 并在 README、docs/AStockAgent_interface_freeze_v1.md:227 处链过去，至少包含：a) Windows 开发机：kaleido 版本、Chrome 安装位置/`BROWSER_PATH`、字体（Microsoft YaHei/SimHei）验证命令；b) Linux CI：`apt-get install fonts-noto-cjk`、Chrome 安装 action 与版本、容器内 `fc-list :lang=zh` 自检；c) 超时与降级判定（多久算超时、超时后 run 状态、告警文案）；d) 版本升级检查清单：改 plotly/kaleido/chrome 任一 → 重跑 png-export job → 对比 PNG 尺寸/字体/耗时 → 更新冻结清单与 tests 断言；e) 常见故障排查（方块字、chrome not found、kaleido 0.2/1.x API 差异）。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "export_png 只有布尔默认 True，显式请求与默认路径不可区分，失败一律降级",
+        "suggestion": "把 export_png 改成三态 `png_mode: Literal[\"off\",\"auto\",\"require\"] = \"auto\"`（保留 export_png 兼容别名）：`require` 时 `_try_png` 失败直接抛专用 `PNGExportError`（或复用 ChartSpecError 之外的显式异常），run 状态记 failed，不落半成品 meta；`auto` 时首次探测失败后缓存「kaleido/chrome 不可用」并只告警一次，避免每图重复尝试与日志噪声；`off` 完全不尝试。补三条单测（require 失败抛错、auto 首次降级且后续不再尝试、off 不调用 to_image），并把语义写进 ops 文档与冻结清单。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-16T01:07:35.847Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-005.md"
+}

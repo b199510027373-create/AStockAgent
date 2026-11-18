@@ -1,0 +1,132 @@
+{
+  "id": "ho-20261117-007",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-012",
+  "threadId": null,
+  "sessionId": "",
+  "title": "补充测试证据：CI 深化交付（plan-20261103-012）",
+  "summary": "上一份交付 ho-20261117-006 的 tests 字段为空，此份 update 补全测试证据（命令 / 结果 / 证据），不新增代码改动：\\n\\n- 本地（Windows，Python 3.13.5，e4102eb 树）：pytest 606 passed / 1 skipped / 5 deselected / 12 subtests；ruff check astock tests = All checks passed!；mypy astock app.py = Success 36 files；coverage TOTAL 9247/2155 = 76.70%（门槛 76.47 通过）；pip check = No broken requirements found.。\\n- 新增/改写的守护测试：tests/test_ci_quality_gates.py 47 条、tests/test_requirements_pins.py 全量精确锁、SessionTests 的 TypeError 用例；三者在本轮合并后 main 上随全量测试通过。\\n- CI（Linux）：PR #21 run 43929440949 两次 test+png-export 全 pass；PR #22 run 43930603107 两次全 pass，日志显示 TOTAL 9247/2176 = 76.47% 恰好过门槛、ruff All checks passed、mypy 36 files Success、605 passed / 2 skipped；main run 43930042354（47645c3）与 43931162007（e284a50）success。\\n- 已知剩余风险：pytest-timeout 未能本地安装验证，版本 2.4.0 取自 CI 日志实测；本地跑 ruff 前需清理测试生成的 gradio/ 目录，否则 isort 误判 first-party 产生假阳性 I001。",
+  "requirements": [
+    {
+      "id": "A6",
+      "text": "最终 `ruff check astock tests` 为 0，CI 全仓 blocking；PR 与 main 均跑 pytest+mypy+ruff，连续两次通过。",
+      "source": "plan-20261103-012.acceptance[5]"
+    },
+    {
+      "id": "A2",
+      "text": "记录最新 coverage 实测值，门槛按实测重设且不低于当前；分阶段提升目标写入 CI 注释。",
+      "source": "plan-20261103-012.acceptance[1]"
+    },
+    {
+      "id": "A3",
+      "text": "requirements/requirements-dev 锁定精确版本，可复现安装；含 ruff/mypy/plotly/kaleido 等工具与图表依赖。",
+      "source": "plan-20261103-012.acceptance[2]"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "新增 CI 配置守护 47 条：push/PR 均覆盖 main、requirements-dev 一次安装无裸装、ruff check astock tests 不含 --select、mypy astock app.py、coverage 门槛唯一来源、分阶段目标 80%/85%、fail_under ≥ 76 且 precision ≥ 1、ruff.toml 显式 select/ignore/exclude/per-file-ignores",
+      "commit": "9d68a47"
+    },
+    {
+      "path": "tests/test_requirements_pins.py",
+      "summary": "重写为全量精确锁校验：逐行 == 形式、禁止 >=/<=/~/!=/>/<、dev 含 -r requirements.txt、工具链 ruff/mypy/coverage/pytest/pytest-timeout 各一次、16 个运行时依赖逐项出现（保留 plotly/kaleido 原断言）",
+      "commit": "9d68a47"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 SessionTests.test_load_rejects_non_object_payload_with_type_error：非 object 顶层载荷抛 TypeError 且消息含「顶层必须是 object」",
+      "commit": "9d68a47"
+    },
+    {
+      "path": "tests/test_hardening.py, tests/test_data_adj_caliber.py, tests/test_scheduler_ledger.py",
+      "summary": "12 处 SIM117 手工合并为 with (A, B):（嵌套 patch.object / assertRaises 上下文），行为不变",
+      "commit": "9d68a47"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\"",
+      "result": "pass",
+      "passed": true,
+      "evidence": "606 passed, 1 skipped, 5 deselected, 12 subtests passed in 37.48s（本地 Windows，含新增 48 条测试）"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests --no-cache",
+      "result": "pass",
+      "passed": true,
+      "evidence": "All checks passed!（已先移走测试生成的 gradio/ 目录；0 条存量）"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "pass",
+      "passed": true,
+      "evidence": "Success: no issues found in 36 source files"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && .venv\\Scripts\\python.exe -m coverage report",
+      "result": "pass",
+      "passed": true,
+      "evidence": "TOTAL 9247 stmts / 2155 miss = 76.70%（本地；门槛 76.47 通过）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pip check",
+      "result": "pass",
+      "passed": true,
+      "evidence": "No broken requirements found."
+    },
+    {
+      "command": "pytest tests/test_ci_quality_gates.py tests/test_requirements_pins.py tests/test_agent_runtime.py -q",
+      "result": "pass",
+      "passed": true,
+      "evidence": "86 passed（目标测试先行验证，含 47 条 CI 守护 + 精确锁 + session TypeError）"
+    },
+    {
+      "command": "gh run view 43930603107 --log | grep 'TOTAL|All checks passed|no issues found|passed, 2 skipped'",
+      "result": "pass",
+      "passed": true,
+      "evidence": "TOTAL 9247 2176 76.47%；All checks passed!；Success: no issues found in 36 source files；605 passed, 2 skipped, 5 deselected, 12 subtests（Linux CI）"
+    },
+    {
+      "command": "gh run list --branch main --limit 2",
+      "result": "pass",
+      "passed": true,
+      "evidence": "43930042354 (47645c3) success；43931162007 (e284a50) success"
+    },
+    {
+      "command": "gh pr checks 22（run 43930603107 两次）",
+      "result": "pass",
+      "passed": true,
+      "evidence": "attempt1 test pass 1m20s / png-export pass 1m0s；attempt2 test pass 1m7s / png-export pass 50s（连续两次通过）"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "pytest-timeout 本地安装",
+      "reason": "pip install/download 因网络挂起，未能在本机验证；pin 2.4.0 依据 CI run 43923401645 日志，属已知剩余风险",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/ci-quality-gates-plan-20261103-012 → merged；feat/ci-gate-align-measured → merged",
+    "commit": "e284a50 (main)",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/21, https://github.com/b199510027373-create/AStockAgent/pull/22",
+    "ci": "PR #21 run 43929440949 两次全绿；main run 43930042354 success；PR #22 run 43930603107 两次全绿（TOTAL 9247/2176=76.47%、ruff 0、mypy 36 files）；main run 43931162007 success",
+    "merge": "PR #21 → 47645c3；PR #22 → e284a50",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-006",
+  "next": "1) 请 reviewer 验收（plan-20261103-012 in_review / progress 95）。\\n2) 2026-11-21 观察期后：删 ruff.toml 中 scheduler.py / jobs.py 的 per-file-ignores 并清理存量（scheduler.py 22 条、jobs.py 0 条），加测试守护。\\n3) 覆盖率 P2 80% → P3 85%。\\n4) app.py 清理后排期移出 exclude；评估 RUF001-003 / B905。\\n5) tools/build_product_doc.py 生成的 unittest 命令文本另行排期改 pytest。\\n6) 本地跑 ruff 前清理测试生成的 gradio/ 目录（已在 .gitignore）。",
+  "createdAt": "2026-11-16T18:41:54.197Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-007.md"
+}

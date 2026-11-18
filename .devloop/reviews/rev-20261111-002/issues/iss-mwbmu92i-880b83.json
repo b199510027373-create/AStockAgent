@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbmu92i-880b83",
+  "threadId": "rev-20261111-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "验收文案",
+  "file": ".devloop/plan/items/plan-20261103-006.json",
+  "lines": "18",
+  "title": "计划项 C2 验收标题仍写「四状态」，却枚举五个状态（含 no_alpha）",
+  "evidence": "`.devloop/plan/items/plan-20261103-006.json:18` 写「（ADR-010 C2）横幅四状态文案去重：insufficient/unavailable/positive/negative/no_alpha 各保留一句说明」——标题说四状态、枚举却是五个（含 no_alpha）。ADR-010 已改成「C2 横幅五状态文案去重」（`.devloop/architecture/adr/ADR-010-research-semantics.md` 条件段），`astock/track.py:37` 的 `ALPHA_BANNER_STATES` 也是五个。门禁 `tests/test_architecture_gate.py:169-190` 只要求标题关键词命中 ≥2，所以「四状态」+ 五个名字仍能通过，不会暴露这处不一致。",
+  "suggestion": "把标题改为「横幅五状态文案去重」，与 ADR-010 条件段和 track.py:37 对齐；若想防止再次串号，可在 gate 的 `_condition_titles` 用例里加一条：条件标题中的数量词（四/五）必须与枚举的状态数一致。修复责任：开发，随本次提交一并改。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:57:15.605Z"
+  },
+  "createdAt": "2026-11-11T04:42:15.786Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:57:15.605Z"
+    }
+  ]
+}

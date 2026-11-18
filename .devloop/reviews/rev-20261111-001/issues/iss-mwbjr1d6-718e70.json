@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbjr1d6-718e70",
+  "threadId": "rev-20261111-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "门禁-误报风险",
+  "file": "tests/test_architecture_gate.py",
+  "lines": "347-366",
+  "title": "tools 目录门禁黑名单含 `os`/`urllib` 会误报合法用法，skip 理由写的计划项也不对",
+  "evidence": "tests/test_architecture_gate.py:352 `forbidden = {\"subprocess\", \"os\", \"shutil\", \"requests\", \"httpx\", \"urllib\", \"socket\"}` 按模块根名黑名单匹配（:355-366 只看 Import/ImportFrom 的首段），因此未来工具里出现 `import os`（哪怕只用 `os.path.join` 拼 `data/agent/files/` 下路径）或 `urllib.parse.quote` 都会被判「工具层出现越权能力」。RC-05（docs/AStockAgent_contract_rule_map_v1.md:76-79）真正的红线是 `os.system`/`os.remove`/`shutil.rmtree`/`shell=True`/直连 HTTP，模块级一刀切会把合法用法一起打红，实际后果通常是开发者放宽门禁而不是改代码。另外 :351 的 skip 理由写成「astock/agent/tools 尚未实现（plan-20261107-003/005）」，而 tools 目录对应的是 plan-20261107-005（图表）与 plan-20261107-006（行情/指标工具），003 是文件解析；同时该测试当前整体 skip，AGENT-01 的自动化覆盖实际只剩 tests/test_agent_runtime.py::test_allowed_permissions_enforced，而落点表 §2 仍标「已覆盖」。",
+  "suggestion": "1) 改按「危险符号」判定：允许 `os.path`/`os.environ`，只拒绝 `os.system`、`os.popen`、`os.remove`、`os.unlink`、`shutil.rmtree`、`subprocess.*`、`socket.*`、`requests.*`、`httpx.*`、`urllib.request.*`（用 `ast.Attribute` 精确到 `module.attr`，ImportFrom 时检查导入名）；2) 把 skip 理由改为 plan-20261107-005/006；3) 在落点表 §2 的 AGENT-01 行注明「tools 目录静态检查待 005/006 落地后生效，当前靠 RC-05 人工核查」，避免把 skip 当已覆盖。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:40:56.361Z"
+  },
+  "createdAt": "2026-11-11T03:15:46.986Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:40:56.361Z"
+    }
+  ]
+}

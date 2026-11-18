@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwk1e76b-235fe7",
+  "threadId": "rev-20261117-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/runtime.py",
+  "lines": "180-184",
+  "title": "回答级强制引用未落到运行时：finalize_file_answer 在生产路径零调用点",
+  "evidence": "runtime.py:180-184 在模型不再调用工具时直接 `answer = reply.content or \"（模型没有给出回答）\"` → `self.session.add_assistant(answer)` → `stop = StopReason.COMPLETED`，全程没有调用 finalize_file_answer。grep astock/ 下全部 .py：finalize_file_answer / has_file_citation 只出现在 astock/agent/tools/citations.py:173-190（定义）与 astock/agent/tools/__init__.py:19-20,51-52（导出），生产路径零调用点。即「回答必须有文件引用，否则只答『未在文件中找到』」只以自然语言写在 runtime.py:53-62 的 SYSTEM_PROMPT 里，模型不遵守时无任何兜底。测试侧 tests/test_agent_tools.py:313-324 只测助手函数本身，:603-611 只断言工具结果行的 citation 含《公告.txt》，没有一条测试覆盖「运行时最终 answer」。验收 A3（回答必须带文件名+页码/工作表引用）与 A4（无命中明确回答『未在文件中找到』）因此只有工具层证据；docs/AStockAgent_contract_rule_map_v1.md 里 AGENT-04 标 enforcement=test、落点 tests/test_agent_tools.py::test_file_result_requires_source，但该测试不校验运行时回答装配，契约声明的强制点不存在。",
+  "suggestion": "在 runtime.py:180-184 的 COMPLETED 分支加装配兜底：若本轮 steps 中任一 ToolResult 的 source 以 `file:` 开头（或工具名命中 {file_search, file_read, table_schema, table_query}），收集这些结果的引用（table 行的 citation 字段 + text 中的《…》片段）作为 cites，执行 `answer = finalize_file_answer(reply.content, cites)` 后再 add_assistant；无文件工具调用时保持现状。并在 tests/test_agent_runtime.py 增加两例（FakeModel 驱动）：① 调用 file_search 后返回无引用的 content → 断言 run_result.answer == CITATION_NOT_FOUND；② content 已含「《年报.pdf》第 2 页」且该引用来自本轮工具结果 → 断言原样保留。若该装配明确由 plan-20261107-005/007 承接，则必须在 docs/AStockAgent_interface_freeze_v1.md §4.1 与 developer handoff 写明承接计划项与测试锚点，并把 A3/A4 从本轮完成声明中撤回——不能以「SYSTEM_PROMPT 已写规则」视为已实现。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:15:34.208Z"
+  },
+  "createdAt": "2026-11-17T01:51:50.483Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:15:34.208Z"
+    }
+  ]
+}

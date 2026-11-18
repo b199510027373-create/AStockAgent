@@ -1,0 +1,33 @@
+{
+  "id": "iss-mweouh8f-6c3d2e",
+  "threadId": "rev-20261113-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/files.py",
+  "lines": "911-920",
+  "title": "数值列强转 float 会把股票代码等前导零标识符改坏（000001 → 1.0），且无告警",
+  "evidence": "`_coerce_column` 对 object 列执行 `numeric = pd.to_numeric(non_null, errors=\"coerce\")`（616 行）后 `if numeric.notna().all(): return pd.to_numeric(series, errors=\"coerce\").astype(float)`（617-619 行）。`_normalize_cell` 本来把 \"000001\" 保留成字符串，但这里整列被判定\"可转数值\"后写进 parquet 变成 [600000.0, 1.0]。tests/test_agent_files.py:329 的夹具已经包含 `000001`，但 350 行只断言了 `frame[\"收盘价\"] == [12.5, 13.5]`，没有断言 `代码` 列，所以这个数据损坏没有被发现，也没有任何 warning。后果：extracted.jsonl/chunk 文本里是 \"600000 | 12.5 | 1000\"，而 `load_table`/后续 table_query 返回的代码是 1.0，A 股 6 位代码被静默篡改，用户和 Agent 都无法察觉。",
+  "suggestion": "在 `_coerce_column` 里加标识符保护：只有当整列原始值都是真数值类型（`all(isinstance(v, (int, float)) and not isinstance(v, bool))`）时，或字符串值不含前导零（`re.match(r\"^0\\d\", v)` 全 False）且不含逗号/单位时才转 float；命中前导零就整列 `return series`（保持字符串），并追加一条 `extraction_warning:` 说明该列按文本保留。同时在 tests/test_agent_files.py:350 后补断言 `frame[\"代码\"].tolist() == [\"600000\", \"000001\"]`，用一个显式用例锁住\"代码列不被转数值\"。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T08:25:16.528Z"
+  },
+  "createdAt": "2026-11-13T08:01:44.127Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T08:25:16.528Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbp1a4j-79492d",
+  "threadId": "rev-20261111-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "文档/接口一致性",
+  "file": "astock/use_cases.py",
+  "lines": "498, 507-514",
+  "title": "run_recommendation 的 now 参数注释与实现不符：生成路径并未把 now 传给流水线",
+  "evidence": "use_cases.py:498 的 docstring 写「now: 生成时传给流水线、历史读取时用于判断数据是否落后」，但 generate 分支调用 generate_recommendation（507-514）没有传 now；astock/recommend.py:670-677 的签名 `generate_recommendation(universe_text=\"\", top_n=5, candidate_n=15, news_days=7, use_llm=True, progress=None)` 也没有 now 形参，内部 682 行固定用 `datetime.now()`。因此调用方传入 now 对生成路径完全无效。",
+  "suggestion": "二选一：把 docstring 改回「now: 仅历史读取用于判断数据是否落后」（最小改动）；或给 generate_recommendation 增加 now 形参并在 use_cases 生成分支透传，使生成与历史读取共用同一时间基准（并在 tests/test_core_paths.py 传固定 now 提升确定性）。不要保留误导性注释。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T06:05:56.843Z"
+  },
+  "createdAt": "2026-11-11T05:43:42.979Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T06:05:56.843Z"
+    }
+  ]
+}

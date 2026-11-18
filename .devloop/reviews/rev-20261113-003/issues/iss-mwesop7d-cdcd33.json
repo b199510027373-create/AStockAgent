@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwesop7d-cdcd33",
+  "threadId": "rev-20261113-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "edge-case/time-point",
+  "file": "astock/data.py",
+  "lines": "731,735",
+  "title": "latest_bar_time 按行序取最后一根而不是按时间最大值，且午休 11:30–13:00 被当作交易时段",
+  "evidence": "`latest_bar_time` 的契约是“最后一根有效 bar”，但 :731 用 `pd.Timestamp(series.iloc[-1])`，输入行序不是时间升序时（例如调用方传入 sort desc 或未排序的 DataFrame）会返回较早的 bar；`series` 只做过 `dropna`，没有排序或 `max()`。另外 :735 仅判断 `09:30 <= clock <= 15:00`，11:31–12:59 的 bar 也会被接受，而 A 股连续竞价只有 09:30–11:30 与 13:00–15:00，函数 docstring 却写“分钟 bar 时间越出交易时段视为数据错误并拒绝”。当前测试没有乱序输入或午休 bar 的用例。",
+  "suggestion": "用 `stamp = pd.Timestamp(series.max())` 取时间最大值，不依赖行序；把时段校验改成两个闭区间 `09:30–11:30` 或 `13:00–15:00`（建议用 `datetime.time` 比较，避免字符串边界歧义）。补两条测试：打乱行序后仍返回最大时间；`11:31`、`12:30` 抛 ValueError，`11:30`、`13:00` 通过。",
+  "confidence": 0.93,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T16:44:20.545Z"
+  },
+  "createdAt": "2026-11-13T09:49:12.985Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T16:44:20.545Z"
+    }
+  ]
+}

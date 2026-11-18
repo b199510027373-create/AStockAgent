@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbmtwu7-d47b7d",
+  "threadId": "rev-20261111-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "文档结构",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "379-384",
+  "title": "插入 §6.4 时删掉了「## 7. 未决问题的去向」标题，未决问题表挂在 §6.4 下",
+  "evidence": "插入 §6.4 时把原 `## 7. 未决问题的去向` 标题删掉了：现文件 379-380 行是 §6.4 的注意块与空行，383 行直接是 `| 未决问题 | 结论 | 落点 |` 表格，之后才到 `## 8. 冻结流程`（391 行）。diff 7838ab1..8884a60 中该 hunk 只删不加 `## 7.`，导致 §7 正文表格悬挂在 §6.4 下、章节编号断裂。",
+  "suggestion": "在 383 行表格前恢复 `## 7. 未决问题的去向`（并把 6.4 与 7 之间留一个空行）；同时检查 §8 之前的编号是否连续。修复责任：开发，随本次 P1 一并提交即可；不单独阻塞合并。",
+  "confidence": 0.99,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:56:52.399Z"
+  },
+  "createdAt": "2026-11-11T04:41:59.935Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:56:52.399Z"
+    }
+  ]
+}

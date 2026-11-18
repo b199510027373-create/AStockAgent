@@ -1,0 +1,21 @@
+{
+  "id": "rev-20261111-003",
+  "title": "评审：推荐 UI 生成/历史读取统一到 ledger",
+  "planItemId": "plan-20261103-003",
+  "sourceDevSessionId": "session-41846cf7-ac59-44c9-93a5-4205a4cdf51f",
+  "branch": "feat/plan-20261103-003-ledger-ui",
+  "base": "main",
+  "files": [
+    "astock/ledger.py",
+    "astock/recommend.py",
+    "astock/recommend_ui.py",
+    "astock/use_cases.py",
+    "tests/test_core_paths.py",
+    "tests/test_research_semantics.py",
+    "tests/test_use_cases.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-11T05:39:24.220Z",
+  "updatedAt": "2026-11-12T16:38:07.268Z",
+  "reviewSessionId": "session-0593b971-9fce-4a1b-bbd2-c8515427015a"
+}

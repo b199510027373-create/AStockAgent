@@ -1,0 +1,64 @@
+{
+  "id": "ho-20261111-013",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "ADR-010 C1/C2：动作词与分位口径全站一致（PR #8 / CI 通过）",
+  "summary": "相对 ho-20261111-010 的更新：分支 feat/adr-gate-freeze 已推送至 7838ab1，创建 PR #8（https://github.com/b199510027373-create/AStockAgent/pull/8），CI 工作流 \"test\" 通过（44s，run 42958355222）。代码与测试内容无变化，仅推进交付状态。等待评审，尚未合并。",
+  "requirements": [
+    {
+      "id": "R1–R5",
+      "text": "同 ho-20261111-010：验收 1–4 与描述的全出口核查（本次无需求变化）",
+      "source": "plan-20261103-006"
+    }
+  ],
+  "changes": [
+    {
+      "path": "https://github.com/b199510027373-create/AStockAgent/pull/8",
+      "summary": "PR #8：base main ← feat/adr-gate-freeze，含 ec4354c（代码+测试）与 7838ab1（交付记录）；代码相对 ho-20261111-010 无变化",
+      "commit": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 8 --watch",
+      "result": "test pass 44s",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/42958355222/job/130318730973；CI 与本地同口径（ruff E9/F63/F7/F82 + mypy + pytest）"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push / PR 创建",
+      "reason": "使用本机 gh keyring 凭据推送并创建 PR #8",
+      "status": "granted"
+    },
+    {
+      "name": "合并 PR #8",
+      "reason": "交付文档 next 为等待评审；合并需评审通过后由用户/评审决定",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze",
+    "commit": "7838ab1",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/8",
+    "ci": "passed（test 44s，run 42958355222）",
+    "merge": "未合并（等待评审）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261111-010",
+  "next": "等待评审（DevLoop review）。评审通过后合并 PR #8，并按需做真实数据 smoke（📰 简报/推荐 Tab）；产品快照文档若仍写「关注/回避」，另开文案同步项。",
+  "createdAt": "2026-11-11T04:19:26.540Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-013.md"
+}

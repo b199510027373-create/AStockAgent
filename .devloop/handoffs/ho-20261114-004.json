@@ -1,0 +1,159 @@
+{
+  "id": "ho-20261114-004",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-005",
+  "threadId": null,
+  "sessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063",
+  "title": "第 3 轮复审修复：删别名、ref anyOf、meta 可升级、孤儿目录清理",
+  "summary": "按 rev-20261113-003 第 3 轮复审逐条修复 4 P1 + 3 P2（第 3 轮判 request_changes，其中 3 条为复审认定的 false fixed）：① 按 ADR-016 Q4=B 真删 panes/style/adj=\"raw\" 别名（schema、校验、归一化输出、文档、测试全部只认 layers/theme/none）；② data.ref 由重叠 pattern 的 oneOf 改 anyOf，jsonschema 实校验 000001.SH/399001.SZ/000001.SZ/830799.BJ 通过、panes 与 adj=raw 被拒；③ Q5=C 采纳复审允许的第二方案：验收第 9 条改写为「v1 由 chart_render 直接落库，chart_service 唯一审计入口迁移见 plan-20261114-002」并在冻结清单 §3.4 记录；④ record_artifact 改 meta upsert，先降级后补 PNG 时 degraded/png_path 升级且仍只 1 行；⑤ params 记录 include_plotlyjs；⑥ prune_artifacts 追加孤儿 digest 目录扫描（PNG 泄漏）；⑦ transforms 过滤为空时 data_as_of/data_time 直接为空，不再回退 attrs 旧时点。目标测试 125 passed，全量 482 passed/2 skipped，mypy 34 files，架构门禁 32 passed/1 skipped，ruff+compileall 通过，CI run 43484888881 success（head b8736a8）。",
+  "requirements": [
+    {
+      "id": "R-31",
+      "text": "（P1 iss-mwfa24ir-5a767e）ADR-016 Q4=B：删除 panes/style/adj=raw 三个别名，schema 不声明、校验报字段级错误、文档与测试同步；旧别名与未知字段一样被拒。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-32",
+      "text": "（P1 iss-mwfa281h-2be589）data.ref 使用 anyOf 避免重叠 pattern 把指数代码（000001.SH/399001.SZ）误判为不匹配；新增 jsonschema 实校验用例覆盖指数、个股、北交所与旧别名拒绝。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-33",
+      "text": "（P1 iss-mwfa2hib-1f519f）Q5=C 审计边界：采用复审允许的「验收第 9 条改为 002 迁移」路径，plan-20261107-005 验收第 9 条已改写、冻结清单 §3.4 记录目标形态（chart_service 唯一入口 + ArtifactReader），迁移由 plan-20261114-002 承接。",
+      "source": "rev-20261113-003 第 3 轮复审 + ADR-016 2026-11-14 裁决"
+    },
+    {
+      "id": "R-34",
+      "text": "（P1 iss-mwfa38a2-e20f69）同一 artifact_id 重复渲染时 meta_json 以最新一次为准：先降级后补齐 PNG，degraded/png_path 必须升级且行数仍为 1。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-35",
+      "text": "（P2 iss-mwfa2ak6-9f265f）params 记录 include_plotlyjs，与冻结清单 §3.4 的复现前提（同 spec/数据/plotly 版本/include_plotlyjs）一致。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-36",
+      "text": "（P2 iss-mwfa2dot-8aa9b2）prune_artifacts 除已记录行外，还要清理没有 DB 行的孤儿 digest 目录（如降级升级遗留 PNG），避免磁盘泄漏。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    },
+    {
+      "id": "R-37",
+      "text": "（P2 iss-mwfa2o0p-6ff259）transforms 过滤为空后 data_as_of/data_time 必须为空并写「时点未知」，不得沿用过滤前 attrs 里的旧时点。",
+      "source": "rev-20261113-003 第 3 轮复审"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chart_spec.py",
+      "summary": "删除 ADJ_ALIASES/FIELD_ALIASES 与别名折叠；adj 仅 qfq/hfq/none；schema data.ref 改 anyOf、adj 枚举收窄、去掉 panes/style 属性、根描述声明旧别名与未知字段同样报错；模块 docstring 记录 Q4=B。",
+      "commit": "b8736a8"
+    },
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "_time_points 在 frame 为空时立即返回空时点（不再读 attrs）；_params 增 include_plotlyjs；_adj_label none 文案去掉 raw；_load_market_frame 注释同步。",
+      "commit": "b8736a8"
+    },
+    {
+      "path": "astock/agent/store.py",
+      "summary": "record_artifact 改 ON CONFLICT(artifact_id) DO UPDATE SET meta_json=excluded.meta_json；prune_artifacts 追加孤儿 digest 目录扫描（Path.unlink/rmdir）。",
+      "commit": "b8736a8"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§3.2.1 改写为「兼容别名已删除（Q4=B）」；§3.4 记录 include_plotlyjs、meta 以最新写入为准、Q5=C 审计边界与 002 迁移。",
+      "commit": "b8736a8"
+    },
+    {
+      "path": "tests/test_agent_chart_spec.py",
+      "summary": "别名用例改为拒绝断言；新增 ref anyOf、jsonschema 实校验（含指数/北交所）、schema 不再声明别名、冻结清单别名删除文档断言；修正旧 oneOf 断言。",
+      "commit": "b8736a8"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "adj 参数化去掉 raw 并新增 raw 在取数前被拒用例；raw 口径用例改为 none；新增降级后再补 PNG 的 meta 升级用例与空 transforms 时点为空用例；meta 增 include_plotlyjs 断言；修复被误改的同 spec 用例。",
+      "commit": "b8736a8"
+    },
+    {
+      "path": "tests/test_agent_store.py",
+      "summary": "新增 prune_artifacts 清理孤儿 digest 目录的用例（行数 0、文件 1、目录 1，保留被引用文件）。",
+      "commit": "b8736a8"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-005.json",
+      "summary": "验收第 9 条改写为 chart_render 直接落库 + chart_service 迁移 plan-20261114-002；links 记录 b8736a8 的 CI 与测试证据。",
+      "commit": "b8736a8"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py tests/test_data_pit_events.py -q",
+      "result": "125 passed, 1 warning in 9.81s",
+      "passed": true,
+      "evidence": "首次运行 1 失败（旧 oneOf 断言），改 anyOf 后全绿；输出：125 passed"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "482 passed, 2 skipped, 2 subtests passed in 29.27s",
+      "passed": true,
+      "evidence": "全量在 feat/agent-chart-pipeline 工作区；根目录 pytest 忌用（会误收 release/AStockAgent）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock",
+      "result": "Success: no issues found in 34 source files",
+      "passed": true,
+      "evidence": "与 CI 的 mypy astock app.py 同源"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "32 passed, 1 skipped, 1 warning in 2.48s",
+      "passed": true,
+      "evidence": "模块图/契约落点/冻结清单文档门禁均通过"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82; .venv\\Scripts\\python.exe -m compileall -q astock app.py",
+      "result": "All checks passed! / compile-exit=0",
+      "passed": true,
+      "evidence": "与 CI 的 Lint and type-check、Compile Python sources 步骤一致"
+    },
+    {
+      "command": "gh run view 43484888881",
+      "result": "conclusion=success（head b8736a8，全部步骤 success，含 coverage gate 50%）",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43484888881"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub 写权限（push / PR / CI 触发）",
+      "reason": "推送 b8736a8 到 feat/agent-chart-pipeline 并观察 PR #12 的 CI 需要仓库写权限",
+      "status": "granted"
+    },
+    {
+      "name": "kaleido 安装（真实 PNG 导出）",
+      "reason": "本机未安装 kaleido；PNG 真实导出由 tests/test_agent_chart_png_export.py 在 CI/装有 kaleido 的环境执行，版本锁定与字体由 plan-20261114-001 负责",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chart-pipeline",
+    "commit": "b8736a8",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43484888881",
+    "merge": "未合并（等待 reviewer 第 4 轮复审）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261114-002",
+  "next": "1) 请 reviewer 复审 rev-20261113-003 第 3 轮 7 条：重点确认 Q4=B 别名是否彻底移除（schema/校验/文档/测试四处一致）、data.ref anyOf 的 jsonschema 用例、meta upsert 的两次渲染用例、prune 孤儿目录用例。2) Q5=C 的 chart_service 唯一审计入口与 ArtifactReader 只读协议按验收第 9 条改写由 plan-20261114-002 承接（本分支不再改渲染边界）。3) PNG 真实导出（plan-20261114-001）与 kaleido 版本锁定待该计划项落地后在本分支之外补集成测试。4) 若批准合并 PR #12，请把 plan-20261107-005 转 done 并同步 main 的 CI 结果。",
+  "createdAt": "2026-11-13T18:42:11.106Z",
+  "markdownPath": ".devloop/handoffs/ho-20261114-004.md"
+}

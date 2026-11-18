@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261113-003-r1",
+  "threadId": "rev-20261113-003",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮全量评审完成：8 条问题（P0=1、P1=2、P2=5）。结论 request_changes。\n\n必须修复（阻断）：\n1) P0 adj 口径失效：chart_render.py:214-222 把 raw→none 原样传给 data.load_daily/load_minute，而 data.py:223/643 对任何非空 adj 都做前复权，导致 none/hfq 实际仍是 qfq，图注却写“不复权/后复权”；test_agent_chart_render.py:301-307 通过注入 frame 绕过了真实取数路径，只验了文案。开发需在 _load_market_frame 做 none→None 映射，并在 data.load_daily/load_minute 真正实现 qfq/hfq/none（或拒绝 hfq），补走真实取数分支的回归测试。\n2) P1 时点错位：chart_render.py:1095-1103 在 apply_transforms 前算 data_as_of/data_time，:1153 快照却取 transformed；test_agent_chart_render.py:359-371 的实际结果是图注 2024-01-04、快照只剩 2024-01-03，artifact 回放还会信任旧 meta 时点。开发需改为 transforms 后重算（显式参数仍优先），artifact 回放优先按快照时间列重算，并补断言。\n3) P1 非法日期逃逸：chart_spec.py:504-505 对 2026-13-01 这类正则可匹配但日期非法的输入抛未捕获 ValueError，check_chart_spec 只捕获 ChartSpecError，违反结构化错误契约。开发需 try/except 转成 $.data.range 字段错误，并补非法日期测试。\n\nP2（同轮修或书面延后）：latest_bar_time 的 iloc[-1] 行序依赖与午休时段漏检（data.py:731/735）；ensure_run 对 running 也写 finished_at（store.py:184-185）；test_agent_store.py:186-198 的 artifact 非法 kind 断言没有独立 def；冻结清单未记 panes/style/raw 别名（docs/AStockAgent_interface_freeze_v1.md:153-181）；模型 JSON Schema 对 transforms/layers/annotations 未封闭、range/ref 无 pattern（chart_spec.py:906-955）。\n\n完全解决判定：由 plan-20261107-005 开发在下一轮修复上述 8 条（P2 若由架构书面接受延期可例外），新增回归测试全绿，且目标 pytest 46/21/8、全量 444 passed/1 skipped、mypy、architecture gate、CI 均通过；reviewer 下一轮确认 openP0=0、openP1=0 后才可 approve 并标记完全解决。",
+  "startedAt": "2026-11-13T09:42:02.657Z",
+  "finishedAt": "2026-11-13T09:49:36.841Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 1,
+    "P1": 2,
+    "P2": 5,
+    "total": 8
+  }
+}

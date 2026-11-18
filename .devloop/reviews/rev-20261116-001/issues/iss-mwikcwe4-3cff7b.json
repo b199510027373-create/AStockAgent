@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwikcwe4-3cff7b",
+  "threadId": "rev-20261116-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "ci",
+  "file": ".github/workflows/ci.yml",
+  "lines": "29-33,51-56",
+  "title": "CI 没有真实导出用例：不装 kaleido/字体/Chrome，PNG 用例 100% skip",
+  "evidence": "ci.yml:29-33 只 `pip install -r requirements.txt`（无 kaleido），:34-56 没有任何 Chrome/Chromium、fonts-noto-cjk 安装步骤，:51-56 用 `coverage run -m pytest tests -q` 跑全量——其中 tests/test_agent_chart_png_export.py 因 skipif 恒跳过。仓库内也没有第二条 workflow/独立 job 承担 PNG 导出。验收第 2 条（Linux CI 能生成 PNG）与第 4 条（CI 增加真实导出用例、失败/超时可观测、不拖垮主流水线）均未实现；docs/AStockAgent_chart_pipeline_decisions_v1.md:152 已明确警告「CI 从不真正导出 PNG…装依赖时很可能代码写了但跑不通」。",
+  "suggestion": "在 ci.yml 增加独立 job `png-export`（不要塞进现有主 job）：`timeout-minutes: 10`；steps 依次为 checkout → setup-python → 安装 requirements.txt + 锁定版 kaleido → `sudo apt-get install -y fonts-noto-cjk`（kaleido 1.x 再加 browser-actions/setup-chrome 或 `kaleido_get_chrome`）→ `pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q --timeout=120`（pytest-timeout）→ `actions/upload-artifact` 上传生成的 PNG（含 failure 时）。主 job 保持 skip 以免拖慢；`png-export` 先以 `continue-on-error: true` 起步但必须在 PR 描述贴出 run 链接，并在本计划项完成前转为必过（否则会再次静默腐烂）。",
+  "confidence": 0.96,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:21:11.077Z"
+  },
+  "createdAt": "2026-11-16T01:07:10.204Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:21:11.077Z"
+    }
+  ]
+}

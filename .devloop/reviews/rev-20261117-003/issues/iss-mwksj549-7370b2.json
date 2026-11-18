@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksj549-7370b2",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "audit",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1462-1469",
+  "title": "chart_render 的 fail_run 会被 runtime 的 finish_run 以 success/partial 覆盖，审计终态与工具失败不一致",
+  "evidence": "png_mode=require 失败且 run_id 非空时，render 先 `store.fail_run(run_id, error=...)` 把整条 Agent run 置 failed（chart_render.py:1462-1469），再抛 PNGExportError。registry.invoke 会把工具异常转成 ToolResult(error) 而不中断 runtime（registry.py:378-388），runtime 继续执行并在结束时调用 finish_run；finish_run 无条件 UPDATE status/finished_at/completion_tokens/error（store.py:483-489），会把 failed 改回 success 或 partial。tests/test_agent_chart_render.py:398-457 只断言 fail_run 之后的即时状态，没有走 runtime 收尾，因此测不到覆盖。",
+  "suggestion": "明确终态所有权：要么 chart_render 不再对整条 Agent run 调 fail_run（只记录工具错误/失败 artifact，由 runtime 统一判定），要么 finish_run 在 status='failed' 时拒绝降级/覆盖 error（例如 `WHERE status != 'failed'`，或用 `COALESCE` 保留首个失败原因）。补一个 runtime + 图表工具的集成测试：工具抛 PNGExportError 后，agent_runs.status 必须仍为 failed 且 error 非空。",
+  "confidence": 0.82,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:00:32.139Z"
+  },
+  "createdAt": "2026-11-17T14:31:30.729Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:00:32.139Z"
+    }
+  ]
+}

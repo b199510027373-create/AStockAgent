@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwaawcwh-19d384",
+  "threadId": "rev-20261110-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/use_cases.py",
+  "lines": "325-338",
+  "title": "历史读取的 stale 判定被 now.hour>=15 门限掩盖，晨间把落后数据报成 success",
+  "evidence": "_ledger_view 里 `stale = (pd.Timestamp(data_as_of) < pd.Timestamp(expected) and now.hour >= 15)`。data.py:90-93 的 last_completed_trade_date 在 15:00 前已只返回上一交易日（周一 10:00 → 周五），所以这个二次门限只会在\"确实落后\"时把 stale 压成 False：例如周一 10:00 打开推荐页，台账最近一批 data_as_of=周四、expected=周五 → status=success，status_text=\"✅ 已从 SQLite 读取 …\"，没有任何落后提示。而同一条批次在生成时的诊断口径是 recommend.py:760 `stale_data = expected is not None and pd.Timestamp(data_as_of) < pd.Timestamp(expected)`（无小时门限），会显示\"⚠️ 数据未更新\"——生成路径与历史读取路径对同一数据给出相反结论，验收标准 4（stale 时要有明确可读诊断）在 15:00 前的窗口不成立。该分支也没有测试：tests/test_use_cases.py:218-237 只用了 now=datetime(2026,11,6,20,0)。",
+  "suggestion": "去掉 `and now.hour >= 15`，让历史读取与生成路径共用同一口径（落后于 last_completed_trade_date 即 stale），并在 _ledger_view docstring 写明该口径；如果确实需要保留门限，必须给出与 recommend.py:760 一致的理由并同时修改生成侧，否则两边永远互相矛盾。同时补一条用例：latest_run=_history_run(data_as_of=\"2026-11-05\")、last_completed_trade_date=2026-11-06、now=datetime(2026,11,6,10,0)，断言 status==\"stale\" 且 message 含\"早于最近交易日\"。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-10T06:42:25.730Z"
+  },
+  "createdAt": "2026-11-10T06:20:12.497Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-10T06:42:25.730Z"
+    }
+  ]
+}

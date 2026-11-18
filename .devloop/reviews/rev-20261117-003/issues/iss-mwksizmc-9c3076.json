@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksizmc-9c3076",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "audit",
+  "file": "astock/agent/runtime.py",
+  "lines": "475-483",
+  "title": "runtime 审计未记录 temperature/seed/code_version，且 ensure_run 的 DO NOTHING 使后续无法补写",
+  "evidence": "_start_audit 的 ensure_run 只传 session_id/provider/model/status/run_kind，没有 temperature、seed、code_version（runtime.py:475-483）。agent_runs 的 DDL 明确有这三列（store.py:119-135），ADR-017 §3 也要求记录 provider/model/temperature/seed 与代码版本。chart_render.py:1445 虽然给 ensure_run 传了 code_version，但 store.ensure_run 使用 `ON CONFLICT(run_id) DO NOTHING`（store.py:437），冲突时不会更新任何列；因此真实 Agent 的 run 行这三列永久为 NULL。tests/test_agent_runtime.py:846-943 的审计用例只断言 run_kind/status/steps/tokens/finished_at，没有断言这三个字段，测试无法发现缺失。",
+  "suggestion": "给 AgentRuntime/ _start_audit 增加 temperature、seed、code_version（或从 model.adapter 读取）并传入 ensure_run；若模型适配器不暴露这些值，也应显式写 None 并在交付文档说明，而不是静默遗漏。可在 ensure_run 冲突分支补充“只允许补空列”的更新（或单独 update_run_provenance），确保 chart_render 等后续调用能补写 code_version。补测试断言 agent_runs 三列等于配置值/代码版本。",
+  "confidence": 0.88,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:00:21.878Z"
+  },
+  "createdAt": "2026-11-17T14:31:23.604Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:00:21.878Z"
+    }
+  ]
+}

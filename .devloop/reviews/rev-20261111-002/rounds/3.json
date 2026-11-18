@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261111-002-r3",
+  "threadId": "rev-20261111-002",
+  "roundNo": 3,
+  "scope": "full",
+  "scopeReason": "第 3 轮：全量代码",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "第 3 轮（full，commit 976319d，关键修复 3cad679「落盘候选池快照并统一分位披露口径」）结论：代码与文档层面 approve，P0=0、新增 P2=1。上一轮 6 条（P1×1、P2×5）逐项复核全部闭合：\n\n① P1 审计链（iss-mwbmtukp-633a00）：live 在 astock/recommend.py:867-871 写 diagnostics.candidate_n=len(candidates)、candidate_pool=[{code, composite}]、percentile_basis=\"candidate_pool\"，`_save` 原样透传 diagnostics（recommend.py:614-615）；backfill 在 astock/backfill.py:135-141 写 params.candidate_n（上限）、pool_size 与同结构 diagnostics（candidate_n=pool_n）；docs/AStockAgent_interface_freeze_v1.md §6.4 的「复算」行已改为「用快照跑 pool_percentile 逐行等于 table；table 只含 ≤top_n，不能复算」，并新增「快照」行。测试 tests/test_research_semantics.py:160-196 读回落盘 JSON，对 candidate_pool 复算并逐行断言等于 table 技术分位；:198-207 覆盖 len(rows)=8<15 时 N=len(pool)。\n② §7 标题恢复：docs 在未决问题表前重新插入「## 7. 未决问题的去向」，章节编号连续。\n③ backfill N：backfill.py:106 取 pool_n=len(pool)，:133 market 与 :135 params.pool_size 均用实际池大小，不再写死 candidate_n。\n④ 展示带 N：app.py:339-345 优先读 diagnostics.candidate_n（旧批次回退 params.candidate_n、table 长度），摘要输出「候选池分位(N=12)92.0%」；astock/use_cases.py:223-232 在推荐表同屏追加「分位基准：候选池（N=…）」；LatestContextTests 断言 N 取 diagnostics（tests/test_research_semantics.py:219-253）。\n⑤ 注释归属：contracts.py:505,518、use_cases.py:192、tests/test_contracts.py 的 docstring 已由 C2 改为「ADR-010 C1（兼容映射）」。\n⑥ plan-20261103-006 的 C2 验收已改为「横幅五状态文案去重：insufficient/unavailable/positive/negative/no_alpha」，与 track.py 五态、ADR-010 一致；C1 三项验收与旧批次映射保持独立。\n\nC1 主体（动作词全站研究语义、推荐表同屏技术面+候选池分位、AI 提示词、旧批次字段映射）与 C2 去重仍成立，未发现新的正确性/安全/数据破坏问题。测试证据采信开发提交（本轮不代跑）：全量 296 passed 1 skipped、目标 tests/test_research_semantics.py 21 passed、ruff 与 mypy 31 files 通过；新增用例与修复逻辑逐行核对一致。\n\n新增 P2（iss-mwbnbkbm-e288d3）：tests/test_research_semantics.py:173-186 的池快照测试只 patch REC_DIR，`_save` 会经 ledger.save_run 把假批次 rec_pool 写进开发机真实 data/astock.db（ledger.py:15 默认路径，无 conftest 覆盖）。由开发在合并前给该测试（顺带 tests/test_contracts.py:417-451）patch ledger.DB_PATH 到临时库即可，不阻塞 approve。完全解决条件：开发（session-220c8f42-b3a7-4832-9fd9-c539d019a00c，分支 feat/adr-gate-freeze）完成上述测试隔离，并对第 2 轮 6 条 issue 提交 fixed 反馈（引用 3cad679 证据），使工具侧 openP1 归零；届时 openP0=0、openP1=0 且该 P2 已修或明确改挂后续计划项，线程才标记为完全解决。在此之前不得把 revisions 视为已关闭。",
+  "startedAt": "2026-11-11T04:54:02.614Z",
+  "finishedAt": "2026-11-11T04:55:54.488Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 1,
+    "total": 1
+  }
+}

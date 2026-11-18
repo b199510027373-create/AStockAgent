@@ -1,0 +1,13 @@
+{
+  "id": "rev-20261117-001",
+  "title": "评审：CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
+  "planItemId": "plan-20261103-012",
+  "sourceDevSessionId": "session-73d90b4d-a2d4-4a72-a16d-9ad17246fe67",
+  "branch": "feat/ci-quality-gates-plan-20261103-012 (merged) / feat/ci-gate-align-measured (merged)",
+  "base": "main",
+  "files": [],
+  "status": "approved",
+  "createdAt": "2026-11-16T18:52:07.075Z",
+  "updatedAt": "2026-11-16T19:39:41.369Z",
+  "reviewSessionId": "session-4f9b232f-84f1-4044-a571-3a73e86b9906"
+}

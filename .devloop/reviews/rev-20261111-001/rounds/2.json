@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261111-001-r2",
+  "threadId": "rev-20261111-001",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "第 2 轮：全量代码",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "第 2 轮（full）复验：第 1 轮 7 条问题在 head eee619e 全部有对应改动，逐条核验通过；新发现 2 条 P2。结论 approve（P0=0、P1 工程上已闭环），但台账中 7 条 issue 仍为 open（开发侧未提交逐条 feedback），因此线程不会被自动标记 resolved。\n\n7 条核验证据（commit eee619e，PR #7；CI run 42952579147 success）：\n1) iss-mwbjqphi-8cafbe 已修：adrs.json 015→plan-20261107-003（C1–C3）+004（C4）、016→005、017→008、018→006；contract.json AGENT-02→008、AGENT-04→005/006；新增 tests/test_architecture_gate.py:134 对 summary/条件段/rationale 的 plan id 做「存在且非 cancelled」断言。架构目录已无指向 20261110 的承接项（仅评审任务本身 plan-20261110-003 的历史标注）。\n2) iss-mwbjqpil-9bb5a8 已修：tests/test_architecture_gate.py:390-408 精确 tuple（11 字段含 raw）+ finish_reason/protocol/degraded 默认值 + total_tokens 补齐行为断言。\n3) iss-mwbjqv5o-4b3cfe 已修：:76-95 新口径（GATED_ADRS 不得回 proposed；其余 proposed 需未过期追认截止日），:108/:118/:126 三条反例测试，ADR-012 §5 同步。\n4) iss-mwbjqv6k-3962b1 已修：落点表 :104 改引 test_doc_test_references_exist（:289-307 真正扫描两份文档的 tests/…::test_x），§5 措辞同步。\n5) iss-mwbjr1cd-ebca7e 已修：冻结清单 period→1min…、range→1mo…，:179-180 消歧，:355 freq 同步，plan-20261107-005 加 schema 用例。\n6) iss-mwbjr1d6-718e70 已修到可接受程度：黑名单改符号级（:492-534），skip 理由改 005/006，落点表 AGENT-01 注明生效时机；残余绕过风险另立 P2 iss-mwbkgxnj-9b117b。\n7) iss-mwbjr5aw-e7ceb8 已修：ADR-015 条件拆 C1–C3→003、C4→004，plan-20261107-003 补 C2、plan-20261107-004 改 C4，ADR-012 与冻结清单同步，新增 :155 条件归属门禁。\n\n新增 2 条 P2（不阻塞）：\n- iss-mwbkgxnj-9b117b（tests/test_architecture_gate.py:492-534）：`from os import system`、`from shutil import rmtree`、`import os as o; o.remove()`、`pathlib.Path('x').unlink()` 均能绕过扫描；建议加别名/from-import 符号解析与 pathlib 删除 API。\n- iss-mwbkgxoi-6b397a（docs/AStockAgent_interface_freeze_v1.md:58）：冻结清单写「三件产物」，§4 目录树与 ADR-015 是四件，plan-20261107-003 的 C1 验收又多了 preview.png；冻结布局失去唯一基准，需先定 v1 产物清单再统一三处。\n\n闭环条件（谁来做什么）：开发在开发会话里逐条把第 1 轮 7 条标记 fixed（附 eee619e），并处理 2 条新 P2（若 preview.png 不入 v1 则改 plan-20261107-003 + :58；若入 v1 则补 §4）；代码合入 main 后回评审线程开第 3 轮，我复核 2 条 P2 与 feedback 记录，届时 openP0=0、openP1=0，才会标记完全解决。在此之前线程保持 changes_requested（台账原因，非代码原因）。",
+  "startedAt": "2026-11-11T03:34:07.164Z",
+  "finishedAt": "2026-11-11T03:36:23.239Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 2,
+    "total": 2
+  }
+}
