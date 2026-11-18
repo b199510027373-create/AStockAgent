@@ -48,7 +48,8 @@
     "pr": "31",
     "review": [
       "rev-20261118-001 (approved, r1→r3)",
-      "ho-20261119-001"
+      "ho-20261119-001",
+      "ho-20261119-003"
     ],
     "test": [
       "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread -> 714 passed, 1 warning, 12 subtests passed in 85.22s（commit 74d3687，P2 修复后）",
@@ -58,10 +59,11 @@
       "ruff check astock tests -> All checks passed",
       "gh pr checks 31（commit 74d3687）-> run 44343766378 test pass 1m44s / png-export pass 1m21s（commit 266538d 的 run 44338507167 中 png-export 首跑因 apt-get 字体安装超 job timeout 失败，rerun --failed 后 pass）",
       "main 上 merge commit a855b37 的 CI run 44344659084 -> completed success",
+      "main 上记账提交 9114b4e 的 CI run 44345604730 -> completed success",
       "历史轮次：commit 3fc1ddf -> 711 passed（run 44328403133 双 job pass）；commit 92b4b62 -> 702 passed（run 44258867189 双 job pass）"
     ]
   },
   "createdAt": "2026-11-07T14:12:10.292Z",
-  "updatedAt": "2026-11-18T16:17:19.283Z",
+  "updatedAt": "2026-11-18T16:20:44.779Z",
   "devSessionId": "session-604a4898-03c2-4f30-90ad-1559cb54410e"
 }
