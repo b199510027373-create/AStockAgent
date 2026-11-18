@@ -621,7 +621,7 @@ def _parse_layer_names(layers: Any) -> list[str]:
     if isinstance(layers, str):
         layers = [layers]
     if not isinstance(layers, (list, tuple)):
-        raise ValueError("layers 必须是字符串数组，例如 [\"ma5\", \"ma20\", \"volume\"]")
+        raise TypeError("layers 必须是字符串数组，例如 [\"ma5\", \"ma20\", \"volume\"]")
     out: list[str] = []
     for item in layers:
         key = str(item or "").strip().lower()
@@ -870,7 +870,7 @@ def kline(
         metadata["ffill"] = {
             "fields": ffill_fields,
             "days": ffill_days,
-            "bars": int(len(display)),
+            "bars": len(display),
             "rule": "日线指标按交易日 ffill 到分钟 bar，只用更早已完成日线（禁止未来值）",
         }
     metadata["layers"] = layer_names
@@ -1028,8 +1028,10 @@ def indicator(
 
     latest = display.iloc[-1]
     parts = [
-        f"{code} {PERIOD_LABELS[period]} 指标（最近 {len(display)} 根，"
-        f"截至 {series.data_as_of} {series.data_time[11:16]}）"
+        (
+            f"{code} {PERIOD_LABELS[period]} 指标（最近 {len(display)} 根，"
+            f"截至 {series.data_as_of} {series.data_time[11:16]}）"
+        )
     ]
     for name in columns:
         value = _num(latest.get(name))
