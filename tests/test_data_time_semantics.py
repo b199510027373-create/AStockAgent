@@ -741,9 +741,21 @@ def _missing_bar_frame() -> pd.DataFrame:
     return _daily_frame(days, start=100.0)  # 全部 vol>0，之后的日子一行都没有
 
 
+# 2023-12-15（最后一根 bar）→ 2024-01-03（今天）之间共有 12 个开市日：
+# 12-18..12-29 十个 + 01-01、01-02 两个。日历必须从 2023-11 起，否则 note 数不满。
+_SUSPENDED_CALENDAR_START = "2023-11-01"
+_SUSPENDED_MISSING_DAYS = 12
+
+
+def _suspended_calendar() -> pd.DataFrame:
+    return _trade_cal(_SUSPENDED_CALENDAR_START, "2024-01-31")
+
+
 def test_quote_marks_suspended_when_bars_are_missing() -> None:
     """停牌 = 缺 bar：三周没有新 bar 时 quote 必须标 suspended，而不是 eod。"""
-    context = _Deps(daily=_missing_bar_frame(), clock="2024-01-03 16:30")
+    context = _Deps(
+        daily=_missing_bar_frame(), clock="2024-01-03 16:30", calendar=_suspended_calendar()
+    )
     result = M.quote(CODE, now=context.clock, deps=context.deps())
     _assert_contract(result)
 
@@ -752,20 +764,30 @@ def test_quote_marks_suspended_when_bars_are_missing() -> None:
     assert result.data_as_of == "2023-12-15"
     assert "停牌" in result.text and "无成交" in result.text
     notes = result.metadata["notes"]
-    assert any("个交易日无行情" in note for note in notes)
+    # 审计数字要精确：缺口天数面向用户，不能只匹配「个交易日无行情」子串。
+    assert any(
+        f"最后一根 bar 为 2023-12-15，其后 {_SUSPENDED_MISSING_DAYS} 个交易日无行情" in note
+        for note in notes
+    ), notes
     # 最后一根 bar 是正常成交日，vol 不为 0——停牌判据不能只看 0 量行。
     assert _table(result)[0]["vol"] > 0
 
 
 def test_suspended_missing_bars_intraday_is_not_just_delayed() -> None:
     """盘中同样是缺 bar 形态：不能只报「延迟」，必须写明停牌/无成交。"""
-    context = _Deps(daily=_missing_bar_frame(), clock="2024-01-03 10:00")
+    context = _Deps(
+        daily=_missing_bar_frame(), clock="2024-01-03 10:00", calendar=_suspended_calendar()
+    )
     result = M.quote(CODE, now=context.clock, deps=context.deps())
     _assert_contract(result)
 
     assert result.metadata["freshness"] == "suspended"
     assert result.metadata["session"] == "open"
     assert "停牌" in result.text and "无成交" in result.text
+    assert any(
+        f"其后 {_SUSPENDED_MISSING_DAYS} 个交易日无行情" in note
+        for note in result.metadata["notes"]
+    )
     # 盘中停牌也不能说成实时行情。
     assert "盘中实时" not in result.text
 
