@@ -277,7 +277,7 @@ def test_suspended_marks_freshness_and_note() -> None:
 
 
 def test_minute_failure_falls_back_to_daily() -> None:
-    """rt_min / stk_mins 都失败时回退日线，并在 notes 与 metadata 留痕。"""
+    """rt_min / stk_mins 都失败时回退日线，标注 delayed，并在 notes 留痕。"""
     context = _Deps(
         minute=TushareError("rt_min / stk_mins 均无数据"), clock="2024-01-03 10:10"
     )
@@ -286,10 +286,26 @@ def test_minute_failure_falls_back_to_daily() -> None:
     _assert_contract(result)
     assert result.metadata["requested_period"] == "1min"
     assert result.metadata["period"] == "day"
+    assert result.metadata["freshness"] == "delayed"
     assert result.source == "market:kline:daily"
     notes = " ".join(result.metadata["notes"])
     assert "已回退日线" in notes
+    assert "不是盘中实时价" in notes
+    assert "延迟" in result.text
     assert result.data_time == "2024-01-03 15:00"
+
+
+def test_daily_period_during_session_is_not_live() -> None:
+    """盘中请求日线：日线收盘后更新，必须标 eod 而不是 live（ADR-018 §1/§4）。"""
+    daily = _daily_frame(["2024-01-02", "2024-01-03"])
+    context = _Deps(daily=daily, clock="2024-01-03 10:10")
+    result = M.kline(CODE, period="day", limit=2, now=context.clock, deps=context.deps())
+
+    _assert_contract(result)
+    assert result.metadata["session"] == "open"
+    assert result.metadata["freshness"] == "eod"
+    assert "收盘后更新" in " ".join(result.metadata["notes"])
+    assert "盘中实时" not in result.text
 
 
 def test_trading_session_buckets() -> None:

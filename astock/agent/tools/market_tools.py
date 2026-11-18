@@ -424,6 +424,7 @@ def load_series(
     notes: list[str] = []
     requested_period = period
     source = "daily"
+    degraded = False
 
     if period in MINUTE_PERIODS:
         if is_index:
@@ -446,6 +447,7 @@ def load_series(
             )
             period = "day"
             source = "daily"
+            degraded = True
     else:
         start = _series_window_start(period, stamp, bars)
         end = stamp.strftime("%Y%m%d")
@@ -477,15 +479,29 @@ def load_series(
         freshness, lag = _freshness_of(
             session, data_time, stamp, deps.minute_stale_seconds
         )
+    # 盘中拿到的是日/周/月 bar：日线在收盘后更新，不能当实时（ADR-018 §1/§4）。
+    if not suspended and session == "open" and period not in MINUTE_PERIODS:
+        if degraded:
+            freshness = "delayed"
+        else:
+            freshness = "eod"
+            notes.append(
+                "日线/周线/月线在收盘后更新：盘中该周期不是实时价，实时行情请用分钟周期"
+            )
 
     if session != "open" and freshness == "eod":
         notes.append("非交易时段：以下为最近交易日收盘数据，不是实时价")
     if freshness == "delayed":
-        lag_text = f"{lag:.0f} 秒" if lag is not None else "未知"
-        notes.append(
-            f"实时行情延迟：最后一根 bar 为 {data_time}，距今 {lag_text}"
-            f"（阈值 {deps.minute_stale_seconds:.0f} 秒），按 delayed 降级并退回最近已完成 bar"
-        )
+        if lag is not None and lag > 0:
+            notes.append(
+                f"实时行情延迟：最后一根 bar 为 {data_time}，距今 {lag:.0f} 秒"
+                f"（阈值 {deps.minute_stale_seconds:.0f} 秒），按 delayed 降级并退回最近已完成 bar"
+            )
+        else:
+            notes.append(
+                f"分钟行情不可用或未及时更新：当前展示 {data_time} 的日线 bar，"
+                "不是盘中实时价，按 delayed 降级"
+            )
     if suspended:
         notes.append("停牌/无成交：最新交易日成交量与成交额为 0，指标按最后一根 bar 计算")
     if period != requested_period:
