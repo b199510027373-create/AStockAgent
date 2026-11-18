@@ -2,14 +2,14 @@
   "id": "plan-20261107-007",
   "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
   "description": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮。复用现有 Gradio 装配模式，不新增 Tab；保持页面在无模型/无网络时的降级可用。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-24",
   "due": "2026-12-02",
   "estimateH": 14,
-  "progress": 0,
+  "progress": 90,
   "acceptance": [
     "AI 对话 Tab 可上传 1–5 个文件并显示解析状态",
     "回答流式输出，工具步骤以时间线展示",
@@ -32,9 +32,18 @@
     "adr": [
       "ADR-013",
       "ADR-016"
+    ],
+    "module": "agent_chat_ui",
+    "branch": "feat/agent-chat-ui",
+    "test": [
+      ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q -> 74 passed",
+      ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" -> 734 passed, 5 deselected; coverage report TOTAL 78.97% (fail_under=76.45)",
+      ".venv\\Scripts\\python.exe -m ruff check astock tests -> All checks passed",
+      ".venv\\Scripts\\python.exe -m mypy astock app.py -> Success: no issues found in 43 source files",
+      ".venv\\Scripts\\python.exe -c \"import app\" -> app import ok"
     ]
   },
   "createdAt": "2026-11-07T14:12:13.272Z",
-  "updatedAt": "2026-11-18T16:30:36.246Z",
+  "updatedAt": "2026-11-18T16:49:52.151Z",
   "devSessionId": "session-b2a69179-5e60-4872-91f0-f30a7d3402d1"
 }
