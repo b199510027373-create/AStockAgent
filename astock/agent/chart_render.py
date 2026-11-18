@@ -1453,11 +1453,15 @@ def render(
             root=artifact_root,
         )
         # 身份 = canonical_spec + data_digest + env_fingerprint（规格 §4.4）；
-        # 文件名不参与，同内容换文件名仍是同一 artifact。
+        # 文件名与 include_plotlyjs 不参与“spec”，但后者决定 HTML 字节，
+        # 必须进入身份种子，否则 inline/CDN 会撞同一 id 后 content_digest 冲突。
+        identity_spec = canonical_json(
+            {"spec": normalized, "include_plotlyjs": include_plotlyjs}
+        )
         artifact_id = artifact_id_for(
             data_digest,
             env_fingerprint=env_fingerprint,
-            canonical_spec=canonical_json(normalized),
+            canonical_spec=identity_spec,
         )
 
         png_path: str | None = None

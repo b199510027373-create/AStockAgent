@@ -1202,13 +1202,13 @@ def agent_metrics(
 
 
 def _protected_paths(conn: sqlite3.Connection, base: Path) -> set[str]:
-    """仍被引用的 artifact 相对路径（行 path + 所有版本 meta 的 PNG 路径）。"""
+    """仍被引用的 artifact 相对路径（行 path + 版本 meta 的 PNG / data blob 路径）。"""
     protected = {
         row["path"] for row in conn.execute("SELECT DISTINCT path FROM agent_artifacts")
     }
     for row in conn.execute("SELECT meta_json FROM agent_artifact_versions"):
         meta = _load_meta(row["meta_json"])
-        for key in ("png_rel_path", "png_path"):
+        for key in ("png_rel_path", "png_path", "data_blob"):
             value = meta.get(key)
             if not isinstance(value, str) or not value:
                 continue
@@ -1362,9 +1362,12 @@ def prune_runs(
 # ---------------------------------------------------------------------------
 
 
-def _backup_database(conn: sqlite3.Connection, db_path: Path) -> Path | None:
-    """在迁移前做一致性备份；WAL 未落盘或备份不可用时直接中止（P2-1）。"""
-    if not db_path.exists() or str(db_path) == ":memory:":
+def _backup_database(conn: sqlite3.Connection, db_path: Path | None) -> Path | None:
+    """在迁移前做一致性备份；WAL 未落盘或备份不可用时直接中止（P2-1）。
+
+    ``db_path=None`` 表示内存库或未知路径：没有文件可备份，直接跳过。
+    """
+    if db_path is None or not db_path.exists() or str(db_path) == ":memory:":
         return None
     try:
         checkpoint = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
@@ -1418,7 +1421,8 @@ def migrate_v1_to_v2(
     if state != "v1":
         raise RuntimeError("无法识别的 agent_* 表结构，拒绝迁移")
 
-    path = Path(db_path) if db_path is not None else DEFAULT_DB_PATH
+    # 内存库没有可备份文件：不要回退 DEFAULT_DB_PATH，否则会生成错误位置的 .bak。
+    path = Path(db_path) if db_path is not None else _connection_db_path(conn)
     backup = _backup_database(conn, path)
     old_runs = conn.execute("SELECT * FROM agent_runs").fetchall()
     old_artifacts = conn.execute("SELECT * FROM agent_artifacts").fetchall()

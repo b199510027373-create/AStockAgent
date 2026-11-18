@@ -861,6 +861,31 @@ def test_ensure_schema_backs_up_using_the_connection_database(
     assert not (tmp_path / "wrong.db.bak-1").exists()
 
 
+def test_memory_database_migration_skips_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """:memory: 迁移不得回退 DEFAULT_DB_PATH 生成错误备份（评审 r2 P2）。"""
+    wrong = tmp_path / "wrong.db"
+    seed = sqlite3.connect(str(wrong))
+    try:
+        seed.execute("CREATE TABLE IF NOT EXISTS marker (id INTEGER)")
+        seed.commit()
+    finally:
+        seed.close()
+    monkeypatch.setattr(store, "DEFAULT_DB_PATH", wrong)
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.executescript(V1_SCHEMA)
+        store.ensure_schema(conn)
+        assert store.schema_state(conn) == "v2"
+        assert conn.execute("SELECT COUNT(*) FROM agent_artifacts").fetchone()[0] == 0
+    finally:
+        conn.close()
+    assert not list(tmp_path.glob("wrong.db.bak-*"))
+
+
 def test_backup_aborts_when_wal_checkpoint_is_busy(tmp_path: Path) -> None:
     class _BusyConnection:
         def execute(self, statement: str):

@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -268,6 +270,64 @@ def test_env_change_renders_second_artifact_without_conflict(paths: dict[str, st
             assert loaded["meta"]["code_version"] == rendered.code_version
     finally:
         conn.close()
+
+
+def test_plotlyjs_mode_is_part_of_artifact_identity(paths: dict[str, str]) -> None:
+    """同一 spec/data/env 下 inline 与 cdn 的 HTML 不同，必须生成两个 artifact（评审 r2 P1）。"""
+    inline = _render(inline_line_spec(), paths, include_plotlyjs="inline")
+    cdn = _render(inline_line_spec(), paths, include_plotlyjs="cdn")
+    assert inline.artifact_id != cdn.artifact_id
+
+    conn = store.connect(paths["db_path"])
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM agent_artifacts").fetchone()[0] == 2
+        for rendered in (inline, cdn):
+            loaded = store.load_artifact(
+                conn, rendered.artifact_id, root=paths["artifact_root"]
+            )
+            assert b"plotly" in loaded["content"].lower()
+    finally:
+        conn.close()
+    assert len(inline.html) > len(cdn.html)  # inline 内嵌 plotly.js，CDN 只留引用
+
+
+def test_gc_keeps_data_blob_referenced_by_versions(paths: dict[str, str]) -> None:
+    """GC 必须保护 meta.data_blob；无引用 blob 仍会被删（评审 r2 P1）。"""
+    rendered = _render(inline_line_spec(), paths)
+    row = _artifact_row(rendered, paths)
+    assert row is not None
+    data_blob = row.meta["data_blob"]
+    base = Path(paths["artifact_root"])
+    blob_path = base / data_blob
+    assert blob_path.is_file()
+    old = (datetime.now(UTC) - timedelta(days=100)).timestamp()
+    os.utime(blob_path, (old, old))
+    orphan = base / "artifacts" / "zz" / "orphan.html"
+    orphan.parent.mkdir(parents=True, exist_ok=True)
+    orphan.write_bytes(b"orphan")
+    os.utime(orphan, (old, old))
+
+    conn = store.connect(paths["db_path"])
+    try:
+        result = store.prune_orphan_blobs(
+            conn,
+            older_than_days=90,
+            root=paths["artifact_root"],
+            dry_run=False,
+        )
+        assert blob_path.is_file()
+        assert not orphan.exists()
+        assert data_blob in store._protected_paths(conn, base)
+        loaded = store.load_artifact(
+            conn,
+            rendered.artifact_id,
+            mode="recomputed",
+            root=paths["artifact_root"],
+        )
+        assert loaded["data"]["row_count"] == 3
+    finally:
+        conn.close()
+    assert result["deleted"] >= 1
 
 
 def test_empty_transform_result_reports_unknown_time_points(paths: dict[str, str]) -> None:
