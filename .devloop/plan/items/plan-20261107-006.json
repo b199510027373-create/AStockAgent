@@ -2,14 +2,14 @@
   "id": "plan-20261107-006",
   "title": "行情/指标工具：实时 K 线与指标",
   "description": "依据 ADR-018 实现行情/指标工具：quote（最新价/涨跌幅/成交额）、kline（日/周/月 + 1/5/15/30/60 分钟，支持 MA/BOLL/成交量叠加）、indicator（MA/EMA/RSI/MACD/BOLL/KDJ/ATR）。复用 data.load_daily/load_minute 与 indicators.add_all；rt_min 走 30s 缓存；每个结果带 data_as_of + data_time；默认 qfq、涨跌停/成交用 raw；非交易时段、延迟、停牌均显式标注。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-29",
   "estimateH": 20,
-  "progress": 0,
+  "progress": 100,
   "acceptance": [
     "工具：quote / kline / indicator 可被 Agent 调用",
     "交易时段返回带 data_time 的最新分钟 K 线",
@@ -40,8 +40,23 @@
     ],
     "mergedFrom": [
       "plan-20261110-007"
+    ],
+    "branch": "feat/market-tools",
+    "commit": "3fc1ddf",
+    "pr": "31",
+    "module": "agent_tools",
+    "test": [
+      "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread -> 711 passed, 1 warning, 12 subtests passed in 151.11s（评审第 1 轮修复后全量）",
+      "pytest tests/test_data_time_semantics.py -q -p no:cacheprovider -> 23 passed（含 ADR-018 指定 test_latest_bar_time_is_single_source / test_non_trading_session_marks_eod / test_stale_rt_min_marks_delayed，及周/月 resample、指数 index_daily、指数分钟拒绝、10 年窗口钳制+真实 chart_render.render、ChartSpecError 降级、图层丢弃/截断告警、长停牌 quote）",
+      "pytest tests/test_agent_tools.py -q -> 58 passed（含 ADR-018 指定 test_market_result_requires_both_timestamps、权限/参数校验/quote 新鲜度）",
+      "pytest tests/test_agent_runtime.py::test_summarize_result_keeps_chart_html_out_of_partial_answer tests/test_agent_runtime.py::test_runtime_observation_keeps_chart_html_out_of_context tests/test_agent_tools.py::test_market_result_requires_both_timestamps tests/test_agent_tools.py::test_market_tools_are_registered_with_permissions tests/test_agent_tools.py::test_quote_via_registry_reports_price_and_freshness -q -> 5 passed",
+      "mypy astock -> Success: no issues found in 40 source files；mypy tests/test_data_time_semantics.py tests/test_agent_runtime.py -> Success",
+      "ruff check astock tests -> All checks passed",
+      "gh pr checks 31 -> test pass 1m26s / png-export pass 1m5s（run 44328403133, commit 3fc1ddf）",
+      "首轮（commit 92b4b62）证据：pytest tests -q -> 702 passed, 12 subtests passed in 102.11s；gh pr checks 31 -> test pass / png-export pass (run 44258867189)"
     ]
   },
   "createdAt": "2026-11-07T14:12:10.292Z",
-  "updatedAt": "2026-11-13T19:09:27.399Z"
+  "updatedAt": "2026-11-18T14:50:47.966Z",
+  "devSessionId": "session-604a4898-03c2-4f30-90ad-1559cb54410e"
 }
