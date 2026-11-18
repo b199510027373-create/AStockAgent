@@ -1059,5 +1059,39 @@ def test_failed_run_is_not_downgraded_by_runtime_finish(tmp_path: Path) -> None:
         conn.close()
 
 
+def test_runtime_observation_keeps_chart_html_out_of_context() -> None:
+    """图表 HTML 只以 artifact 句柄进 observation，避免撑爆模型上下文。"""
+    import json
+
+    runtime = AgentRuntime(FakeModel(["ok"]), ToolRegistry())
+    big = "<html>" + "x" * 5000 + "</html>"
+    result = ToolResult(
+        text="图已生成",
+        figure=big,
+        data_as_of="2024-01-04",
+        data_time="2024-01-04 15:00",
+        metadata={
+            "chart": {
+                "artifact_id": "art_0123456789abcdef",
+                "artifact_path": "artifacts/kline.html",
+            }
+        },
+    )
+
+    observation = runtime._format_observation("kline", result)
+    payload = json.loads(observation)
+    assert payload["figure"] == {
+        "chars": len(big),
+        "artifact_id": "art_0123456789abcdef",
+        "artifact_path": "artifacts/kline.html",
+    }
+    assert big not in observation
+    assert payload["data_time"] == "2024-01-04 15:00"
+
+    # 小图（例如内联 SVG 片段）仍原样透传。
+    small = ToolResult(figure="<svg/>")
+    assert json.loads(runtime._format_observation("kline", small))["figure"] == "<svg/>"
+
+
 if __name__ == "__main__":
     unittest.main()
