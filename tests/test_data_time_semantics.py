@@ -379,12 +379,15 @@ def test_trading_session_buckets() -> None:
 
 def test_non_trading_day_answer_never_claims_realtime() -> None:
     """回答文本里不得声称「盘中实时」，必须写「最近交易日收盘」（ADR-018 §2/§3）。"""
-    daily = _daily_frame(["2024-01-02", "2024-01-03"])
+    daily = _daily_frame(["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"])
     context = _Deps(daily=daily, clock="2024-01-06 10:00")
     result = M.quote(CODE, now=context.clock, deps=context.deps())
     assert "盘中实时" not in result.text
     assert "最近交易日收盘" in result.text
     assert "最新价" in result.text
+    # 周五的 bar 在，缺 bar 判据不应把周末误判成停牌。
+    assert result.metadata["freshness"] == "eod"
+    assert result.metadata["suspended"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -730,6 +733,53 @@ def test_quote_handles_long_suspension() -> None:
     assert result.data_as_of == "2023-12-15"
     assert "停牌" in result.text and "无成交" in result.text
     assert _table(result)[0]["vol"] == 0.0
+
+
+def _missing_bar_frame() -> pd.DataFrame:
+    """真实停牌形态：停牌日**没有行**，最后一根 bar 仍是停牌前的正常成交日。"""
+    days = pd.bdate_range("2023-11-01", "2023-12-15").strftime("%Y-%m-%d").tolist()
+    return _daily_frame(days, start=100.0)  # 全部 vol>0，之后的日子一行都没有
+
+
+def test_quote_marks_suspended_when_bars_are_missing() -> None:
+    """停牌 = 缺 bar：三周没有新 bar 时 quote 必须标 suspended，而不是 eod。"""
+    context = _Deps(daily=_missing_bar_frame(), clock="2024-01-03 16:30")
+    result = M.quote(CODE, now=context.clock, deps=context.deps())
+    _assert_contract(result)
+
+    assert result.metadata["freshness"] == "suspended"
+    assert result.metadata["suspended"] is True
+    assert result.data_as_of == "2023-12-15"
+    assert "停牌" in result.text and "无成交" in result.text
+    notes = result.metadata["notes"]
+    assert any("个交易日无行情" in note for note in notes)
+    # 最后一根 bar 是正常成交日，vol 不为 0——停牌判据不能只看 0 量行。
+    assert _table(result)[0]["vol"] > 0
+
+
+def test_suspended_missing_bars_intraday_is_not_just_delayed() -> None:
+    """盘中同样是缺 bar 形态：不能只报「延迟」，必须写明停牌/无成交。"""
+    context = _Deps(daily=_missing_bar_frame(), clock="2024-01-03 10:00")
+    result = M.quote(CODE, now=context.clock, deps=context.deps())
+    _assert_contract(result)
+
+    assert result.metadata["freshness"] == "suspended"
+    assert result.metadata["session"] == "open"
+    assert "停牌" in result.text and "无成交" in result.text
+    # 盘中停牌也不能说成实时行情。
+    assert "盘中实时" not in result.text
+
+
+def test_closed_session_without_today_bar_is_eod_not_suspended() -> None:
+    """收盘后当日日线还没发布属于延迟，不能把正常股票误判成停牌。"""
+    days = pd.bdate_range("2023-12-01", "2024-01-03").strftime("%Y-%m-%d").tolist()
+    context = _Deps(daily=_daily_frame(days), clock="2024-01-04 16:30")
+    result = M.quote(CODE, now=context.clock, deps=context.deps())
+    _assert_contract(result)
+
+    assert result.metadata["freshness"] == "eod"
+    assert result.metadata["suspended"] is False
+    assert "停牌" not in result.text
 
 
 # ---------------------------------------------------------------------------

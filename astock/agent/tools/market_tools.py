@@ -404,6 +404,34 @@ def _is_suspended(frame: pd.DataFrame) -> bool:
     return bool((vol <= 0).all() and (amount <= 0).all())
 
 
+def _missing_open_days(calendar: Any, stamp: pd.Timestamp, data_as_of: str) -> int:
+    """``data_as_of`` 之后、今天之前缺失的交易日数，即停牌交易日数（ADR-018 §4）。
+
+    真实日线里停牌日**没有行**（``astock/track.py:688``、``astock/recommend.py:704``
+    都按「缺 bar」判停牌），所以只看 vol/amount 是否为 0 会漏掉三周停牌这类形态：
+    最后一根 bar 仍是停牌前的成交日、量不为 0，data_as_of 却已经落后很多天。
+
+    这里把「今天」排除在缺口之外：收盘后（15:00 之后）当日日线常常还没发布，
+    不能因为今天这根 bar 没到就把正常股票判成停牌——今天缺 bar 属于 eod/delayed
+    的延迟语义，只有更早的交易日整段缺失才说明标的停牌。
+    """
+    if not data_as_of:
+        return 0
+    try:
+        last_bar = pd.Timestamp(data_as_of).normalize()
+    except (TypeError, ValueError):  # pragma: no cover - data_as_of 由契约保证格式
+        return 0
+    if calendar is None or len(calendar) == 0 or "cal_date" not in getattr(
+        calendar, "columns", []
+    ):
+        return 0
+    days = pd.to_datetime(calendar["cal_date"]).dt.normalize()
+    is_open = pd.to_numeric(calendar["is_open"], errors="coerce").fillna(0).astype(int)
+    opens = pd.Series(days[is_open == 1].unique()).sort_values()
+    today = stamp.normalize()
+    return int(sum(1 for day in opens if pd.Timestamp(day) < today and day > last_bar))
+
+
 # ---------------------------------------------------------------------------
 # 取数：唯一入口 load_series（时点只由 latest_bar_time 生产）
 # ---------------------------------------------------------------------------
@@ -491,6 +519,10 @@ def load_series(
 
     data_as_of, data_time = deps.bar_time(frame, freq=PERIOD_FREQ[period], notes=notes)
     suspended = _is_suspended(frame)
+    # 停牌第二判据：真实日线停牌日缺行（不是 0 量行）。指数不存在停牌，跳过。
+    missing_days = 0 if is_index else _missing_open_days(deps.trade_cal(), stamp, data_as_of)
+    if missing_days > 0:
+        suspended = True
     freshness: str
     lag: float | None = None
     if suspended:
@@ -531,7 +563,15 @@ def load_series(
                 "不是盘中实时价，按 delayed 降级"
             )
     if suspended:
-        notes.append("停牌/无成交：最新交易日成交量与成交额为 0，指标按最后一根 bar 计算")
+        if missing_days > 0:
+            notes.append(
+                f"停牌/无成交：最后一根 bar 为 {data_as_of}，其后 {missing_days} 个交易日无行情，"
+                "指标按最后一根 bar 计算"
+            )
+        else:
+            notes.append(
+                "停牌/无成交：最新交易日成交量与成交额为 0，指标按最后一根 bar 计算"
+            )
     if period != requested_period:
         notes.append(f"请求的 {requested_period} 不可用，实际返回 {period} 数据")
 
