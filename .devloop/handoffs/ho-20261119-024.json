@@ -1,0 +1,254 @@
+{
+  "id": "ho-20261119-024",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261114-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
+  "summary": "图表管线 v2 已按 docs/AStockAgent_chart_audit_v2_change_spec.md 落地并全绿，计划置 in_review，PR #36 已开（CI 进行中）。\\n\\n核心结构变化：chart_render 从「渲染+落库」拆成纯渲染器 render_figure()（不再 import 审计写路径），新增 astock/agent/chart_service.py 作为唯一审计入口（render_chart 写 snapshot/HTML/PNG blob + artifact/version/link 三件套，直接渲染不再合成 run_chart_* 假 run），另提供只读 ArtifactReader 与 load_chart_artifact（as_recorded 校验 digest、recomputed 重算只提示不覆盖）。\\n\\n语义收口：data_as_of/data_time 固定为 transforms 之前的行情时点，新增 view_as_of/view_time 表示 transforms 后的视图时点，图注按 §3.2 五档文案同时展示；canonical HTML 固定 div_id=astock-chart，UI 用 embed_html 每图实例换唯一 id；meta schema_version=chart_meta_v2、不再含大快照（快照走 data.json blob）。\\n\\n契约：ChartSpec 增 data.time_field/time_semantics，无法证明时间语义直接 ChartSpecError（不再猜第一个可解析列）；stats.aggregate_groups 成为 transforms 分组聚合唯一实现（空组/NaN 保留+告警、稳定排序、同名后缀）；data.latest_bar_time 接受 09:25/盘后固定价并标 session，连续指标只用连续竞价 bar，不回退前一日。\\n\\n维护面：tools/artifact_admin.py 提供 correct（actor+理由必填、只改 provenance）与 gc（默认 dry-run、只删孤儿文件、行永久保留）；interface_freeze_v2.md、ADR-016/017/018 回填、modules.json 均已更新。\\n\\n证据：全量 771 passed（-m \\\"not png\\\"）、PNG 5 passed、ruff All checks passed、mypy Success 44 files。",
+  "requirements": [
+    {
+      "id": "Q4",
+      "text": "panes/style/raw 别名删除，schema 只声明 layers/theme/adj=none，旧别名与未知键均报错",
+      "source": "plan-20261114-002 验收标准 #1；spec §1 Q4"
+    },
+    {
+      "id": "Q1",
+      "text": "data_as_of/data_time 行情时点 + view_as_of/view_time 视图时点，图注同时展示；runtime/gateway 仍读行情时点",
+      "source": "plan-20261114-002 验收标准 #2；spec §3"
+    },
+    {
+      "id": "Q2",
+      "text": "meta 不含大快照，meta_digest/版本/correction 落库；回放 as_recorded 与 recomputed 分离且不静默覆盖",
+      "source": "plan-20261114-002 验收标准 #3；spec §4"
+    },
+    {
+      "id": "Q3",
+      "text": "artifact 逻辑身份含 spec+数据快照+plotly/python/code 版本；embed_html 每图唯一 div_id，双图/重复嵌入验收",
+      "source": "plan-20261114-002 验收标准 #4；spec §5"
+    },
+    {
+      "id": "Q5",
+      "text": "chart_render 不 import agent_store 写路径；chart_service 唯一审计入口；ArtifactReader 只读 data.source=artifact",
+      "source": "plan-20261114-002 验收标准 #5；spec §7"
+    },
+    {
+      "id": "Q7",
+      "text": "09:25/盘后固定价可渲染并标 session=pre/auction；连续指标默认排除；strict 模式可硬失败；不回退前一日",
+      "source": "plan-20261114-002 验收标准 #6；spec §6"
+    },
+    {
+      "id": "D10",
+      "text": "无显式时间列或无法证明时间语义时抛契约错误，禁止猜第一个可解析列",
+      "source": "plan-20261114-002 验收标准 #7；spec §15.1"
+    },
+    {
+      "id": "D11",
+      "text": "transforms 走 stats 口径，空组/NaN/排序行为有对照测试，图上均值与表一致",
+      "source": "plan-20261114-002 验收标准 #8；spec §15.2"
+    },
+    {
+      "id": "§12",
+      "text": "artifact/version 行永久保留、孤儿文件 GC；correction 仅维护脚本/管理员，actor/理由/时间必填",
+      "source": "plan-20261114-002 验收标准 #9；spec §12"
+    },
+    {
+      "id": "FREEZE-V2",
+      "text": "冻结清单 v2、ADR-016/017/018 补丁、迁移脚本与全量回归通过；文档与实现一致",
+      "source": "plan-20261114-002 验收标准 #10；spec §9"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "改纯渲染器：render()→render_figure()，无 DB/blob 写入；store import 仅 PNG_DEGRADED_WARNING_PREFIX/compute_env_fingerprint；data_*/view_* 分离、§3.2 图注、固定 FIGURE_DIV_ID+embed_html、D10 resolve_time_column、D11 走 stats、Q7 session/continuous 指标",
+      "commit": ""
+    },
+    {
+      "path": "astock/agent/chart_service.py",
+      "summary": "新增：唯一审计入口 render_chart（快照/HTML/PNG blob + record_artifact），只读 ArtifactReader、load_chart_artifact（as_recorded/recomputed 分离）、artifact_file",
+      "commit": ""
+    },
+    {
+      "path": "astock/agent/chart_spec.py",
+      "summary": "D10 契约：DATA_FIELDS 增 time_field/time_semantics，TIME_SEMANTICS=('bar_time','trade_date','none')，inline 必须显式声明，JSON schema 同步",
+      "commit": ""
+    },
+    {
+      "path": "astock/data.py",
+      "summary": "Q7：MARKET_TZ/BAR_SESSIONS、classify_bar_time、bar_sessions、continuous_bars、latest_bar_time 重写（接受 09:25/盘后、strict 独立）、validate_bar_time",
+      "commit": ""
+    },
+    {
+      "path": "astock/stats.py",
+      "summary": "D11：GROUP_AGG_FUNCS + GroupAggResult + aggregate_groups（dropna=False、空组/NaN 组保留并告警、同名后缀、稳定顺序）",
+      "commit": ""
+    },
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "figure_embed_html 用 embed_html + _embed_div_id() 每图唯一 div_id，legacy HTML 回退",
+      "commit": ""
+    },
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "默认 renderer 改 chart_service.render_chart；metadata 增 view_as_of/view_time/session/degraded（getattr 容错）",
+      "commit": ""
+    },
+    {
+      "path": "tools/artifact_admin.py",
+      "summary": "新增维护 CLI：correct（必填 --actor/--reason，仅 CORRECTION_FIELDS）、gc（prune_orphan_blobs，默认 dry-run）",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "重写：Q1/Q3/Q5/D9/D10/D11/Q7 全部验收用例（60 passed）",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_artifact_admin.py",
+      "summary": "新增 4 个用例：actor/理由必填、correction 追加版本且历史不变、禁止改身份字段、GC 默认 dry-run",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_data_pit_events.py",
+      "summary": "LatestBarTimeTests 重写：09:25/盘后/午休/closed 边界、classify_bar_time 时区、validate_bar_time strict、continuous_bars",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_agent_chart_png_export.py",
+      "summary": "改走 chart_service；png_digest 裸 hex 与 content_digest 前缀口径断言",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_agent_chart_png_zh.py",
+      "summary": "改走 chart_service.render_chart(png_mode='require')",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_data_time_semantics.py",
+      "summary": "spy renderer 改 chart_service.render_chart",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "EXPECTED_CHECKED_MODULES 42→43（新增 chart_service 受 mypy 检查）",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_agent_chart_spec.py",
+      "summary": "冻结文档用例改为指向 interface_freeze_v2.md",
+      "commit": ""
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v2.md",
+      "summary": "新增：v2 生效冻结清单（render 语义/审计表/回放/GC/D10/D11/Q7）",
+      "commit": ""
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v2_draft.md",
+      "summary": "改为指向 v2 正式冻结的简短说明",
+      "commit": ""
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "头注版本边界指向 v2 文件",
+      "commit": ""
+    },
+    {
+      "path": "docs/AStockAgent_chart_pipeline_decisions_v1.md",
+      "summary": "追加 §7 v2 裁决与落地表（D2/D3/D4/D5/D9/D10/D11/Q7）",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-016-chart-spec.md",
+      "summary": "追加落地回填：Q4/Q5/D10/D11 + time_field/time_semantics",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-017-agent-audit-security.md",
+      "summary": "追加落地回填：三表永久行/触发器/GC dry-run/correction 维护脚本/废弃合成 run",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-018-realtime-quotes.md",
+      "summary": "追加落地回填：data_* vs view_*、集合竞价/盘后 session、strict opt-in、回放两模式",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/architecture/modules.json",
+      "summary": "新增 chart_service 模块，边改为 chart_service→chart_render/agent_store、agent_tools→chart_service、chart_render→agent_store(read-only-meta)",
+      "commit": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider -m \"not png\" --timeout=600",
+      "result": "全量非 PNG 用例通过（CI 的 test job 同口径）",
+      "passed": true,
+      "evidence": "771 passed, 5 deselected, 1 warning, 12 subtests passed in 74.19s"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_render.py tests/test_artifact_admin.py -q -p no:cacheprovider",
+      "result": "目标用例通过",
+      "passed": true,
+      "evidence": "64 passed (chart_render 60 + artifact_admin 4)"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_data_pit_events.py tests/test_data_time_semantics.py -q -p no:cacheprovider",
+      "result": "Q7 时间语义相关用例通过",
+      "passed": true,
+      "evidence": "52 passed, 1 warning in 4.61s"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png -p no:cacheprovider --timeout=300",
+      "result": "PNG 导出链路（真实 Kaleido/Chrome）通过",
+      "passed": true,
+      "evidence": "5 passed, 1 warning in 20.45s"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "CI lint 口径通过",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "CI 类型检查口径通过",
+      "passed": true,
+      "evidence": "Success: no issues found in 44 source files"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "danger-full-access 文件权限（跑测试用）",
+      "reason": "pytest 通过 tempfile.mkdtemp 创建 0700 临时目录，workspace-write 沙箱下子进程写 parquet 报 PermissionError；本会话已由用户授予 danger-full-access",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub push + 开 PR",
+      "reason": "gh CLI 已登录（b199510027373-create，scope 含 repo/workflow），已推送 feat/chart-pipeline-v2 并开 PR #36",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/chart-pipeline-v2",
+    "commit": "c01f365",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/36",
+    "ci": "pending（PR #36：test + png-export 两个 job 均在跑）",
+    "merge": "未合并（等待评审批准）",
+    "status": "pr-open"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "1) 等 PR #36 CI（test + png-export）转绿后按需补一份 update handoff 记录 CI 结论；2) 请评审重点看：chart_render 的 D10 时间列契约（artifact 记录值例外路径是否可接受）、Q1 图注文案与 §3.2 表格逐条一致性、chart_service 的 artifact 身份拼装（identity_spec 含 include_plotlyjs）是否与 Q3 定义一致；3) 评审若要求保留 chart_render.render 兼容别名，可在 chart_service 里加薄封装；4) plan-20261114-003（hfq）合并后需确认 caption 价格口径文案与新 adj=none 口径联动。",
+  "createdAt": "2026-11-19T13:15:27.665Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-024.md"
+}

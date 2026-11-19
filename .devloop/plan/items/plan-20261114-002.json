@@ -48,9 +48,12 @@
       "stats",
       "data"
     ],
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/36",
+    "branch": "feat/chart-pipeline-v2",
     "test": [
-      "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests/test_agent_chart_render.py tests/test_artifact_admin.py -q -p no:cacheprovider => 64 passed (60 + 4)",
+      "CI（PR #36，run 44531537237）：test job pass 1m8s、png-export job pass 1m18s",
       "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests -q -p no:cacheprovider -m \"not png\" --timeout=600 => 771 passed, 5 deselected, 12 subtests passed in 74.19s",
+      "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests/test_agent_chart_render.py tests/test_artifact_admin.py -q -p no:cacheprovider => 64 passed (60 + 4)",
       "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests/test_data_pit_events.py tests/test_data_time_semantics.py -q -p no:cacheprovider => 52 passed in 4.61s",
       "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png -p no:cacheprovider --timeout=300 => 5 passed in 20.45s",
       "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m ruff check astock tests => All checks passed!",
@@ -58,6 +61,6 @@
     ]
   },
   "createdAt": "2026-11-13T16:36:35.797Z",
-  "updatedAt": "2026-11-19T13:13:55.427Z",
+  "updatedAt": "2026-11-19T13:17:07.859Z",
   "devSessionId": "session-7f3600bf-2abb-44b4-a4c7-372e79943be7"
 }
