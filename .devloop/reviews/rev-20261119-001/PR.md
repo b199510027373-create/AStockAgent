@@ -1,93 +1,86 @@
 # PR 评审：评审：Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图
 
-> 自动生成于 2026-11-19T01:33:00.191Z；可直接转交开发会话。
+> 自动生成于 2026-11-19T07:10:56.621Z；可直接转交开发会话。
 
 ## 概览
 
 - 线程：`rev-20261119-001`
 - 计划项：`plan-20261107-007`
 - 分支：`feat/agent-chat-ui` → `main`
-- 轮次：第 2 轮（diff）
-- 结论：需要修改（request_changes）
+- 轮次：第 3 轮（full）
+- 结论：通过（approve）
 - 开发会话：`session-b2a69179-5e60-4872-91f0-f30a7d3402d1`
-- 本轮问题：1（P0 0 / P1 1 / P2 0）
-- 线程未闭环：P0 0 / P1 3 / P2 4
+- 本轮问题：1（P0 0 / P1 0 / P2 1）
+- 线程未闭环：P0 0 / P1 0 / P2 1
 
 ## 本轮结论
 
-第 2 轮（scope=diff，base=1ba2293 → head=eca6667）复核结论：第 1 轮 6 条问题全部有落地修复与证据，但本轮修复自身新引入 1 条 P1（iss-mwmvlhso-cd6199），因此仍 request_changes，openP0=0 / openP1=1。
+第 3 轮（scope=full，范围 main → a1e15d1，本轮变更集中在 5cceb3c 的 astock/agent/chat.py 与 tests/test_agent_chat.py）结论：approve，openP0=0 / openP1=0；新记 1 条 P2（iss-mwn7nzfl-0c196c，不阻断验收，需在合并 PR #32 前二选一定稿）。
 
-一、第 1 轮 6 条逐条复核（均已修复，接受关闭）
-1. iss-mwmtsmue-f7a49c（P1 审批审计未接线）→ 已修：app.py:28 import DEFAULT_DB_PATH as AGENT_DB_PATH，app.py:481-487 把 db_path=AGENT_DB_PATH 传入 build_agent_chat_tab；astock/agent/chat.py 新增 db_path property（chat.py:677-680）并透传到 AgentRuntime(db_path=...)，agent_runs/agent_steps 真正落库。证据：tests/test_agent_chat.py test_run_and_step_records_are_persisted（sqlite 直查 agent_runs 1 行、agent_steps == len(steps)+1 且末行 kind=final）、test_db_path_reaches_controller，加真机 agent_runs=9 / agent_steps=27。
-2. iss-mwmtsmv4-4f6d7f（P1 AC2–AC5 无真机证据）→ 已修：.smoke-agent-ui/shots/1-figure-iframe.png … 8-citation-1280.png 共 8 张截图 + smoke_drive.py / degraded_drive.py / visual_drive.py / cdp.py 等驱动脚本已随分支提交；handoff ho-20261119-011/012/013 记录 CDP 断言（AC1 附件 2/2、AC2 20 帧+3 步、AC3 三个 iframe srcdoc、AC4 点击 #cite-1、AC5 中断保留 121 字且可立刻再问、降级横幅+128 字回答）。CI run 44436480771 全绿（含 png-export），PR #32 未合并。
-3. iss-mwmtt39d-d8e449（P2 每帧重算引用）→ 已修：agent_chat_ui.py 内嵌 citations_block() 按 (label, page, sheet, file_id) 指纹缓存 + render_citations_html(memo=...)，只在变化时重算；证据 test_citation_html_rendered_once_per_round、test_memo_reuses_resolved_details。
-4. iss-mwmtt3ab-775ed6（P2 建模型/检索阶段中断失效 + 死 cancel 参数）→ 已修：worker 直接传 cancel_event=self._cancelled，删除局部 threading.Event，ask() 在 _ensure_runtime 后新增前置检查（chat.py:752-756），证据 test_interrupt_before_runtime_starts_skips_run。但该修复的「无条件 runtime.request_interrupt()」引入了本轮新 P1，见下。
-5. iss-mwmtta2g-c95a18（P2 工作表级匹配却宣称行/单元格定位）→ 已修：resolve_citation 记录 matched_scope，工作表级命中且引用带行/单元格时 note 改为「工作表级定位：未精确到第 N 行/单元格 X，先展示该工作表首段内容。」；证据 test_sheet_level_match_with_cell_does_not_claim_cell_precision。
-6. iss-mwmtta3c-cfdaaa（P2 三处测试缺口）→ 已修：补 test_page_mismatch_falls_back_to_first_chunk、test_more_than_limit_truncates_with_hint（21 条 → 20 卡 +「还有 1 条引用未展示」）、test_busy_round_is_rejected_and_lock_released 等 10 例，目标测试 84 passed。
+一、第 2 轮 P1（iss-mwmvlhso-cd6199）已闭环，逐条核实
+1. 三态中断判定（astock/agent/chat.py:703-731）：run 在途（`self._running.is_set()`）→ 置 `_cancelled` + `runtime.request_interrupt()`，返回「已请求中断…」；空闲（`not self._busy.locked()`）→ 直接返回「当前没有正在生成的回答。」且不改任何状态；busy 但 run 未在途（建模型/检索阶段或流式阶段）→ 只置 `_cancelled`/`_stop_output`，绝不碰 runtime 的中断标记。第 2 轮的两条污染路径（run 已返回后点中断、runtime 已缓存时预运行阶段中断）均已被这条分支切断。
+2. worker 侧生命周期（chat.py:779-796）：`self._running.set()` 在 `runtime.run(...)` 之前，`finally: self._running.clear()` 在投递 result 之前——与注释一致，主线程开始流式输出时 runtime 已不在途，因此流式阶段的点击不会再被误判为「在途中断」。
+3. run 在途时的既有语义未被破坏：`_cancelled` 仍作为 `cancel_event` 传入（chat.py:783-787），`_guard` 会在检查点生效；`AgentRuntime._interrupt` 只在 run() finally 清理（runtime.py:512）这一约束没有被绕过，也没有改成「run() 入口 clear」，tests/test_agent_runtime.py:215-229 钉住的 pre-run 语义保持原样。
+4. 回归用例到位（tests/test_agent_chat.py 新增 3 条）：test_interrupt_after_finished_run_does_not_poison_next_question（空闲点击 → 「没有正在生成」→ 第二问 COMPLETED、1 步、answer 含 1680.00、done 不含「已中断」）、test_stop_output_during_streaming_keeps_text_and_next_question_completes（流式阶段点击 → 保留已产出分片、下一问 COMPLETED）、test_interrupt_while_runtime_ready_does_not_poison_next_question（runtime 已缓存时在 context_provider 阶段中断 → 本轮 0 步中断收尾、下一问仍 COMPLETED）。三条都直击第 2 轮缺陷，不是形式化断言。
+5. 真机证据：.smoke-agent-ui/round3_drive.py 存在，shots/9-round3-idle-interrupt.png、10-round3-next-question.png、11-round3-midrun-interrupt.png 在评审工作区可见，handoff ho-20261119-015/016/017 记录 PASS 4/4（基线 3 步/408 字、空闲中断提示、第二问 3 步/408 字、生成中中断保留 121 字）。
+6. 质量门禁与交付记录：87 passed（84+3）、全量 747 passed / 79.07%、ruff/mypy 43 files/import app 全过、CI run 44439808455 与 44440100842 success（因本会话无 shell 工具，这两项依据 handoff ho-20261119-016/017 记录，未由我独立执行）。
 
-二、本轮新问题（必须修）
-- iss-mwmvlhso-cd6199（P1，astock/agent/chat.py:700-708、752-756）：interrupt() 现在无条件把中断转发给缓存复用的 runtime，而 runtime._interrupt 只在 run() 的 finally（runtime.py:512）清理。于是在「run 已返回、回答仍在流式输出」或「建模型/新闻检索阶段」点「⏹」会让下一问在首个 _guard（runtime.py:645-647）直接判 INTERRUPTED：零步骤、文案「已中断」。修法：控制器用 self._running 事件标记 run 是否真在途（worker set/finally clear），仅 _running.is_set() 时调 request_interrupt()；不要改成 run() 入口 clear（tests/test_agent_runtime.py:215-229 已钉住 pre-run 语义）；并按 issue 里的用例补「run 已结束后 interrupt() → 下一问仍 COMPLETED」的回归测试。
+二、第 1 轮 6 条复核（台账里已由开发回执 fixed，本轮再抽验，确认属实）
+- iss-mwmtsmue-f7a49c：app.py:481-487 传 `db_path=AGENT_DB_PATH`，chat.py:677-680 透传；test_run_and_step_records_are_persisted 直查 agent_runs/agent_steps。
+- iss-mwmtsmv4-4f6d7f：8 张截图 + CDP 驱动脚本 + AC1–AC5 断言记录。
+- iss-mwmtt39d-d8e449：citations_block() 指纹缓存 + render_citations_html(memo=...)，test_citation_html_rendered_once_per_round 约束。
+- iss-mwmtt3ab-775ed6：已由 chat.py:748-756 前置检查替代，并补齐三态语义（本轮再确认无误）。
+- iss-mwmtta2g-c95a18：matched_scope + 工作表级 note，test_sheet_level_match_with_cell_does_not_claim_cell_precision。
+- iss-mwmtta3c-cfdaaa：页未命中回退、>20 截断、busy 并发三条分支均有用例。
 
-三、残存风险（不计问题，要求第 3 轮带一句话结论）
-去掉 stop.click 的 cancels 后，若某次工具/模型调用长时间不返回（runtime.py:266-267 明确无法抢占），respond() 的 queue_.get()（chat.py:775-776）无超时会一直阻塞，busy 锁直到该调用返回才释放，期间提问均为「上一轮仍在生成」。请在第 3 轮 handoff 里说明是否接受该取舍（httpx 客户端有 read timeout，属于有界阻塞）或改为 queue_.get(timeout=...) 轮询 + 可中断收尾。
+三、验收标准对照（全部有代码 + 测试/真机证据）
+AC1 附件 1–5 + 解析状态：ingest_attachments/attachment_summary + handle_uploads，测试 csv+txt 与 6→5 上限；真机 2/2。
+AC2 流式 + 步骤时间线：iter_answer_chunks（40 字）+ render_steps_html（enumerate start=1、data-status），真机 20 帧/3 步。
+AC3 内嵌图 + spec/来源：figure_embed_html（iframe sandbox=allow-scripts、srcdoc 已转义、details 内 spec ≤4000/来源/artifact），真机 3 个 iframe。
+AC4 引用定位：collect_citations/resolve_citation/render_citations_html（cite-N 锚点、limit 20、未命中退回首段并给 note），真机点击 #cite-1。
+AC5 中断保留：三态中断 + 3 条回归 + 真机 121 字保留且可立刻再问。
+降级：model_banner 捕获异常出横幅、ask 在 _ensure_runtime 失败时 done 提示，真机 degraded 横幅 + 128 字回答。
 
-四、何时算完全解决
-开发在 PR #32 上按 iss-mwmvlhso-cd6199 的修法改 chat.py，补上「run 已结束中断不污染下一问」的回归用例并跑通目标测试 + 全量 + ruff/mypy，附一条真机 CDP 冒烟（连续两问之间点一次「⏹」，第二问仍返回带步骤的正常回答）；第 3 轮我只复核该条与残存风险说明，届时 openP0=0 且 openP1=0 即 approve 并标记完全解决。
+四、残存风险结论（第 2 轮第三节的答复）
+开发在 ho-20261119-015/016 明确答复「接受 respond() 里 queue_.get() 的阻塞式收取：生产路径阻塞有界（httpx 客户端 read timeout + runtime 每检查点 timeout_seconds），仅注入的 FakeModel 可无限阻塞，不用于生产」。我接受该取舍，不记为问题。补充两条供后续排期参考（不阻断）：①interrupt() 在 `_running.is_set()` 与 `request_interrupt()` 之间有极小的 TOCTOU 窗口（run 恰好在此刻返回并在 finally 清标记），若后续要彻底消除，建议在 AgentRuntime 侧加「非在途则忽略 request_interrupt」的自检；②.smoke-agent-ui/ 未被 git 跟踪，冒烟脚本与截图只存在于评审工作区与 handoff，换机器不可复现，建议后续入计划项或纳入仓库。
+
+五、本轮唯一未闭环项（P2，不阻断）
+iss-mwn7nzfl-0c196c：astock/agent_chat_ui.py:208-214 的 done 分支用完整 `result.answer` 覆盖了控制器已截断的分片（chat.py:817-831），导致流式阶段点「停止输出」后界面仍一次性显示全文，与状态栏「已停止输出：已生成的回答保留」矛盾。由开发在合并 PR #32 前二选一：方案 A 给 ChatEvent 加 stopped 标记并跳过覆盖 + 控制器/UI 两层用例 + 真机 shots/12；方案 B 保留现状但改文案为「已停止流式输出，完整回答已显示」并在 handoff 写明取舍。此条不影响 AC1–AC5 达标，故本轮 approve，plan-20261107-007 可置 done / progress 100；若选方案 A 建议同一 PR 内完成，选方案 B 则需在 PR 描述里写明该产品取舍。
 
 ## 本轮问题
 
-### P1 · 空闲/流式阶段点「中断」会给 runtime 留下未消费的中断标记，下一次提问被立刻判为「已中断」且零步骤
+### P2 · 流式阶段点「停止输出」被 done 帧覆盖：状态栏说已停止输出，界面却一次性显示完整回答
 
-- 位置：`astock/agent/chat.py:700-708,752-756`
+- 位置：`astock/agent_chat_ui.py:208-214`
 - 状态：未闭环
-- 置信度：0.9
+- 置信度：0.86
 
 **证据**
 
-ed4e44b 把 interrupt() 改成无条件转发（astock/agent/chat.py:700-708）：
+5cceb3c 新增的「流式阶段停止输出」在控制器侧生效，但在 UI 层被 done 帧覆盖掉：
 
-    self._cancelled.set()
-    runtime = self._runtime
-    if runtime is not None:
-        runtime.request_interrupt()
-    if self._busy.locked():
-        return "⏹ 已请求中断：当前步骤完成后停止，已产出的内容会保留。"
+1) 控制器截断：astock/agent/chat.py:817-831 —— 分片循环每 yield 一次就检查 `if self._stop_output.is_set(): break`，并把 done 文案改为「⏹ 已停止输出：已生成的回答保留。」，done 事件仍带 `result=result`（完整 answer）。
+2) UI 覆盖：astock/agent_chat_ui.py:208-214 的 done 分支
+       result: AgentRunResult | None = event.result
+       if result is not None:
+           ...
+           if result.answer:
+               chat[-1]["content"] = result.answer
+   即 done 帧无条件用完整 `result.answer` 覆盖已累积的分片内容。于是浏览器里点「⏹」后：流式追加确实停住（控制器 break），但紧接着 done 帧把整段回答一次性贴上去，用户看到的是「先停住、再全文出现」，与状态栏同时显示的「已停止输出：已生成的回答保留」自相矛盾，本轮新加的 `_stop_output` 在 UI 上等于只省了几帧、没有真正「停止输出」。
+3) 现有用例覆盖不到这个组合：新加的 tests/test_agent_chat.py::test_stop_output_during_streaming_keeps_text_and_next_question_completes 只在控制器事件层断言（done.text 含「停止输出」、answer 非空、下一问 COMPLETED），完全不经过 respond()；真机 round3_drive.py 的 4 条断言是基线 / 空闲点中断 / 第二问 / 生成中（run 在途）中断，也没有覆盖「run 已返回、流式中途点停止」这一路（.smoke-agent-ui/shots/11-round3-midrun-interrupt.png 是 run 在途场景）。
 
-1) runtime.request_interrupt() 只做 `self._interrupt.set()`（astock/agent/runtime.py:247-253），而 `self._interrupt` 全仓唯一 clear 点是 run() 的 finally（astock/agent/runtime.py:512），run() 入口（runtime.py:273-291）不 reset。
-2) self._runtime 首次 ask 后缓存复用（astock/agent/chat.py:832-843），因此从第二轮起 interrupt() 的 runtime 分支一定命中。
-3) 触发路径 A：一轮 run 已返回、生成器仍在推 answer 分片时点「⏹」→ busy 仍 locked、runtime 非 None → _interrupt 置位，但这次 run 的 finally 早在返回值时就清过了，之后无人清理。下一问 ask()：chat.py:727 只 clear `self._cancelled`，没有清 runtime._interrupt；worker 进入 runtime.run → 首个 _guard 命中 `if self._interrupt.is_set(): return StopReason.INTERRUPTED`（runtime.py:645-647）→ 零步骤，answer 为 _partial_answer(INTERRUPTED, []) = "未能完整完成本轮任务：用户中断。\n尚未执行任何工具。"，随后 chat.py:800-801 又覆盖成 _STOP_LABELS["interrupted"]。用户刚打的新问题一行步骤都没有就被判「已中断」。
-4) 触发路径 B：第二轮起在建模型/新闻检索阶段点「⏹」→ runtime 已存在 → 同样置位 _interrupt；chat.py:752-756 的前置检查直接 return，worker 从未启动，_interrupt 没人消费 → 下一问照样秒断。
-5) 现有用例覆盖不到：test_interrupt_before_runtime_starts_skips_run 用的是 BlockingRuntime（其 request_interrupt 只计数、run 不读中断标记），test_user_interrupt_returns_partial_result 只覆盖「run 进行中」；没有任何用例覆盖「run 已结束时 interrupt() → 下一问仍能正常回答」。清空会话按钮不受影响（new_session 在 chat.py:671-675 interrupt() 后立刻 self._runtime = None，被污染的实例被丢弃）。
-
-影响：每多点一次「⏹」（AC5 的按钮常驻可点），就白烧掉一个完整提问，且页面文案把用户的新问题说成「已中断」，与 AC2/AC5 的可预期行为不符。
+影响：不丢内容、不影响 AC5 的「已产出内容保留」，因此按提示级（P2）记录，不阻断本轮；但按钮语义与界面文案不一致，会让人误以为有 bug。
 
 **建议**
 
-把「是否真的有 run 在跑」显式建模，只在 run 真正在途时才转发中断；注意不要改成「run() 入口 clear self._interrupt」——tests/test_agent_runtime.py:215-229 已钉住「pre-run interrupt 在首个 guard 生效、本次消费、下次恢复」的 runtime 语义。
+二选一，合并 PR #32 前定稿并写进 handoff：
 
-建议实现（改动集中在 astock/agent/chat.py）：
-1) __init__ 增加 `self._running = threading.Event()`。
-2) ask() 的 worker 改为：
-       def worker() -> None:
-           self._running.set()
-           try:
-               result = runtime.run(prompt, cancel_event=self._cancelled, on_step=...)
-               queue_.put(("result", result))
-           except Exception as exc:
-               queue_.put(("error", exc))
-           finally:
-               self._running.clear()
-3) interrupt() 改为 `if runtime is not None and self._running.is_set(): runtime.request_interrupt()`；`_busy.locked()` 分支保留，用于返回文案（「已请求中断…」vs「当前没有正在生成的回答。」）。前置检查（chat.py:752-756）依赖 `self._cancelled` 收尾即可，此时不会再置 _interrupt，路径 B 随之消失。
-4) 补一条回归用例（真实 AgentRuntime + FakeModel，不 mock runtime）：先完成一问并断言 stop_reason==COMPLETED；再调 controller.interrupt() 断言返回「当前没有正在生成的回答。」；然后 ask("再查一次贵州茅台价格") 断言 result.stop_reason==COMPLETED、len(result.steps)>=1、answer 含 "1680.00"；同一用例再覆盖路径 B（runtime 已存在时在建模型阶段 interrupt → 该轮 0 次 run，随后一问仍 COMPLETED）。当前代码下这两条断言都会失败，可作为修复的验证标准。
+方案 A（推荐，真正实现「停止输出」）：给 ChatEvent 增加一个明确标记（如 `stopped: bool = False`），控制器在 chat.py:827-828 置 `_stop_output` 时把它设为 True 并在 done 事件上带出；agent_chat_ui.py:213-214 改成
+    if result.answer and not getattr(event, "stopped", False):
+        chat[-1]["content"] = result.answer
+这样停止输出时保留已累积的分片，done 只更新状态栏。补两条用例：①控制器层断言 done.stopped is True 且 `"".join(answer 分片)` 是 result.answer 的严格前缀；②UI 层用 respond() 直接驱动（像 test_citation_html_rendered_once_per_round 那样调用生成器），在第二个 answer 帧后调 controller.interrupt()，断言最终 chat[-1]["content"] 等于已累积分片而不是完整 result.answer。并把 round3_drive.py 增加一条「流式中途点停止」的真机断言（截图 shots/12）。
 
-## 历史未闭环问题
-
-- P1 · 生产入口未传 db_path：AI 对话的 run 与工具调用都不落 agent_runs/agent_steps（AGENT-02 / ADR-017） · `astock/agent_chat_ui.py:78-84`（第 1 轮）
-- P1 · AC2–AC5 缺真机 UI 证据：流式刷新、iframe 渲染、引用跳转、中断按钮只测了纯函数 · `tests/test_agent_chat.py:436-474`（第 1 轮）
-- P2 · 每个流式分片都重算引用卡片并同步读盘（glob 全部 meta.json + 整读正文），回答越长越卡 · `astock/agent_chat_ui.py:184-185`（第 1 轮）
-- P2 · 中断在「新闻检索/建模型」阶段完全失效且提示误导，本地 cancel Event 是死参数 · `astock/agent/chat.py:676-683`（第 1 轮）
-- P2 · 引用只匹配到工作表却显示「定位：…第 N 行/单元格」，精度被夸大且 note 为空 · `astock/agent/chat.py:515-525`（第 1 轮）
-- P2 · 测试缺口：引用未命中退回首段、>20 条截断提示、并发发送 busy 分支均无用例 · `tests/test_agent_chat.py:283-340`（第 1 轮）
+方案 B（接受现状）：在 astock/agent_chat_ui.py:213-214 上方加注释说明「停止输出只停止流式追加，done 帧仍显示完整回答」，同时把控制器 done 文案改成不宣称截断（例如「⏹ 已停止流式输出，完整回答已显示」），避免文案与界面不一致；并在 handler/handoff 里明确这是产品取舍。
 
 ## 变更文件
 

@@ -2,14 +2,14 @@
   "id": "plan-20261107-007",
   "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
   "description": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮。复用现有 Gradio 装配模式，不新增 Tab；保持页面在无模型/无网络时的降级可用。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-24",
   "due": "2026-12-02",
   "estimateH": 14,
-  "progress": 95,
+  "progress": 100,
   "acceptance": [
     "AI 对话 Tab 可上传 1–5 个文件并显示解析状态",
     "回答流式输出，工具步骤以时间线展示",
@@ -34,21 +34,22 @@
       "ADR-016"
     ],
     "branch": "feat/agent-chat-ui",
+    "commit": "fb185dc",
     "module": "agent_chat_ui",
     "test": [
-      ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q -> 84 passed",
-      ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" -> 744 passed, 5 deselected, 12 subtests; coverage TOTAL 79.04% (fail_under=76.45)",
-      "ruff check astock tests -> All checks passed; mypy astock app.py -> Success 43 files; python -c \"import app\" -> ok",
-      "Edge headless + CDP smoke (.smoke-agent-ui/smoke_drive.py) -> AC1 附件 2/2、AC2 流式 20 帧+3 步时间线、AC3 3 个 iframe、AC4 点击 #cite-1、AC5 中断保留 121 字、agent_runs=9/agent_steps=27",
-      "Edge headless + CDP degraded (.smoke-agent-ui/degraded_drive.py, AGENT_PROVIDER=rule) -> 横幅「规则兜底模式」+ 128 字回答",
-      "gh run view 44436201023 -> success (head 24b2190)",
-      "第 3 轮：pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q -> 87 passed（新增 3 条中断回归）",
-      "第 3 轮：coverage run -m pytest tests -q -m \"not png\" -> 747 passed; TOTAL 79.07%",
-      "第 3 轮：ruff All checks passed; mypy Success 43 files; import app ok",
-      "第 3 轮真机 CDP (.smoke-agent-ui/round3_drive.py) -> 空闲中断提示「当前没有正在生成的回答。」、第二问 3 步/408 字未被污染、生成中中断保留 121 字（shots/9,10,11）"
+      "P2 轮：pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q -> 89 passed（新增 stopped 断言、UI 保留分片、done 提前放锁 3 处）",
+      "P2 轮：coverage run -m pytest tests -q -m \"not png\" -> 749 passed, 5 deselected, 12 subtests; TOTAL 11399 stmts / 2384 miss = 79.09%",
+      "P2 轮：ruff All checks passed; mypy Success 43 files; import app ok",
+      "P2 轮真机 CDP (.smoke-agent-ui/round4_drive.py) -> 流式阶段点中断后界面保留 48 字 / 完整 2040 字，状态「⏹ 已停止输出：已生成的回答保留。」（shots/12）",
+      "提交 fb185dc fix(agent-ui): keep partial answer when output is stopped（3 文件 +91/−19）",
+      "第 3 轮：pytest 87 passed（新增 3 条中断回归）；coverage 747 passed / 79.07%；ruff+mypy+import ok",
+      "第 3 轮真机 CDP (.smoke-agent-ui/round3_drive.py) -> 空闲中断提示「当前没有正在生成的回答。」、第二问 3 步/408 字未被污染、生成中中断保留 121 字（shots/9,10,11）",
+      "首轮：coverage run -m pytest tests -q -m \"not png\" -> 744 passed, 12 subtests; TOTAL 79.04%",
+      "首轮真机 CDP smoke -> AC1 附件 2/2、AC2 流式 20 帧+3 步时间线、AC3 3 个 iframe、AC4 点击 #cite-1、AC5 中断保留 121 字、agent_runs=9/agent_steps=27",
+      "首轮降级 CDP (AGENT_PROVIDER=rule) -> 横幅「规则兜底模式」+ 128 字回答；gh run 44436201023 success"
     ]
   },
   "createdAt": "2026-11-07T14:12:13.272Z",
-  "updatedAt": "2026-11-19T01:51:56.637Z",
+  "updatedAt": "2026-11-19T09:22:35.682Z",
   "devSessionId": "session-b2a69179-5e60-4872-91f0-f30a7d3402d1"
 }

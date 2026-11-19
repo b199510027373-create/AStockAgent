@@ -1,0 +1,127 @@
+{
+  "id": "ho-20261119-019",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+  "summary": "第 4 轮：关闭评审线程最后一条 P2 iss-mwn7nzfl（方案 A）。ChatEvent 新增 stopped 字段，UI 在收到 stopped done 时不再用完整 result.answer 覆盖流式阶段已截断的分片，状态栏与界面内容一致。同时修复真机冒烟暴露的真实缺陷：Gradio 可能在收到 done 后不再 next()，原实现只靠 finally 放 busy 锁会永久占用 → 改为 finish() 在产出 done 前主动 release。新增 2 条用例（UI 保留分片、done 提前放锁）。验证：目标 89 passed；全量 749 passed / 覆盖率 79.09%；ruff、mypy 43 files、import app 全通过；round4 真机 CDP 显示界面保留 48 字（完整 2040 字），状态「⏹ 已停止输出：已生成的回答保留。」。提交 fb185dc 已 push 到 PR #32；计划项已置 done / progress 100。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮；复用现有 Gradio 装配模式，不新增 Tab；保持无模型/无网络时降级可用。",
+      "source": "plan-20261107-007 描述"
+    },
+    {
+      "id": "ac1",
+      "text": "AI 对话 Tab 可上传 1–5 个文件并显示解析状态。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac3",
+      "text": "图表在回答中内嵌渲染，可点开看 spec/来源。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "boundary",
+      "text": "v1 不做模型层流式（ChatModel/AgentModel 形参被测试冻结）；本任务的「流式」= UI 增量事件（步骤事件 + 按标点切片的回答分片）。",
+      "source": "docs/AStockAgent_interface_freeze_v1.md:37,127,445 + 架构门禁"
+    },
+    {
+      "id": "p2",
+      "text": "停止输出后，UI 不得用完整 result.answer 覆盖已截断分片；需与状态文案一致，并有控制器/UI 两层用例与真机证据。",
+      "source": "review thread rev-20261119-001 P2 iss-mwn7nzfl-0c196c"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "ChatEvent 新增 stopped 标记；ask() 在输出被停止时以 stopped=True 结束；新增 finish() 在产出 done 事件前主动释放 busy 锁，所有终止分支统一走 finish()",
+      "commit": "fb185dc"
+    },
+    {
+      "path": "astock/agent_chat_ui.py",
+      "summary": "done 分支仅在 not event.stopped 时用完整 result.answer 覆盖，避免覆盖流式阶段已截断的片段",
+      "commit": "fb185dc"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 UI 保留分片用例、done 提前放锁用例，并在控制器停止输出用例中断言 done.stopped",
+      "commit": "fb185dc"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q",
+      "result": "89 passed",
+      "passed": true,
+      "evidence": "89 passed, 1 warning in 11.24s（新增 test_stop_output_keeps_partial_answer_in_chat、test_done_event_releases_lock_before_generator_is_drained 及 done.stopped 断言）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && .venv\\Scripts\\python.exe -m coverage report -m",
+      "result": "749 passed, coverage 79.09%",
+      "passed": true,
+      "evidence": "749 passed, 5 deselected, 12 subtests in 86.42s；TOTAL 11399 stmts / 2384 miss = 79.09%（fail_under=76.45）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests; .venv\\Scripts\\python.exe -m mypy astock app.py; .venv\\Scripts\\python.exe -c \"import app\"",
+      "result": "ruff clean, mypy ok, import ok",
+      "passed": true,
+      "evidence": "All checks passed / Success: no issues found in 43 source files / import app ok"
+    },
+    {
+      "command": "Edge headless + CDP: .smoke-agent-ui/round4_app.py (7869) + round4_drive.py",
+      "result": "界面保留 48 字，未覆盖为全文",
+      "passed": true,
+      "evidence": "流式停止 OK：界面 48 字 / 完整回答 2040 字；状态=⏹ 已停止输出：已生成的回答保留。截图 .smoke-agent-ui/shots/12-round4-stop-output.png"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "推送分支与查询 GitHub CI",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "真实模型端到端验证；本任务用 FakeModel + 规则兜底覆盖，不需要新授权",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui",
+    "commit": "fb185dc",
+    "pr": "#32 https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "pending（fb185dc 已 push，等待本轮 CI）",
+    "merge": "未合并（计划项已 done，待 CI 绿后合并）",
+    "status": "pr-open"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-017",
+  "next": "1) 等 fb185dc 的 CI 全绿后在 PR #32 记录本轮修复（方案 A + 48/2040 字真机证据）并合并；2) 评审确认 iss-mwn7nzfl 可关闭后线程即可收尾；3) 残存风险（已在第 3 轮评审接受，此处再次记录）：interrupt() 与 request_interrupt() 之间存在极小 TOCTOU 窗口；queue_.get() 无超时但后端 httpx 有 read timeout，属有界阻塞；.smoke-agent-ui/ 冒烟夹具与截图未跟踪，换机不可复现，建议后续单独建计划项纳入受控测试资产。",
+  "createdAt": "2026-11-19T09:22:47.522Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-019.md"
+}
