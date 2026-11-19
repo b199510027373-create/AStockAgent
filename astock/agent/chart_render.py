@@ -1,20 +1,23 @@
-"""ChartSpec → Plotly Figure → 自包含 HTML / PNG artifact（ADR-016 §3、冻结清单 §3.4）。
+"""ChartSpec → Plotly Figure → 自包含 HTML（+ PNG bytes）：**纯渲染，不碰审计库**。
 
-职责边界：
+职责边界（Q5，2026-11-14 裁决）：
 
 - **只接受声明式 spec**：先过 :func:`astock.agent.chart_spec.validate_chart_spec`，
   再按 ``kind`` 分派到固定渲染函数；本模块没有 ``exec``/``eval``，也不拼接可执行代码，
-  ``transforms`` 的五个算子全部用 pandas 显式实现（白名单之外的 op 在校验阶段就被拒绝）。
-- **不重新发明计算**：MA/BOLL/MACD/RSI/KDJ 全部调用 :mod:`astock.indicators` 的既有实现；
-  行情由 :mod:`astock.data` 取，``data_as_of``/``data_time`` 由 ``data.latest_bar_time()``
-  统一产出（ADR-018 C1：工具与渲染器不得自行 ``strftime`` 拼时点）。
-- **每个产物可回放**：HTML 按 sha256 内容寻址落盘，写入 ``agent_artifacts``，``meta_json``
-  记录 ``{spec, params, data_as_of, data_time, source, code_version}`` 与数据快照，
-  凭 ``artifact_id`` 可原样复现（ADR-016 C3、冻结清单 §5）。
-- **降级不抛异常**：没有 kaleido 时只出 HTML，``png_path=None`` 且 ``degraded=True``，
-  调用方通过 :func:`figure_tool_result` 把 ``degraded`` 写进 ``ToolResult.metadata``。
-- **时点必须同屏**：图题角标与 ``ToolResult.text`` 同时展示 ``data_as_of`` 与 ``data_time``，
-  缺任一写「时点未知」，禁止只写「实时」（ADR-018 §2）。
+  ``transforms`` 的算子全部用 pandas / :mod:`astock.stats` 显式实现。
+- **不重新发明计算**：MA/BOLL/MACD/RSI/KDJ 全部调用 :mod:`astock.indicators`；
+  分组聚合调用 :func:`astock.stats.aggregate_groups`（D11：图上均值与表同口径）；
+  ``data_as_of``/``data_time`` 由 ``data.latest_bar_time()`` 统一产出（ADR-018 C1）。
+- **不写库、不落盘**：本模块只返回 HTML / PNG bytes / 数据快照 / meta 草稿；
+  artifact 身份、blob 写入与 ``record_artifact`` 全部由
+  :mod:`astock.agent.chart_service` 负责（唯一审计入口）。因此这里**不能** import
+  ``record_artifact``/``put_content``/``connect`` 等写路径，测试会静态扫描守住。
+- **时点分两套**（Q1）：``data_as_of``/``data_time`` 是 transforms **之前**的行情时点，
+  ``view_as_of``/``view_time`` 是图上的视图时点；图注同时展示（未知写「时点未知」，禁止猜）。
+- **D10 不猜时间列**：只认 spec 显式声明的 ``data.time_field``（或 ``encode.x`` 指向的、
+  值可证明为日期时间的列）；``code=20240104``、``label="2024-01-04 收盘"`` 一律不解析。
+- **Q7 接受特殊时段 bar**：09:25 集合竞价、盘后固定价都能画（``session`` 标注在 meta），
+  连续指标只用连续竞价 bar；盘前只有集合竞价数据时不回退前一日。
 
 groupby/agg 的输出列名规则：``"{field}_{func}"``（如 ``amount_sum``），多字段时按
 ``by`` 列 + 指标列顺序排列；模型在 ``encode.y`` 里要用这些名字（同一条 spec 可复现）。
@@ -26,7 +29,6 @@ import json
 import os
 import platform
 import re
-import sqlite3
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -34,7 +36,6 @@ from datetime import date, datetime, timedelta
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -43,45 +44,31 @@ from plotly.subplots import make_subplots
 
 from astock import __version__ as _PKG_VERSION
 from astock import data as market
-from astock import indicators
+from astock import indicators, stats
 from astock.agent.chart_spec import (
     ChartSpecError,
     SpecIssue,
     validate_chart_spec,
 )
 from astock.agent.store import (
-    DEFAULT_ARTIFACT_ROOT,
     PNG_DEGRADED_WARNING_PREFIX,
-    artifact_id_for,
-    canonical_json,
     compute_env_fingerprint,
-    connect,
-    data_snapshot_digest,
-    ensure_run,
-    fail_run,
-    get_artifact,
-    load_data_snapshot,
-    meta_digest,
-    normalize_content_digest,
-    put_content,
-    record_artifact,
-    sha256_bytes,
 )
 from astock.agent.types import ToolResult
 
 __all__ = [
     "CODE_VERSION",
     "DEFAULT_FONT_FAMILY",
-    "FIGURE_DIV_PREFIX",
+    "FIGURE_DIV_ID",
     "PRICE_DOWN",
     "PRICE_UP",
     "PNGExportError",
     "RenderedFigure",
     "apply_transforms",
-    "figure_div_id",
+    "embed_html",
     "figure_tool_result",
     "font_family",
-    "render",
+    "render_figure",
     "reset_png_probe_cache",
 ]
 
@@ -97,17 +84,15 @@ GRID = "rgba(0,0,0,0.06)"
 
 MAX_SNAPSHOT_ROWS = 5000
 
-#: 图表 div id 前缀。完整 id 由「规范化 spec + 数据快照」派生（见 :func:`figure_div_id`）：
-#: 同一份 spec 与数据 → 同一 div id → 同一字节 → 同一 artifact_id（可复现）；
-#: 不同 spec/数据 → 不同 id，避免同页多张图互相覆盖（评审 D4/Q3）。
-FIGURE_DIV_PREFIX = "astock-chart"
+#: 规范 HTML 的固定 div id（Q3）：artifact 字节必须稳定，所以**不**按图派生 id。
+#: 同页多图/重复嵌入选 :func:`embed_html` 换成每个 DOM 实例唯一的 id。
+FIGURE_DIV_ID = "astock-chart"
+_DIV_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+
+#: artifact meta 的 schema 版本（§3.6）：没有该键的历史 meta 一律视为 legacy。
+CHART_META_SCHEMA_VERSION = "chart_meta_v2"
 MINUTE_FREQS = ("1min", "5min", "15min", "30min", "60min")
 FREQ_ALIASES = {"day": "D", "week": "W", "month": "M"}
-#: 时点探测只认这些列名（防止把 ``code``/``label`` 之类误判成时间列，D10）。
-_TIME_COLUMN_NAMES = frozenset(
-    {"day", "date", "dt", "datetime", "trade_date", "trade_time", "time"}
-)
-_TIME_COLUMN_HINTS = ("date", "time")
 
 #: 中文字体栈（CSS ``font-family``，从左到右取第一个已安装字体）。
 #: Linux CI 装 fonts-noto-cjk，Windows 开发机用雅黑/黑体；可用 ``ASTOCK_CHART_FONT`` 覆盖。
@@ -195,18 +180,34 @@ def _chrome_identity() -> tuple[str | None, str]:
     return str(path), match.group(1) if match else "unknown"
 
 
-def figure_div_id(spec: Mapping[str, Any], snapshot: Mapping[str, Any]) -> str:
-    """确定性 div id：``astock-chart-<8 hex>``，输入 = 规范化 spec + 数据快照行。"""
-    seed = json.dumps(
-        {"spec": spec, "rows": snapshot.get("rows") or []},
-        ensure_ascii=False,
-        sort_keys=True,
-        default=str,
-    )
-    return f"{FIGURE_DIV_PREFIX}-{sha256_bytes(seed.encode('utf-8'))[:8]}"
+def embed_html(html: str, div_id: str) -> str:
+    """把规范 HTML 的固定 div id 换成该 DOM 实例唯一的 id（Q3，2026-11-14 裁决）。
+
+    规范 HTML 用固定 :data:`FIGURE_DIV_ID` 保证字节稳定（同 spec 同数据 → 同
+    ``content_digest``/``artifact_id``）；同页放两张图、或同一 artifact 重复嵌入时，
+    必须各自换 id，否则 Plotly 只会渲染最后一个 div。
+
+    契约：
+
+    - ``div_id`` 必须匹配 ``^[A-Za-z][A-Za-z0-9_-]{0,63}$``（Plotly/HTML id 约束）；
+    - 替换**全部** ``astock-chart`` 出现处（div id 与脚本里的 ``getElementById``）；
+    - 一处都没替换到时抛 ``ValueError``——说明传入的不是本渲染器的规范 HTML，
+      静默返回会让两张图共享 DOM id（宁可报错）。
+    """
+    target = str(div_id or "").strip()
+    if not _DIV_ID_RE.match(target):
+        raise ValueError(f"非法 div_id {div_id!r}：必须匹配 ^[A-Za-z][A-Za-z0-9_-]{{0,63}}$")
+    if target == FIGURE_DIV_ID:
+        return html
+    replaced = html.replace(FIGURE_DIV_ID, target)
+    if replaced == html or html.count(FIGURE_DIV_ID) == 0:
+        raise ValueError(
+            f"HTML 里找不到 {FIGURE_DIV_ID!r}，不能换成 {target!r}（只有 chart_render 产出的规范 HTML 支持 embed_html）"
+        )
+    return replaced
 
 
-def _runtime_versions() -> dict[str, str]:
+def runtime_versions() -> dict[str, str]:
     """记录复现所需的运行环境版本（plotly/kaleido 输出字节随版本漂移）。
 
     PNG 追溯要求「字体 + 版本」可查（评审 P1）：HTML 复现看 plotly，PNG 复现看
@@ -227,13 +228,13 @@ def _runtime_versions() -> dict[str, str]:
     }
 
 
-def _env_fingerprint(code_version: str) -> str:
-    """v2 artifact 环境身份：plotly + python + code_version（ADR-017 §4.4）。"""
-    versions = _runtime_versions()
+def env_fingerprint(code_version: str | None = None) -> str:
+    """v2 artifact 环境身份：plotly + python + code_version（规格 §4.4）。"""
+    versions = runtime_versions()
     return compute_env_fingerprint(
         plotly_version=str(versions.get("plotly_version") or ""),
         python_version=str(versions.get("python_version") or ""),
-        code_version=code_version,
+        code_version=code_version or CODE_VERSION,
     )
 
 
@@ -248,33 +249,55 @@ DataResolver = Callable[[Mapping[str, Any]], pd.DataFrame]
 
 @dataclass
 class RenderedFigure:
-    """渲染结果（冻结字段在前：``html``/``png_path``/``artifact_id``/``warnings``）。"""
+    """渲染结果（冻结字段在前：``html``/``png_path``/``artifact_id``/``warnings``）。
+
+    ``artifact_id``/``artifact_version``/``meta_digest``/``path``/``digest`` 由
+    :mod:`astock.agent.chart_service` 在写入审计库后回填；纯渲染阶段为空/None。
+    """
 
     html: str
     png_path: str | None
-    artifact_id: str
+    artifact_id: str = ""
     warnings: list[str] = field(default_factory=list)
     path: str = ""
     digest: str = ""
+    #: 行情时点（transforms **之前**，Q1）：``data_as_of`` 为交易日，``data_time`` 为 bar 时间。
     data_as_of: str = ""
     data_time: str = ""
+    #: 视图时点（transforms **之后**，Q1）：聚合后没有时间列时为空，图注写「视图时点未知」。
+    view_as_of: str = ""
+    view_time: str = ""
+    #: bar 时段（Q7）：``pre``/``continuous``/``post``/``closed``，日线为 ``close``。
+    session: str = ""
     source: str = ""
     spec: dict[str, Any] = field(default_factory=dict)
     params: dict[str, Any] = field(default_factory=dict)
     degraded: bool = False
-    run_id: str | None = ""
+    run_id: str | None = None
     code_version: str = CODE_VERSION
-    #: 时点语义：``market``=未被 transforms 裁剪的行情时点；``view``=图上前端视图时点；
-    #: ``unknown``=取不到时点（决策记录 D2/Q1）。
-    time_point_scope: str = "view"
-    #: 本次写入/复用的 ``agent_artifact_versions.version`` 与 meta digest（P2-3）。
     artifact_version: int | None = None
     meta_digest: str | None = None
+    #: 待写入/已写入的 v2 meta（``schema_version="chart_meta_v2"``）与可回放数据快照。
+    meta: dict[str, Any] = field(default_factory=dict)
+    snapshot: dict[str, Any] = field(default_factory=dict)
+    #: PNG 字节（纯渲染阶段只在内存里；落盘由 chart_service 负责）。
+    png_bytes: bytes | None = None
+    #: 旧版 artifact（meta 无 schema_version）：图注只能写「旧版记录时点（语义未区分）」。
+    legacy: bool = False
 
     @property
     def caption(self) -> str:
-        """图注：两个时点 + 价格口径（缺时点写「时点未知」）。"""
-        return _caption(self.spec, self.data_as_of, self.data_time)
+        """图注：行情时点 + 视图时点 + 口径；缺时点写「时点未知」，旧记录单独标注。"""
+        return _caption(
+            self.spec,
+            self.data_as_of,
+            self.data_time,
+            self.view_as_of,
+            self.view_time,
+            legacy=self.legacy,
+            session=self.session,
+            warnings=self.warnings,
+        )
 
     def summary_text(self) -> str:
         """一句话摘要，写进 ``ToolResult.text``（与图题角标同口径）。"""
@@ -282,7 +305,8 @@ class RenderedFigure:
         parts = [f"{title}：{self.caption}"]
         if self.degraded:
             parts.append("PNG 导出降级：仅 HTML（degraded）")
-        parts.append(f"artifact_id={self.artifact_id}")
+        if self.artifact_id:
+            parts.append(f"artifact_id={self.artifact_id}")
         return "；".join(parts)
 
     def to_dict(self) -> dict[str, Any]:
@@ -295,18 +319,24 @@ class RenderedFigure:
             "digest": self.digest,
             "data_as_of": self.data_as_of,
             "data_time": self.data_time,
+            "view_as_of": self.view_as_of,
+            "view_time": self.view_time,
+            "session": self.session,
             "source": self.source,
             "params": dict(self.params),
             "degraded": self.degraded,
             "run_id": self.run_id,
             "code_version": self.code_version,
-            "time_point_scope": self.time_point_scope,
             "artifact_version": self.artifact_version,
             "meta_digest": self.meta_digest,
         }
 
     def metadata(self) -> dict[str, Any]:
-        """写进 ``ToolResult.metadata`` 的固定键集（含 ``degraded`` 标注）。"""
+        """写进 ``ToolResult.metadata`` 的固定键集（含 ``degraded`` 标注）。
+
+        Q1：``data_as_of``/``data_time`` 保持行情时点（runtime/gateway 继续读它）；
+        ``view_as_of``/``view_time`` 只做展示；``session`` 标注集合竞价/盘后（Q7）。
+        """
         return {
             "artifact_id": self.artifact_id,
             "artifact_path": self.path,
@@ -314,7 +344,9 @@ class RenderedFigure:
             "figure_params": dict(self.params),
             "data_as_of": self.data_as_of,
             "data_time": self.data_time,
-            "time_point_scope": self.time_point_scope,
+            "view_as_of": self.view_as_of,
+            "view_time": self.view_time,
+            "session": self.session,
             "degraded": self.degraded,
             "warnings": list(self.warnings),
             "code_version": self.code_version,
@@ -355,15 +387,6 @@ def _frame_from_inline(data: Mapping[str, Any]) -> pd.DataFrame:
     return frame
 
 
-def _frame_from_snapshot(
-    meta: Mapping[str, Any], *, root: str | Path | None = None
-) -> pd.DataFrame:
-    snapshot = load_data_snapshot(meta, root=root)
-    rows = snapshot.get("rows") or []
-    fields = list(snapshot.get("fields") or [])
-    return pd.DataFrame(rows, columns=fields)
-
-
 def _range_window(range_value: str, *, end: date | None = None) -> tuple[date, date]:
     """冻结词表 → (start, end)：月档带 ``mo``、年档带 ``y``，不共用 ``1m``。"""
     today = end or date.today()
@@ -396,44 +419,10 @@ def _load_market_frame(data: Mapping[str, Any]) -> pd.DataFrame:
         days = max(1, min(30, (end - start).days + 1))
         frame = market.load_minute(ref, freq=period, days=days, adj=adj)
     else:
-        frame = market.load_daily(
-            ref, start=start.strftime("%Y%m%d"), end=end.strftime("%Y%m%d"), adj=adj
-        )
+        frame = market.load_daily(ref, start=start.strftime("%Y%m%d"), end=end.strftime("%Y%m%d"), adj=adj)
         if period in ("week", "month") and not frame.empty:
             rule = "W-FRI" if period == "week" else "ME"
             frame = market.resample_ohlcv(frame, rule)
-    return frame
-
-
-def _load_artifact_frame(
-    data: Mapping[str, Any],
-    conn: sqlite3.Connection,
-    *,
-    root: str | Path | None = None,
-) -> pd.DataFrame:
-    record = get_artifact(conn, str(data["ref"]))
-    if record is None:
-        raise ChartSpecError(
-            [SpecIssue("$.data.ref", f"artifact {data['ref']} 不存在")]
-        )
-    if record.kind not in ("chart", "table"):
-        raise ChartSpecError(
-            [
-                SpecIssue(
-                    "$.data.ref",
-                    f"artifact {data['ref']} 的 kind={record.kind}，不能作为图表数据源",
-                )
-            ]
-        )
-    frame = _frame_from_snapshot(record.meta, root=root)
-    if frame.empty:
-        raise ChartSpecError(
-            [SpecIssue("$.data.ref", f"artifact {data['ref']} 没有数据快照（v1 只回放快照）")]
-        )
-    snapshot_as_of = str(record.meta.get("data_as_of") or "")
-    if snapshot_as_of:
-        frame.attrs["data_as_of"] = snapshot_as_of
-        frame.attrs["data_time"] = str(record.meta.get("data_time") or "")
     return frame
 
 
@@ -442,22 +431,36 @@ def _resolve_frame(
     *,
     frame: pd.DataFrame | None,
     resolver: DataResolver | None,
-    conn: sqlite3.Connection,
-    artifact_root: str | Path | None = None,
 ) -> tuple[pd.DataFrame, str, list[str]]:
+    """取数：注入的 frame > 注入的 resolver > inline/market。
+
+    ``data.source="artifact"`` 必须由调用方注入 resolver（:mod:`astock.agent.chart_service`
+    用只读 ``ArtifactReader`` 实现）——渲染器不再直接读审计库（Q5）。
+    """
     warnings: list[str] = []
     source = str(data.get("source"))
     if frame is not None:
         resolved = frame.copy()
         warnings.append("使用调用方注入的 DataFrame（source 仅作标注）")
-    elif resolver is not None:
+    elif source == "artifact":
+        if resolver is None:
+            raise ChartSpecError(
+                [
+                    SpecIssue(
+                        "$.data.ref",
+                        "data.source=artifact 需要注入只读 resolver（chart_service.ArtifactReader），渲染器不直接读审计库",
+                    )
+                ]
+            )
         resolved = resolver(data).copy()
     elif source == "inline":
         resolved = _frame_from_inline(data)
     elif source == "market":
         resolved = _load_market_frame(data)
     else:
-        resolved = _load_artifact_frame(data, conn, root=artifact_root)
+        raise ChartSpecError(
+            [SpecIssue("$.data.source", f"未知 source {source!r}")]
+        )
     return resolved, source, warnings
 
 
@@ -480,9 +483,15 @@ def _require_column(frame: pd.DataFrame, column: Any, path: str) -> str:
 
 
 def apply_transforms(
-    frame: pd.DataFrame, transforms: Sequence[Mapping[str, Any]]
+    frame: pd.DataFrame,
+    transforms: Sequence[Mapping[str, Any]],
+    notes: list[str] | None = None,
 ) -> pd.DataFrame:
-    """按顺序应用 ``filter/groupby/agg/sort/limit``；其他 op 直接报错。"""
+    """按顺序应用 ``filter/groupby/agg/sort/limit``；其他 op 直接报错。
+
+    ``notes`` 非空时收集聚合层的显式告警（空组/NaN 组/输出改名，D11），
+    由调用方写进图注与 artifact meta 的 ``warnings``。
+    """
     out = frame.copy()
     for index, transform in enumerate(transforms):
         op = transform.get("op")
@@ -490,7 +499,7 @@ def apply_transforms(
         if op == "filter":
             out = _transform_filter(out, transform, path)
         elif op in ("groupby", "agg"):
-            out = _transform_group(out, transform, path)
+            out = _transform_group(out, transform, path, notes)
         elif op == "sort":
             out = _transform_sort(out, transform, path)
         elif op == "limit":
@@ -500,11 +509,12 @@ def apply_transforms(
     # pandas 的切片/排序不保证传播 attrs，而 artifact 回放要靠它做时点兜底。
     out.attrs = dict(frame.attrs)
     return out
+    # pandas 的切片/排序不保证传播 attrs，而 artifact 回放要靠它做时点兜底。
+    out.attrs = dict(frame.attrs)
+    return out
 
 
-def _transform_filter(
-    frame: pd.DataFrame, transform: Mapping[str, Any], path: str
-) -> pd.DataFrame:
+def _transform_filter(frame: pd.DataFrame, transform: Mapping[str, Any], path: str) -> pd.DataFrame:
     column = _require_column(frame, transform.get("field"), f"{path}.field")
     value = transform.get("value")
     cmp = transform.get("cmp")
@@ -527,14 +537,15 @@ def _transform_filter(
         else:  # pragma: no cover - 校验已拦截
             raise ChartSpecError([SpecIssue(f"{path}.cmp", f"不支持的比较符 {cmp!r}")])
     except TypeError as exc:
-        raise ChartSpecError(
-            [SpecIssue(f"{path}.value", f"与列 {column!r} 的类型不兼容：{exc}")]
-        ) from exc
+        raise ChartSpecError([SpecIssue(f"{path}.value", f"与列 {column!r} 的类型不兼容：{exc}")]) from exc
     return frame[mask.fillna(False)].copy()
 
 
 def _transform_group(
-    frame: pd.DataFrame, transform: Mapping[str, Any], path: str
+    frame: pd.DataFrame,
+    transform: Mapping[str, Any],
+    path: str,
+    notes: list[str] | None = None,
 ) -> pd.DataFrame:
     by = transform.get("by")
     by_list = [by] if isinstance(by, str) else list(by or [])
@@ -543,24 +554,24 @@ def _transform_group(
     metrics = dict(transform.get("metrics") or {})
     if not metrics:
         raise ChartSpecError([SpecIssue(f"{path}.metrics", "metrics 不能为空")])
-    spec: dict[str, tuple[str, str]] = {}
-    for column, func in metrics.items():
+    for column in metrics:
         _require_column(frame, column, f"{path}.metrics.{column}")
-        spec[f"{column}_{func}"] = (column, str(func))
-    grouped = frame.groupby(by_list, dropna=False).agg(**spec).reset_index()
-    return grouped
+    # D11：聚合口径只在 astock.stats 里实现一次，图上均值必须与统计表一致。
+    try:
+        result = stats.aggregate_groups(frame, by=by_list, metrics=metrics)
+    except ValueError as exc:
+        raise ChartSpecError([SpecIssue(f"{path}.metrics", str(exc))]) from exc
+    if notes is not None:
+        notes.extend(result.warnings)
+    return result.frame
 
 
-def _transform_sort(
-    frame: pd.DataFrame, transform: Mapping[str, Any], path: str
-) -> pd.DataFrame:
+def _transform_sort(frame: pd.DataFrame, transform: Mapping[str, Any], path: str) -> pd.DataFrame:
     column = _require_column(frame, transform.get("by"), f"{path}.by")
     return frame.sort_values(column, ascending=not bool(transform.get("desc", False)), kind="stable")
 
 
-def _transform_limit(
-    frame: pd.DataFrame, transform: Mapping[str, Any], path: str
-) -> pd.DataFrame:
+def _transform_limit(frame: pd.DataFrame, transform: Mapping[str, Any], path: str) -> pd.DataFrame:
     n = int(transform.get("n", 0))
     if n <= 0:
         raise ChartSpecError([SpecIssue(f"{path}.n", "n 必须 ≥ 1")])
@@ -574,11 +585,21 @@ def _transform_limit(
 # ---------------------------------------------------------------------------
 
 
-def _indicator_frame(frame: pd.DataFrame, layers: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """按 layers 计算覆盖列与副图指标，返回 ``{"overlays": {...}, "panes": [...]}``。"""
+def _indicator_frame(
+    frame: pd.DataFrame,
+    layers: Sequence[Mapping[str, Any]],
+    *,
+    source_frame: pd.DataFrame | None = None,
+) -> dict[str, Any]:
+    """按 layers 计算覆盖列与副图指标，返回 ``{"overlays": {...}, "panes": [...]}``。
+
+    ``source_frame`` 是计算指标的样本（Q7：只含连续竞价 bar）。画图仍用 ``frame``
+    （含 09:25/盘后 bar），指标按索引对齐回 ``frame``，非连续 bar 处为 NaN。
+    """
+    base = frame if source_frame is None else source_frame
     overlays: dict[str, pd.Series] = {}
     panes: list[dict[str, Any]] = []
-    close = frame["close"] if "close" in frame.columns else None
+    close = base["close"] if "close" in base.columns else None
     ma_windows: list[int] = []
     boll_specs: list[tuple[int, float]] = []
     for layer in layers:
@@ -595,35 +616,43 @@ def _indicator_frame(frame: pd.DataFrame, layers: Sequence[Mapping[str, Any]]) -
             panes.append(dict(layer))
     if close is not None:
         for window in ma_windows:
-            overlays[f"ma{window}"] = indicators.sma(close, window)
+            overlays[f"ma{window}"] = indicators.sma(close, window).reindex(frame.index)
         for window, k in boll_specs:
             boll = indicators.boll(close, n=window, k=k)
             for column in boll.columns:
-                overlays[column] = boll[column]
-    return {"overlays": overlays, "panes": panes}
+                overlays[column] = boll[column].reindex(frame.index)
+    return {"overlays": overlays, "panes": panes, "indicator_frame": base}
 
 
 def _pane_series(
-    frame: pd.DataFrame, pane: Mapping[str, Any]
+    frame: pd.DataFrame,
+    pane: Mapping[str, Any],
+    *,
+    source_frame: pd.DataFrame | None = None,
 ) -> dict[str, pd.Series] | pd.DataFrame:
+    """副图指标序列；``source_frame``（Q7：只含连续竞价 bar）用于计算，按索引对齐回图上。"""
+    base = frame if source_frame is None else source_frame
+    index = frame.index
     kind = pane["type"]
-    close = frame["close"]
+    close = base["close"]
     if kind == "macd":
-        return indicators.macd(
+        macd = indicators.macd(
             close,
             fast=int(pane.get("fast", 12)),
             slow=int(pane.get("slow", 26)),
             signal=int(pane.get("signal", 9)),
         )
+        return {name: series.reindex(index) for name, series in macd.items()}
     if kind == "rsi":
-        return {"rsi": indicators.rsi(close, n=int(pane.get("window", 14)))}
+        return {"rsi": indicators.rsi(close, n=int(pane.get("window", 14))).reindex(index)}
     if kind == "kdj":
-        return indicators.kdj(
-            frame,
+        kdj = indicators.kdj(
+            base,
             n=int(pane.get("n", 9)),
             k_period=int(pane.get("k", 3)),
             d_period=int(pane.get("m", 3)),
         )
+        return {name: series.reindex(index) for name, series in kdj.items()}
     raise ChartSpecError(  # pragma: no cover - 校验已拦截
         [SpecIssue("$.layers", f"不支持的副图指标 {kind!r}")]
     )
@@ -644,14 +673,50 @@ def _adj_label(adj: str) -> str:
     return f"口径未知（{adj}）"
 
 
-def _caption(spec: Mapping[str, Any], data_as_of: str, data_time: str) -> str:
-    as_of = data_as_of or "时点未知"
-    bar = data_time or "时点未知"
+def _caption(
+    spec: Mapping[str, Any],
+    data_as_of: str,
+    data_time: str,
+    view_as_of: str = "",
+    view_time: str = "",
+    *,
+    legacy: bool = False,
+    session: str = "",
+    warnings: Sequence[str] = (),
+) -> str:
+    """图注：行情时点 + 视图时点（Q1），并标注竞价/盘后时段（Q7）。
+
+    组合口径见变更说明 §3.2（``行情 X · 视图截止 Y`` / ``行情 X（视图一致）`` /
+    ``视图时点未知（聚合后无时间列）`` / ``行情时点未知 · 视图 Y`` /
+    旧版「旧版记录时点 X（语义未区分）」）。
+    """
     data = spec.get("data") or {}
-    parts = [f"数据截止 {as_of}", f"最新 bar {bar}"]
+    period = str(data.get("period") or "day")
+    market = data_time or data_as_of
+    view = view_time or view_as_of
+    parts: list[str] = []
+    if legacy:
+        parts.append(f"旧版记录时点 {market or '未知'}（语义未区分）")
+    elif not market and not view:
+        parts.append("行情时点未知 · 视图时点未知")
+    elif not market:
+        parts.append(f"行情时点未知 · 视图 {view}")
+    elif not view:
+        parts.append(f"行情 {market} · 视图时点未知（聚合后无时间列）")
+    elif view_as_of and view_as_of != data_as_of:
+        parts.append(f"行情 {market} · 视图截止 {view_as_of}")
+    elif view == market:
+        parts.append(f"行情 {market}（视图一致）")
+    else:
+        parts.append(f"行情 {market} · 视图 {view}")
+    tag = {"pre": "集合竞价（09:15–09:29）", "post": "盘后固定价（15:00 后）"}.get(session)
+    if tag and not legacy:
+        parts.append(tag)
+    if session == "pre" and period not in ("day", "week", "month") and not legacy:
+        parts.append("盘前，暂无连续竞价数据")
     if data.get("source") == "market":
         parts.append(f"价格口径：{_adj_label(str(data.get('adj', 'qfq')))}")
-        parts.append(f"周期：{data.get('period', 'day')}")
+        parts.append(f"周期：{period}")
     else:
         parts.append(f"数据来源：{data.get('source', 'inline')}")
     return " · ".join(parts)
@@ -690,75 +755,145 @@ def _figure_title(spec: Mapping[str, Any], caption: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+#: D10：可证明的时间字面量——只认 ``YYYY-MM-DD`` / ``YYYY-MM-DD HH:MM[:SS]``。
+#: ``20240104``（字符串代码）、``20240104``（整数）、``2024-01-04 收盘``（文本标签）
+#: 一律不猜，必须由 spec 显式声明 ``data.time_field``。
+_TIME_VALUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$")
+
+
+def _is_provable_time_column(frame: pd.DataFrame, column: str) -> bool:
+    """整列都能证明是时间：datetime 类型，或全部是 ISO 日期/时间字面量（D10）。"""
+    if column not in frame.columns:
+        return False
+    series = frame[column]
+    if pd.api.types.is_datetime64_any_dtype(series.dtype):
+        return True
+    values = [value for value in series.tolist() if not _is_missing(value)]
+    if not values:
+        return False
+    return all(isinstance(value, str) and bool(_TIME_VALUE_RE.match(value.strip())) for value in values)
+
+
+def _is_missing(value: Any) -> bool:
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):  # pragma: no cover - 非标量
+        return False
+
+
+def resolve_time_column(
+    frame: pd.DataFrame,
+    data: Mapping[str, Any],
+    *,
+    encode: Mapping[str, Any] | None = None,
+    path: str = "$.data",
+) -> str | None:
+    """确定时间列（D10 唯一入口）：**只接受可证明的时间列，绝不猜**。
+
+    返回 ``None`` 表示 ``data.time_semantics="none"``（数据本身没有时间语义，
+    图注只能写「视图时点未知」，且不得编造 ``data_as_of``）。
+
+    拒绝的情形（抛 :class:`ChartSpecError`，不出图）：
+
+    - ``data.time_field`` 指向不存在 / 不能证明是时间的列；
+    - 未声明 ``time_field``，且 ``encode.x`` / ``trade_date`` / ``trade_time`` 里
+      没有可证明的时间列（含 ``code="20240104"``、``label="2024-01-04 收盘"``）。
+    """
+    semantics = str(data.get("time_semantics") or "bar_time")
+    declared = data.get("time_field")
+    if declared:
+        name = str(declared)
+        if name not in frame.columns:
+            raise ChartSpecError(
+                [
+                    SpecIssue(
+                        f"{path}.time_field",
+                        f"time_field={name!r} 不在数据列 {list(frame.columns)} 里",
+                    )
+                ]
+            )
+        if not _is_provable_time_column(frame, name):
+            raise ChartSpecError(
+                [
+                    SpecIssue(
+                        f"{path}.time_field",
+                        f"列 {name!r} 不是可证明的时间列：只接受 datetime 或 "
+                        "YYYY-MM-DD[ HH:MM[:SS]]，字符串代码/文本标签/纯数字不猜",
+                    )
+                ]
+            )
+        return name
+    if semantics == "none":
+        return None
+    candidates: list[str] = []
+    if encode:
+        x = encode.get("x")
+        if x:
+            candidates.append(str(x))
+    candidates.extend(["trade_time", "trade_date"])
+    for candidate in candidates:
+        if _is_provable_time_column(frame, candidate):
+            return candidate
+    raise ChartSpecError(
+        [
+            SpecIssue(
+                f"{path}.time_field",
+                "无法证明时间语义：未声明 data.time_field，且 encode.x/trade_date/"
+                "trade_time 都不是可证明的时间列；请显式指定 time_field，"
+                '或声明 data.time_semantics="none"',
+            )
+        ]
+    )
+
+
 def _period_freq(period: str) -> str:
     return FREQ_ALIASES.get(period, period)
 
 
-def _time_points(
+def _time_probe(frame: pd.DataFrame, column: str) -> pd.DataFrame:
+    """把已确认的时间列复制成 ``trade_date``/``trade_time``，交给唯一生产者。"""
+    probe = frame.copy()
+    stamps = pd.to_datetime(probe[column], errors="coerce")
+    probe["trade_date"] = stamps
+    probe["trade_time"] = stamps
+    return probe
+
+
+def _bar_session(frame: pd.DataFrame, *, period: str, column: str | None) -> str:
+    """最新一根 bar 的时段：分钟档按 :func:`astock.data.classify_bar_time`，日线 ``close``。"""
+    if column is None or frame.empty:
+        return ""
+    key = _period_freq(period)
+    stamps = pd.to_datetime(frame[column], errors="coerce").dropna()
+    if stamps.empty:
+        return ""
+    return market.classify_bar_time(stamps.max(), key)
+
+
+def _points_from_frame(
     frame: pd.DataFrame,
     *,
     period: str,
-    data_as_of: str | None,
-    data_time: str | None,
+    column: str | None,
+    as_of: str | None,
+    bar_time: str | None,
     warnings: list[str],
+    label: str,
+    unknown_note: str,
 ) -> tuple[str, str]:
-    if data_as_of is not None or data_time is not None:
-        # 显式传参优先；显式空串表示「时点未知」，不再回退猜测（图注写「时点未知」）
-        return data_as_of or "", data_time or ""
-
-    if frame.empty:
-        # transforms 过滤后可能一行不剩；attrs 里还带着过滤前的旧时点，不能拿来用（评审 P2）。
-        warnings.append("数据为空（transforms 过滤后无行），时点未知（data_as_of/data_time 置空）")
+    """从一帧数据取 ``(as_of, time)``；显式参数优先，取不到就置空（不猜）。"""
+    if as_of is not None or bar_time is not None:
+        return as_of or "", bar_time or ""
+    if column is None:
         return "", ""
-
-    # 先按实际渲染的数据重算（transforms 之后调用），artifacts 的旧 meta 只作兜底，
-    # 避免把首次渲染的错误时点固化到回放结果里（评审 P1）。
-    probe = frame if _has_bar_time_column(frame) else _probe_time_frame(frame)
-    if probe is not None:
-        try:
-            return market.latest_bar_time(
-                probe, freq=_period_freq(period), notes=warnings
-            )
-        except ValueError as exc:
-            warnings.append(f"无法确定时点：{exc}")
-    snapshot_as_of = frame.attrs.get("data_as_of")
-    if snapshot_as_of:
-        warnings.append("artifact 快照缺少可用时间列，回退到快照记录的时点")
-        return str(snapshot_as_of), str(frame.attrs.get("data_time") or "")
-    warnings.append("无法确定时点：数据缺少交易日/时间列（data_as_of/data_time 置空）")
-    return "", ""
-
-
-def _has_bar_time_column(frame: pd.DataFrame) -> bool:
-    return "trade_date" in frame.columns or "trade_time" in frame.columns
-
-
-def _time_column_candidates(frame: pd.DataFrame) -> list[str]:
-    """时间列白名单：列名必须像日期/时间（防止 ``code``/``label`` 被误判，D10）。"""
-    names: list[str] = []
-    for column in frame.columns:
-        name = str(column).strip().lower()
-        if name in _TIME_COLUMN_NAMES or any(hint in name for hint in _TIME_COLUMN_HINTS):
-            names.append(str(column))
-    return names
-
-
-def _probe_time_frame(frame: pd.DataFrame) -> pd.DataFrame | None:
-    """inline 数据可能只带业务日期列（如 day），补一列 trade_date 交给唯一生产者。
-
-    只考虑列名像日期/时间的列（``_TIME_COLUMN_NAMES`` 或被 ``date``/``time`` 包含），
-    且该列必须整列可解析；否则返回 ``None``，由调用方写「时点未知」。
-    """
-    for column in _time_column_candidates(frame):
-        series = frame[column]
-        if pd.api.types.is_numeric_dtype(series.dtype):
-            continue
-        parsed = pd.to_datetime(series, errors="coerce")
-        if len(parsed) and bool(parsed.notna().all()):
-            probe = frame.copy()
-            probe["trade_date"] = parsed
-            return probe
-    return None
+    if frame.empty:
+        warnings.append(f"{label}为空（transforms 过滤后无行），{unknown_note}")
+        return "", ""
+    try:
+        return market.latest_bar_time(_time_probe(frame, column), freq=_period_freq(period), notes=warnings)
+    except ValueError as exc:
+        warnings.append(f"{label}：{exc}")
+        return "", ""
 
 
 def _intraday_rangebreaks() -> list[dict[str, Any]]:
@@ -802,11 +937,12 @@ def _build_candlestick(
     *,
     caption: str,
     period: str,
+    indicator_frame: pd.DataFrame | None = None,
 ) -> go.Figure:
     _ensure_price_columns(frame)
     layers = list(spec.get("layers") or [])
     volume_layer = any(layer["type"] == "volume" for layer in layers)
-    extras = _indicator_frame(frame, layers)
+    extras = _indicator_frame(frame, layers, source_frame=indicator_frame)
     pane_specs = extras["panes"]
 
     rows = 1 + (1 if volume_layer else 0) + len(pane_specs)
@@ -924,10 +1060,7 @@ def _build_candlestick(
     if volume_layer:
         volume_field = "vol" if "vol" in frame.columns else "volume"
         _require_column(frame, volume_field, "$.layers")
-        colors = [
-            PRICE_UP if close >= open_ else PRICE_DOWN
-            for open_, close in zip(frame["open"], frame["close"])
-        ]
+        colors = [PRICE_UP if close >= open_ else PRICE_DOWN for open_, close in zip(frame["open"], frame["close"])]
         figure.add_trace(
             go.Bar(
                 x=x_values,
@@ -944,7 +1077,7 @@ def _build_candlestick(
         current_row += 1
 
     for pane in pane_specs:
-        series = _pane_series(frame, pane)
+        series = _pane_series(frame, pane, source_frame=indicator_frame)
         kind = pane["type"]
         columns = list(series.columns) if isinstance(series, pd.DataFrame) else list(series)
         for index, column in enumerate(columns):
@@ -1060,9 +1193,7 @@ def _build_xy(figure_kind: str, frame: pd.DataFrame, spec: Mapping[str, Any], ca
                     x=x_values, y=values, name=column, mode="markers", marker={"size": 7, "color": color}
                 )
         else:
-            trace = go.Scatter(
-                x=x_values, y=values, name=column, mode="lines", line={"color": color, "width": 1.6}
-            )
+            trace = go.Scatter(x=x_values, y=values, name=column, mode="lines", line={"color": color, "width": 1.6})
         figure.add_trace(trace)
 
     _add_annotations(figure, frame, spec, x_values=x_values, row=None)
@@ -1085,9 +1216,7 @@ def _build_heatmap(frame: pd.DataFrame, spec: Mapping[str, Any], caption: str) -
     x_field = _require_column(frame, encode.get("x"), "$.encode.x")
     y_field = _require_column(frame, encode.get("y"), "$.encode.y")
     value_field = _require_column(frame, encode.get("color"), "$.encode.color")
-    pivot = frame.pivot_table(
-        index=y_field, columns=x_field, values=value_field, aggfunc="mean"
-    )
+    pivot = frame.pivot_table(index=y_field, columns=x_field, values=value_field, aggfunc="mean")
     figure = go.Figure(
         go.Heatmap(
             z=pivot.to_numpy(),
@@ -1133,11 +1262,22 @@ def _build_histogram(frame: pd.DataFrame, spec: Mapping[str, Any], caption: str)
 
 
 def _build_figure(
-    frame: pd.DataFrame, spec: Mapping[str, Any], *, caption: str, period: str
+    frame: pd.DataFrame,
+    spec: Mapping[str, Any],
+    *,
+    caption: str,
+    period: str,
+    indicator_frame: pd.DataFrame | None = None,
 ) -> go.Figure:
     kind = str(spec["kind"])
     if kind == "candlestick":
-        figure = _build_candlestick(frame, spec, caption=caption, period=period)
+        figure = _build_candlestick(
+            frame,
+            spec,
+            caption=caption,
+            period=period,
+            indicator_frame=indicator_frame,
+        )
     elif kind == "heatmap":
         figure = _build_heatmap(frame, spec, caption)
     elif kind == "histogram":
@@ -1234,7 +1374,7 @@ def data_snapshot(frame: pd.DataFrame, *, limit: int = MAX_SNAPSHOT_ROWS) -> dic
         latest = _latest_position(frame)
         if latest is not None and latest not in positions:
             # 丢掉最早的一行，把最新行补到末尾（快照仍按时间升序可回放）。
-            positions = [*positions[-(limit - 1):], latest] if limit > 1 else [latest]
+            positions = [*positions[-(limit - 1) :], latest] if limit > 1 else [latest]
         selected = frame.iloc[positions]
     else:
         selected = frame
@@ -1273,7 +1413,7 @@ def _params(
         "theme": spec.get("theme"),
         # 复现前提：同 spec 同数据在不同 plotly 版本下 HTML 字节不同（D4/Q3）。
         "include_plotlyjs": include_plotlyjs,
-        **_runtime_versions(),
+        **runtime_versions(),
         "code_version": code_version,
     }
 
@@ -1313,27 +1453,10 @@ def _remember_png_failure(reason: str | None) -> None:
     _PNG_PROBE_FAILURE = reason or "unknown"
 
 
-def _png_artifact(
-    payload: bytes,
-    *,
-    artifact_id: str,
-    artifact_root: str | None,
-    width: int,
-    height: int,
-    elapsed_ms: int,
-) -> tuple[str, dict[str, Any]]:
-    """落盘 PNG 并返回 ``(绝对路径, 追溯元数据)``。
-
-    PNG 与 HTML 各自内容寻址、分属不同 digest 目录；meta 里同时记
-    ``png_rel_path``/``png_digest``/尺寸/字体/版本，HTML artifact 行即可反查 PNG（评审 P1）。
-    """
-    digest, rel_path, absolute = put_content(
-        payload, filename=f"chart_{artifact_id}.png", root=artifact_root
-    )
+def _png_meta(payload: bytes, *, width: int, height: int, elapsed_ms: int) -> dict[str, Any]:
+    """PNG 的追溯元数据（落盘路径/digest 由 chart_service 写入后回填）。"""
     chrome_path, chrome_version = _chrome_identity()
-    return str(absolute), {
-        "png_rel_path": rel_path,
-        "png_digest": digest,
+    return {
         "png_bytes": len(payload),
         "png_width": width,
         "png_height": height,
@@ -1351,281 +1474,212 @@ def _png_artifact(
 # ---------------------------------------------------------------------------
 
 
-def render(
+def render_figure(
     spec: Mapping[str, Any] | Any,
     *,
     frame: pd.DataFrame | None = None,
     resolver: DataResolver | None = None,
-    conn: sqlite3.Connection | None = None,
-    db_path: str | None = None,
-    artifact_root: str | None = None,
-    run_id: str | None = None,
-    step: int | None = None,
-    session_id: str = "chart",
-    code_version: str | None = None,
     data_as_of: str | None = None,
     data_time: str | None = None,
+    view_as_of: str | None = None,
+    view_time: str | None = None,
     include_plotlyjs: str | bool = "inline",
     export_png: bool = True,
     png_mode: str | None = None,
+    code_version: str | None = None,
 ) -> RenderedFigure:
-    """``spec`` → Plotly Figure → 自包含 HTML（+ PNG）→ ``agent_artifacts``。
+    """``spec`` → Plotly Figure → 自包含 HTML（+ PNG 字节）；**纯渲染，不写审计库**（Q5）。
 
-    ``png_mode`` 三态（评审 P2，ADR-016 Q6=A）：
+    审计落库（artifact/version/link/digest/版本号）由唯一入口
+    :func:`astock.agent.chart_service.render_chart` 负责，本函数不 import 任何
+    ``agent_store`` 写路径，因此也永远不会合成 ``run_chart_*`` 假 run（D9/§7）。
 
-    * ``"auto"``（默认）：尝试导出；失败降级为仅 HTML，``degraded=True`` 并告警一次；
-      缺 kaleido / Chrome 这类环境失败会缓存探测结果，避免每张图重复起浏览器。
-    * ``"require"``：显式请求 PNG，失败抛 :class:`PNGExportError`（不落半成品 artifact）。
-    * ``"off"``：不尝试 PNG，只产出 HTML。
+    时点（Q1）：``data_*`` 取自 transforms **之前**的行情帧（行情时点），
+    ``view_*`` 取自 transforms **之后**的绘图帧（视图时点）；显式参数只覆盖自己那一组。
 
-    ``export_png`` 是兼容别名：``False`` → ``off``，``True`` → ``auto``；显式 ``png_mode`` 优先。
+    时间语义（D10）：时间列必须由 ``data.time_field`` 显式声明，或 ``encode.x``/
+    ``trade_date``/``trade_time`` 是**可证明**的时间列；否则抛
+    :class:`astock.agent.chart_spec.ChartSpecError`，绝不猜第一个可解析列。
 
-    非法 spec 抛 :class:`astock.agent.chart_spec.ChartSpecError`（字段 + 原因），
-    调用方把 ``exc.to_dict()`` 原样回传模型即可重试。
+    ``png_mode`` 三态（ADR-016 Q6=A）：``auto``（默认，失败降级 ``degraded=True``）/
+    ``require``（失败抛 :class:`PNGExportError`）/ ``off``。``export_png`` 是兼容别名。
     """
     mode = (png_mode or ("auto" if export_png else "off")).strip().lower()
     if mode not in PNG_MODES:
         raise ValueError(f"png_mode 必须是 {PNG_MODES} 之一，实际 {png_mode!r}")
     normalized = validate_chart_spec(spec)
     warnings: list[str] = []
-    owned = conn is None
-    connection = conn if conn is not None else connect(db_path)
+    data = normalized["data"]
+    period = str(data.get("period", "day"))
+    freq = _period_freq(period)
+
+    source_frame, source, resolve_warnings = _resolve_frame(data, frame=frame, resolver=resolver)
+    warnings.extend(resolve_warnings)
+    recorded_as_of = str(source_frame.attrs.get("data_as_of") or "")
+    recorded_time = str(source_frame.attrs.get("data_time") or "")
     try:
-        data = normalized["data"]
-        period = str(data.get("period", "day"))
-        frame_resolved, source, resolve_warnings = _resolve_frame(
-            data,
-            frame=frame,
-            resolver=resolver,
-            conn=connection,
-            artifact_root=artifact_root,
+        time_column = resolve_time_column(
+            source_frame, data, encode=normalized.get("encode")
         )
-        warnings.extend(resolve_warnings)
+    except ChartSpecError:
+        # artifact 快照可能已被聚合（没有可证明的时间列）：行情时点只能采信记录值
+        # （§3.5「data_* 信任 meta，不反推」）；inline/market 仍必须报契约错误。
+        if not recorded_as_of:
+            raise
+        time_column = None
+        warnings.append(
+            "artifact 快照没有可证明的时间列：行情时点采信记录值（不回推 data_as_of）"
+        )
+    if time_column is None and not recorded_as_of:
+        warnings.append("数据声明 time_semantics=none，行情时点未知（不编造 data_as_of）")
 
-        transformed = apply_transforms(frame_resolved, normalized["transforms"])
-        if transformed.empty:
-            warnings.append("transforms 之后数据为空，图为空态")
+    as_of, bar_time = _points_from_frame(
+        source_frame,
+        period=period,
+        column=time_column,
+        as_of=data_as_of if data_as_of is not None else (recorded_as_of or None),
+        bar_time=data_time if data_time is not None else (recorded_time or None),
+        warnings=warnings,
+        label="行情数据",
+        unknown_note="行情时点未知",
+    )
+    transformed = apply_transforms(source_frame, normalized["transforms"], notes=warnings)
+    if transformed.empty:
+        warnings.append("transforms 之后数据为空，图为空态")
+    view_column = time_column if time_column and time_column in transformed.columns else None
+    if view_column is None and normalized["transforms"]:
+        warnings.append("视图时点未知（聚合后无时间列）")
+    v_as_of, v_time = _points_from_frame(
+        transformed,
+        period=period,
+        column=view_column,
+        as_of=view_as_of,
+        bar_time=view_time,
+        warnings=warnings,
+        label="视图数据",
+        unknown_note="视图时点未知",
+    )
+    session_frame = transformed if view_column else source_frame
+    session = _bar_session(session_frame, period=period, column=view_column or time_column)
+    if session == "pre":
+        warnings.append("最新 bar 属集合竞价（session=pre）：K 线照常绘制，连续指标不含该 bar")
+    elif session == "post":
+        warnings.append("最新 bar 属盘后固定价（session=post）：K 线照常绘制，连续指标不含该 bar")
 
-        # 时点必须取自实际落图的 transformed 数据（快照也来自它）；显式参数仍优先。
-        as_of, bar_time = _time_points(
-            transformed,
-            period=period,
-            data_as_of=data_as_of,
-            data_time=data_time,
-            warnings=warnings,
-        )
+    caption = _caption(
+        normalized,
+        as_of,
+        bar_time,
+        v_as_of,
+        v_time,
+        session=session,
+        warnings=warnings,
+    )
+    # Q7：连续指标只吃连续竞价 bar（集合竞价/盘后固定价不参与 MA/BOLL/MACD/RSI/KDJ）。
+    indicator_frame = market.continuous_bars(transformed, freq=freq) if view_column else None
+    figure = _build_figure(
+        transformed,
+        normalized,
+        caption=caption,
+        period=period,
+        indicator_frame=indicator_frame,
+    )
+    version = code_version or CODE_VERSION
+    # 规范 HTML 固定 div id（同 spec 同数据 → 字节稳定 → content_digest 可复现）；
+    # 每张图/每次嵌入的唯一 id 由 embed_html 在展示时替换（Q3）。
+    html = figure.to_html(
+        full_html=True,
+        include_plotlyjs=include_plotlyjs,
+        config={"displaylogo": False, "responsive": True},
+        div_id=FIGURE_DIV_ID,
+    )
+    snapshot = data_snapshot(transformed)
 
-        caption = _caption(normalized, as_of, bar_time)
-        # 时点语义（D2/Q1）：未被 transforms 裁剪的行情数据 → market；否则只是视图时点。
-        if not as_of:
-            scope = "unknown"
-        elif source == "market" and not normalized["transforms"]:
-            scope = "market"
-        else:
-            scope = "view"
-        figure = _build_figure(transformed, normalized, caption=caption, period=period)
-
-        version = code_version or CODE_VERSION
-        env_fingerprint = _env_fingerprint(version)
-        snapshot = data_snapshot(transformed)
-        snapshot_bytes = canonical_json(snapshot).encode("utf-8")
-        data_digest, data_blob, _data_absolute = put_content(
-            snapshot_bytes,
-            filename="data.json",
-            root=artifact_root,
-        )
-        if normalize_content_digest(data_digest) != data_snapshot_digest(snapshot):
-            raise RuntimeError("数据快照 digest 不一致")
-        data_digest = normalize_content_digest(data_digest)
-        # div id 由 spec + 数据快照派生：同 spec 同数据字节稳定（artifact_id 可复现），
-        # 不同图不共享 id（同页多图不会互相覆盖）。
-        div_id = figure_div_id(normalized, snapshot)
-        html = figure.to_html(
-            full_html=True,
-            include_plotlyjs=include_plotlyjs,
-            config={"displaylogo": False, "responsive": True},
-            div_id=div_id,
-        )
-
-        digest, rel_path, _absolute = put_content(
-            html,
-            filename="chart.html",
-            root=artifact_root,
-        )
-        # 身份 = canonical_spec + data_digest + env_fingerprint（规格 §4.4）；
-        # 文件名与 include_plotlyjs 不参与“spec”，但后者决定 HTML 字节，
-        # 必须进入身份种子，否则 inline/CDN 会撞同一 id 后 content_digest 冲突。
-        identity_spec = canonical_json(
-            {"spec": normalized, "include_plotlyjs": include_plotlyjs}
-        )
-        artifact_id = artifact_id_for(
-            data_digest,
-            env_fingerprint=env_fingerprint,
-            canonical_spec=identity_spec,
-        )
-
-        png_path: str | None = None
-        png_meta: dict[str, Any] = {
-            "png_rel_path": None,
-            "png_digest": None,
-            "png_bytes": None,
-            "png_width": None,
-            "png_height": None,
-            "png_scale": None,
-            "png_elapsed_ms": None,
-            "font_family": font_family(),
-            "kaleido_version": _kaleido_version(),
-            "chrome_version": _chrome_identity()[1],
-            "chrome_path": _chrome_identity()[0] or "",
-        }
-        degraded = False
-        png_error: str | None = None
-        # 直接渲染（Agent 之外）不再合成 run_chart_* run；只有真实 Agent 传入 run_id 时
-        # 才确保 run 行存在，并等待运行时在会话结束时 finish_run（ADR-017 C3、规格 §7.1）。
-        if run_id is not None:
-            ensure_run(
-                connection,
-                run_id,
-                session_id=session_id,
-                provider="local",
-                model="chart_render",
-                code_version=version,
-                status="running",
-                run_kind="agent",
+    width = int(figure.layout.width or 960)
+    height = int(figure.layout.height or 520)
+    png_bytes: bytes | None = None
+    png_meta: dict[str, Any] = {
+        "png_bytes": None,
+        "png_width": None,
+        "png_height": None,
+        "png_scale": None,
+        "png_elapsed_ms": None,
+        "font_family": font_family(),
+        "kaleido_version": _kaleido_version(),
+        "chrome_version": _chrome_identity()[1],
+        "chrome_path": _chrome_identity()[0] or "",
+    }
+    degraded = False
+    png_error: str | None = None
+    if mode == "require":
+        started = time.perf_counter()
+        payload, reason = _try_png(figure, width=width, height=height)
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        if payload is None:
+            raise PNGExportError(f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}")
+        png_bytes = payload
+        png_meta = _png_meta(payload, width=width, height=height, elapsed_ms=elapsed_ms)
+    elif mode == "auto":
+        if _PNG_PROBE_FAILURE:
+            degraded = True
+            png_error = _PNG_PROBE_FAILURE
+            warnings.append(
+                f"{PNG_DEGRADED_WARNING_PREFIX}：{_PNG_PROBE_FAILURE}"
+                "（进程内已探测失败，跳过重试；png_mode='require' 可强制重试）"
             )
-        width = int(figure.layout.width or 960)
-        height = int(figure.layout.height or 520)
-
-        if mode == "require":
+        else:
             started = time.perf_counter()
             payload, reason = _try_png(figure, width=width, height=height)
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             if payload is None:
-                # 显式请求不得静默降级：真实 Agent 的 run 记 failed，且不落 artifact 行。
-                if run_id is not None:
-                    fail_run(
-                        connection,
-                        run_id,
-                        error=f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}",
-                    )
-                raise PNGExportError(
-                    f"PNG 导出失败（png_mode=require）：{reason or '未知原因'}"
-                )
-            png_path, png_meta = _png_artifact(
-                payload,
-                artifact_id=artifact_id,
-                artifact_root=artifact_root,
-                width=width,
-                height=height,
-                elapsed_ms=elapsed_ms,
-            )
-        elif mode == "auto":
-            if _PNG_PROBE_FAILURE:
                 degraded = True
-                png_error = _PNG_PROBE_FAILURE
-                warnings.append(
-                    f"{PNG_DEGRADED_WARNING_PREFIX}：{_PNG_PROBE_FAILURE}"
-                    "（进程内已探测失败，跳过重试；png_mode='require' 可强制重试）"
-                )
+                png_error = reason
+                warnings.append(f"{PNG_DEGRADED_WARNING_PREFIX}：{reason or '未知原因'}（仅 HTML artifact）")
+                if _is_env_failure(reason):
+                    _remember_png_failure(reason)
             else:
-                started = time.perf_counter()
-                payload, reason = _try_png(figure, width=width, height=height)
-                elapsed_ms = int((time.perf_counter() - started) * 1000)
-                if payload is None:
-                    degraded = True
-                    png_error = reason
-                    warnings.append(
-                        f"{PNG_DEGRADED_WARNING_PREFIX}：{reason or '未知原因'}（仅 HTML artifact）"
-                    )
-                    if _is_env_failure(reason):
-                        _remember_png_failure(reason)
-                else:
-                    png_path, png_meta = _png_artifact(
-                        payload,
-                        artifact_id=artifact_id,
-                        artifact_root=artifact_root,
-                        width=width,
-                        height=height,
-                        elapsed_ms=elapsed_ms,
-                    )
+                png_bytes = payload
+                png_meta = _png_meta(payload, width=width, height=height, elapsed_ms=elapsed_ms)
 
-        params = _params(
-            normalized, code_version=version, include_plotlyjs=include_plotlyjs
-        )
-        meta = {
-            "spec": normalized,
-            "params": params,
-            "data_as_of": as_of,
-            "data_time": bar_time,
-            "time_point_scope": scope,
-            "source": source,
-            "code_version": version,
-            "div_id": div_id,
-            "degraded": degraded,
-            "warnings": list(warnings),
-            "png_path": png_path,
-            "png_mode": mode,
-            "png_error": png_error,
-            # 本次渲染是否复用了旧 PNG（store._merge_artifact_meta 在重写同一 artifact 时置 True）。
-            "png_reused": False,
-            # 产出当前 png_path 的那次导出模式；本次没出 PNG 时由 store 从旧 meta 回填。
-            "png_source_mode": mode if png_path else None,
-            # 复用旧 PNG 时保留本次失败原因，png_error 归 None，避免 provenance 自相矛盾。
-            "png_last_attempt_error": None,
-            **png_meta,
-            # 完整数据快照落独立 content-addressed blob（data.json），meta 只留摘要，
-            # 避免每次渲染把 5000 行 rows 写进版本表（P1-5）。
-            "data_digest": data_digest,
-            "data_blob": data_blob,
-            "data_rows": int(snapshot.get("row_count", 0)),
-            "data_truncated": bool(snapshot.get("truncated", False)),
-        }
-        artifact_id, artifact_version = record_artifact(
-            connection,
-            artifact_id=artifact_id,
-            run_id=run_id,
-            kind="figure",
-            path=rel_path,
-            content_digest=digest,
-            env_fingerprint=env_fingerprint,
-            meta=meta,
-            step=step,
-            source="agent" if run_id is not None else "render",
-            session_id=session_id if run_id is not None else None,
-            reason="agent_render" if run_id is not None else "render",
-            actor="agent" if run_id is not None else "system",
-        )
-        stored = get_artifact(connection, artifact_id, version=artifact_version)
-        stored_meta_digest = meta_digest(stored.meta) if stored is not None else None
-    finally:
-        if owned:
-            connection.close()
-
+    params = _params(normalized, code_version=version, include_plotlyjs=include_plotlyjs)
+    meta: dict[str, Any] = {
+        "schema_version": CHART_META_SCHEMA_VERSION,
+        "spec": normalized,
+        "params": params,
+        "data_as_of": as_of,
+        "data_time": bar_time,
+        "view_as_of": v_as_of,
+        "view_time": v_time,
+        "session": session,
+        "source": source,
+        "code_version": version,
+        "degraded": degraded,
+        "warnings": list(warnings),
+        "png_mode": mode,
+        "png_error": png_error,
+        **png_meta,
+        # meta 只留数据摘要；快照本身由 chart_service 落独立 blob（Q2）。
+        "data_rows": int(snapshot.get("row_count", 0)),
+        "data_truncated": bool(snapshot.get("truncated", False)),
+    }
     return RenderedFigure(
         html=html,
-        png_path=png_path,
-        artifact_id=artifact_id,
+        png_path=None,
         warnings=warnings,
-        path=rel_path,
-        digest=digest,
         data_as_of=as_of,
         data_time=bar_time,
+        view_as_of=v_as_of,
+        view_time=v_time,
+        session=session,
         source=source,
         spec=normalized,
         params=params,
         degraded=degraded,
-        run_id=run_id,
         code_version=version,
-        time_point_scope=scope,
-        artifact_version=artifact_version,
-        meta_digest=stored_meta_digest,
+        meta=meta,
+        snapshot=snapshot,
+        png_bytes=png_bytes,
     )
-
-
-def artifact_file(rendered: RenderedFigure, *, root: str | None = None) -> str:
-    """返回 HTML artifact 的绝对路径（测试与 UI 预览用）。"""
-    base = Path(root) if root is not None else DEFAULT_ARTIFACT_ROOT
-    return str(base / rendered.path)
 
 
 def spec_from_artifact(meta: Mapping[str, Any]) -> dict[str, Any]:

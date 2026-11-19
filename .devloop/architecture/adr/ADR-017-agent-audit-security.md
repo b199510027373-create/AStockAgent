@@ -94,3 +94,19 @@ Agent 会读用户文件、查行情、画图、调用多个工具。一旦没�
 - `astock/ledger.py`（现有五表，无 `agent_*`）
 - ADR-009（LLM 边界）、ADR-015（文件约束）、ADR-016（图表产物）
 - 冻结 DDL：`docs/AStockAgent_interface_freeze_v1.md` §5；承接项 plan-20261107-008
+
+## 落地回填（2026-11-19，plan-20261114-002 / spec §12）
+
+- **行永久保留**：`agent_artifacts` / `agent_artifact_versions` 由触发器
+  `trg_agent_artifacts_no_update`、`trg_agent_artifact_versions_no_update` 拒绝 UPDATE；
+  删除 run 只级联删 `agent_run_artifacts` link，artifact/version 行不动。
+- **唯一清理面是文件**：`store.prune_orphan_blobs(..., dry_run=True)` 只删未被任何
+  `agent_artifacts.path` 引用、且超过保留期（默认 90 天）的 blob；默认 dry-run。
+- **correction 只走维护脚本**：`tools/artifact_admin.py correct`，`--actor` 与 `--reason`
+  必填，只能改 `source/data_as_of/data_time/view_as_of/view_time/session/degraded/warnings`
+  这些 provenance 字段；`spec`/`data_digest`/`content_digest`/`artifact_id` 不可补丁；
+  Agent/UI 没有入口。每条 correction 记 old/new/actor/reason/时间。验收：
+  `tests/test_artifact_admin.py`（含 actor/理由缺失被拒、身份字段被拒、旧版本不变、GC 保留行）。
+- **合成 run 退场**：直接渲染不建 `run_chart_*`，link 的 `run_id=NULL`、`source='render'`；
+  `agent_runs.run_kind ∈ agent|render|legacy`，metrics 只统计 `agent`。
+  验收：`tests/test_agent_chart_render.py::test_direct_render_records_artifact_without_synthetic_run`。

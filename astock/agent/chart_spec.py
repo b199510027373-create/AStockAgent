@@ -57,6 +57,7 @@ __all__ = [
     "SOURCES",
     "SPEC_VERSION",
     "THEMES",
+    "TIME_SEMANTICS",
     "TOP_LEVEL_FIELDS",
     "TRANSFORM_OPS",
     "ChartSpecError",
@@ -108,7 +109,19 @@ TOP_LEVEL_FIELDS = (
     "annotations",
     "meta",
 )
-DATA_FIELDS = ("source", "ref", "rows", "fields", "period", "range", "adj")
+DATA_FIELDS = (
+    "source",
+    "ref",
+    "rows",
+    "fields",
+    "period",
+    "range",
+    "adj",
+    "time_field",
+    "time_semantics",
+)
+#: D10：时间语义必须显式声明，不再用「第一个能解析的列」猜时间。
+TIME_SEMANTICS = ("bar_time", "trade_date", "none")
 ENCODE_FIELDS = ("x", "y", "color")
 
 FIELD_RE = re.compile(r"^[a-z_][a-z0-9_]{0,31}$")
@@ -520,6 +533,27 @@ def _validate_data(data: Any, path: str, issues: _Issues) -> dict[str, Any]:
         )
         adj = "none"
 
+    # D10：时间语义只能显式声明；不猜第一个可解析列（§15.1）。
+    time_semantics_raw = data.get("time_semantics")
+    time_semantics = "bar_time"
+    if time_semantics_raw is not None:
+        if time_semantics_raw not in TIME_SEMANTICS:
+            issues.add(
+                f"{path}.time_semantics",
+                f"取值 {time_semantics_raw!r} 不在枚举 {list(TIME_SEMANTICS)} 中",
+            )
+        else:
+            time_semantics = str(time_semantics_raw)
+    time_field: str | None = None
+    time_field_raw = data.get("time_field")
+    if time_field_raw is not None:
+        time_field = _check_field_name(time_field_raw, f"{path}.time_field", issues)
+        if time_semantics == "none":
+            issues.add(f"{path}.time_field", "time_semantics=none 时不允许声明 time_field")
+            time_field = None
+        elif time_field and isinstance(fields, list) and time_field not in fields:
+            issues.add(f"{path}.time_field", f"{time_field!r} 不在 data.fields 里")
+
     normalized: dict[str, Any] = {"source": source or "market"}
     if ref is not None and source in ("market", "artifact"):
         normalized["ref"] = ref
@@ -529,6 +563,10 @@ def _validate_data(data: Any, path: str, issues: _Issues) -> dict[str, Any]:
     normalized["period"] = period
     normalized["range"] = range_value
     normalized["adj"] = adj
+    if time_semantics_raw is not None:
+        normalized["time_semantics"] = time_semantics
+    if time_field is not None:
+        normalized["time_field"] = time_field
     return normalized
 
 
@@ -957,6 +995,16 @@ _JSON_SCHEMA: dict[str, Any] = {
                     "enum": list(ADJ_VALUES),
                     "default": "qfq",
                     "description": "价格口径：qfq/hfq/none；raw 已不是别名（Q4=B）",
+                },
+                "time_field": _FIELD_SCHEMA,
+                "time_semantics": {
+                    "type": "string",
+                    "enum": list(TIME_SEMANTICS),
+                    "default": "bar_time",
+                    "description": (
+                        "bar_time=数据列就是 bar 时间；trade_date=交易日；"
+                        "none=不声明时间语义（图上不编造 data_as_of/view_as_of）"
+                    ),
                 },
             },
         },

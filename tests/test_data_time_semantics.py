@@ -578,14 +578,14 @@ def test_kline_week_resamples_and_marks_eod_intraday() -> None:
 
 def test_kline_month_resamples_and_runs_real_render(tmp_path: Any) -> None:
     """月线重采样 + 真实渲染管线：range 钳到 ChartSpec 10 年上限后仍能出图。"""
-    from astock.agent import chart_render
+    from astock.agent import chart_service
     from astock.agent.chart_spec import MAX_RANGE_YEARS, validate_chart_spec
 
     frames: list[pd.DataFrame] = []
 
     def spy(spec: dict[str, Any], **kwargs: Any) -> Any:
         frames.append(kwargs["frame"])
-        return chart_render.render(spec, **kwargs)
+        return chart_service.render_chart(spec, **kwargs)
 
     days = pd.bdate_range("2010-01-04", "2021-12-31").strftime("%Y-%m-%d").tolist()
     context = _Deps(daily=_daily_frame(days, start=10.0), clock="2024-01-03 16:30")

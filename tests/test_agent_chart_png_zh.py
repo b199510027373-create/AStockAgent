@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 from PIL import Image
 
-from astock.agent import chart_render
+from astock.agent import chart_render, chart_service
 
 #: CI 的 png-export job 设 ``ASTOCK_REQUIRE_CJK=1``：缺字体直接失败而不是 skip。
 CJK_ENFORCED = os.getenv("ASTOCK_REQUIRE_CJK") == "1"
@@ -82,7 +82,7 @@ def _spec() -> dict[str, Any]:
 
 
 def test_chinese_candlestick_png_renders_glyphs(tmp_path: Path) -> None:
-    rendered = chart_render.render(
+    rendered = chart_service.render_chart(
         _spec(),
         db_path=str(tmp_path / "agent.db"),
         artifact_root=str(tmp_path / "agent"),
@@ -129,7 +129,7 @@ def test_chinese_candlestick_png_renders_glyphs(tmp_path: Path) -> None:
 
 def test_chinese_font_family_is_recorded_in_meta(tmp_path: Path) -> None:
     """字体必须进 meta：换机器复现 PNG 时要知道用的是哪套 CJK 字体（评审 P1）。"""
-    rendered = chart_render.render(
+    rendered = chart_service.render_chart(
         _spec(),
         db_path=str(tmp_path / "agent.db"),
         artifact_root=str(tmp_path / "agent"),

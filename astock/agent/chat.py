@@ -16,12 +16,14 @@ import html
 import json
 import queue
 import threading
+import uuid
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from astock.agent import files as file_store
+from astock.agent.chart_render import FIGURE_DIV_ID, embed_html
 from astock.agent.runtime import AgentRuntime
 from astock.agent.session import AgentSession
 from astock.agent.tools.citations import (
@@ -348,12 +350,20 @@ def collect_figures(steps: Sequence[StepRecord]) -> list[Figure]:
     return figures
 
 
-def figure_embed_html(figure: Figure) -> str:
+def _embed_div_id() -> str:
+    """每次嵌入都换一个新的 DOM id（Q3：同页多图/重复嵌入互不覆盖）。"""
+    return f"{FIGURE_DIV_ID}-{uuid.uuid4().hex[:8]}"
+
+
+def figure_embed_html(figure: Figure, *, div_id: str | None = None) -> str:
     """把 Plotly 完整 HTML 文档塞进 ``iframe srcdoc``。
 
     Gradio 的 HTML 组件用 innerHTML 渲染，内联 ``<script>`` 不会执行；iframe
     的 srcdoc 会按完整文档执行脚本，因此图表能在回答区真实渲染。spec/来源用
     ``<details>`` 折叠，点击即可查看（ADR-016 要求图注同时给出两个时点）。
+
+    Q3：规范 HTML 用固定 div id 保证字节稳定，**每次嵌入**都要换成唯一 id
+    （``astock-chart-<8hex>``），否则同页多图/重复嵌入会互相覆盖。
     """
     spec_json = json.dumps(figure.spec, ensure_ascii=False, indent=2) if figure.spec else ""
     spec_block = (
@@ -366,10 +376,17 @@ def figure_embed_html(figure: Figure) -> str:
         if figure.warnings
         else ""
     )
+    target_id = div_id or _embed_div_id()
+    try:
+        html = embed_html(figure.html, target_id)
+    except ValueError:
+        # 旧版 artifact 的 HTML 自带 astock-chart-<hash> id，无法再替换；iframe 各自
+        # 独立文档，不会跨图撞 id，保持原样即可（新渲染的图都走 embed_html）。
+        html = figure.html
     return (
         f'<figure class="astock-figure" data-tool="{_esc(figure.tool)}">'
         f'<iframe class="astock-figure-frame" title="{_esc(figure.caption)}" '
-        f'loading="lazy" sandbox="allow-scripts" srcdoc="{_esc(figure.html)}"></iframe>'
+        f'loading="lazy" sandbox="allow-scripts" srcdoc="{_esc(html)}"></iframe>'
         f"<figcaption>{_esc(figure.caption)}</figcaption>"
         f"<details><summary>查看图表 spec / 来源</summary>{spec_block}"
         f"<p class=\"astock-muted\">来源：{_esc(figure.source or '未标注')}"
