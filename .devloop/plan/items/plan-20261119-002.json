@@ -1,0 +1,40 @@
+{
+  "id": "plan-20261119-002",
+  "title": "Agent 会话真实模型 E2E 验证（DeepSeek/兼容网关）",
+  "description": "用真实 DeepSeek（或 OpenAI-compatible 网关）跑通 3 轮端到端：流式回答、一次工具步骤、引用、内嵌图、生成中停止；记录首字延迟、总耗时、token/费用与失败恢复。密钥只从环境变量读取，不写入仓库；无 key 时用例 skip 并明确提示。",
+  "status": "todo",
+  "priority": "P2",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-20",
+  "due": "2026-11-26",
+  "estimateH": 4,
+  "progress": 0,
+  "acceptance": [
+    "真实模型 3 轮对话完成，流式分片可见且最终回答不覆盖已停止分片",
+    "至少一次工具调用步骤出现在时间线，结果可被用户看到",
+    "引用可定位，内嵌图可渲染（若该轮触发图表）",
+    "生成中停止后下一问不受中断标记污染",
+    "记录首字延迟/总耗时/token 或费用估算；失败时有明确降级提示",
+    "无 API key 时自动 skip，不把未验证说成已验证"
+  ],
+  "tags": [
+    "agent",
+    "e2e",
+    "deepseek",
+    "cost"
+  ],
+  "deps": [
+    "plan-20261107-007"
+  ],
+  "links": {
+    "adr": [
+      "ADR-014"
+    ],
+    "module": [
+      "agent_chat_ui"
+    ]
+  },
+  "createdAt": "2026-11-19T10:26:28.187Z",
+  "updatedAt": "2026-11-19T10:26:28.187Z"
+}

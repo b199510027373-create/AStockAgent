@@ -1,0 +1,39 @@
+{
+  "id": "plan-20261119-001",
+  "title": "Agent 会话 UI 冒烟脚本入库与可复现",
+  "description": "把 `.smoke-agent-ui/` 中仍可用的 CDP 冒烟脚本整理进仓库（建议 `tests/smoke/agent_ui/`），去掉本机绝对路径/临时截图/密钥，补 README 与固定启动方式；至少覆盖上传、流式、步骤、内嵌图、引用、中断六条路径。截图可只保留关键几张或改为断言输出，避免仓库膨胀。",
+  "status": "todo",
+  "priority": "P2",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-20",
+  "due": "2026-11-24",
+  "estimateH": 3,
+  "progress": 0,
+  "acceptance": [
+    "冒烟脚本在干净检出上可运行，不依赖本机绝对路径",
+    "脚本不包含 API key、token、个人路径或大体积截图",
+    "README 写清依赖、启动命令、失败判据与已知限制",
+    "覆盖上传/流式/步骤/内嵌图/引用/中断六条主路径",
+    "默认不进入普通 CI；提供手动或 nightly 入口"
+  ],
+  "tags": [
+    "agent",
+    "ui",
+    "smoke",
+    "cdp"
+  ],
+  "deps": [
+    "plan-20261107-007"
+  ],
+  "links": {
+    "module": [
+      "agent_chat_ui"
+    ],
+    "docs": [
+      "docs/AStockAgent_interface_freeze_v1.md"
+    ]
+  },
+  "createdAt": "2026-11-19T10:26:23.525Z",
+  "updatedAt": "2026-11-19T10:26:23.525Z"
+}
