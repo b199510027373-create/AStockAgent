@@ -628,6 +628,8 @@ class ChatEvent:
     text: str = ""
     step: StepRecord | None = None
     result: AgentRunResult | None = None
+    # done 事件：回答是被「停止输出」截断的，UI 不应再用完整 result.answer 覆盖近似片段。
+    stopped: bool = False
 
 
 class AgentChatController:
@@ -744,6 +746,22 @@ class AgentChatController:
             return
         self._cancelled.clear()
         self._stop_output.clear()
+        released = False
+
+        def finish(
+            text: str,
+            *,
+            result: AgentRunResult | None = None,
+            stopped: bool = False,
+        ) -> ChatEvent:
+            # 先释放 busy 再交出 done：浏览器收到 done 后可能不再 next()，
+            # 生成器不会被耗尽，若把 release 只放在 finally 里会永久卡住下一问。
+            nonlocal released
+            if not released:
+                self._busy.release()
+                released = True
+            return ChatEvent("done", text=text, result=result, stopped=stopped)
+
         try:
             current_attachments = list(attachments)
             if not current_attachments:
@@ -758,20 +776,17 @@ class AgentChatController:
             try:
                 runtime = self._ensure_runtime()
             except Exception as exc:  # noqa: BLE001 - 无模型/无网络时降级
-                yield ChatEvent(
-                    "done",
-                    text=(
-                        "⚠️ 模型不可用："
-                        f"{type(exc).__name__}: {exc}。"
-                        "已上传的附件仍已解析，可在文件工具恢复后重试。"
-                    ),
+                yield finish(
+                    "⚠️ 模型不可用："
+                    f"{type(exc).__name__}: {exc}。"
+                    "已上传的附件仍已解析，可在文件工具恢复后重试。"
                 )
                 return
 
             # 建模型/检索新闻阶段点过「中断」也要生效（评审 iss-mwmtt3ab）：
             # 不再启动 worker，直接以中断收尾并释放锁。
             if self._cancelled.is_set():
-                yield ChatEvent("done", text=_STOP_LABELS["interrupted"])
+                yield finish(_STOP_LABELS["interrupted"])
                 return
 
             queue_: queue.Queue[tuple[str, Any]] = queue.Queue()
@@ -804,13 +819,10 @@ class AgentChatController:
                     result = payload
                     break
                 else:
-                    yield ChatEvent(
-                        "done",
-                        text=(
-                            "⚠️ 本轮生成失败："
-                            f"{type(payload).__name__}: {payload}。"
-                            "已产出的步骤保留在时间线里。"
-                        ),
+                    yield finish(
+                        "⚠️ 本轮生成失败："
+                        f"{type(payload).__name__}: {payload}。"
+                        "已产出的步骤保留在时间线里。"
                     )
                     return
 
@@ -821,20 +833,22 @@ class AgentChatController:
                 # 流式输出阶段点「停止输出」：保留已产出的回答，不再继续追加。
                 if self._stop_output.is_set():
                     break
+            stopped = self._stop_output.is_set()
             text = stop_reason_label(result.stop_reason) if result else "已完成"
             if result is not None and result.error:
                 text += f"（{result.error}）"
-            if self._stop_output.is_set():
+            if stopped:
                 text = "⏹ 已停止输出：已生成的回答保留。"
             elif self._cancelled.is_set():
                 text = _STOP_LABELS["interrupted"]
-            yield ChatEvent("done", text=text, result=result)
+            yield finish(text, result=result, stopped=stopped)
             if self.session_path is not None:
                 # 会话落盘失败只影响下轮回放，不改变本轮回答。
                 with contextlib.suppress(OSError):
                     self.session.save()
         finally:
-            self._busy.release()
+            if not released:
+                self._busy.release()
 
     def _compose_question(
         self, question: str, context: str, attachments: Sequence[Attachment]

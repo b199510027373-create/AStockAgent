@@ -210,7 +210,9 @@ def build_agent_chat_tab(
                     if result is not None:
                         figures = collect_figures(result.steps)
                         citations = collect_citations(result.steps, result.answer)
-                        if result.answer:
+                        if result.answer and not event.stopped:
+                            # 流式阶段点过「停止输出」时，界面保留已产出的片段，
+                            # 不用完整回答覆盖，避免与状态栏文案矛盾（iss-mwn7nzfl）。
                             chat[-1]["content"] = result.answer
                     timeline = render_steps_html(steps)
                     status_text = event.text

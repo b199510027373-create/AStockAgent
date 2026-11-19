@@ -564,6 +564,28 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(third[-1].kind, "done")
         self.assertEqual(runtime.runs, 2)
 
+    def test_done_event_releases_lock_before_generator_is_drained(self) -> None:
+        """UI 收到 done 后不再 next() 时，busy 锁也必须释放（浏览器断开场景）。"""
+        controller = make_controller(
+            FakeModel(
+                [
+                    ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                    "收盘价 1680.00 元。",
+                ]
+            )
+        )
+        stream = controller.ask("第一问")
+        for event in stream:
+            if event.kind == "done":
+                # 模拟 Gradio：拿到 done 后停止消费，不再耗尽生成器。
+                break
+        second = list(controller.ask("第二问"))
+        self.assertFalse(
+            any("上一轮仍在生成" in event.text for event in second),
+            [event.text for event in second],
+        )
+        self.assertIs(second[-1].result.stop_reason, StopReason.COMPLETED)
+
     def test_interrupt_before_runtime_starts_skips_run(self) -> None:
         """模型/运行时准备阶段的中断也必须生效（评审 iss-mwmtt3ab）。"""
         runtime = BlockingRuntime()
@@ -640,6 +662,7 @@ class ControllerTests(unittest.TestCase):
         done = events[-1]
         self.assertEqual(done.kind, "done")
         self.assertIn("停止输出", done.text)
+        self.assertTrue(done.stopped)
         # 已产出的回答分片保留，不因停止输出而清空。
         answer = "".join(event.text for event in events if event.kind == "answer")
         self.assertTrue(answer)
@@ -753,6 +776,39 @@ class UiBuilderTests(unittest.TestCase):
         self.assertIn("1680.00", final[0][-1]["content"])
         self.assertIn("lookup_price", final[2])
         self.assertIn("已完成", final[5])
+
+    def test_stop_output_keeps_partial_answer_in_chat(self) -> None:
+        """流式阶段点「停止输出」后，UI 不得再用完整回答覆盖已产出片段。"""
+        import gradio as gr
+
+        from astock.agent_chat_ui import build_agent_chat_tab
+
+        full = "回答内容" * 20 + " 1680.00 元。"
+        controller = make_controller(
+            FakeModel(
+                [
+                    ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                    full,
+                ]
+            )
+        )
+        with gr.Blocks():
+            components = build_agent_chat_tab(controller=controller)
+
+        frames = []
+        interrupted = False
+        for frame in components["respond"]("600519.SH 收盘价？", [], [], []):
+            frames.append(frame)
+            if not interrupted and "正在输出回答" in frame[5]:
+                self.assertIn("中断输出", controller.interrupt())
+                interrupted = True
+
+        self.assertTrue(interrupted)
+        final = frames[-1]
+        self.assertIn("停止输出", final[5])
+        shown = final[0][-1]["content"]
+        self.assertTrue(shown)
+        self.assertLess(len(shown), len(full))
 
     def test_db_path_reaches_controller(self) -> None:
         import gradio as gr
