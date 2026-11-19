@@ -2,7 +2,7 @@
   "id": "plan-20261107-007",
   "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
   "description": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮。复用现有 Gradio 装配模式，不新增 Tab；保持页面在无模型/无网络时的降级可用。",
-  "status": "changes_requested",
+  "status": "in_review",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
@@ -49,6 +49,6 @@
     ]
   },
   "createdAt": "2026-11-07T14:12:13.272Z",
-  "updatedAt": "2026-11-19T01:49:02.119Z",
+  "updatedAt": "2026-11-19T01:51:56.637Z",
   "devSessionId": "session-b2a69179-5e60-4872-91f0-f30a7d3402d1"
 }
