@@ -229,6 +229,19 @@ class RuntimeLoopTests(unittest.TestCase):
         self.assertEqual(follow_up.stop_reason, StopReason.COMPLETED)
         self.assertEqual(model.call_count, 1)
 
+    def test_interrupt_if_running_does_not_leak_after_run(self) -> None:
+        model = FakeModel(["完成"])
+        runtime = AgentRuntime(model, ToolRegistry())
+
+        first = runtime.run("第一问")
+        self.assertEqual(first.stop_reason, StopReason.COMPLETED)
+        # run 已结束时请求中断应返回 False，且不留下标记给下一问。
+        self.assertFalse(runtime.request_interrupt_if_running())
+
+        follow_up = runtime.run("第二问")
+        self.assertEqual(follow_up.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(model.call_count, 2)
+
     def test_pre_set_cancel_event_stops_at_first_guard(self) -> None:
         model = FakeModel(["不应到达"])
         cancel_event = threading.Event()

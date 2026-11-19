@@ -714,8 +714,10 @@ class AgentChatController:
         runtime = self._runtime
         if runtime is not None and self._running.is_set():
             self._cancelled.set()
-            runtime.request_interrupt()
-            return "⏹ 已请求中断：当前步骤完成后停止，已产出的内容会保留。"
+            if runtime.request_interrupt_if_running():
+                return "⏹ 已请求中断：当前步骤完成后停止，已产出的内容会保留。"
+            # run 恰好在 _running 检查与转发之间结束：不要留下中断标记，
+            # 继续走下面的输出阶段分支，只停止本轮流式输出。
         if not self._busy.locked():
             return "当前没有正在生成的回答。"
         # 建模型/检索新闻阶段（runtime 未就绪）或回答流式输出阶段：

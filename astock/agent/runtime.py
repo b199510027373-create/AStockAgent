@@ -241,6 +241,8 @@ class AgentRuntime:
         self._clock: Clock = clock or time.monotonic
         self._interrupt = threading.Event()
         self._cancel_event: threading.Event | None = None
+        self._run_state_lock = threading.Lock()
+        self._in_run = False
 
     # ---- 控制 -------------------------------------------------------------
 
@@ -251,6 +253,20 @@ class AgentRuntime:
         运行会在其返回后的下一个检查点停止并返回已执行步骤。
         """
         self._interrupt.set()
+
+    def request_interrupt_if_running(self) -> bool:
+        """仅在 ``run()`` 真正在途时设置中断，返回是否已转发。
+
+        与 :meth:`request_interrupt` 的区别：后者保留“预运行”语义，可用于
+        在下一轮开始前先埋一个中断；本方法消除 UI 侧
+        ``_running.is_set()`` 与真正设置中断之间的竞态——若 run 恰好在两者
+        之间结束，不会把中断标记留给下一问。
+        """
+        with self._run_state_lock:
+            if not self._in_run:
+                return False
+            self._interrupt.set()
+            return True
 
     def run(
         self,
@@ -271,6 +287,8 @@ class AgentRuntime:
         同步执行，异常一律吞掉——界面渲染故障不得打断 Agent 主流程。
         """
         self._cancel_event = cancel_event
+        with self._run_state_lock:
+            self._in_run = True
         if question:
             self.session.add_user(question)
 
@@ -509,7 +527,9 @@ class AgentRuntime:
                     except OSError as exc:
                         save_error = f"{type(exc).__name__}: {exc}"
             finally:
-                self._interrupt.clear()
+                with self._run_state_lock:
+                    self._in_run = False
+                    self._interrupt.clear()
                 self._finish_audit(audit, steps, tokens_used, stop, error, answer)
 
         if stop is None:
