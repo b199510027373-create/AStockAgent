@@ -1507,3 +1507,26 @@ def test_replay_verifies_stored_meta_digest_and_rejects_tampering(
             )
     finally:
         conn.close()
+
+
+def test_replay_reuses_recorded_include_plotlyjs_without_stringifying_bool(
+    paths: dict[str, str],
+) -> None:
+    """边角：记录里 include_plotlyjs=False（bool）时，重算不得被 str() 变成 "False"。"""
+    rendered = _render(inline_line_spec(), paths, include_plotlyjs=False)
+    assert rendered.meta["params"]["include_plotlyjs"] is False
+
+    conn = store.connect(paths["db_path"])
+    try:
+        payload = chart_service.load_chart_artifact(
+            conn,
+            rendered.artifact_id,
+            mode="recomputed",
+            root=paths["artifact_root"],
+        )
+    finally:
+        conn.close()
+
+    assert payload["meta"]["params"]["include_plotlyjs"] is False
+    # False 表示不内联也不引 CDN；若被写成 "False"，plotly 会把非空字符串当 CDN 路径
+    assert "cdn.plot.ly" not in payload["html"]

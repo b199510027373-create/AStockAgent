@@ -308,6 +308,16 @@ class ArtifactReader:
 # ---------------------------------------------------------------------------
 
 
+def _stored_include_plotlyjs(meta: dict[str, Any]) -> str | bool:
+    """回放时原样复用记录里的 include_plotlyjs（bool 不能被 str() 变成 "False"）。"""
+    value = dict(meta.get("params") or {}).get("include_plotlyjs", "cdn")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value:
+        return value
+    return "cdn"
+
+
 def load_chart_artifact(
     conn: sqlite3.Connection,
     artifact_id: str,
@@ -380,7 +390,7 @@ def load_chart_artifact(
         frame=frame,
         data_as_of=payload["data_as_of"] or None,
         data_time=payload["data_time"] or None,
-        include_plotlyjs=str(meta.get("params", {}).get("include_plotlyjs", "cdn")),
+        include_plotlyjs=_stored_include_plotlyjs(meta),
         export_png=False,
     )
     warnings = [str(item) for item in payload["warnings"]]
