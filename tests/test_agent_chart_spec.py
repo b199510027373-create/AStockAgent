@@ -648,11 +648,13 @@ def test_freeze_doc_records_alias_removal() -> None:
     assert "panes" in text and "style" in text and "raw" in text
 
 
-def test_freeze_v1_doc_stays_v1_and_v2_only_lives_in_draft() -> None:
-    """冻结清单一律按 v1 口径读：v2 语义只能待在草案文件里（评审 P1）。
+def test_freeze_v1_stays_v1_and_v2_lives_in_its_own_file() -> None:
+    """冻结清单分版本：v1 正文保持 v1 口径，v2 口径只写在自己的文件里。
 
     2026-11-14 曾把 ``agent_artifact_versions``/``view_as_of``/``data_digest`` 等 v2 口径
-    就地写进 v1 冻结清单，而 ``main`` 的实现仍是 v1，导致「文档说 v2、代码是 v1」。
+    就地写进 v1 冻结清单，而当时的实现仍是 v1，导致「文档说 v2、代码是 v1」。
+    2026-11-19（plan-20261114-002）v2 正式生效，但生效方式是**新增 v2 文件**，
+    仍然不允许把 v2 条目塞回 v1 正文。
     """
     from pathlib import Path
 
@@ -670,13 +672,14 @@ def test_freeze_v1_doc_stays_v1_and_v2_only_lives_in_draft() -> None:
     assert "time_point_scope" in v1
     assert "png_path" in v1
 
-    draft = (root / "docs" / "AStockAgent_interface_freeze_v2_draft.md").read_text(
-        encoding="utf-8"
-    )
-    assert "草案、未实现" in draft
+    draft = (root / "docs" / "AStockAgent_interface_freeze_v2.md").read_text(encoding="utf-8")
     assert "plan-20261114-002" in draft
-    assert "不作为当前实现依据" in draft
     assert "agent_artifact_versions" in draft
+    assert "view_as_of" in draft and "view_time" in draft
+    assert "chart_meta_v2" in draft
+    assert "embed_html" in draft
+    # 已生效：不再是「草案、未实现」
+    assert "草案、未实现" not in draft
 
 
 def test_freeze_v1_doc_documents_both_bbox_classes() -> None:
@@ -695,10 +698,7 @@ def test_freeze_v1_doc_documents_both_bbox_classes() -> None:
     assert "x0,y0,x1,y1" in v1
     assert "pdfplumber" in v1
 
-    draft = (root / "docs" / "AStockAgent_interface_freeze_v2_draft.md").read_text(
-        encoding="utf-8"
-    )
+    draft = (root / "docs" / "AStockAgent_interface_freeze_v2.md").read_text(encoding="utf-8")
     assert "row_start" not in draft
     assert "x0,y0,x1,y1" not in draft
-    assert "不属于 v2 草案" in draft
 

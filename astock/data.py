@@ -9,6 +9,7 @@ from datetime import time as clock_time
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -111,9 +112,7 @@ def _today() -> pd.Timestamp:
     return pd.Timestamp.today().normalize()
 
 
-def _load_trade_cal_impl(
-    start: str = "20150101", end: str | None = None, refresh: bool = False
-) -> pd.DataFrame:
+def _load_trade_cal_impl(start: str = "20150101", end: str | None = None, refresh: bool = False) -> pd.DataFrame:
     """交易日历（SSE），本地缓存；返回 cal_date / is_open / pretrade_date。"""
     key = (start, end or "auto")
     if key in _CAL_CACHE and not refresh:
@@ -141,25 +140,17 @@ def _load_trade_cal_impl(
                     missing["cal_date"] = pd.to_datetime(missing["cal_date"])
                     cal = pd.concat([cal, missing], ignore_index=True)
         else:
-            cal = client.query(
-                "trade_cal", exchange="SSE", start_date=start, end_date=end
-            )
+            cal = client.query("trade_cal", exchange="SSE", start_date=start, end_date=end)
             if cal.empty:
                 raise TushareError("trade_cal 返回为空，请检查 token/代理")
             cal["cal_date"] = pd.to_datetime(cal["cal_date"])
     else:
-        cal = client.query(
-            "trade_cal", exchange="SSE", start_date=start, end_date=end
-        )
+        cal = client.query("trade_cal", exchange="SSE", start_date=start, end_date=end)
         if cal.empty:
             raise TushareError("trade_cal 返回为空，请检查 token/代理")
         cal["cal_date"] = pd.to_datetime(cal["cal_date"])
 
-    cal = (
-        cal.drop_duplicates("cal_date")
-        .sort_values("cal_date")
-        .reset_index(drop=True)
-    )
+    cal = cal.drop_duplicates("cal_date").sort_values("cal_date").reset_index(drop=True)
     cal["is_open"] = pd.to_numeric(cal["is_open"], errors="coerce").fillna(0).astype(int)
     _atomic_parquet(cal, CAL_PATH)
     _CAL_CACHE[key] = cal
@@ -167,9 +158,7 @@ def _load_trade_cal_impl(
     return cal[cal["cal_date"] >= begin].copy()
 
 
-def load_trade_cal(
-    start: str = "20150101", end: str | None = None, refresh: bool = False
-) -> pd.DataFrame:
+def load_trade_cal(start: str = "20150101", end: str | None = None, refresh: bool = False) -> pd.DataFrame:
     # 多个加载线程会同时调用；日历只允许一个线程写缓存
     with _CAL_LOCK:
         return _load_trade_cal_impl(start=start, end=end, refresh=refresh)
@@ -187,11 +176,7 @@ def non_trading_days(start: str | pd.Timestamp, end: str | pd.Timestamp) -> list
     """区间内的工作日休市日（周末由 Plotly rangebreaks 的 bounds 处理）。"""
     cal = load_trade_cal()
     start_ts, end_ts = pd.Timestamp(start), pd.Timestamp(end)
-    closed = cal[
-        (cal["cal_date"] >= start_ts)
-        & (cal["cal_date"] <= end_ts)
-        & (cal["is_open"] == 0)
-    ]["cal_date"]
+    closed = cal[(cal["cal_date"] >= start_ts) & (cal["cal_date"] <= end_ts) & (cal["is_open"] == 0)]["cal_date"]
     return [d.strftime("%Y-%m-%d") for d in closed if d.weekday() < 5]
 
 
@@ -221,9 +206,7 @@ def _read_meta(path: Path) -> dict:
         return {}
 
 
-def _clean_adj_factors(
-    fct: pd.DataFrame | None, *, ts_code: str, source: str
-) -> pd.DataFrame:
+def _clean_adj_factors(fct: pd.DataFrame | None, *, ts_code: str, source: str) -> pd.DataFrame:
     """校验并归一化复权因子（ADR-008 D1）。
 
     空表、缺列、NaN、inf、``<= 0`` 一律抛 :class:`DataContractError`；
@@ -245,11 +228,7 @@ def _clean_adj_factors(
     out = fct[["trade_date", "adj_factor"]].copy()
     out["trade_date"] = pd.to_datetime(out["trade_date"])
     out["adj_factor"] = pd.to_numeric(out["adj_factor"], errors="coerce")
-    bad = (
-        out["adj_factor"].isna()
-        | ~np.isfinite(out["adj_factor"])
-        | (out["adj_factor"] <= 0)
-    )
+    bad = out["adj_factor"].isna() | ~np.isfinite(out["adj_factor"]) | (out["adj_factor"] <= 0)
     if bad.any():
         sample = [
             {"trade_date": str(pd.Timestamp(r["trade_date"]).date()), "adj_factor": r["adj_factor"]}
@@ -257,20 +236,13 @@ def _clean_adj_factors(
         ]
         raise DataContractError(
             "AdjFactor",
-            f"{ts_code} 复权因子存在 {int(bad.sum())} 行非法值"
-            f"（缺失/NaN/inf/<=0，{source}）：{sample}",
+            f"{ts_code} 复权因子存在 {int(bad.sum())} 行非法值（缺失/NaN/inf/<=0，{source}）：{sample}",
             invalid=["adj_factor"],
         )
-    return (
-        out.drop_duplicates("trade_date")
-        .sort_values("trade_date")
-        .reset_index(drop=True)
-    )
+    return out.drop_duplicates("trade_date").sort_values("trade_date").reset_index(drop=True)
 
 
-def _query_adj_history(
-    client: TushareClient, ts_code: str, end: str
-) -> pd.DataFrame:
+def _query_adj_history(client: TushareClient, ts_code: str, end: str) -> pd.DataFrame:
     """拉取自 ``ADJ_HISTORY_START`` 起的全部 adj_factor（ADR-008 D1）。
 
     单次 ``query`` 会被服务端行数上限截断：实测 000001.SZ 从 19900101 起
@@ -287,9 +259,7 @@ def _query_adj_history(
     return client.query("adj_factor", **params)
 
 
-def _check_factor_coverage(
-    fct: pd.DataFrame, raw: pd.DataFrame, adj: str, *, ts_code: str
-) -> None:
+def _check_factor_coverage(fct: pd.DataFrame, raw: pd.DataFrame, adj: str, *, ts_code: str) -> None:
     """因子表必须覆盖行情区间两端（ADR-008 D1）。
 
     服务端对单次查询有行数上限，截断若落在最早一段，``_adj_base`` 会拿到
@@ -310,8 +280,7 @@ def _check_factor_coverage(
     if adj == "qfq" and last_fct < last_raw:
         raise DataContractError(
             "AdjFactor",
-            f"{ts_code} 复权因子最新 {last_fct:%Y-%m-%d} 早于行情最新 "
-            f"{last_raw:%Y-%m-%d}（{adj}）：因子历史疑似被截断",
+            f"{ts_code} 复权因子最新 {last_fct:%Y-%m-%d} 早于行情最新 {last_raw:%Y-%m-%d}（{adj}）：因子历史疑似被截断",
             invalid=["adj_factor"],
         )
 
@@ -328,23 +297,17 @@ def _adj_base(factors: pd.DataFrame, adj: str) -> tuple[float, pd.Timestamp]:
     return float(row["adj_factor"]), pd.Timestamp(row["trade_date"])
 
 
-def _adjustment_meta(
-    adj: str | None, base_factor: float | None, base_date: Any
-) -> dict[str, Any]:
+def _adjustment_meta(adj: str | None, base_factor: float | None, base_date: Any) -> dict[str, Any]:
     """复权标注（ADR-008 D1）：``adj``/``adj_base``/``base_factor``/``adj_source``。"""
     return {
         "adj": adj or "none",
-        "adj_base": (
-            None if base_date is None else pd.Timestamp(base_date).strftime("%Y-%m-%d")
-        ),
+        "adj_base": (None if base_date is None else pd.Timestamp(base_date).strftime("%Y-%m-%d")),
         "base_factor": None if base_factor is None else float(base_factor),
         "adj_source": "daily",
     }
 
 
-def _cache_base_valid(
-    meta: dict, cached: pd.DataFrame, adj: str | None, end_eff: Any = None
-) -> bool:
+def _cache_base_valid(meta: dict, cached: pd.DataFrame, adj: str | None, end_eff: Any = None) -> bool:
     """缓存 meta 的 ``base_factor`` 与缓存数据不一致时视为失效（ADR-008 §5）。
 
     只做可自证的内部一致性检查，不联网：
@@ -372,9 +335,7 @@ def _cache_base_valid(
     if "adj_factor" not in cached.columns or cached.empty:
         return False
     ordered = cached.sort_values("trade_date").reset_index(drop=True)
-    horizon = (
-        pd.Timestamp(end_eff) if end_eff is not None else ordered["trade_date"].max()
-    )
+    horizon = pd.Timestamp(end_eff) if end_eff is not None else ordered["trade_date"].max()
     if adj == "qfq":
         window = ordered[ordered["trade_date"] <= horizon]
         if window.empty:
@@ -393,9 +354,7 @@ def _fetch_daily(
     end: str,
     adj: str | None,
 ) -> pd.DataFrame:
-    raw = client.query(
-        "daily", ts_code=ts_code, start_date=start, end_date=end
-    )
+    raw = client.query("daily", ts_code=ts_code, start_date=start, end_date=end)
     if raw.empty:
         return pd.DataFrame()
     # 供应商列漂移（缺 ts_code/trade_date/OHLC/vol/amount）在这里显式报错，
@@ -417,16 +376,10 @@ def _fetch_daily(
         merged = raw.merge(fct, on="trade_date", how="left")
         missing = merged["adj_factor"].isna()
         if missing.any():
-            dates = (
-                merged.loc[missing, "trade_date"]
-                .head(3)
-                .dt.strftime("%Y-%m-%d")
-                .tolist()
-            )
+            dates = merged.loc[missing, "trade_date"].head(3).dt.strftime("%Y-%m-%d").tolist()
             raise DataContractError(
                 "AdjFactor",
-                f"{ts_code} 以下交易日缺少 adj_factor（{adj}）：{dates}；"
-                "禁止用 1.0 填充或回退 qfq",
+                f"{ts_code} 以下交易日缺少 adj_factor（{adj}）：{dates}；禁止用 1.0 填充或回退 qfq",
                 invalid=["adj_factor"],
             )
         # 保留原始价：涨跌停/ST/新股规则必须用交易所原始价判断
@@ -516,24 +469,14 @@ def load_daily(
             )
         if cached is not None and not cached.empty:
             fetched_today = meta.get("fetched_at") == _today().strftime("%Y-%m-%d")
-            covers = (
-                cached["trade_date"].min() <= start_eff
-                and cached["trade_date"].max() >= end_eff
-            )
+            covers = cached["trade_date"].min() <= start_eff and cached["trade_date"].max() >= end_eff
             # 缓存 meta 的 base_factor 与数据不一致即失效（ADR-008 §5），
             # 否则会把按旧基准计算的价格继续当作 qfq/hfq 返回。
             # qfq 还要按请求 end_eff 取基准行，避免命中缓存后基准随缓存窗口漂移。
-            cache_ok = (
-                fetched_today
-                and covers
-                and _cache_base_valid(meta, cached, adj, end_eff=end_eff)
-            )
+            cache_ok = fetched_today and covers and _cache_base_valid(meta, cached, adj, end_eff=end_eff)
 
     if cache_ok and cached is not None:
-        result = cached[
-            (cached["trade_date"] >= start_eff)
-            & (cached["trade_date"] <= pd.Timestamp(end))
-        ].copy()
+        result = cached[(cached["trade_date"] >= start_eff) & (cached["trade_date"] <= pd.Timestamp(end))].copy()
         adjust_meta = _adjustment_meta(adj, meta.get("base_factor"), meta.get("adj_base"))
     else:
         result = _fetch_daily(client, ts_code, _fmt(start_eff), _fmt(end_eff), adj)
@@ -541,9 +484,7 @@ def load_daily(
             raise TushareError(f"{ts_code} 无行情数据（区间 {_fmt(start_eff)}-{_fmt(end_eff)}）")
         _atomic_parquet(result, path)
         fresh = dict(result.attrs.get("adjustment") or {})
-        adjust_meta = _adjustment_meta(
-            adj, fresh.get("base_factor"), fresh.get("adj_base")
-        )
+        adjust_meta = _adjustment_meta(adj, fresh.get("base_factor"), fresh.get("adj_base"))
         _atomic_text(
             json.dumps(
                 {
@@ -562,11 +503,7 @@ def load_daily(
             meta_path,
         )
 
-    result = (
-        result.sort_values("trade_date")
-        .drop_duplicates("trade_date")
-        .reset_index(drop=True)
-    )
+    result = result.sort_values("trade_date").drop_duplicates("trade_date").reset_index(drop=True)
     # 缓存与增量两条路径统一过契约：旧 parquet 缺列时显式报错，而不是返回残表。
     result = validate_bars(
         result,
@@ -599,24 +536,25 @@ def load_index_daily(
             cached["trade_date"] = pd.to_datetime(cached["trade_date"])
         except (OSError, ValueError, KeyError, TypeError):  # 缓存损坏/缺列时当作无缓存
             cached = None
-        if cached is not None and not cached.empty and (
-            meta.get("fetched_at") == _today().strftime("%Y-%m-%d")
-            and cached["trade_date"].min() <= pd.Timestamp(start)
-            and cached["trade_date"].max() >= (last_open_date(end) or pd.Timestamp(end))
+        if (
+            cached is not None
+            and not cached.empty
+            and (
+                meta.get("fetched_at") == _today().strftime("%Y-%m-%d")
+                and cached["trade_date"].min() <= pd.Timestamp(start)
+                and cached["trade_date"].max() >= (last_open_date(end) or pd.Timestamp(end))
+            )
         ):
             cached = validate_bars(
                 cached[
-                    (cached["trade_date"] >= pd.Timestamp(start))
-                    & (cached["trade_date"] <= pd.Timestamp(end))
+                    (cached["trade_date"] >= pd.Timestamp(start)) & (cached["trade_date"] <= pd.Timestamp(end))
                 ].copy(),
                 allow_empty=True,
                 source=f"index_daily({ts_code})",
             )
             return cached
 
-    df = client.query(
-        "index_daily", ts_code=ts_code, start_date=_fmt(start), end_date=_fmt(end)
-    )
+    df = client.query("index_daily", ts_code=ts_code, start_date=_fmt(start), end_date=_fmt(end))
     if df.empty:
         return pd.DataFrame()
     df["trade_date"] = pd.to_datetime(df["trade_date"])
@@ -661,16 +599,8 @@ def _normalize_minute(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors="coerce").astype(float)
 
     # stk_mins / rt_min：vol 股 -> 手；amount 元 -> 千元
-    df["vol"] = (
-        pd.to_numeric(df["vol"], errors="coerce").fillna(0.0) / 100.0
-        if "vol" in df.columns
-        else 0.0
-    )
-    df["amount"] = (
-        pd.to_numeric(df["amount"], errors="coerce").fillna(0.0) / 1000.0
-        if "amount" in df.columns
-        else 0.0
-    )
+    df["vol"] = pd.to_numeric(df["vol"], errors="coerce").fillna(0.0) / 100.0 if "vol" in df.columns else 0.0
+    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0) / 1000.0 if "amount" in df.columns else 0.0
     df["pre_close"] = df["close"].shift(1)
     df["change"] = df["close"].diff()
     df["pct_chg"] = df["close"].pct_change() * 100.0
@@ -779,9 +709,7 @@ def _apply_minute_adj(
         return df
     if df is None or df.empty:
         return df
-    fct = _clean_adj_factors(
-        factors, ts_code=ts_code or "?", source=f"分钟线({ts_code or '?'})"
-    )
+    fct = _clean_adj_factors(factors, ts_code=ts_code or "?", source=f"分钟线({ts_code or '?'})")
     base_factor, base_date = _adj_base(fct, adj)
     merged = df.merge(fct, on="trade_date", how="left")
     missing = merged["adj_factor"].isna()
@@ -796,16 +724,10 @@ def _apply_minute_adj(
         intraday = missing & (days == today) & (last_factor_day < today)
         unexpected = missing & ~intraday
         if unexpected.any():
-            dates = (
-                merged.loc[unexpected, "trade_date"]
-                .head(3)
-                .dt.strftime("%Y-%m-%d")
-                .tolist()
-            )
+            dates = merged.loc[unexpected, "trade_date"].head(3).dt.strftime("%Y-%m-%d").tolist()
             raise DataContractError(
                 "AdjFactor",
-                f"{ts_code or '?'} 分钟线以下交易日缺少 adj_factor（{adj}）：{dates}；"
-                "禁止用 1.0 填充或回退 qfq",
+                f"{ts_code or '?'} 分钟线以下交易日缺少 adj_factor（{adj}）：{dates}；禁止用 1.0 填充或回退 qfq",
                 invalid=["adj_factor"],
             )
         merged.loc[intraday, "adj_factor"] = float(fct["adj_factor"].iloc[-1])
@@ -816,9 +738,7 @@ def _apply_minute_adj(
         if col in merged.columns:
             merged[col] = pd.to_numeric(merged[col], errors="coerce") * ratio
     merged["change"] = merged["close"] - merged["pre_close"]
-    merged["pct_chg"] = (
-        merged["close"] / merged["pre_close"].replace(0, np.nan) * 100 - 100
-    )
+    merged["pct_chg"] = merged["close"] / merged["pre_close"].replace(0, np.nan) * 100 - 100
     out = merged.drop(columns=["adj_factor"])
     meta = _adjustment_meta(adj, base_factor, base_date)
     if partial:
@@ -866,48 +786,32 @@ def load_minute(
     client = client or get_client()
 
     if days <= 1:
-        df = _normalize_minute(
-            client.query("rt_min", ts_code=code, freq=MINUTE_FREQ_MAP[freq])
-        )
+        df = _normalize_minute(client.query("rt_min", ts_code=code, freq=MINUTE_FREQ_MAP[freq]))
         if df.empty:
             # 非交易时段/接口异常时，退回最近几天 stk_mins，取最后一个交易日
             today = pd.Timestamp.today().normalize()
-            hist = _query_stk_mins(
-                client, code, freq, today - pd.Timedelta(days=7), today
-            )
+            hist = _query_stk_mins(client, code, freq, today - pd.Timedelta(days=7), today)
             df = _normalize_minute(hist)
             if not df.empty:
                 df = df[df["trade_date"] == df["trade_date"].max()].reset_index(drop=True)
             if df.empty:
-                raise TushareError(
-                    f"{code} 分钟线为空：rt_min / stk_mins 均无数据"
-                )
+                raise TushareError(f"{code} 分钟线为空：rt_min / stk_mins 均无数据")
     else:
         today = pd.Timestamp.today().normalize()
         cal = load_trade_cal()
         open_days = cal.loc[(cal["is_open"] == 1) & (cal["cal_date"] <= today), "cal_date"]
-        start = (
-            open_days.sort_values().tail(days).min()
-            if len(open_days)
-            else today - pd.Timedelta(days=days * 2 + 7)
-        )
+        start = open_days.sort_values().tail(days).min() if len(open_days) else today - pd.Timedelta(days=days * 2 + 7)
         df = _normalize_minute(_query_stk_mins(client, code, freq, start, today))
         # stk_mins 通常只含已完成的交易日；把当日 rt_min 补上
         try:
-            rt = _normalize_minute(
-                client.query("rt_min", ts_code=code, freq=MINUTE_FREQ_MAP[freq])
-            )
+            rt = _normalize_minute(client.query("rt_min", ts_code=code, freq=MINUTE_FREQ_MAP[freq]))
             if not rt.empty:
                 df = pd.concat([df, rt], ignore_index=True) if not df.empty else rt
         except Exception:  # noqa: BLE001, S110 - 实时分钟线是可选增强（权限/额度受限），失败保留日线
             pass
         if df.empty:
             raise TushareError(f"{code} 历史分钟线为空（stk_mins 无返回）")
-        df = (
-            df.drop_duplicates("trade_time")
-            .sort_values("trade_time")
-            .reset_index(drop=True)
-        )
+        df = df.drop_duplicates("trade_time").sort_values("trade_time").reset_index(drop=True)
         dates = df["trade_date"].drop_duplicates().sort_values().tail(days)
         df = df[df["trade_date"].isin(dates)].reset_index(drop=True)
 
@@ -921,9 +825,7 @@ def load_minute(
         df = _apply_minute_adj(df, factors, adj, ts_code=code)
         adjust_meta = dict(df.attrs.get("adjustment") or {})
 
-    df = validate_bars(
-        df, allow_empty=True, source=f"load_minute({code},{freq})"
-    )
+    df = validate_bars(df, allow_empty=True, source=f"load_minute({code},{freq})")
     if adjust_meta:
         df.attrs["adjustment"] = adjust_meta
     _cache_put(_MINUTE_MEM, key, (now, df), maxsize=128)
@@ -979,11 +881,79 @@ BAR_FREQS = ("D", "W", "M", "1min", "5min", "15min", "30min", "60min")
 _PERIOD_FREQ_ALIASES = {"day": "D", "week": "W", "month": "M"}
 _MINUTE_FREQS = ("1min", "5min", "15min", "30min", "60min")
 _DAILY_BAR_CLOSE = "15:00"
+#: 行情时区：bar 时间语义一律按北京时间解释（ADR-005/ADR-018，Q7）。
+MARKET_TZ = ZoneInfo("Asia/Shanghai")
+#: bar 所处时段（Q7）：集合竞价 / 连续竞价 / 盘后固定价 / 其他（休市）/ 日线收盘。
+BAR_SESSIONS = ("pre", "continuous", "post", "closed", "close")
 #: A 股连续竞价两段闭区间（午休 11:30–13:00 不是交易时段）。
 _MORNING_OPEN = clock_time(9, 30)
 _MORNING_CLOSE = clock_time(11, 30)
 _AFTERNOON_OPEN = clock_time(13, 0)
 _AFTERNOON_CLOSE = clock_time(15, 0)
+#: 集合竞价 bar 的最早时间（09:15 起接受申报，09:25 出成交价）。
+_PRE_OPEN = clock_time(9, 15)
+
+
+def _freq_key(freq: str) -> str:
+    key = _PERIOD_FREQ_ALIASES.get(freq, freq)
+    if key not in BAR_FREQS:
+        raise ValueError(f"未知频率: {freq}（允许 {BAR_FREQS}）")
+    return key
+
+
+def market_timestamp(value: Any) -> pd.Timestamp:
+    """把任意 bar 时间戳归一到 ``Asia/Shanghai``：naive 视为本地时间，aware 直接换算。"""
+    stamp = pd.Timestamp(value)
+    if stamp.tzinfo is None:
+        return stamp.tz_localize(MARKET_TZ)
+    return stamp.tz_convert(MARKET_TZ)
+
+
+def classify_bar_time(stamp: Any, freq: str = "D") -> str:
+    """bar 时间属于哪个时段（Q7 唯一判定入口，返回值见 :data:`BAR_SESSIONS`）。
+
+    - ``pre``：09:15–09:29 集合竞价（09:25 的成交价 bar 是合法行情，不是脏数据）；
+    - ``continuous``：09:30–11:30、13:00–15:00 连续竞价；
+    - ``post``：15:00 之后（盘后固定价格交易）；
+    - ``closed``：其余时间（含午休、开盘前、隔夜）；
+    - ``close``：日/周/月线（收盘价 bar，不按盘中时段判定）。
+
+    时区按 :data:`MARKET_TZ` 解释：naive 视为北京时间，aware 先换算再判定。
+    """
+    key = _freq_key(freq)
+    if key not in _MINUTE_FREQS:
+        return "close"
+    clock = market_timestamp(stamp).time()
+    if _PRE_OPEN <= clock < _MORNING_OPEN:
+        return "pre"
+    if _MORNING_OPEN <= clock <= _MORNING_CLOSE or _AFTERNOON_OPEN <= clock <= _AFTERNOON_CLOSE:
+        return "continuous"
+    if clock > _AFTERNOON_CLOSE:
+        return "post"
+    return "closed"
+
+
+def bar_sessions(df: pd.DataFrame, *, freq: str = "D") -> pd.Series:
+    """逐行标注时段（索引与 ``df`` 对齐）；无时间列时返回空 Series。
+
+    分钟档按 ``trade_time`` 判定，日/周/月线统一 ``close``；缺列时退回 ``trade_date``，
+    两列都没有时返回空 Series（时点语义由调用方显式判定，不猜）。
+    """
+    if df is None or df.empty:
+        return pd.Series(dtype=object)
+    column = "trade_time" if "trade_time" in df.columns else "trade_date"
+    if column not in df.columns:
+        return pd.Series(dtype=object)
+    stamps = pd.to_datetime(df[column], errors="coerce")
+    return stamps.map(lambda value: classify_bar_time(value, freq) if pd.notna(value) else "closed")
+
+
+def continuous_bars(df: pd.DataFrame, *, freq: str = "D") -> pd.DataFrame:
+    """只保留连续竞价 bar（Q7：集合竞价/盘后固定价不参与 MA/BOLL/MACD 等连续指标）。"""
+    sessions = bar_sessions(df, freq=freq)
+    if sessions.empty:
+        return df.iloc[0:0].copy()
+    return df.loc[sessions.to_numpy() == "continuous"].copy()
 
 
 def latest_bar_time(
@@ -1002,16 +972,15 @@ def latest_bar_time(
     - 不变量：``data_time[:10] == data_as_of``；空 DataFrame 抛 ``ValueError``
       （不允许返回空串骗过必填校验）。
 
-    分钟档的越界 bar（集合竞价 09:25、盘后 15:01 等）默认**跳过**并取时段内最后一根，
-    因为真实行情源会带这类 bar，硬失败会让整张图不可用；跳过时若传了 ``notes`` 会追加一条
-    说明供图注/日志留痕。``strict=True`` 时改为抛 ``ValueError``（数据校验场景）。
-    若时段内一根都没有，两种模式都抛错。
+    Q7（2026-11-14 裁决）：分钟档的集合竞价（09:25）与盘后固定价（15:0x）bar 都是
+    **合法行情**，默认直接接受并取时间最大值，不再跳过、也不回退前一日；时段由
+    :func:`classify_bar_time` 标注，连续指标由 :func:`continuous_bars` 排除。
+    ``strict=True`` 仅保留给数据校验/研究场景：最新 bar 不是连续竞价 bar 时抛 ``ValueError``；
+    通用的硬校验入口是 :func:`validate_bar_time`。
 
     工具与渲染器**不得**自行 ``strftime`` 拼时点，一律经此函数。
     """
-    key = _PERIOD_FREQ_ALIASES.get(freq, freq)
-    if key not in BAR_FREQS:
-        raise ValueError(f"未知频率: {freq}（允许 {BAR_FREQS}）")
+    key = _freq_key(freq)
     if df is None or df.empty:
         raise ValueError("空 DataFrame 没有有效 bar，无法确定 data_as_of/data_time")
 
@@ -1022,43 +991,50 @@ def latest_bar_time(
     if series.empty:
         raise ValueError(f"{column} 全部无效，无法确定时点")
     # 取时间最大值而不是 iloc[-1]：调用方可能传入 sort desc 或未排序的 DataFrame。
-    stamps = series.sort_values()
-
+    stamp = pd.Timestamp(series.sort_values().iloc[-1])
+    as_of = stamp.strftime("%Y-%m-%d")
     if key in _MINUTE_FREQS:
-        session = stamps[stamps.map(_is_session_time)]
-        if session.empty:
-            stamp = pd.Timestamp(stamps.iloc[-1])
-            raise ValueError(
-                f"分钟 bar 时间 {stamp} 全部不在交易时段 "
-                f"{_MORNING_OPEN.strftime('%H:%M')}–{_MORNING_CLOSE.strftime('%H:%M')} / "
-                f"{_AFTERNOON_OPEN.strftime('%H:%M')}–{_AFTERNOON_CLOSE.strftime('%H:%M')}，拒绝该数据"
-            )
-        if strict and len(session) != len(stamps):
-            stamp = pd.Timestamp(stamps[~stamps.map(_is_session_time)].iloc[-1])
-            raise ValueError(
-                f"分钟 bar 时间 {stamp} 不在交易时段 "
-                f"{_MORNING_OPEN.strftime('%H:%M')}–{_MORNING_CLOSE.strftime('%H:%M')} / "
-                f"{_AFTERNOON_OPEN.strftime('%H:%M')}–{_AFTERNOON_CLOSE.strftime('%H:%M')}，拒绝该数据"
-            )
-        skipped = len(stamps) - len(session)
-        if skipped and notes is not None:
-            notes.append(f"已跳过 {skipped} 根交易时段外的分钟 bar（集合竞价/盘后）")
-        stamp = pd.Timestamp(session.iloc[-1])
-        as_of = stamp.strftime("%Y-%m-%d")
         data_time = stamp.strftime("%Y-%m-%d %H:%M")
+        session = classify_bar_time(stamp, key)
+        if strict and session != "continuous":
+            raise ValueError(
+                f"最新分钟 bar {data_time} 的 session={session}（非连续竞价），"
+                "strict=True 拒绝该数据；需要渲染请改用 strict=False 或 validate_bar_time"
+            )
+        if notes is not None and session != "continuous":
+            label = {"pre": "集合竞价", "post": "盘后固定价"}.get(session, "非连续竞价时段")
+            notes.append(f"最新分钟 bar {data_time} 属{label}（session={session}）")
     else:
-        stamp = pd.Timestamp(stamps.iloc[-1])
-        as_of = stamp.strftime("%Y-%m-%d")
         data_time = f"{as_of} {_DAILY_BAR_CLOSE}"
+        session = "close"
     if data_time[:10] != as_of:  # pragma: no cover - 构造上恒成立，守住不变量
         raise ValueError(f"data_time {data_time} 与 data_as_of {as_of} 不同日")
     return as_of, data_time
 
 
-def _is_session_time(stamp: Any) -> bool:
-    """分钟 bar 的时间戳是否落在连续竞价两段闭区间内。"""
-    clock = pd.Timestamp(stamp).time()
-    return (
-        _MORNING_OPEN <= clock <= _MORNING_CLOSE
-        or _AFTERNOON_OPEN <= clock <= _AFTERNOON_CLOSE
-    )
+def validate_bar_time(df: pd.DataFrame, *, freq: str = "D", strict: bool = True) -> str:
+    """校验数据里存在合法交易时段的 bar，返回最新 bar 的时段（Q7 硬校验入口）。
+
+    ``strict=True``（默认）时，出现集合竞价/盘后固定价/休市 bar 或全天无连续竞价 bar
+    一律抛 ``ValueError``；``strict=False`` 只返回时段、不抛错。渲染层**不调用**本函数
+    （图上要能画 09:25 bar），它只服务数据质量门禁与研究口径。
+    """
+    key = _freq_key(freq)
+    if df is None or df.empty:
+        raise ValueError("空 DataFrame 没有有效 bar")
+    sessions = bar_sessions(df, freq=key)
+    if sessions.empty:
+        raise ValueError("缺少 trade_date/trade_time 列，无法判定 bar 时段")
+    counts = sessions.value_counts()
+    session = str(sessions.iloc[-1])
+    if not strict:
+        return session
+    allowed = {"continuous"} if key in _MINUTE_FREQS else {"close"}
+    bad = sorted(set(counts.index) - allowed)
+    if bad:
+        detail = "、".join(f"{name}×{int(counts[name])}" for name in bad)
+        raise ValueError(
+            f"{key} 频率下出现非法时段的 bar：{detail}；"
+            f"合法时段为 {sorted(allowed)}（集合竞价/盘后固定价只能在渲染层标注，不能进数据门禁）"
+        )
+    return session

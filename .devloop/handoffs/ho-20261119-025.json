@@ -1,0 +1,153 @@
+{
+  "id": "ho-20261119-025",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
+  "summary": "承接 ho-20261119-024（initial）。本轮只做交付闭环验证与两处收口，无新增功能：\\n\\n1) PNG 契约收口：chart_service 里 png_digest 从 \\\"sha256:<hex>\\\" 改回裸 hex（与 blob 目录名同源、保持 plan-20261114-001 的既有契约），content_digest 仍为 sha256: 前缀；tests/test_agent_chart_png_export.py 同步改断言（原先对比已废弃的 meta[\\\"div_id\\\"]）。\\n2) load_chart_artifact 的 meta_digest 改由 meta 规范化重算（ArtifactRecord 无 meta_digest 属性），修掉 mypy 报错。\\n3) 推送分支 feat/chart-pipeline-v2 并开 PR #36，CI 两个 job 均 pass；plan 的 links 补 pr/branch 并把 CI 结论记入 links.test。\\n\\n相对上一份交付的修改痕迹：chart_service.py（png_digest/meta_digest）、tests/test_agent_chart_png_export.py（两条断言）、plan item JSON（links）、本 handoff。",
+  "requirements": [
+    {
+      "id": "Q1",
+      "text": "data_as_of/data_time 行情时点 + view_as_of/view_time 视图时点，图注同时展示；runtime/gateway 仍读行情时点",
+      "source": "plan-20261114-002 验收 #2；spec §3"
+    },
+    {
+      "id": "Q2",
+      "text": "meta 不含大快照，meta_digest/版本/correction 落库；回放 as_recorded 与 recomputed 分离且不静默覆盖",
+      "source": "plan-20261114-002 验收 #3；spec §4"
+    },
+    {
+      "id": "Q3",
+      "text": "artifact 逻辑身份含 spec+数据快照+plotly/python/code 版本；embed_html 每图唯一 div_id",
+      "source": "plan-20261114-002 验收 #4；spec §5"
+    },
+    {
+      "id": "Q4",
+      "text": "panes/style/raw 别名删除，schema 只声明 layers/theme/adj=none",
+      "source": "plan-20261114-002 验收 #1；spec §1"
+    },
+    {
+      "id": "Q5",
+      "text": "chart_render 不 import agent_store 写路径；chart_service 唯一审计入口；ArtifactReader 只读",
+      "source": "plan-20261114-002 验收 #5；spec §7"
+    },
+    {
+      "id": "Q7",
+      "text": "09:25/盘后固定价可渲染并标 session；连续指标默认排除；strict 可硬失败；不回退前一日",
+      "source": "plan-20261114-002 验收 #6；spec §6"
+    },
+    {
+      "id": "D10",
+      "text": "无显式时间列或无法证明时间语义时抛契约错误",
+      "source": "plan-20261114-002 验收 #7；spec §15.1"
+    },
+    {
+      "id": "D11",
+      "text": "transforms 走 stats 口径，空组/NaN/排序有对照测试",
+      "source": "plan-20261114-002 验收 #8；spec §15.2"
+    },
+    {
+      "id": "§12",
+      "text": "artifact/version 行永久保留、孤儿文件 GC；correction 仪维护脚本，actor/理由必填",
+      "source": "plan-20261114-002 验收 #9；spec §12"
+    },
+    {
+      "id": "FREEZE-V2",
+      "text": "冻结清单 v2、ADR-016/017/018 补丁、回归通过；文档与实现一致",
+      "source": "plan-20261114-002 验收 #10；spec §9"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "本轮无新增改动；CI 已确认纯渲染器版本通过（相对上一份交付：仅 png_digest 写入位置调整到 chart_service）",
+      "commit": ""
+    },
+    {
+      "path": "astock/agent/chart_service.py",
+      "summary": "png_digest 改为存裸 hex（与 blob 目录同源，保持 v1 契约）；meta_digest 由 meta 规范化重算（ArtifactRecord 无该属性，修 mypy）",
+      "commit": ""
+    },
+    {
+      "path": "tests/test_agent_chart_png_export.py",
+      "summary": "png_digest 断言回到裸 hex；删掉已废弃的 div_id 对比，改为与 content_digest 区分",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-002.json",
+      "summary": "links 新增 pr/branch，links.test 追加 CI 结论（test/png-export 均 pass）",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261119-024.md",
+      "summary": "初始交付文档（kind=initial）",
+      "commit": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 36",
+      "result": "GitHub Actions 两个 job 全绿",
+      "passed": true,
+      "evidence": "png-export pass 1m18s / test pass 1m8s（run 44531537237）"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider -m \"not png\" --timeout=600",
+      "result": "全量非 PNG 回归通过（png_digest 改动后重跑）",
+      "passed": true,
+      "evidence": "771 passed, 5 deselected, 1 warning, 12 subtests passed in 74.19s"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png -p no:cacheprovider --timeout=300",
+      "result": "PNG 链路在 png_digest 口径修正后通过",
+      "passed": true,
+      "evidence": "5 passed, 1 warning in 20.45s"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "lint 通过",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "类型检查通过（修掉 ArtifactRecord.meta_digest 报错）",
+      "passed": true,
+      "evidence": "Success: no issues found in 44 source files"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "danger-full-access 文件权限（跑测试用）",
+      "reason": "pytest 使用 0700 临时目录，workspace-write 沙箱会 PermissionError；本会话已授予",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub push + PR",
+      "reason": "已推送 feat/chart-pipeline-v2 并开 PR #36（gh 已登录）",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/chart-pipeline-v2",
+    "commit": "c01f365",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/36",
+    "ci": "passed（PR #36，run 44531537237：test pass 1m8s，png-export pass 1m18s）",
+    "merge": "未合并（等待评审 approve）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-024",
+  "next": "评审轮次：请评审按 spec docs/AStockAgent_chart_audit_v2_change_spec.md 逐条核对 Q1–Q7/D10/D11/§12（重点：§3.2 图注五档文案、D10 time_field 契约与 artifact 记录值例外、chart_service 身份拼装）。若要求兼容 chart_render.render 别名可在 chart_service 加薄封装；合并后需把计划置 done 并在 completion 时确认 plan-20261114-003（hfq）与新 adj 口径的 caption 联动。",
+  "createdAt": "2026-11-19T13:17:17.108Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-025.md"
+}

@@ -451,7 +451,7 @@ class AdjCaliberTests(unittest.TestCase):
 
 
 class LatestBarTimeTests(unittest.TestCase):
-    """§6.2 唯一时点生产者：取时间最大值、两段交易时段、不依赖行序（评审 P2）。"""
+    """§6.2 唯一时点生产者：取时间最大值、Q7 接受集合竞价/盘后 bar、不依赖行序。"""
 
     def test_daily_uses_max_date_not_row_order(self):
         df = pd.DataFrame(
@@ -471,16 +471,26 @@ class LatestBarTimeTests(unittest.TestCase):
             self.assertEqual(as_of, "2024-01-02")
             self.assertEqual(bar_time, stamp)
 
-    def test_minute_rejects_lunch_break_and_off_hours_in_strict_mode(self):
-        for stamp in ("2024-01-02 11:31", "2024-01-02 12:30", "2024-01-02 09:29", "2024-01-02 15:01"):
+    def test_minute_non_strict_accepts_lunch_break_and_off_hours(self):
+        # Q7：渲染层不得因 bar 时段失败；越界只标注 session 并给 note。
+        for stamp, expected in (
+            ("2024-01-02 11:31", "closed"),
+            ("2024-01-02 12:30", "closed"),
+            ("2024-01-02 09:29", "pre"),
+            ("2024-01-02 15:01", "post"),
+        ):
             df = pd.DataFrame({"trade_time": pd.to_datetime([stamp])})
-            with self.assertRaises(ValueError):
-                data.latest_bar_time(df, freq="5min")
+            notes: list[str] = []
+            as_of, bar_time = data.latest_bar_time(df, freq="5min", notes=notes)
+            self.assertEqual(as_of, "2024-01-02")
+            self.assertEqual(bar_time, stamp)
+            self.assertEqual(len(notes), 1)
+            self.assertIn(f"session={expected}", notes[0])
             with self.assertRaises(ValueError):
                 data.latest_bar_time(df, freq="5min", strict=True)
 
-    def test_minute_skips_out_of_session_bars_by_default(self):
-        # 集合竞价 09:25 bar 真实存在；默认跳过，取时段内最后一根（决策记录 Q7）。
+    def test_minute_accepts_auction_and_post_bars_as_latest(self):
+        # 2026-11-14 Q7：09:25 集合竞价 / 15:0x 盘后固定价都是合法行情，取时间最大值，不回退前一日。
         df = pd.DataFrame(
             {
                 "trade_time": pd.to_datetime(
@@ -491,17 +501,70 @@ class LatestBarTimeTests(unittest.TestCase):
         notes: list[str] = []
         as_of, bar_time = data.latest_bar_time(df, freq="5min", notes=notes)
         self.assertEqual(as_of, "2024-01-02")
-        self.assertEqual(bar_time, "2024-01-02 09:35")
+        self.assertEqual(bar_time, "2024-01-02 15:01")
         self.assertEqual(len(notes), 1)
-        self.assertIn("2 根", notes[0])
+        self.assertIn("盘后固定价", notes[0])
 
         with self.assertRaises(ValueError):
             data.latest_bar_time(df, freq="5min", strict=True)
 
-    def test_minute_raises_when_every_bar_is_out_of_session(self):
+    def test_minute_auction_only_frame_is_accepted(self):
         df = pd.DataFrame({"trade_time": pd.to_datetime(["2024-01-02 09:25"])})
-        with self.assertRaises(ValueError):
-            data.latest_bar_time(df, freq="5min")
+        notes: list[str] = []
+        as_of, bar_time = data.latest_bar_time(df, freq="5min", notes=notes)
+        self.assertEqual((as_of, bar_time), ("2024-01-02", "2024-01-02 09:25"))
+        self.assertIn("集合竞价", notes[0])
+        # 不回退前一日：同一天的下一根 bar 不存在也不会拿别的日期顶替。
+        self.assertEqual(bar_time[:10], as_of)
+
+    def test_classify_bar_time_boundaries_and_timezone(self):
+        cases = [
+            ("2024-01-02 09:14", "closed"),
+            ("2024-01-02 09:15", "pre"),
+            ("2024-01-02 09:25", "pre"),
+            ("2024-01-02 09:29", "pre"),
+            ("2024-01-02 09:30", "continuous"),
+            ("2024-01-02 11:30", "continuous"),
+            ("2024-01-02 11:31", "closed"),
+            ("2024-01-02 13:00", "continuous"),
+            ("2024-01-02 15:00", "continuous"),
+            ("2024-01-02 15:05", "post"),
+        ]
+        for stamp, expected in cases:
+            self.assertEqual(data.classify_bar_time(pd.Timestamp(stamp), "1min"), expected, stamp)
+        self.assertEqual(data.classify_bar_time(pd.Timestamp("2024-01-02"), "D"), "close")
+        # naive 视为北京时间；aware 先换算再判定（UTC 01:25 = 北京 09:25）。
+        aware = pd.Timestamp("2024-01-02 01:25", tz="UTC")
+        self.assertEqual(data.classify_bar_time(aware, "1min"), "pre")
+        self.assertEqual(data.market_timestamp(aware).hour, 9)
+
+    def test_validate_bar_time_strict_and_lenient(self):
+        clean = pd.DataFrame({"trade_time": pd.to_datetime(["2024-01-02 09:31", "2024-01-02 14:59"])})
+        self.assertEqual(data.validate_bar_time(clean, freq="1min"), "continuous")
+        dirty = pd.DataFrame(
+            {"trade_time": pd.to_datetime(["2024-01-02 09:25", "2024-01-02 09:31", "2024-01-02 15:05"])}
+        )
+        with self.assertRaises(ValueError) as ctx:
+            data.validate_bar_time(dirty, freq="1min")
+        self.assertIn("pre", str(ctx.exception))
+        self.assertIn("post", str(ctx.exception))
+        self.assertEqual(data.validate_bar_time(dirty, freq="1min", strict=False), "post")
+        daily = pd.DataFrame({"trade_date": pd.to_datetime(["2024-01-02"])})
+        self.assertEqual(data.validate_bar_time(daily), "close")
+
+    def test_continuous_bars_excludes_auction_and_post(self):
+        df = pd.DataFrame(
+            {
+                "trade_time": pd.to_datetime(
+                    ["2024-01-02 09:25", "2024-01-02 09:31", "2024-01-02 15:05"]
+                ),
+                "close": [10.0, 10.1, 10.2],
+            }
+        )
+        kept = data.continuous_bars(df, freq="1min")
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(float(kept["close"].iloc[0]), 10.1)
+        self.assertEqual(len(data.continuous_bars(df.iloc[0:0], freq="1min")), 0)
 
     def test_empty_frame_raises(self):
         with self.assertRaises(ValueError):

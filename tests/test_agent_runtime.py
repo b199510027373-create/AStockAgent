@@ -14,6 +14,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from astock.agent import (
@@ -1166,6 +1167,86 @@ def test_summarize_result_keeps_chart_html_out_of_partial_answer() -> None:
 
     # 短图（内联 SVG 等）保持原样，避免把正常小图也抽象掉。
     assert _summarize_result(ToolResult(figure="<svg/>")) == "图表 <svg/>"
+
+
+def test_runtime_passes_run_context_so_chart_artifact_links_real_run(
+    tmp_path: Path,
+) -> None:
+    """P1：runtime→tool 的 run 上下文让图表 link 挂到真实 run（source="agent"）。
+
+    ``chart_service`` 只在 ``ToolContext`` 存在时记录 ``source="agent"`` + ``run_id``；
+    旧实现里工具拿不到 run_id，图表永远落成 ``source="render"``、link.run_id=NULL。
+    """
+    from astock.agent import store
+    from astock.agent.tools import market_tools
+
+    code = "600519.SH"
+    daily = pd.DataFrame(
+        {
+            "ts_code": code,
+            "trade_date": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
+            "open": [100.0, 101.0, 102.0],
+            "high": [101.0, 102.0, 103.0],
+            "low": [99.0, 100.0, 101.0],
+            "close": [100.5, 101.5, 102.5],
+            "pre_close": [99.5, 100.5, 101.5],
+            "change": [1.0, 1.0, 1.0],
+            "pct_chg": [1.0, 1.0, 1.0],
+            "vol": [1000.0, 1000.0, 1000.0],
+            "amount": [5000.0, 5000.0, 5000.0],
+        }
+    )
+    calendar = pd.DataFrame(
+        {"cal_date": pd.bdate_range("2024-01-01", "2024-03-31"), "is_open": 1}
+    )
+    from astock import data as market
+
+    deps = market_tools.MarketDeps(
+        daily=lambda ts_code, *, start, end, adj: daily.copy(),
+        index_daily=lambda ts_code, *, start, end: daily.copy(),
+        minute=lambda ts_code, *, freq, days, adj: daily.copy(),
+        resample=market.resample_ohlcv,
+        bar_time=market.latest_bar_time,
+        trade_cal=lambda: calendar,
+        clock=lambda: pd.Timestamp("2024-01-04 16:30"),
+    )
+    db_path = str(tmp_path / "astock.db")
+    artifact_root = str(tmp_path / "agent")
+    registry = market_tools.build_market_registry(
+        deps=deps, db_path=db_path, artifact_root=artifact_root
+    )
+    model = FakeModel(
+        [
+            ToolCall("kline", {"ts_code": code, "chart": True, "limit": 3}),
+            "2024-01-04 收盘 102.50 元。",
+        ]
+    )
+    runtime = AgentRuntime(model, registry, db_path=db_path)
+
+    result = runtime.run("画个 K 线")
+
+    assert result.stop_reason == StopReason.COMPLETED
+    chart_meta = result.steps[0].result.metadata["chart"]
+    conn = store.connect(db_path)
+    try:
+        run = conn.execute(
+            "SELECT run_id, status FROM agent_runs ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        links = conn.execute(
+            "SELECT run_id, step, source FROM agent_run_artifacts "
+            "WHERE artifact_id = ?",
+            (chart_meta["artifact_id"],),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert run is not None
+    assert (run["status"], len(links)) == ("success", 1)
+    assert (links[0]["run_id"], links[0]["step"], links[0]["source"]) == (
+        run["run_id"],
+        0,
+        "agent",
+    )
 
 
 if __name__ == "__main__":

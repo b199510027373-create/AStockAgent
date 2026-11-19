@@ -287,4 +287,29 @@
 
 ---
 
+## 7. v2 裁决与落地（2026-11-19，plan-20261114-002）
+
+2026-11-14 的统一裁决全文见 `docs/AStockAgent_chart_audit_v2_change_spec.md`；
+本节只记录 v1 里被推翻的条目与最终落点，接口冻结口径见
+`docs/AStockAgent_interface_freeze_v2.md`。
+
+| v1 条目 | v1 当时的做法 | v2 裁决与落点 |
+|---|---|---|
+| D2 时点跟随「图上最后一根 bar」 | `RenderedFigure.time_point_scope`（market/view/unknown）单字段双义 | **推翻**：`data_as_of`/`data_time` 固定为行情时点（transforms 前），新增 `view_as_of`/`view_time` 为 views 后时点；图注同时展示；`chart_render._caption` + `chart_service` |
+| D3 artifact 回放重算时点 | 按快照重算并覆盖会话里的时点 | `load_chart_artifact(mode=...)`：`as_recorded` 逐字读记录，`recomputed` 只算视图时点、行情时点采信 meta，不一致只给 warning |
+| D4 固定 `div_id` 换确定性 | `figure_div_id()` 由 spec+快照派生，meta 记 `div_id` | **推翻**：规范 HTML 固定 `astock-chart`（字节稳定），`embed_html(html, div_id)` 为每个嵌入实例换唯一 id；meta 不再记 `div_id` |
+| D5 panes/style/raw 兼容别名 | 保留别名 | 2026-11-14 已裁决删除；v2 只认 `layers`/`theme`/`adj=qfq|hfq|none`，旧别名/未知键报错（v1 之前已完成，本轮补文档一致性） |
+| D9 `store.py` 三表最小实现 + 合成 run | `run_chart_<artifact_id>` 假 run | plan-20261107-008 已落 v2 三表 + `run_kind`；本轮删掉 last 合成 run 残留：直接渲染 `run_id=None, source='render'`，`chart_service` 是唯一审计入口 |
+| D10 无标准时间列时「猜」时间列 | `_probe_time_frame` 取第一个可解析非数值列 | **推翻**：只认 `encode.x`/`data.time_field` 的可证明时间列，否则抛 `ChartSpecError`；新增 `data.time_semantics=bar_time|trade_date|none` |
+| D11 transforms 在渲染帧上用 pandas 手写 | `_transform_group` 内联 `groupby().agg()` | 统一走 `astock/stats.py::aggregate_groups`（空组/NaN 组保留 + warning、稳定排序、同名后缀） |
+| Q7 09:25 bar 默认跳过 | `latest_bar_time` 跳过 pre/post 并在 notes 说明 | **推翻**：接受集合竞价/盘后固定价 bar，`session=pre|post` 如实标注；连续指标只用 `data.continuous_bars`，只有竞价数据时图注「盘前，暂无连续竞价数据」，不回退前一日 |
+
+新增对外面：`astock/agent/chart_service.py`（`render_chart` / `ArtifactReader` /
+`load_chart_artifact` / `artifact_file`）、`astock/data.py`（`classify_bar_time` / `bar_sessions` /
+`continuous_bars` / `validate_bar_time`）、`astock/stats.py::aggregate_groups`、
+`tools/artifact_admin.py`（correction / 孤儿 blob GC，actor+理由必填，默认 dry-run）。
+
+---
+
 *本文档由开发角色整理：§1–§5 记录决策与风险，§6 回填实施状态。裁决结果请回写 ADR-016 / ADR-018 与冻结清单；若裁决与 §6 不一致，开发侧再出一次修复提交。*
+*§7 为 v2 落地回填（2026-11-19），与 §6 的 v1 状态并存：§6 记录当时做法，§7 记录最终裁决。*

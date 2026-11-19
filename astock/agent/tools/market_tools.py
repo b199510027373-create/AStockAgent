@@ -1038,9 +1038,10 @@ def _render_kline(
     ``metadata['chart']['warning']``，表格数据仍然可用（评审 iss-mwm6tovm）。
     """
     if renderer is None:
-        from astock.agent import chart_render as renderer_module
+        from astock.agent import chart_service as renderer_module
 
-        renderer = renderer_module.render
+        # Q5：渲染 + 审计的唯一入口；chart_render 只是纯渲染器。
+        renderer = renderer_module.render_chart
     label = _freshness_label(series.freshness, series.session, series.data_time)
     chart_title = title or f"{series.code} {PERIOD_LABELS[period]} K线 · {label}"
     layer_spec, layer_warnings = _chart_layers(layers)
@@ -1068,6 +1069,19 @@ def _render_kline(
         "layers": layer_spec,
     }
     meta: dict[str, Any] = {"title": chart_title, "freshness_label": label}
+    # ADR-017 §7.1：runtime 通过 ToolContext 告诉工具本次调用的 run_id/step，
+    # 图表 artifact 才能挂到真实 run（source="agent"）；UI 直接渲染无上下文，
+    # 仍按 source="render" 记录（Q5/D9）。
+    from astock.agent.registry import current_tool_context
+
+    context = current_tool_context()
+    audit_kwargs: dict[str, Any] = {"session_id": "market_tools"}
+    if context is not None:
+        audit_kwargs = {
+            "run_id": context.run_id,
+            "step": context.step,
+            "session_id": context.session_id or "market_tools",
+        }
     try:
         rendered = renderer(
             spec,
@@ -1077,7 +1091,7 @@ def _render_kline(
             data_as_of=series.data_as_of,
             data_time=series.data_time,
             export_png=False,
-            session_id="market_tools",
+            **audit_kwargs,
         )
     except ChartSpecError as exc:
         warning = f"图表未生成（{exc}），K 线表仍可读"
@@ -1090,6 +1104,13 @@ def _render_kline(
         "artifact_path": rendered.path,
         "data_as_of": rendered.data_as_of,
         "data_time": rendered.data_time,
+        # Q1：视图时点只做展示；行情时点仍是上面的 data_*（runtime/gateway 继续读它）。
+        # 注入的 renderer 可能是轻量替身：缺字段时按「未知」处理，不因为展示字段炸掉。
+        "view_as_of": getattr(rendered, "view_as_of", ""),
+        "view_time": getattr(rendered, "view_time", ""),
+        # Q7：pre=集合竞价 / post=盘后固定价 / continuous / close（日线）。
+        "session": getattr(rendered, "session", ""),
+        "degraded": bool(getattr(rendered, "degraded", False)),
         "warnings": warnings + list(rendered.warnings),
         "spec": spec,
     }

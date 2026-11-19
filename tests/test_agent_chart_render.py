@@ -17,15 +17,19 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from astock.agent import chart_render, store
+from astock import data as market
+from astock import indicators
+from astock.agent import chart_render, chart_service, store
 from astock.agent.chart_render import (
+    FIGURE_DIV_ID,
     PRICE_DOWN,
     PRICE_UP,
     apply_transforms,
+    embed_html,
     figure_tool_result,
-    render,
     spec_from_artifact,
 )
+from astock.agent.chart_service import render_chart as render
 from astock.agent.chart_spec import ChartSpecError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -147,7 +151,8 @@ def test_line_chart_renders_self_contained_html_and_records_artifact(paths: dict
     assert row is not None
     assert row.kind == "chart"
     assert row.path == rendered.path
-    assert row.digest == rendered.digest
+    # 库里 digest 是裸 hex（content_digest 规范化后才带 sha256: 前缀）
+    assert rendered.digest == f"sha256:{row.digest}"
 
     absolute = Path(paths["artifact_root"]) / rendered.path
     assert absolute.exists()
@@ -161,16 +166,25 @@ def test_artifact_meta_records_spec_params_time_points_source_version(
     row = _artifact_row(rendered, paths)
     meta = row.meta
     for key in (
+        "schema_version",
         "spec",
         "params",
         "data_as_of",
         "data_time",
+        "view_as_of",
+        "view_time",
+        "session",
         "source",
         "code_version",
-        "time_point_scope",
-        "div_id",
+        "data_digest",
+        "data_blob",
+        "data_rows",
+        "data_truncated",
     ):
         assert key in meta, key
+    assert meta["schema_version"] == chart_render.CHART_META_SCHEMA_VERSION
+    assert "div_id" not in meta  # Q3：规范化 HTML 用固定 div id，meta 不再记 per-artifact id
+    assert "time_point_scope" not in meta  # Q1：时点语义由 data_*/view_* 两对字段表达
     assert meta["data_as_of"] == "2024-01-04"
     assert meta["data_time"] == "2024-01-04 15:00"
     assert meta["source"] == "inline"
@@ -185,6 +199,10 @@ def test_artifact_meta_records_spec_params_time_points_source_version(
     assert meta["params"]["python_version"]
     assert meta["params"]["code_version"] == rendered.code_version
     assert meta["params"]["include_plotlyjs"] == "cdn"
+    # Q2：meta 只留 provenance——行数据落 data.json，大快照不进 meta_json。
+    assert "data" not in meta
+    assert "rows" not in meta
+    assert len(store.canonical_json(meta)) < 8000
 
 
 def test_rerender_upgrades_stale_degraded_meta(paths: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -330,16 +348,24 @@ def test_gc_keeps_data_blob_referenced_by_versions(paths: dict[str, str]) -> Non
     assert result["deleted"] >= 1
 
 
-def test_empty_transform_result_reports_unknown_time_points(paths: dict[str, str]) -> None:
-    """transforms 过滤掉全部行后，不能沿用过滤前的旧时点（评审 P2）。"""
+def test_transforms_keep_market_time_and_drop_view_time_when_rows_vanish(
+    paths: dict[str, str],
+) -> None:
+    """Q1：行情时点在 transforms **之前**算，视图时点是 transforms 之后（规格 §3）。"""
     spec = inline_line_spec()
     spec["transforms"] = [{"op": "filter", "field": "close", "cmp": "gt", "value": 999}]
     rendered = _render(spec, paths)
 
-    assert rendered.data_as_of == ""
-    assert rendered.data_time == ""
-    assert "时点未知" in rendered.caption
-    assert _artifact_row(rendered, paths).meta["data_as_of"] == ""
+    # 行情数据仍然是 01-02..01-04 这份数据；只是过滤后没有可见行。
+    assert rendered.data_as_of == "2024-01-04"
+    assert rendered.data_time == "2024-01-04 15:00"
+    assert rendered.view_as_of == ""
+    assert rendered.view_time == ""
+    assert "行情 2024-01-04 15:00" in rendered.caption
+    assert "视图时点未知" in rendered.caption
+    meta = _artifact_row(rendered, paths).meta
+    assert meta["data_as_of"] == "2024-01-04"
+    assert meta["view_as_of"] == ""
 
 
 def test_same_spec_renders_to_same_artifact_id_and_single_row(paths: dict[str, str]) -> None:
@@ -394,7 +420,7 @@ def test_candlestick_supports_ma_boll_and_volume(paths: dict[str, str]) -> None:
     assert "MA20" in html
     assert "BOLL 上轨" in html and "BOLL 下轨" in html
     assert "成交量" in html
-    assert "数据截止 2024-" in html
+    assert "行情 2024-" in html
     assert "前复权（qfq）" in html
 
 
@@ -461,7 +487,48 @@ def test_minute_frame_uses_bar_end_time_as_data_time(paths: dict[str, str]) -> N
     rendered = _render(spec, paths, frame=minute_frame(1))
     assert rendered.data_as_of == "2024-01-02"
     assert rendered.data_time == "2024-01-02 09:35"
-    assert "最新 bar 2024-01-02 09:35" in rendered.html
+    assert "行情 2024-01-02 09:35" in rendered.html
+    assert rendered.session == "continuous"
+
+
+def test_auction_only_minute_frame_renders_with_pre_session_and_no_indicators(
+    paths: dict[str, str],
+) -> None:
+    """Q7：09:25 集合竞价 bar 照常画 K 线、标 session=pre，连续指标为空且明确提示。"""
+    auction = pd.DataFrame(
+        {
+            "ts_code": "000001.SZ",
+            "trade_time": pd.to_datetime(["2024-01-02 09:25:00"]),
+            "open": [10.0],
+            "high": [10.1],
+            "low": [9.9],
+            "close": [10.05],
+            "vol": [500.0],
+            "amount": [5_000.0],
+        }
+    )
+    spec = candlestick_spec(layers=[{"type": "ma", "window": 5}, {"type": "volume"}])
+    spec["data"]["period"] = "5min"
+    spec["encode"] = {"x": "trade_time"}
+    rendered = _render(spec, paths, frame=auction)
+
+    assert rendered.session == "pre"
+    assert rendered.data_time == "2024-01-02 09:25"
+    assert "集合竞价" in rendered.caption
+    assert "盘前，暂无连续竞价数据" in rendered.caption
+    # Q7：连续指标只在连续竞价 bar 上算；集合竞价帧没有连续 bar。
+
+    assert market.continuous_bars(auction, freq="5min").empty
+    indicators = chart_render._indicator_frame(
+        auction, spec["layers"], source_frame=market.continuous_bars(auction, freq="5min")
+    )
+    for series in indicators["panes"]:
+        assert pd.Series(series).dropna().empty  # 没有连续 bar → 指标全空，不拿竞价 bar 充数
+    for series in indicators["overlays"].values():
+        assert pd.Series(series).dropna().empty
+    assert indicators["indicator_frame"].empty
+    assert "成交量" in rendered.html
+    assert _artifact_row(rendered, paths).meta["session"] == "pre"
 
 
 def test_missing_time_points_render_unknown_not_realtime(paths: dict[str, str]) -> None:
@@ -516,6 +583,11 @@ def test_png_mode_require_raises_and_marks_run_failed(
     paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """显式请求 PNG 失败必须报错：不静默降级、不落半成品 artifact 行。"""
+    conn = store.connect(paths["db_path"])
+    try:
+        store.ensure_run(conn, "run_require", status="running")
+    finally:
+        conn.close()
 
     def failing(figure, *, width: int, height: int):
         return None, "kaleido not installed"
@@ -534,6 +606,51 @@ def test_png_mode_require_raises_and_marks_run_failed(
         conn.close()
     assert run is not None and run["status"] == "failed"
     assert artifacts == 0
+
+
+def test_unknown_run_id_fails_fast_without_creating_run(paths: dict[str, str]) -> None:
+    """chart_service 不替调用方造 run：run_id 不存在直接报错（评审 P1）。
+
+    旧行为是 ``ensure_run(status="running")`` 自建 run，成功路径又没人 finish，
+    会留下永久 running 的假审计记录。
+    """
+    with pytest.raises(ValueError, match="必须由 AgentRuntime 先 ensure_run"):
+        _render(inline_line_spec(), paths, run_id="run_missing", step=3)
+
+    conn = store.connect(paths["db_path"])
+    try:
+        runs = conn.execute("SELECT COUNT(*) AS n FROM agent_runs").fetchone()["n"]
+        artifacts = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+    finally:
+        conn.close()
+    assert runs == 0
+    assert artifacts == 0
+
+
+def test_successful_render_never_finishes_existing_run(paths: dict[str, str]) -> None:
+    """成功渲染只挂 link，不改 run 状态：finish 归 runtime（评审 P1）。"""
+    conn = store.connect(paths["db_path"])
+    try:
+        store.ensure_run(conn, "run_runtime", status="running", session_id="s1")
+    finally:
+        conn.close()
+
+    rendered = _render(inline_line_spec(), paths, run_id="run_runtime", step=2)
+
+    conn = store.connect(paths["db_path"])
+    try:
+        run = conn.execute(
+            "SELECT status FROM agent_runs WHERE run_id = ?", ("run_runtime",)
+        ).fetchone()
+        link = conn.execute(
+            "SELECT run_id, step, source FROM agent_run_artifacts WHERE artifact_id = ?",
+            (rendered.artifact_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    assert run is not None and run["status"] == "running"
+    assert link is not None
+    assert (link["run_id"], link["step"], link["source"]) == ("run_runtime", 2, "agent")
 
 
 def test_png_mode_require_fails_precreated_run(
@@ -757,6 +874,7 @@ def test_market_branch_unadjusted_caption_and_snapshot_agree(
 
 
 def test_time_point_follows_transformed_rows(paths: dict[str, str]) -> None:
+    """Q1 验收：过滤掉最新一天后，行情时点仍是 01-04，视图时点是 01-03。"""
     spec = inline_line_spec(
         transforms=[
             {"op": "filter", "field": "close", "cmp": "gt", "value": 10.0},
@@ -766,16 +884,67 @@ def test_time_point_follows_transformed_rows(paths: dict[str, str]) -> None:
     )
     rendered = _render(spec, paths)
     row = _artifact_row(rendered, paths)
+    assert rendered.data_as_of == "2024-01-04"
+    assert rendered.data_time == "2024-01-04 15:00"
+    assert rendered.view_as_of == "2024-01-03"
+    assert rendered.view_time == "2024-01-03 15:00"
+    assert row.meta["data_as_of"] == "2024-01-04"
+    assert row.meta["view_as_of"] == "2024-01-03"
+    # 图注同时展示两个时点（ADR-016：同屏）
+    assert "行情 2024-01-04 15:00" in rendered.caption
+    assert "视图截止 2024-01-03" in rendered.caption
+    # 快照是 transforms 之后的数据（视图），行情时点来自 meta
+    assert store.load_data_snapshot(row.meta, root=paths["artifact_root"])["rows"][-1][
+        "day"
+    ] == "2024-01-03"
+
+
+def test_groupby_drops_time_column_and_reports_unknown_view(paths: dict[str, str]) -> None:
+    """Q1 验收：groupby 聚合掉时间列后视图时点未知，但行情时点不丢。"""
+    spec = {
+        "version": 1,
+        "kind": "bar",
+        "data": {
+            "source": "inline",
+            "fields": ["day", "sector", "excess"],
+            "time_field": "day",
+            "rows": [
+                {"day": "2024-01-02", "sector": "银行", "excess": 1.2},
+                {"day": "2024-01-02", "sector": "银行", "excess": 0.4},
+                {"day": "2024-01-03", "sector": "券商", "excess": -0.2},
+            ],
+        },
+        "encode": {"x": "sector", "y": "excess_mean"},
+        "transforms": [
+            {"op": "groupby", "by": ["sector"], "metrics": {"excess": "mean"}}
+        ],
+    }
+    rendered = _render(spec, paths)
     assert rendered.data_as_of == "2024-01-03"
-    assert rendered.data_time == "2024-01-03 15:00"
-    assert row.meta["data_as_of"] == "2024-01-03"
-    assert row.meta["data_as_of"] == store.load_data_snapshot(
-        row.meta, root=paths["artifact_root"]
-    )["rows"][-1]["day"]
-    assert "2024-01-03" in rendered.caption
+    assert rendered.view_as_of == ""
+    assert rendered.view_unknown_reason == "aggregated"
+    assert "行情 2024-01-03 15:00" in rendered.caption
+    assert "视图时点未知（聚合后无时间列）" in rendered.caption
 
 
-def test_artifact_replay_recomputes_time_from_snapshot(paths: dict[str, str]) -> None:
+def test_explicit_time_params_only_override_their_own_group(paths: dict[str, str]) -> None:
+    """Q1：显式 data_* 只覆盖行情时点，不影响从视图算出的 view_*。"""
+    rendered = _render(
+        inline_line_spec(transforms=[{"op": "limit", "n": 2}]),
+        paths,
+        data_as_of="2024-01-05",
+        data_time="2024-01-05 15:00",
+    )
+    assert rendered.data_as_of == "2024-01-05"
+    assert rendered.view_as_of == "2024-01-03"
+    assert "行情 2024-01-05 15:00" in rendered.caption
+    assert "视图截止 2024-01-03" in rendered.caption
+
+
+def test_artifact_replay_trusts_recorded_market_time_and_recomputes_view(
+    paths: dict[str, str],
+) -> None:
+    """§3.5：重算只重算 view_*，data_* 采信 meta（不得从裁剪快照反推）。"""
     rendered = _render(
         inline_line_spec(
             transforms=[
@@ -789,8 +958,7 @@ def test_artifact_replay_recomputes_time_from_snapshot(paths: dict[str, str]) ->
     row = _artifact_row(rendered, paths)
     assert row is not None
 
-    # 篡改 meta 里的时点：回放必须按快照时间列重算，不得信任旧 meta。
-    # v2 的 meta 不可变，修正只能追加版本 + corrections。
+    # v2 的 meta 不可变：修正只能追加版本 + corrections，历史版本不变。
     conn = store.connect(paths["db_path"])
     try:
         store.correct_artifact(
@@ -806,12 +974,14 @@ def test_artifact_replay_recomputes_time_from_snapshot(paths: dict[str, str]) ->
             "data": {"source": "artifact", "ref": row.artifact_id, "period": "day"},
             "encode": {"x": "day", "y": "close"},
         }
-        replay = _render(spec, paths)
+        replay = _render(spec, paths, artifact_root=paths["artifact_root"])
     finally:
         conn.close()
 
-    assert replay.data_as_of == "2024-01-03"
-    assert "2024-01-03" in replay.caption
+    # 行情时点：采信纠正后的 meta，不按快照「反推」成 01-03。
+    assert replay.data_as_of == "2020-01-01"
+    # 视图时点：按快照 + 当前代码重算。
+    assert replay.view_as_of == "2024-01-03"
 
 
 def test_snapshot_truncation_always_keeps_latest_bar() -> None:
@@ -823,47 +993,61 @@ def test_snapshot_truncation_always_keeps_latest_bar() -> None:
 
 
 
-# ---------------------------------------------------------------- div id / 时点语义（D2/D4/D10）
+# ---------------------------------------------------------------- Q3 div id / D10 时间语义
 
 
-def test_div_id_is_derived_from_spec_and_snapshot(paths: dict[str, str]) -> None:
+def test_canonical_html_uses_fixed_div_id_and_embed_html_is_per_instance(
+    paths: dict[str, str],
+) -> None:
+    """Q3：规范 HTML 固定 div id（字节稳定）；每次嵌入换唯一 id，双图/重复嵌入都不撞。"""
     first = _render(inline_line_spec(), paths)
     second = _render(inline_line_spec(), paths)
-    first_row = _artifact_row(first, paths)
-    assert first_row is not None
-    div_id = first_row.meta["div_id"]
-    assert div_id.startswith(chart_render.FIGURE_DIV_PREFIX + "-")
-    assert f'id="{div_id}"' in first.html
-    assert second.artifact_id == first.artifact_id
-    assert second.html == first.html
+    assert first.html == second.html
+    assert first.artifact_id == second.artifact_id
+    assert f'id="{FIGURE_DIV_ID}"' in first.html
 
-    other = dict(inline_line_spec())
-    other["title"] = "换一张图"
-    other_row = _artifact_row(_render(other, paths), paths)
-    assert other_row is not None
-    assert other_row.meta["div_id"] != div_id  # 同页多图不共享 id
+    a = embed_html(first.html, "astock-chart-aaaa1111")
+    b = embed_html(first.html, "astock-chart-bbbb2222")
+    assert 'id="astock-chart-aaaa1111"' in a
+    assert 'id="astock-chart-bbbb2222"' in b
+    assert a != b
+    # 同一份 artifact 重复嵌入两次也要拿到两个不同 id
+    c = embed_html(first.html, "astock-chart-bbbb2222")
+    assert embed_html(first.html, "astock-chart-cccc3333") != c
+    assert FIGURE_DIV_ID + '"' not in a  # 全部替换，不留旧 id
+
+    with pytest.raises(ValueError, match="div_id"):
+        embed_html(first.html, "1bad-id")
+    with pytest.raises(ValueError, match="找不到"):
+        embed_html("<html>no chart here</html>", "astock-chart-x1")
 
 
-def test_time_point_scope_marks_market_view_and_unknown(paths: dict[str, str]) -> None:
-    market = _render(candlestick_spec(), paths, frame=ohlcv_frame())
-    assert market.time_point_scope == "market"
-    assert market.metadata()["time_point_scope"] == "market"
+def test_ui_embed_html_swaps_div_id_per_figure(paths: dict[str, str]) -> None:
+    """chat 层每次嵌入都换 id，两张图各自渲染（双图验收）。"""
+    from astock.agent import chat
 
-    viewed = _render(
-        inline_line_spec(
-            transforms=[{"op": "limit", "n": 1}],
-        ),
-        paths,
+    rendered = _render(inline_line_spec(), paths)
+    figure = chat.Figure(
+        step=1,
+        tool="chart_render",
+        html=rendered.html,
+        title="收盘走势",
+        spec=rendered.spec,
+        source=rendered.source,
+        data_as_of=rendered.data_as_of,
+        data_time=rendered.data_time,
+        artifact_id=rendered.artifact_id,
+        artifact_path=rendered.path,
     )
-    assert viewed.time_point_scope == "view"
+    one = chat.figure_embed_html(figure)
+    two = chat.figure_embed_html(figure)
+    assert one != two
+    ids = set(re.findall(r"astock-chart-[0-9a-f]{8}", one + two))
+    assert len(ids) == 2
 
-    unknown = _render(inline_line_spec(), paths, data_as_of="", data_time="")
-    assert unknown.time_point_scope == "unknown"
-    assert unknown.data_as_of == ""
 
-
-def test_time_probe_only_trusts_date_like_columns(paths: dict[str, str]) -> None:
-    # code 列的取值虽然形如日期，但列名不在白名单里 → 不得据此猜时点（D10）。
+def test_unprovable_time_column_raises_instead_of_guessing(paths: dict[str, str]) -> None:
+    """D10：字符串代码/纯数字日期列不能被猜成时间列，必须报契约错误。"""
     spec = {
         "version": 1,
         "kind": "line",
@@ -877,10 +1061,83 @@ def test_time_probe_only_trusts_date_like_columns(paths: dict[str, str]) -> None
         },
         "encode": {"x": "code", "y": "close"},
     }
-    rendered = _render(spec, paths)
-    assert rendered.data_as_of == ""
-    assert rendered.time_point_scope == "unknown"
-    assert "时点未知" in rendered.caption
+    with pytest.raises(ChartSpecError) as info:
+        _render(spec, paths)
+    assert "$.data.time_field" in {issue.field for issue in info.value.issues} or any(
+        "无法证明时间语义" in issue.message for issue in info.value.issues
+    )
+
+
+def test_text_label_column_is_never_treated_as_time(paths: dict[str, str]) -> None:
+    spec = {
+        "version": 1,
+        "kind": "line",
+        "data": {
+            "source": "inline",
+            "fields": ["label", "close"],
+            "rows": [
+                {"label": "2024-01-04 收盘", "close": 10.0},
+                {"label": "2024-01-05 收盘", "close": 10.2},
+            ],
+        },
+        "encode": {"x": "label", "y": "close"},
+    }
+    with pytest.raises(ChartSpecError):
+        _render(spec, paths)
+
+
+def test_explicit_time_field_makes_otherwise_unprovable_data_renderable(
+    paths: dict[str, str],
+) -> None:
+    """D10：显式声明 time_field（真实 datetime）就能证明语义；只画「视图时点未知」时也可声明 none。"""
+    spec = {
+        "version": 1,
+        "kind": "line",
+        "data": {
+            "source": "inline",
+            "fields": ["code", "day", "close"],
+            "time_field": "day",
+            "rows": [
+                {"code": "20240102", "day": "2024-01-02", "close": 10.0},
+                {"code": "20240103", "day": "2024-01-03", "close": 10.2},
+            ],
+        },
+        "encode": {"x": "code", "y": "close"},
+    }
+    rendered = _render(spec, paths, frame=None)
+    assert rendered.data_as_of == "2024-01-03"
+
+    no_time = {
+        "version": 1,
+        "kind": "line",
+        "data": {
+            "source": "inline",
+            "fields": ["code", "close"],
+            "time_semantics": "none",
+            "rows": [
+                {"code": "20240102", "close": 10.0},
+                {"code": "20240103", "close": 10.2},
+            ],
+        },
+        "encode": {"x": "code", "y": "close"},
+    }
+    rendered_none = _render(no_time, paths)
+    assert rendered_none.data_as_of == ""
+    assert "时点未知" in rendered_none.caption
+
+
+def test_time_field_must_be_declared_and_provable(paths: dict[str, str]) -> None:
+    spec = inline_line_spec()
+    spec["data"]["time_field"] = "nope"
+    with pytest.raises(ChartSpecError) as info:
+        _render(spec, paths)
+    assert {issue.field for issue in info.value.issues} == {"$.data.time_field"}
+
+    bad = inline_line_spec()
+    bad["data"]["time_semantics"] = "sometimes"
+    with pytest.raises(ChartSpecError) as info2:
+        _render(bad, paths)
+    assert {issue.field for issue in info2.value.issues} == {"$.data.time_semantics"}
 
 
 # ---------------------------------------------------------------- 安全边界
@@ -949,3 +1206,327 @@ def test_png_export_does_not_retry_missing_dependency() -> None:
     assert payload is None
     assert reason is not None and "Kaleido package" in reason
     assert figure.calls == 1
+
+
+# ---------------------------------------------------------------- Q5 / D9 审计边界
+
+
+def _run_row(paths: dict[str, str], run_id: str):
+    conn = store.connect(paths["db_path"])
+    try:
+        return conn.execute(
+            "SELECT run_id, status, run_kind FROM agent_runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+
+def _link_rows(paths: dict[str, str], artifact_id: str) -> list[dict]:
+    conn = store.connect(paths["db_path"])
+    try:
+        return [
+            dict(row)
+            for row in conn.execute(
+                "SELECT run_id, artifact_version, source, step FROM agent_run_artifacts"
+                " WHERE artifact_id = ? ORDER BY link_id",
+                (artifact_id,),
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+
+
+def test_direct_render_records_artifact_without_synthetic_run(paths: dict[str, str]) -> None:
+    """Q5/D9：直接渲染只落 artifact/version/link，绝不合成 run_chart_* 假 run。"""
+    rendered = _render(inline_line_spec(), paths)
+
+    conn = store.connect(paths["db_path"])
+    try:
+        runs = conn.execute("SELECT COUNT(*) AS n FROM agent_runs").fetchone()["n"]
+        artifacts = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+        versions = conn.execute(
+            "SELECT COUNT(*) AS n FROM agent_artifact_versions"
+        ).fetchone()["n"]
+    finally:
+        conn.close()
+    assert runs == 0
+    assert artifacts == 1
+    assert versions == 1
+    links = _link_rows(paths, rendered.artifact_id)
+    assert len(links) == 1
+    assert links[0]["run_id"] is None
+    assert links[0]["source"] == "render"
+
+
+def test_agent_render_links_real_run_and_delete_keeps_artifact(paths: dict[str, str]) -> None:
+    conn = store.connect(paths["db_path"])
+    try:
+        store.ensure_run(conn, "run_agent_1", session_id="sess-1")
+    finally:
+        conn.close()
+
+    rendered = _render(inline_line_spec(), paths, run_id="run_agent_1", step=3, session_id="sess-1")
+    links = _link_rows(paths, rendered.artifact_id)
+    assert [(link["run_id"], link["source"], link["step"]) for link in links] == [
+        ("run_agent_1", "agent", 3)
+    ]
+    assert _run_row(paths, "run_agent_1")["status"] == "running"  # 真实 run 由 Agent 自己收尾
+
+    conn = store.connect(paths["db_path"])
+    try:
+        conn.execute("DELETE FROM agent_runs WHERE run_id = ?", ("run_agent_1",))
+        conn.commit()
+        artifacts = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+    finally:
+        conn.close()
+    assert artifacts == 1  # artifact 永久保留，只级联删 link
+    assert _link_rows(paths, rendered.artifact_id) == []
+
+
+def test_two_runs_link_to_one_artifact(paths: dict[str, str]) -> None:
+    conn = store.connect(paths["db_path"])
+    try:
+        store.ensure_run(conn, "run_a", session_id="s")
+        store.ensure_run(conn, "run_b", session_id="s")
+    finally:
+        conn.close()
+
+    first = _render(inline_line_spec(), paths, run_id="run_a", step=1)
+    second = _render(inline_line_spec(), paths, run_id="run_b", step=2)
+    assert first.artifact_id == second.artifact_id
+    run_ids = {link["run_id"] for link in _link_rows(paths, first.artifact_id)}
+    assert run_ids == {"run_a", "run_b"}
+
+
+def test_chart_render_is_pure_and_chart_service_is_the_only_writer() -> None:
+    """Q5：纯渲染器不得 import 审计写入路径；唯一写入点在 chart_service。"""
+    import ast
+
+    renderer = (ROOT / "astock" / "agent" / "chart_render.py").read_text(encoding="utf-8")
+    store_imports: set[str] = set()
+    for node in ast.walk(ast.parse(renderer)):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").endswith(
+            "astock.agent.store"
+        ):
+            store_imports.update(alias.name for alias in node.names)
+    allowed = {"PNG_DEGRADED_WARNING_PREFIX", "compute_env_fingerprint"}
+    assert store_imports <= allowed, f"chart_render 仍 import 审计写路径 {store_imports - allowed}"
+    assert "import astock.agent.store" not in renderer or store_imports
+
+    service = (ROOT / "astock" / "agent" / "chart_service.py").read_text(encoding="utf-8")
+    for token in ("record_artifact", "put_content"):
+        assert token in service, f"chart_service 缺少审计写入 {token}"
+
+
+# ---------------------------------------------------------------- D11 transforms = stats 口径
+
+
+def test_transform_groupby_matches_stats_caliber() -> None:
+    from astock import stats
+
+    frame = pd.DataFrame(
+        {
+            "sector": ["银行", "券商", "银行", "券商", "银行"],
+            "amount": [1.0, 5.0, 3.0, 7.0, 2.0],
+        }
+    )
+    expected = stats.aggregate_groups(
+        frame, by=["sector"], metrics={"amount": "mean"}
+    ).frame
+    actual = apply_transforms(
+        frame, [{"op": "groupby", "by": ["sector"], "metrics": {"amount": "mean"}}]
+    )
+    pd.testing.assert_frame_equal(
+        actual.reset_index(drop=True), expected.reset_index(drop=True)
+    )
+    assert actual.set_index("sector")["amount_mean"].to_dict() == pytest.approx(
+        {"银行": 2.0, "券商": 6.0}
+    )
+
+
+def test_transform_groupby_keeps_empty_and_nan_groups_with_warning() -> None:
+    frame = pd.DataFrame(
+        {
+            "sector": ["银行", "券商", None, "银行"],
+            "amount": [1.0, None, 4.0, 3.0],
+        }
+    )
+    notes: list[str] = []
+    grouped = apply_transforms(
+        frame,
+        [{"op": "groupby", "by": ["sector"], "metrics": {"amount": "mean"}}],
+        notes=notes,
+    )
+    keys = grouped["sector"].tolist()
+    assert len(keys) == 3  # 空组、全 NaN 组都保留（D11）
+    assert sum(1 for key in keys if pd.isna(key)) == 1
+    assert {key for key in keys if not pd.isna(key)} == {"银行", "券商"}
+    assert any("空组" in note for note in notes)
+
+
+def test_transform_sort_is_stable_and_limit_follows() -> None:
+    frame = pd.DataFrame(
+        {
+            "sector": ["a", "a", "b", "b"],
+            "tag": ["first", "second", "third", "fourth"],
+            "amount": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    notes: list[str] = []
+    ordered = apply_transforms(
+        frame, [{"op": "sort", "by": "amount", "desc": True}], notes=notes
+    )
+    assert ordered["tag"].tolist() == ["first", "second", "third", "fourth"]
+
+    limited = apply_transforms(
+        frame,
+        [
+            {"op": "sort", "by": "amount", "desc": True},
+            {"op": "limit", "n": 2},
+        ],
+    )
+    assert limited["tag"].tolist() == ["first", "second"]
+
+
+def test_same_name_groupby_output_is_disambiguated_with_warning() -> None:
+    frame = pd.DataFrame({"sector": ["银行"], "amount": [1.0], "amount_sum": [9.0]})
+    notes: list[str] = []
+    grouped = apply_transforms(
+        frame,
+        [{"op": "groupby", "by": ["sector"], "metrics": {"amount": "sum"}}],
+        notes=notes,
+    )
+    assert "amount_sum_2" in grouped.columns
+    assert any("同名" in note for note in notes)
+
+
+# ---------------------------------------------------------------- 评审第 1 轮修复
+# rev-20261119-002：P0 日/周/月指标恒空；P1 runtime→tool link；P1 run 生命周期；
+# P2 meta 摘要校验；P2 图注「视图时点未知」归因。
+
+
+@pytest.mark.parametrize("period", ["day", "week", "month"])
+def test_period_indicators_are_numeric_and_match_indicators(
+    period: str, paths: dict[str, str]
+) -> None:
+    """P0：日/周/月线的 MA/BOLL/MACD 必须真的算出来（不能静默全 NaN）。
+
+    ``classify_bar_time`` 对非分钟频率返回 ``close``，旧实现把所有周期都喂给
+    ``continuous_bars``（只留 ``continuous``）＝指标样本恒空；这里用数值对齐
+    :func:`astock.indicators.sma` 卡住回归。
+    """
+    frame = ohlcv_frame(120)
+    spec = candlestick_spec(layers=[{"type": "ma", "window": 20}, {"type": "volume"}])
+    spec["data"]["period"] = period
+    rendered = _render(spec, paths, frame=frame)
+
+    assert rendered.session == "close"
+    assert not any("连续指标无可用 bar" in note for note in rendered.warnings)
+
+    figure = rendered.figure
+    assert figure is not None
+    trace = next(trace for trace in figure.data if trace.name == "MA20")
+    values = pd.Series(trace.y, dtype="float64")
+    expected = indicators.sma(frame["close"], 20)
+
+    assert values.notna().sum() == expected.notna().sum() > 0
+    pd.testing.assert_series_equal(
+        values.iloc[-10:].reset_index(drop=True),
+        expected.iloc[-10:].reset_index(drop=True),
+        check_names=False,
+        rtol=1e-9,
+    )
+
+
+def test_auction_only_minute_frame_warns_indicators_are_empty(paths: dict[str, str]) -> None:
+    """P0：指标样本为空时必须显式写 warning，不能静默全 NaN。"""
+    auction = pd.DataFrame(
+        {
+            "ts_code": "000001.SZ",
+            "trade_time": pd.to_datetime(["2024-01-02 09:25:00"]),
+            "open": [10.0],
+            "high": [10.1],
+            "low": [9.9],
+            "close": [10.05],
+            "vol": [500.0],
+            "amount": [5_000.0],
+        }
+    )
+    spec = candlestick_spec(layers=[{"type": "ma", "window": 5}])
+    spec["data"]["period"] = "5min"
+    spec["encode"] = {"x": "trade_time"}
+    rendered = _render(spec, paths, frame=auction)
+
+    assert any("连续指标无可用 bar" in note for note in rendered.warnings)
+    assert any("连续指标无可用 bar" in note for note in rendered.meta["warnings"])
+
+
+def test_view_unknown_reason_names_time_semantics_none(paths: dict[str, str]) -> None:
+    """P2：只有聚合丢列才写「聚合后无时间列」，声明 none 时要写明原因。"""
+    spec = inline_line_spec()
+    spec["data"]["time_semantics"] = "none"
+    rendered = _render(
+        spec, paths, data_as_of="2024-01-04", data_time="2024-01-04 15:00"
+    )
+
+    assert rendered.view_unknown_reason == "none"
+    assert "视图时点未知（声明 time_semantics=none）" in rendered.caption
+    assert "聚合后无时间列" not in rendered.caption
+
+
+def test_replay_verifies_stored_meta_digest_and_rejects_tampering(
+    paths: dict[str, str],
+) -> None:
+    """P2：回放要拿库内 meta_digest 校验，绕过 correction 改 meta_json 必须报错。"""
+    rendered = _render(inline_line_spec(), paths)
+    conn = store.connect(paths["db_path"])
+    try:
+        record = store.get_artifact(conn, rendered.artifact_id)
+        assert record is not None
+        payload = chart_service.load_chart_artifact(
+            conn, rendered.artifact_id, root=paths["artifact_root"]
+        )
+        assert payload["meta_digest"] == record.meta_digest
+        assert record.meta_digest == store.meta_digest(record.meta)
+
+        tampered = dict(record.meta)
+        tampered["data_as_of"] = "1999-01-01"
+        # 模拟「维护脚本直接改库」：正常路径被 immutability trigger 挡住，
+        # 这里先去掉 trigger 再改，验证回放端的摘要校验确实能发现。
+        conn.execute("DROP TRIGGER IF EXISTS trg_agent_artifact_versions_no_update")
+        conn.execute(
+            "UPDATE agent_artifact_versions SET meta_json = ? "
+            "WHERE artifact_id = ? AND version = ?",
+            (store.canonical_json(tampered), record.artifact_id, record.version),
+        )
+        conn.commit()
+
+        with pytest.raises(store.ArtifactReplayUnavailable, match="meta 摘要不一致"):
+            chart_service.load_chart_artifact(
+                conn, rendered.artifact_id, root=paths["artifact_root"]
+            )
+    finally:
+        conn.close()
+
+
+def test_replay_reuses_recorded_include_plotlyjs_without_stringifying_bool(
+    paths: dict[str, str],
+) -> None:
+    """边角：记录里 include_plotlyjs=False（bool）时，重算不得被 str() 变成 "False"。"""
+    rendered = _render(inline_line_spec(), paths, include_plotlyjs=False)
+    assert rendered.meta["params"]["include_plotlyjs"] is False
+
+    conn = store.connect(paths["db_path"])
+    try:
+        payload = chart_service.load_chart_artifact(
+            conn,
+            rendered.artifact_id,
+            mode="recomputed",
+            root=paths["artifact_root"],
+        )
+    finally:
+        conn.close()
+
+    assert payload["meta"]["params"]["include_plotlyjs"] is False
+    # False 表示不内联也不引 CDN；若被写成 "False"，plotly 会把非空字符串当 CDN 路径
+    assert "cdn.plot.ly" not in payload["html"]

@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from astock.agent import chart_render, store
+from astock.agent import chart_service, store
 
 pytestmark = [
     pytest.mark.png,
@@ -50,7 +50,7 @@ def _render(tmp_path: Path, **kwargs: Any):
         "include_plotlyjs": "cdn",
     }
     options.update(kwargs)
-    return chart_render.render(_spec(), **options)
+    return chart_service.render_chart(_spec(), **options)
 
 
 def _meta(tmp_path: Path, artifact_id: str) -> dict[str, Any]:
@@ -75,7 +75,8 @@ def test_png_export_writes_file_and_records_meta(tmp_path: Path) -> None:
     assert row_meta["png_path"] == rendered.png_path
     assert row_meta["degraded"] is False
     assert row_meta["png_digest"] == hashlib.sha256(png.read_bytes()).hexdigest()
-    assert row_meta["png_digest"] != row_meta["div_id"]  # PNG 与 HTML 各自独立寻址
+    # PNG 与 HTML 各自独立寻址：png_digest 裸 hex，HTML 的 content_digest 带 sha256: 前缀。
+    assert row_meta["png_digest"] != rendered.digest.removeprefix("sha256:")
 
 
 def test_png_meta_links_png_with_html_artifact(tmp_path: Path) -> None:

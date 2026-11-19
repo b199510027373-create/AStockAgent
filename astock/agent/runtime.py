@@ -27,6 +27,7 @@ from astock.agent.registry import (
     ToolArgumentError,
     ToolNotFoundError,
     ToolRegistry,
+    tool_context,
 )
 from astock.agent.session import AgentSession
 from astock.agent.types import (
@@ -492,7 +493,15 @@ class AgentRuntime:
                     answer = self._partial_answer(stop, steps)
                     break
 
-                result = self.registry.invoke(call.name, prepared)
+                # ADR-017 §7.1：告诉工具「这次调用属于哪条 run / 第几步」，
+                # 图表等 artifact 才能挂到真实 run 上（而不是 source="render"）。
+                if audit is None:
+                    result = self.registry.invoke(call.name, prepared)
+                else:
+                    with tool_context(
+                        audit[1], index, session_id=self.session.session_id
+                    ):
+                        result = self.registry.invoke(call.name, prepared)
                 observation = self._format_observation(call.name, result)
                 tokens_used += _estimate_tokens(observation)
                 reflection = self._reflect(index, result)

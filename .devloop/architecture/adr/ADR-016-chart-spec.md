@@ -93,3 +93,25 @@ ChartSpec v1 在 `docs/AStockAgent_interface_freeze_v1.md` §3 **逐字冻结**�
 - **D10（2026-11-14）**：禁止猜时间列。`encode.x` 或显式 `data.time_field` 必须指向可证明的时间列；`data_as_of` 只能由该列按 `Asia/Shanghai` 解析，字符串代码 `20240104`、标签 `2024-01-04 收盘` 一律不得当时间列。无显式时间列、无法证明时区/交易日语义时抛 `ChartSpecError`，不静默生成“看似合理”的图注；inline 数据必须自带 `time_field` 或声明 `time_semantics=none`。落地项 `plan-20261114-002`。
 - **D11（2026-11-14）**：`transforms` 的统计口径必须复用 `astock/stats.py`（或同一实现），不得手写另一套 pandas 聚合。`groupby` 默认 `dropna=False` 保留空组，`agg` 的 `mean/sum/min/max/count/last` 与 stats 对齐；空组/全 NaN 组保留并显式标 warning，不静默丢行；排序稳定（`kind="mergesort"`），同值不随机换序；字段覆盖同名时在结果里加后缀并报警，不静默覆盖。图上均值必须与表/报告一致。落地项 `plan-20261114-002`。
 - **D1（2026-11-14）**：`ChartSpec.data.adj` 增加 `hfq`（标准后复权，基准 1.0，定义见 ADR-008 补充裁决）；默认仍 `qfq`，`none` 保留给涨跌停/成交类图。分钟 hfq 必须标 `adj_source=daily`，不得与日线 hfq 混成连续序列。落地项 `plan-20261114-003`。
+
+## 落地回填（2026-11-19，plan-20261114-002）
+
+上述 2026-11-14 裁决已全部落地，实现口径以 `docs/AStockAgent_interface_freeze_v2.md` 为准：
+
+- **Q4**：`astock/agent/chart_spec.py` 只声明 `layers`/`theme`/`adj ∈ qfq|hfq|none`；`panes`/`style`/`adj="raw"` 与未知键一律 `ChartSpecError`。验收：`tests/test_agent_chart_spec.py::test_json_schema_no_longer_declares_compat_aliases`。
+- **Q5**：`chart_render.render_figure()` 是纯渲染器（只 import `PNG_DEGRADED_WARNING_PREFIX` 与 `compute_env_fingerprint` 两个纯函数）；`astock/agent/chart_service.py::render_chart()` 是唯一审计入口，`ArtifactReader` 提供只读 `data.source=artifact`。验收：`tests/test_agent_chart_render.py::test_chart_render_is_pure_and_chart_service_is_the_only_writer`。
+- **D10**：`ChartSpec.data` 新增 `time_field` 与 `time_semantics ∈ bar_time|trade_date|none`；`chart_render.resolve_time_column()` 只认可证明的时间列（datetime 或 `YYYY-MM-DD[ HH:MM[:SS]]` 字符串），代码/文本标签/纯数字不猜，无法证明即报错。验收：`tests/test_agent_chart_render.py::test_unprovable_time_column_raises_instead_of_guessing` 等 4 个 D10 用例。
+- **D11**：`astock/stats.py::aggregate_groups()` 成为分组聚合唯一实现，`_transform_group` 委托它；空组/全 NaN 组保留 + warning、稳定排序、同名后缀。验收：`tests/test_agent_chart_render.py::test_transform_groupby_matches_stats_caliber` 等 4 个 D11 用例。
+- **Q3/Q1 附带**：`embed_html(html, div_id)` 实现每实例唯一 div id；`RenderedFigure` 用 `data_as_of/data_time` + `view_as_of/view_time` 两对字段取代 `time_point_scope`。
+
+
+## 评审回填（2026-11-19，rev-20261119-002）
+- **连续指标样本范围**：分钟周期（1/5/15/30/60min）只用连续竞价 bar；日/周/月线每根都是收盘 bar，
+  必须全量参与 MA/BOLL/MACD/RSI/KDJ 计算（旧实现一把梳子过滤全部周期，导致日/周/月指标恒为 NaN）。
+  指标样本为空时必须写「连续指标无可用 bar」warning，不允许静默全 NaN。
+  验收：`tests/test_agent_chart_render.py::test_period_indicators_are_numeric_and_match_indicators`、
+  `::test_auction_only_minute_frame_warns_indicators_are_empty`。
+- **图注归因**：`RenderedFigure.view_unknown_reason` 区分「聚合丢列」/「声明 time_semantics=none」/
+  其他未知，`_caption` 只在前者写「（聚合后无时间列）」。
+  验收：`tests/test_agent_chart_render.py::test_view_unknown_reason_names_time_semantics_none`、
+  `::test_groupby_drops_time_column_and_reports_unknown_view`。

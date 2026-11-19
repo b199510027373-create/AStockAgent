@@ -6,10 +6,10 @@
 > 关联文件：`docs/AStockAgent_contract_rule_map_v1.md`（18 条 contract 规则落点）、
 > `.devloop/architecture/contract.json`（v1.1）、`tests/test_architecture_gate.py`（防漂移门禁）。
 >
-> **版本边界（2026-11-16 复审澄清）**：本次 `main` 的实现口径就是本文件 v1 正文，
-> 不得用 v2 口径读它。`docs/AStockAgent_interface_freeze_v2_draft.md` 与
-> `docs/AStockAgent_chart_audit_v2_change_spec.md` 是**草案、未实现**，目标 plan-20261114-002，
-> **不作为当前实现依据**。
+> **版本边界（2026-11-16 复审澄清，2026-11-19 更新）**：本文件 v1 正文对未涉及条目继续有效，
+> 不得用 v2 口径读 v1 条目。图表与审计链路的 v2 口径见
+> `docs/AStockAgent_interface_freeze_v2.md`（2026-11-19 生效，plan-20261114-002）；
+> 历史草案 `docs/AStockAgent_interface_freeze_v2_draft.md` 已并入该文件，只作留档。
 
 ## 0. 评审记录
 

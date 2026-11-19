@@ -1,0 +1,189 @@
+{
+  "id": "ho-20261119-027",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
+  "summary": "按 rev-20261119-002 第 1 轮评审逐条修复 plan-20261114-002：P0 修复分钟/日周月指标样本范围（日/周/月不再全 NaN，空样本显式 warning）；P1 打通 runtime→tool 的 ToolContext 让 Agent 出图 link 挂真实 run，并让 chart_service 对不存在 run_id fail-fast、不再自建永久 running 的 run；P2 删除死代码、ArtifactRecord 增 meta_digest 并在回放时校验（篡改抛 ArtifactReplayUnavailable）、图注按 aggregated/none/unknown 三态归因。补齐评审指出的测试充分性缺口：日/周/月 MA20 数值断言、runtime→tool 端到端 link、run 生命周期三例、meta 篡改检测。全量 780 passed、PNG 5 passed、ruff/mypy 全绿，CI run 44541882652 双 job 通过；提交 89572cb 已推送 PR #36，等待第 2 轮 diff 复核。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "日/周/月线连续指标不得被 continuous_bars 过滤为空：非分钟周期不过滤；_indicator_frame/_pane_series 空帧写 warning；补 daily/weekly/monthly MA20 数值断言（与 indicators.sma(close,20) 对齐），保留 auction-only 分钟用例",
+      "source": "rev-20261119-002 / iss-mwnlpfyt-26f425 (P0)"
+    },
+    {
+      "id": "R2",
+      "text": "Agent 出图必须挂真实 run：runtime 在 dispatch 前把 run_id+step 注入上下文，工具传给 render_chart，link=(真实 run_id, agent, step)；直接渲染仍 run_id=NULL；补端到端测试",
+      "source": "rev-20261119-002 / iss-mwnlpizd-c9feed (P1)"
+    },
+    {
+      "id": "R3",
+      "text": "chart_service 不得自建 run：run_id 不存在即 fail-fast，成功路径不改 run 状态，只有 PNG 硬失败才 fail_run；补三个生命周期用例",
+      "source": "rev-20261119-002 / iss-mwnlpll3-c475bb (P1)"
+    },
+    {
+      "id": "R4",
+      "text": "删除 apply_transforms return 之后重复 attrs 赋值死代码",
+      "source": "rev-20261119-002 / iss-mwnlpnd5-4be737 (P2)"
+    },
+    {
+      "id": "R5",
+      "text": "回放必须校验库内 meta_digest：ArtifactRecord 增 meta_digest，load_chart_artifact 用记录值比对，不一致抛 ArtifactReplayUnavailable；补篡改与被篡改两个用例",
+      "source": "rev-20261119-002 / iss-mwnlppp6-b47e47 (P2)"
+    },
+    {
+      "id": "R6",
+      "text": "图注「视图时点未知」需按原因区分（aggregated/none/unknown），只有聚合丢列才写「（聚合后无时间列）」；补声明 none 与聚合掉列两个用例",
+      "source": "rev-20261119-002 / iss-mwnlpsvc-3f5905 (P2)"
+    },
+    {
+      "id": "R7",
+      "text": "补齐数值级与端到端测试：日/周/月指标数值对照、agent runtime→tool artifact link 端到端；不得只断言图例文字",
+      "source": "评审 handoff ho-20261119-026（测试充分性）"
+    },
+    {
+      "id": "R8",
+      "text": "文档与实现一致：interface freeze v2、ADR-016/017/018 补丁、模块图随本轮行为变化同步更新",
+      "source": "用户 m01058「按交付文档做，测试充分性一并修」+ 任务验收第 10 条"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "P0：只有分钟周期用 continuous_bars，日/周/月全量参与指标；新增 _requests_indicators 与空样本/全 NaN warning；RenderedFigure 增 view_unknown_reason/figure，_caption 按 aggregated/none/unknown 三态文案；删除 apply_transforms 重复 attrs 赋值",
+      "commit": "89572cb"
+    },
+    {
+      "path": "astock/agent/registry.py",
+      "summary": "新增 ToolContext、current_tool_context()、tool_context(run_id, step)（ContextVar），供 runtime 向工具传递审计上下文",
+      "commit": "89572cb"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "dispatch 前用 tool_context 注入 run_id+step，Agent 工具出图可挂真实 run",
+      "commit": "89572cb"
+    },
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "_render_kline 从 current_tool_context() 取 run_id/step/session_id 传给 render_chart，保留无上下文的直接渲染路径",
+      "commit": "89572cb"
+    },
+    {
+      "path": "astock/agent/chart_service.py",
+      "summary": "删除 ensure_run 自建 run；不存在的 run_id fail-fast、run_kind!=agent 拒绝；load_chart_artifact 用库内 meta_digest 校验，不一致抛 ArtifactReplayUnavailable",
+      "commit": "89572cb"
+    },
+    {
+      "path": "astock/agent/store.py",
+      "summary": "ArtifactRecord 增 meta_digest 字段（含 to_dict），_row_to_record 读取版本行 meta_digest",
+      "commit": "89572cb"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "新增 daily/weekly/monthly MA20 数值断言、run 生命周期 3 例（不存在 run_id fail-fast、成功不改状态、PNG 失败置 failed）、meta 摘要篡改检测、caption 归因 none 用例、竞价指标空 warning",
+      "commit": "89572cb"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 runtime→tool→chart_service 端到端 link 断言（agent_runs.finish、link=(真实 run_id, step, source=agent)）",
+      "commit": "89572cb"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v2.md",
+      "summary": "§3.4 补 view_unknown_reason 三态、run_id 只接受已存在 agent run 且经 tool_context 传递、回放校验 meta_digest；§10 明确日/周/月全量参与指标",
+      "commit": "89572cb"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-016-chart-spec.md",
+      "summary": "追加「评审回填」：指标样本范围 + 图注归因 + 验收测试名",
+      "commit": "89572cb"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-017-agent-audit-security.md",
+      "summary": "追加「评审回填」：run 生命周期只归 runtime、ToolContext 注入、meta 摘要校验 + 验收测试名",
+      "commit": "89572cb"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-018-realtime-quotes.md",
+      "summary": "追加「评审回填」：指标样本范围 + 视图时点归因",
+      "commit": "89572cb"
+    },
+    {
+      "path": ".devloop/architecture/modules.json",
+      "summary": "chart_render/chart_service 模块描述改写为纯渲染器/唯一审计入口，chart_render→agent_store 边标签改为 pure-helpers",
+      "commit": "89572cb"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_agent_chart_render.py tests/test_agent_runtime.py -q -p no:cacheprovider",
+      "result": "121 passed",
+      "passed": true,
+      "evidence": "121 passed, 1 warning in 18.05s；新增 daily/weekly/monthly MA20 数值断言（assert_series_equal rtol=1e-9）、run 生命周期 3 例、runtime→tool 端到端 link、meta 篡改检测、caption 归因"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests -q -m \"not png\" --timeout=900 -p no:cacheprovider",
+      "result": "780 passed, 5 deselected, 12 subtests passed",
+      "passed": true,
+      "evidence": "780 passed, 5 deselected, 1 warning, 12 subtests passed in 77.21s"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png --timeout=300 -p no:cacheprovider",
+      "result": "5 passed",
+      "passed": true,
+      "evidence": "5 passed, 1 warning in 18.83s"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "Success: no issues found in 44 source files"
+    },
+    {
+      "command": "gh run watch 44541882652 --exit-status --interval 15",
+      "result": "CI run 44541882652 success（commit 89572cb）",
+      "passed": true,
+      "evidence": "test job（含 coverage gate）与 png-export job 均 ✓，run success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "danger-full-access 文件策略",
+      "reason": "pytest/tempfile 创建 0700 临时目录并在其中写 parquet，workspace-write 沙箱会报 PermissionError；本轮所有测试均在 danger-full-access 下运行",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub CLI 推送与 CI 查询",
+      "reason": "gh 已登录（b199510027373-create），用于 push 分支、gh run list/watch 取 CI 结论",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/chart-pipeline-v2",
+    "commit": "89572cb",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/36",
+    "ci": "run 44541882652（commit 89572cb）test job pass（含 coverage gate）、png-export job pass",
+    "merge": "未合并（等待 reviewer 第 2 轮 diff 复核后由用户合并）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-025",
+  "next": "1) reviewer 按 rev-20261119-002 第 2 轮 diff 复核六条 issue 是否关闭（P0×1/P1×2/P2×3），确认后合入 PR #36；2) 合并后用 devloop_review finish / plan-20261114-002 置 done；3) plan-20261114-003（hfq）合并后确认价格口径文案与 ADR-008 基准 1.0 的联动；4) 可选：如需兼容旧调用方，可在 chart_service 加 chart_render.render 薄别名（当前未加，测试与 market_tools 已全部切到 render_chart）。",
+  "createdAt": "2026-11-19T14:17:40.577Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-027.md"
+}

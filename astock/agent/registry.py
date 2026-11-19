@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import copy
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -29,11 +31,14 @@ __all__ = [
     "SAFE_PERMISSIONS",
     "Permission",
     "ToolArgumentError",
+    "ToolContext",
     "ToolNotFoundError",
     "ToolRegistrationError",
     "ToolRegistry",
     "ToolSpec",
     "apply_defaults",
+    "current_tool_context",
+    "tool_context",
     "validate_tool_arguments",
 ]
 
@@ -75,6 +80,42 @@ class Permission(str, Enum):  # noqa: UP042 - ADR 冻结枚举；StrEnum 会改�
 
 
 SAFE_PERMISSIONS = frozenset(Permission)
+
+
+@dataclass(frozen=True)
+class ToolContext:
+    """一次工具调用的审计上下文（ADR-017 §7.1）。
+
+    由 :class:`astock.agent.runtime.AgentRuntime` 在 dispatch 前设置：带
+    ``run_id`` 的工具结果（如图表 artifact）据此把 link 挂到真实 run 上，
+    而不是假装成「直接渲染」。Agent 之外的调用（UI 直接渲染、测试）没有上下文，
+    工具按 ``source="render"`` 记录。
+    """
+
+    run_id: str
+    step: int
+    session_id: str = ""
+
+
+_tool_context: ContextVar[ToolContext | None] = ContextVar("astock_tool_context", default=None)
+
+
+def current_tool_context() -> ToolContext | None:
+    """当前工具调用的审计上下文；没有（非 runtime 调用）返回 ``None``。"""
+    return _tool_context.get()
+
+
+@contextmanager
+def tool_context(
+    run_id: str, step: int, *, session_id: str = ""
+) -> Iterator[ToolContext]:
+    """在 ``with`` 作用域内把 ``(run_id, step)`` 暴露给工具实现。"""
+    context = ToolContext(run_id=run_id, step=int(step), session_id=session_id)
+    token = _tool_context.set(context)
+    try:
+        yield context
+    finally:
+        _tool_context.reset(token)
 
 
 def _permission_values() -> str:
