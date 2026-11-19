@@ -1,0 +1,85 @@
+{
+  "id": "ho-20261119-028",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
+  "summary": "补充记录交付状态变化：代码修复提交 89572cb（CI run 44541882652 全绿）之后，又推送了 .devloop 记账提交 29dd0e1（handoff ho-20261119-027 + 计划项证据 + calendar/worklog），其 CI run 44542208886 同样 test/png-export 双 job 通过。PR #36 head 现为 29dd0e1，仍未合并，等待 reviewer 第 2 轮 diff 复核。相对 ho-20261119-027 的修改痕迹：无代码变更，仅交付文档与证据回填。",
+  "requirements": [
+    {
+      "id": "R9",
+      "text": "交付文档与计划项证据需反映最新 head commit 与 CI 结果，便于 reviewer 第 2 轮复核",
+      "source": "流程要求：PR/CI 状态变化后补 update handoff"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/handoffs/ho-20261119-027.json",
+      "summary": "新增 developer update handoff（六条 issue 关闭记录 + 测试证据 + 交付状态）",
+      "commit": "29dd0e1"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-002.json",
+      "summary": "计划项回填 links.test（含修复后全量/PNG/ruff/mypy 与 CI run）与 links.review=rev-20261119-002，progress 93、status in_review",
+      "commit": "29dd0e1"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "记录本轮开发 75 分钟的日历事件",
+      "commit": "29dd0e1"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "worklog log-1795097764580-e4f946：评审修复内容与验证结论",
+      "commit": "29dd0e1"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run watch 44542208886 --exit-status --interval 15",
+      "result": "CI run 44542208886 success（commit 29dd0e1）",
+      "passed": true,
+      "evidence": "test job（含 coverage gate）与 png-export job 均 ✓，run success"
+    },
+    {
+      "command": ".venv/Scripts/python.exe -m pytest tests -q -m \"not png\" --timeout=900 -p no:cacheprovider",
+      "result": "780 passed, 5 deselected, 12 subtests passed",
+      "passed": true,
+      "evidence": "780 passed, 5 deselected, 1 warning, 12 subtests passed in 77.21s（29dd0e1 未改代码，继承 89572cb 结果并已由 CI 复核）"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "danger-full-access 文件策略",
+      "reason": "pytest 写 0700 临时目录需要完整文件权限（本轮已在本策略下跑完全量测试）",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub CLI 推送与 CI 查询",
+      "reason": "gh 已登录，用于 push 分支与 gh run watch 取 CI 结论",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/chart-pipeline-v2",
+    "commit": "29dd0e1",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/36",
+    "ci": "run 44542208886（commit 29dd0e1）test job pass（含 coverage gate）、png-export job pass；代码提交 89572cb 的 run 44541882652 亦全绿",
+    "merge": "未合并（等待 reviewer 第 2 轮 diff 复核）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-027",
+  "next": "1) reviewer 执行 rev-20261119-002 第 2 轮 diff 复核（scope=diff）并关闭六条 issue；2) 复审通过后合入 PR #36，plan-20261114-002 置 done；3) plan-20261114-003（hfq）合并后回看价格口径文案联动。",
+  "createdAt": "2026-11-19T14:20:09.994Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-028.md"
+}
