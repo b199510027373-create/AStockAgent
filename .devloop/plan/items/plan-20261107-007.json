@@ -9,7 +9,7 @@
   "start": "2026-11-24",
   "due": "2026-12-02",
   "estimateH": 14,
-  "progress": 90,
+  "progress": 92,
   "acceptance": [
     "AI 对话 Tab 可上传 1–5 个文件并显示解析状态",
     "回答流式输出，工具步骤以时间线展示",
@@ -36,14 +36,16 @@
     "module": "agent_chat_ui",
     "branch": "feat/agent-chat-ui",
     "test": [
-      ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q -> 74 passed",
-      ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" -> 734 passed, 5 deselected; coverage report TOTAL 78.97% (fail_under=76.45)",
+      ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q -> 84 passed",
+      ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" -> 744 passed, 5 deselected, 12 subtests; coverage report TOTAL 79.04% (fail_under=76.45)",
       ".venv\\Scripts\\python.exe -m ruff check astock tests -> All checks passed",
       ".venv\\Scripts\\python.exe -m mypy astock app.py -> Success: no issues found in 43 source files",
-      ".venv\\Scripts\\python.exe -c \"import app\" -> app import ok"
+      ".venv\\Scripts\\python.exe -c \"import app\" -> app import ok",
+      "Edge headless + CDP smoke (.smoke-agent-ui/smoke_drive.py) -> AC1 附件 2/2、AC2 流式 20 帧+3 步时间线、AC3 3 个 iframe srcdoc 命中、AC4 点击 #cite-1、AC5 中断保留 121 字并可立刻再问、P1-1 agent_runs=9/agent_steps=27",
+      "Edge headless + CDP degraded (.smoke-agent-ui/degraded_drive.py, AGENT_PROVIDER=rule) -> 横幅「规则兜底模式」且完成一轮 128 字"
     ]
   },
   "createdAt": "2026-11-07T14:12:13.272Z",
-  "updatedAt": "2026-11-18T16:49:52.151Z",
+  "updatedAt": "2026-11-19T01:20:09.456Z",
   "devSessionId": "session-b2a69179-5e60-4872-91f0-f30a7d3402d1"
 }
