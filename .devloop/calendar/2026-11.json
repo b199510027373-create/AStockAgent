@@ -802,6 +802,16 @@
       "notes": "第 3 轮 · approve"
     },
     {
+      "id": "cal-rev-20261119-001-r4",
+      "type": "review",
+      "title": "评审：评审：Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+      "start": "2026-11-19T10:18:08.584Z",
+      "end": "2026-11-19T10:19:28.693Z",
+      "planItemId": "plan-20261107-007",
+      "source": "reviewer-agent",
+      "notes": "第 4 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",
