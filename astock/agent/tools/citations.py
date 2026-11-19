@@ -32,6 +32,7 @@ __all__ = [
     "finalize_file_answer",
     "format_citation",
     "has_file_citation",
+    "parse_citation",
 ]
 
 #: 没有命中任何文件内容时的唯一回答（验收标准，不得改写）。
@@ -182,6 +183,39 @@ def _normalize_citation(text: str) -> str:
 def extract_citations(text: str | None) -> list[str]:
     """抽出一段文字里所有「《文件名》…」引用（去重保序）。"""
     return list(dict.fromkeys(match.group(0) for match in _CITATION_RE.finditer(str(text or ""))))
+
+
+_PARSE_RE = re.compile(
+    r"^《(?P<name>[^》]+)》"
+    r"(?:\s*第\s*(?P<page>\d+)\s*页)?"
+    r"(?:\s*(?P<sheet_word>工作表|表格)「(?P<sheet>[^」]+)」)?"
+    r"(?:\s*第\s*(?P<row>\d+)\s*行)?"
+    r"(?:\s*(?P<cell>[A-Z]{1,3}\d+(?::[A-Z]{1,3}\d+)?))?"
+)
+
+
+def parse_citation(text: str | None) -> dict[str, Any] | None:
+    """把一条引用拆成 ``{name, page, sheet, row, cell}``，供 UI 定位。
+
+    只接受 :func:`format_citation` 产出的形状；至少要有页码、工作表或行号，
+    否则返回 ``None``（避免把普通书名号文字当成文件引用）。
+    """
+    match = _PARSE_RE.match(str(text or "").strip())
+    if match is None:
+        return None
+    page = int(match.group("page")) if match.group("page") else None
+    sheet = match.group("sheet") or None
+    row = int(match.group("row")) if match.group("row") else None
+    if page is None and sheet is None and row is None:
+        return None
+    return {
+        "name": match.group("name").strip(),
+        "page": page,
+        "sheet": sheet,
+        "sheet_word": match.group("sheet_word") or "工作表",
+        "row": row,
+        "cell": match.group("cell") or None,
+    }
 
 
 def _grounded(found: str, allowed: list[str]) -> bool:

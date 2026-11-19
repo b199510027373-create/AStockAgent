@@ -45,9 +45,11 @@ MYPY_UI_WHITELIST = {
         "recommend_ui",
     )
 }
-# astock 下共 49 个 .py，排除上述 9 个 → 40 个受检 + app.py = CI 日志里的 41 files。
+# astock 下共 51 个 .py，排除上述 9 个 → 42 个受检 + app.py = CI 日志里的 43 files。
 # plan-20261107-006 新增 astock/agent/tools/market_tools.py（非 UI，必须受 mypy 检查）。
-EXPECTED_CHECKED_MODULES = 40
+# plan-20261107-007 新增 astock/agent/chat.py 与 astock/agent_chat_ui.py：都不在 UI
+# 白名单里，因此同样受 mypy 检查（UI 白名单只豁免历史 Gradio 模块）。
+EXPECTED_CHECKED_MODULES = 42
 
 
 def _ci() -> dict[str, Any]:
@@ -260,7 +262,7 @@ def test_mypy_exclude_matches_frozen_ui_whitelist() -> None:
     regex = re.compile(pattern)
 
     # mypy 递归检查 astock 包（含 astock/agent/*.py），exclude 正则只作用于顶层模块：
-    # 44 个 .py - 9 个 UI 白名单 = 35 个受检模块，加 app.py 即 CI 日志的 36 files。
+    # 51 个 .py - 9 个 UI 白名单 = 42 个受检模块，加 app.py 即 CI 日志的 43 files。
     package_files = {path.relative_to(ROOT).as_posix() for path in (ROOT / "astock").rglob("*.py")}
     excluded = {path for path in package_files if regex.fullmatch(path)}
 

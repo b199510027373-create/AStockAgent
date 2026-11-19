@@ -1,0 +1,163 @@
+{
+  "id": "ho-20261119-008",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：CI 通过（更新交付）",
+  "summary": "相对上一份交付（ho-20261119-007）的修改痕迹：1) PR #32 CI 由 pending → 全部通过（test、png-export 两个 job 均 SUCCESS，run 44351871833，head 84b55bc），PR 可合并（MERGEABLE）；2) 补提交 handoff sidecar 与本次更新文档（仅 devloop 记账，无源码变化）。代码与测试结论不变：目标测试 74 passed、全量 734 passed / 覆盖率 78.97%、ruff 与 mypy 通过。等待评审。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮。复用现有 Gradio 装配模式，不新增 Tab；保持页面在无模型/无网络时的降级可用。",
+      "source": "plan-20261107-007 description"
+    },
+    {
+      "id": "ac1",
+      "text": "AI 对话 Tab 可上传 1–5 个文件并显示解析状态",
+      "source": "plan-20261107-007 acceptance #1"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示",
+      "source": "plan-20261107-007 acceptance #2"
+    },
+    {
+      "id": "ac3",
+      "text": "图表在回答中内嵌渲染，可点开看 spec/来源",
+      "source": "plan-20261107-007 acceptance #3"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表",
+      "source": "plan-20261107-007 acceptance #4"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留",
+      "source": "plan-20261107-007 acceptance #5"
+    },
+    {
+      "id": "boundary",
+      "text": "「流式」边界：接口冻结 v1 明确 ChatModel/AgentModel 不预留 stream 形参；流式 = UI 增量事件（on_step 时间线 + 回答按标点切片），模型侧整轮返回。",
+      "source": "docs/AStockAgent_interface_freeze_v1.md + tests/test_architecture_gate.py"
+    },
+    {
+      "id": "degrade",
+      "text": "无模型/无网络时：横幅显示「模型未就绪」，页面可开，附件仍可解析，提问得到可读降级提示。",
+      "source": "plan-20261107-007 description"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "新增纯逻辑层（附件/流式切片/时间线/图表 iframe/引用定位/控制器与中断）",
+      "commit": "6011d16"
+    },
+    {
+      "path": "astock/agent_chat_ui.py",
+      "summary": "新增 Gradio 装配 build_agent_chat_tab（上传/对话/时间线/图表/引用/中断）",
+      "commit": "6011d16"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "AgentRuntime.run 增加可选 on_step 钩子",
+      "commit": "6011d16"
+    },
+    {
+      "path": "astock/agent/tools/citations.py",
+      "summary": "新增 parse_citation 结构化引用定位",
+      "commit": "6011d16"
+    },
+    {
+      "path": "app.py",
+      "summary": "AI Tab 改为 build_agent_chat_tab；_chat_page_context 页面上下文",
+      "commit": "6011d16"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 23 个用例",
+      "commit": "6011d16"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 2 个 on_step 用例",
+      "commit": "6011d16"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "mypy 受检模块 40→42",
+      "commit": "6011d16"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261119-007.json",
+      "summary": "本份更新：补交首次交付 handoff 的 json sidecar（仅记账）",
+      "commit": "本轮 update 提交"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q",
+      "result": "74 passed",
+      "passed": true,
+      "evidence": "23 chat + 51 runtime（含 2 个 on_step 用例）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && .venv\\Scripts\\python.exe -m coverage report -m",
+      "result": "734 passed, 5 deselected; 覆盖率 78.97%（门槛 76.45%）",
+      "passed": true,
+      "evidence": "全量通过"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 43 source files",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "gh pr checks 32",
+      "result": "test / png-export 均 SUCCESS",
+      "passed": true,
+      "evidence": "run https://github.com/b199510027373-create/AStockAgent/actions/runs/44351871833，head 84b55bc"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "已推送分支与 PR，CI 已跑通",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "真机验证真实模型回答需 AGENT_API_KEY/DEEPSEEK_API_KEY；缺失时走降级路径",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui",
+    "commit": "84b55bc",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "passed（run 44351871833：test SUCCESS、png-export SUCCESS）",
+    "merge": "未合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-007",
+  "next": "等待评审。评审关注点：a) 流式仅 UI 级（接口冻结 v1）；b) iframe srcdoc 的 sandbox=allow-scripts 且无 allow-same-origin；c) 引用未精确命中时退回文件首段并注明。合并后建议在 main 上跑一次全量并做真机 UI 冒烟。",
+  "createdAt": "2026-11-18T16:53:50.948Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-008.md"
+}

@@ -1,0 +1,115 @@
+{
+  "id": "ho-20261119-020",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+  "summary": "相对上一份交付（ho-20261119-019）仅补 CI 状态：代码修复 fb185dc 与记录提交 cb2931e 均已推送，CI run 44482153964 与 44495904965 全部 success（test + png-export）；计划项 plan-20261107-007 保持 done / progress 100；PR #32 已评论本轮方案 A 修复与 48/2040 字真机证据。无代码变更。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮；复用现有 Gradio 装配模式，不新增 Tab；保持无模型/无网络时降级可用。",
+      "source": "plan-20261107-007 描述"
+    },
+    {
+      "id": "ac1",
+      "text": "AI 对话 Tab 可上传 1–5 个文件并显示解析状态。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac3",
+      "text": "图表在回答中内嵌渲染，可点开看 spec/来源。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "boundary",
+      "text": "v1 不做模型层流式；「流式」= UI 增量事件（步骤事件 + 回答分片）。",
+      "source": "interface freeze v1 + 架构门禁测试"
+    },
+    {
+      "id": "p2",
+      "text": "停止输出后 UI 不得用完整 result.answer 覆盖已截断分片；需控制器/UI 两层用例与真机证据（方案 A）。",
+      "source": "review thread rev-20261119-001 iss-mwn7nzfl-0c196c"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "ChatEvent.stopped；ask() 以 stopped=True 结束；finish() 在 done 前主动释放 busy 锁。",
+      "commit": "fb185dc"
+    },
+    {
+      "path": "astock/agent_chat_ui.py",
+      "summary": "done 分支仅在 not event.stopped 时用完整 result.answer 覆盖。",
+      "commit": "fb185dc"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 UI 保留分片、done 提前放锁用例；控制器用例断言 done.stopped。",
+      "commit": "fb185dc"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 44482153964 --json headSha,status,conclusion",
+      "result": "success",
+      "passed": true,
+      "evidence": "headSha fb185dc343daaa52313d0a96af910b78e0d79084，status completed，conclusion success"
+    },
+    {
+      "command": "gh run view 44495904965 --json headSha,status,conclusion,jobs",
+      "result": "success（test + png-export）",
+      "passed": true,
+      "evidence": "headSha cb2931e34c62c4327409a824041c565448c2aa96，conclusion success；jobs: test success、png-export success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "推送分支、PR 评论与 CI 查询",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "真实模型端到端验证（本任务已用 FakeModel + 规则兜底覆盖）",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui",
+    "commit": "cb2931e",
+    "pr": "#32 https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "CI run 44482153964 (fb185dc) success；run 44495904965 (cb2931e) success（test + png-export）",
+    "merge": "未合并（等用户/评审确认后合并）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-019",
+  "next": "1) 评审确认 iss-mwn7nzfl 已闭环后线程可收尾；2) 合并 PR #32 并删除分支；3) 建议后续单独建计划项：把 .smoke-agent-ui/ 的 CDP 冒烟夹具（smoke_app/round3_drive/round4_drive/degraded_drive）纳入受控测试资产，避免换机不可复现；4) 残存风险同前：interrupt↔request_interrupt 极小 TOCTOU、queue_.get() 依赖后端 httpx read timeout 的有界阻塞。",
+  "createdAt": "2026-11-19T09:27:10.623Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-020.md"
+}

@@ -1,0 +1,134 @@
+{
+  "id": "ho-20261119-015",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+  "summary": "第 2 轮评审 P1（iss-mwmvlhso-cd6199）修复：interrupt() 不再无条件向缓存 runtime 转发中断，改用 self._running 事件只在实际 run 在途时 request_interrupt()；新增 self._stop_output 处理「run 已返回、回答仍在流式输出」阶段的停止（保留已生成文本，重复点击不二次截断）。补 3 条回归用例覆盖空闲/流式/预运行三种中断后下一问仍 COMPLETED。验证：目标测试 87 passed、全量 747 passed 覆盖率 79.07%、ruff/mypy/import app 通过；Edge headless + CDP 真机复跑确认空闲点中断提示「当前没有正在生成的回答。」、第二问 3 步/408 字未被污染、生成中中断保留 121 字。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮；复用现有 Gradio 装配模式，不新增 Tab；无模型/无网络时降级可用。",
+      "source": "plan-20261107-007 描述"
+    },
+    {
+      "id": "ac1",
+      "text": "AI 对话 Tab 可上传 1–5 个文件并显示解析状态。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac3",
+      "text": "图表在回答中内嵌渲染，可点开看 spec/来源。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "p1-round2",
+      "text": "interrupt() 不得在 run 已结束/未运行时向缓存 runtime 留下中断标记，避免下一问零步骤被判「已中断」；补 run 结束后 interrupt 的回归用例。",
+      "source": "review thread rev-20261119-001 / iss-mwmvlhso-cd6199"
+    },
+    {
+      "id": "residual-risk",
+      "text": "说明 respond() 中 queue_.get() 无超时阻塞的取舍：接受有界阻塞或改为轮询。",
+      "source": "rev-20261119-001 round 2 评审第三节"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "新增 self._running / self._stop_output 两个 Event；interrupt() 仅在 run 在途时转发 runtime.request_interrupt()，流式阶段只置停止输出标记并返回「已中断输出」；worker 用 try/finally 维护 _running；ask() 开头清标记，每个 chunk 后检查停止标记，done 文案优先「已停止输出」。",
+      "commit": "5cceb3c"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 3 条回归：run 完成后 interrupt 不污染下一问、流式阶段停止输出保留文本且下一问正常、runtime 已缓存时预运行阶段 interrupt 下一问仍 COMPLETED。",
+      "commit": "5cceb3c"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q",
+      "result": "87 passed",
+      "passed": true,
+      "evidence": "87 passed in 11.86s（84 + 3 条中断回归）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && .venv\\Scripts\\python.exe -m coverage report -m",
+      "result": "747 passed, coverage 79.07%",
+      "passed": true,
+      "evidence": "747 passed, 5 deselected, 12 subtests；TOTAL 11390 stmts / 2384 miss = 79.07%（fail_under 76.45）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "pass",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "pass",
+      "passed": true,
+      "evidence": "Success: no issues found in 43 source files"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -c \"import app\"",
+      "result": "pass",
+      "passed": true,
+      "evidence": "app import ok"
+    },
+    {
+      "command": "Edge headless + CDP: .venv\\Scripts\\python.exe .smoke-agent-ui\\round3_drive.py（smoke_app.py:7866, FakeModel, 工具 0.8s, chunk 24）",
+      "result": "PASS（4/4 断言）",
+      "passed": true,
+      "evidence": "基线 3 步/408 字；空闲点「⏹」→「当前没有正在生成的回答。」；第二问 3 步/408 字未被中断污染；生成中 1.0s 点中断保留 121 字。截图 .smoke-agent-ui/shots/9-round3-idle-interrupt.png、10-round3-next-question.png、11-round3-midrun-interrupt.png"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "gh CLI 推送分支/查询 CI",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "真实模型端到端问答未在本轮验证，使用 FakeModel 冒烟；配置 AGENT_API_KEY 后可人工复核真实输出。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui",
+    "commit": "5cceb3c",
+    "pr": "#32 https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "待 5cceb3c 的 CI run 完成，绿后再补 update",
+    "merge": "未合并",
+    "status": "ci-running"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-013",
+  "next": "1) 第 3 轮复核仅需看 iss-mwmvlhso-cd6199 是否闭环：chat.py interrupt 三态（在途 / 空闲 / 流式停止输出）与 3 条回归用例。2) 残存风险结论：接受 respond() 中 queue_.get() 的阻塞式收取——生产路径的阻塞有界（httpx 客户端配置了 read timeout，运行时的 timeout_seconds 也在每个检查点生效），且中断按钮仍可在预运行/流式阶段生效；仅注入的 FakeModel 可无限阻塞，不用于生产，故不改为轮询。3) 真机证据：.smoke-agent-ui/round3_drive.py（shots/9-round3-idle-interrupt.png、10-round3-next-question.png、11-round3-midrun-interrupt.png）。4) CI 绿后写 ho-20261119-015（kind=update）并在 PR #32 评论本轮修复。",
+  "createdAt": "2026-11-19T01:49:16.788Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-015.md"
+}

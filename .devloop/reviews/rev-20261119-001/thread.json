@@ -1,0 +1,22 @@
+{
+  "id": "rev-20261119-001",
+  "title": "评审：Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+  "planItemId": "plan-20261107-007",
+  "sourceDevSessionId": "session-b2a69179-5e60-4872-91f0-f30a7d3402d1",
+  "branch": "feat/agent-chat-ui",
+  "base": "main",
+  "files": [
+    "app.py",
+    "astock/agent/chat.py",
+    "astock/agent/runtime.py",
+    "astock/agent/tools/citations.py",
+    "astock/agent_chat_ui.py",
+    "tests/test_agent_chat.py",
+    "tests/test_agent_runtime.py",
+    "tests/test_ci_quality_gates.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-18T16:59:15.768Z",
+  "updatedAt": "2026-11-19T07:10:56.621Z",
+  "reviewSessionId": "session-af7d48c3-613f-4388-8738-63288569dfcc"
+}

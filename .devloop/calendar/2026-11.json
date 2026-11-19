@@ -761,6 +761,16 @@
       "notes": "第 4 轮 · approve"
     },
     {
+      "id": "cal-rev-20261119-001-r1",
+      "type": "review",
+      "title": "评审：评审：Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+      "start": "2026-11-18T16:59:15.870Z",
+      "end": "2026-11-19T00:43:03.997Z",
+      "planItemId": "plan-20261107-007",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
       "id": "cal-plan-20261110-007-planned",
       "type": "planned",
       "title": "ADR-018 实时口径：data_as_of/data_time 生产者与降级标注",
@@ -770,6 +780,26 @@
       "planItemId": "plan-20261110-007",
       "source": "devloop",
       "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-rev-20261119-001-r2",
+      "type": "review",
+      "title": "评审：评审：Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+      "start": "2026-11-19T01:30:40.114Z",
+      "end": "2026-11-19T01:33:00.191Z",
+      "planItemId": "plan-20261107-007",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261119-001-r3",
+      "type": "review",
+      "title": "评审：评审：Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+      "start": "2026-11-19T07:09:49.812Z",
+      "end": "2026-11-19T07:10:56.621Z",
+      "planItemId": "plan-20261107-007",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
     },
     {
       "id": "cal-plan-20261103-008-planned",

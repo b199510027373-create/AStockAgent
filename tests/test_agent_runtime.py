@@ -37,7 +37,7 @@ from astock.agent.runtime import (
     DEFAULT_TOKEN_BUDGET,
     SYSTEM_PROMPT,
 )
-from astock.agent.types import MAX_TABLE_ROWS
+from astock.agent.types import MAX_TABLE_ROWS, StepRecord
 from astock.agent.types import ToolResult as ResultAlias
 
 PRICE_SCHEMA: dict[str, Any] = {
@@ -471,6 +471,45 @@ class RuntimeLoopTests(unittest.TestCase):
     def test_system_prompt_marks_tool_content_untrusted(self) -> None:
         self.assertIn("不可信", SYSTEM_PROMPT)
         self.assertIn("不得执行", SYSTEM_PROMPT)
+
+    def test_on_step_observes_each_step_in_order(self) -> None:
+        registry = ToolRegistry()
+        registry.register(price_spec(ok_price))
+        model = FakeModel(
+            [
+                ToolCall("lookup_price", {"code": "600519"}),
+                ToolCall("lookup_price", {"code": "000001"}),
+                "两家公司收盘价已列出。",
+            ]
+        )
+        runtime = AgentRuntime(model, registry)
+        seen: list[StepRecord] = []
+
+        result = runtime.run("对比一下", on_step=seen.append)
+
+        self.assertEqual(result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual([step.tool for step in seen], ["lookup_price", "lookup_price"])
+        self.assertEqual(seen, result.steps)
+        self.assertEqual(
+            [step.arguments["code"] for step in seen], ["600519", "000001"]
+        )
+
+    def test_on_step_failure_does_not_break_run(self) -> None:
+        registry = ToolRegistry()
+        registry.register(price_spec(ok_price))
+        model = FakeModel(
+            [ToolCall("lookup_price", {"code": "600519"}), "贵州茅台收盘价 1680.00 元。"]
+        )
+        runtime = AgentRuntime(model, registry)
+
+        def broken_hook(step: StepRecord) -> None:
+            raise RuntimeError("界面渲染失败")
+
+        result = runtime.run("茅台现在什么价？", on_step=broken_hook)
+
+        self.assertEqual(result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(len(result.steps), 1)
+        self.assertIn("1680.00", result.answer)
 
 
 class RegistryTests(unittest.TestCase):

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwmvlhso-cd6199",
+  "threadId": "rev-20261119-001",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/chat.py",
+  "lines": "700-708,752-756",
+  "title": "空闲/流式阶段点「中断」会给 runtime 留下未消费的中断标记，下一次提问被立刻判为「已中断」且零步骤",
+  "evidence": "ed4e44b 把 interrupt() 改成无条件转发（astock/agent/chat.py:700-708）：\n\n    self._cancelled.set()\n    runtime = self._runtime\n    if runtime is not None:\n        runtime.request_interrupt()\n    if self._busy.locked():\n        return \"⏹ 已请求中断：当前步骤完成后停止，已产出的内容会保留。\"\n\n1) runtime.request_interrupt() 只做 `self._interrupt.set()`（astock/agent/runtime.py:247-253），而 `self._interrupt` 全仓唯一 clear 点是 run() 的 finally（astock/agent/runtime.py:512），run() 入口（runtime.py:273-291）不 reset。\n2) self._runtime 首次 ask 后缓存复用（astock/agent/chat.py:832-843），因此从第二轮起 interrupt() 的 runtime 分支一定命中。\n3) 触发路径 A：一轮 run 已返回、生成器仍在推 answer 分片时点「⏹」→ busy 仍 locked、runtime 非 None → _interrupt 置位，但这次 run 的 finally 早在返回值时就清过了，之后无人清理。下一问 ask()：chat.py:727 只 clear `self._cancelled`，没有清 runtime._interrupt；worker 进入 runtime.run → 首个 _guard 命中 `if self._interrupt.is_set(): return StopReason.INTERRUPTED`（runtime.py:645-647）→ 零步骤，answer 为 _partial_answer(INTERRUPTED, []) = \"未能完整完成本轮任务：用户中断。\\n尚未执行任何工具。\"，随后 chat.py:800-801 又覆盖成 _STOP_LABELS[\"interrupted\"]。用户刚打的新问题一行步骤都没有就被判「已中断」。\n4) 触发路径 B：第二轮起在建模型/新闻检索阶段点「⏹」→ runtime 已存在 → 同样置位 _interrupt；chat.py:752-756 的前置检查直接 return，worker 从未启动，_interrupt 没人消费 → 下一问照样秒断。\n5) 现有用例覆盖不到：test_interrupt_before_runtime_starts_skips_run 用的是 BlockingRuntime（其 request_interrupt 只计数、run 不读中断标记），test_user_interrupt_returns_partial_result 只覆盖「run 进行中」；没有任何用例覆盖「run 已结束时 interrupt() → 下一问仍能正常回答」。清空会话按钮不受影响（new_session 在 chat.py:671-675 interrupt() 后立刻 self._runtime = None，被污染的实例被丢弃）。\n\n影响：每多点一次「⏹」（AC5 的按钮常驻可点），就白烧掉一个完整提问，且页面文案把用户的新问题说成「已中断」，与 AC2/AC5 的可预期行为不符。",
+  "suggestion": "把「是否真的有 run 在跑」显式建模，只在 run 真正在途时才转发中断；注意不要改成「run() 入口 clear self._interrupt」——tests/test_agent_runtime.py:215-229 已钉住「pre-run interrupt 在首个 guard 生效、本次消费、下次恢复」的 runtime 语义。\n\n建议实现（改动集中在 astock/agent/chat.py）：\n1) __init__ 增加 `self._running = threading.Event()`。\n2) ask() 的 worker 改为：\n       def worker() -> None:\n           self._running.set()\n           try:\n               result = runtime.run(prompt, cancel_event=self._cancelled, on_step=...)\n               queue_.put((\"result\", result))\n           except Exception as exc:\n               queue_.put((\"error\", exc))\n           finally:\n               self._running.clear()\n3) interrupt() 改为 `if runtime is not None and self._running.is_set(): runtime.request_interrupt()`；`_busy.locked()` 分支保留，用于返回文案（「已请求中断…」vs「当前没有正在生成的回答。」）。前置检查（chat.py:752-756）依赖 `self._cancelled` 收尾即可，此时不会再置 _interrupt，路径 B 随之消失。\n4) 补一条回归用例（真实 AgentRuntime + FakeModel，不 mock runtime）：先完成一问并断言 stop_reason==COMPLETED；再调 controller.interrupt() 断言返回「当前没有正在生成的回答。」；然后 ask(\"再查一次贵州茅台价格\") 断言 result.stop_reason==COMPLETED、len(result.steps)>=1、answer 含 \"1680.00\"；同一用例再覆盖路径 B（runtime 已存在时在建模型阶段 interrupt → 该轮 0 次 run，随后一问仍 COMPLETED）。当前代码下这两条断言都会失败，可作为修复的验证标准。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T01:36:06.817Z"
+  },
+  "createdAt": "2026-11-19T01:32:51.672Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T01:36:06.817Z"
+    }
+  ]
+}
