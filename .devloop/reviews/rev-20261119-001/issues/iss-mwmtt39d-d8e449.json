@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwmtt39d-d8e449",
+  "threadId": "rev-20261119-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "performance",
+  "file": "astock/agent_chat_ui.py",
+  "lines": "184-185",
+  "title": "每个流式分片都重算引用卡片并同步读盘（glob 全部 meta.json + 整读正文），回答越长越卡",
+  "evidence": "respond() 的每一帧（含每个 40 字 answer 分片）都无条件调用 render_citations_html(citations)（astock/agent_chat_ui.py:184-185），而 render_citations_html 对每条引用同步调用 resolve_citation（astock/agent/chat.py:551-552）；resolve_citation 每次 load_meta + list(iter_chunks) 整读 extracted 内容（astock/agent/chat.py:501-504），answer 文本里的引用 file_id 为 None（astock/agent/chat.py:461-464），于是还要 _find_file 去 glob data/agent/files/*/meta.json 并逐个 read_text+json.loads（astock/agent/chat.py:468-479）。一次 3000 字回答约 75 帧 × 最多 20 条引用 × 全量 meta 扫描，全部发生在 Gradio 生成器里，流式观感会被同步磁盘 I/O 拖慢；且这些重算对同一批 citation 的结果完全不变。当前测试也没有对每帧重算行为的约束。",
+  "suggestion": "在 respond() 里缓存上一次的 citations 指纹（如 tuple((c.label, c.page, c.sheet, c.file_id) for c in citations)）与对应 HTML，只在 step/done 帧或指纹变化时重算 answer 帧直接复用；同时给 render_citations_html 增加可选的 memo 字典参数，把 resolve_citation 结果按 (label, page, sheet) 缓存。改完后在 tests/test_agent_chat.py 补一条断言：连续两个相同 citations 的 answer 帧只发生一次 resolve（可用 monkeypatch 计数）。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T01:36:11.767Z"
+  },
+  "createdAt": "2026-11-19T00:42:46.848Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T01:36:11.767Z"
+    }
+  ]
+}

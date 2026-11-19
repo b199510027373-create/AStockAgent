@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwmtta3c-cfdaaa",
+  "threadId": "rev-20261119-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_agent_chat.py",
+  "lines": "283-340",
+  "title": "测试缺口：引用未命中退回首段、>20 条截断提示、并发发送 busy 分支均无用例",
+  "evidence": "CitationTests 只覆盖两条路径：精确命中（tests/test_agent_chat.py:295 起）与文件不存在（tests/test_agent_chat.py:329 起），没有覆盖 chat.py:523-525 的「未命中退回首段 + note」分支，也没有覆盖 chat.py:571-575 的「还有 N 条引用未展示」（limit=20）。ControllerTests 覆盖了中断（tests/test_agent_chat.py:375-402）与空问题，但没有覆盖 chat.py:699-701 的并发发送分支「上一轮仍在生成，请先点「中断」或等待完成。」。这三处正是 AC4 降级话术与并发安全的关键行为，其中「退回首段」与「未展示 N 条」在没有用例的情况下改文案/改 limit 都不会被发现。",
+  "suggestion": "补三条用例：①constructed Citation(page=999) 对已导入 CSV 调 resolve_citation，断言 found is True、snippet 等于首段、note 含「未在提取内容中精确命中」；②21 条 Citation 调 render_citations_html，断言含「还有 1 条引用未展示」且只渲染 20 个 details；③用可阻塞的 FakeRuntime（run 里先 sleep 或等 Event）对同一 AgentChatController 连续调用两次 ask()，断言第二次首个事件即 done 且 text 含「上一轮仍在生成」，第一次结束后的第三次 ask 能正常开始（顺带固定「_busy 已释放」这一不变量）。",
+  "confidence": 0.88,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T01:37:01.791Z"
+  },
+  "createdAt": "2026-11-19T00:42:55.704Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T01:37:01.791Z"
+    }
+  ]
+}

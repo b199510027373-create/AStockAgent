@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwmtsmv4-4f6d7f",
+  "threadId": "rev-20261119-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "test",
+  "file": "tests/test_agent_chat.py",
+  "lines": "436-474",
+  "title": "AC2–AC5 缺真机 UI 证据：流式刷新、iframe 渲染、引用跳转、中断按钮只测了纯函数",
+  "evidence": "UiBuilderTests 只在 with gr.Blocks(): 里构造组件，然后直接调用 respond()/handle_uploads()（tests/test_agent_chat.py:436-474），不启动 Gradio，也从未触发 stop.click 的接线。ho-20261119-009 的 tests 全部是 pytest/ruff/mypy/gh（.devloop/handoffs/ho-20261119-009.json tests 数组），next 明确写「合并后…做真机 UI 冒烟（上传 PDF/Excel、出图、点引用、中断）」，permissions 里 agent-api-key 仍是 needed。因此本轮没有任何证据覆盖：AC2 的逐帧刷新、AC3 的 iframe srcdoc 在浏览器里真正执行 plotly、AC4 的 #cite-N 锚点跳转、AC5 的 stop.click(queue=False, cancels=[send_event, submit_event])（astock/agent_chat_ui.py:204-210）在 Gradio 6.15.2 下的取消行为，以及「中断后 _busy 是否释放、下一问能否开始」（astock/agent/chat.py:699-701、778-779）——后者一旦不成立，页面会永久卡在「上一轮仍在生成」。",
+  "suggestion": "合并前由开发在真实页面做一次手工冒烟并把证据写进 handoff tests（command 写启动方式 + evidence 写观察结果）：①上传 1 个 PDF + 1 个 Excel，看到「附件解析 2/2 成功」与页数/表名；②提问看步骤时间线先出、回答分段追加；③让助手出 K 线，确认 iframe 内图真的渲染、details 能展开 spec/来源；④点引用跳到 cite-N 卡片并显示正文摘录；⑤生成中点「⏹ 中断」：部分步骤保留、状态显示已中断，并立刻再问一句能正常进入「正在分析」；⑥无 key 时刷新页面看「模型未就绪」横幅 + 提问降级提示。模型不可用可用注入 FakeModel 的 controller，但第⑤步必须在浏览器里点按钮，而不是直接调 controller.interrupt()。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T01:36:00.614Z"
+  },
+  "createdAt": "2026-11-19T00:42:25.600Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T01:36:00.614Z"
+    }
+  ]
+}

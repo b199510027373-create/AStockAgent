@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwmtt3ab-775ed6",
+  "threadId": "rev-20261119-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/chat.py",
+  "lines": "676-683",
+  "title": "中断在「新闻检索/建模型」阶段完全失效且提示误导，本地 cancel Event 是死参数",
+  "evidence": "interrupt() 只在 runtime 已创建且 self._busy.locked() 时才调 runtime.request_interrupt()，否则返回「当前没有正在生成的回答。」（astock/agent/chat.py:676-683）。而 ask() 在 _ensure_runtime() 之前先同步执行 context_provider（astock/agent/chat.py:707-709），app.py:480 注入的 _chat_page_context 会走 build_ai_context 的新闻/公告检索，可能耗时数秒；这段时间 _busy 已 locked 但 runtime 仍为 None，用户点「⏹ 中断」得到的是「当前没有正在生成的回答」，紧接着 chat.py:729 的 self._cancelled.clear() 又把它抹掉，run 照常完整执行并显示「✅ 已完成」——中断请求被静默丢弃。另外 chat.py:728 的局部 cancel = threading.Event() 交给 runtime.run(cancel_event=cancel)，但没有任何代码路径 set 它（interrupt() 只设 _cancelled 和 self._interrupt），是死参数，容易让后续维护者误以为两条取消通道都在工作。",
+  "suggestion": "把判定改成「self._busy.locked() 即视为已请求中断」并返回「⏹ 已请求中断…」，runtime 为 None 时也能生效；在 _ensure_runtime() 之后、启动 worker 之前检查 self._cancelled，若已置位就直接 yield done(_STOP_LABELS[\"interrupted\"]) 并 return（finally 释放锁），不再启动 run。同时把 chat.py:728 的局部 cancel Event 挂到实例（如 self._cancel_event）并在 interrupt() 中 set 它，或直接删掉该形参，保持单一取消通道。",
+  "confidence": 0.82,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T01:36:49.665Z"
+  },
+  "createdAt": "2026-11-19T00:42:46.883Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T01:36:49.665Z"
+    }
+  ]
+}
