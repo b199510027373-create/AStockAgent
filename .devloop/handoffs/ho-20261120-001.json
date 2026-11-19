@@ -1,0 +1,145 @@
+{
+  "id": "ho-20261120-001",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261120-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "复权口径展示收口：enrich/周期聚合保留复权标注 + 图注标注 hfq 与基准",
+  "summary": "2026-11-20 实跑回测（run_strategy 600519.SH/000001.SZ）时发现数据层口径已对但标注在展示链路丢失：enrich() 经 indicators.add_all 的 join/replace 生成新 frame，attrs[\"adjustment\"] 消失（run_strategy 返回帧 attrs=None）；resample_ohlcv() 聚合同样丢 attrs；charts.summary_markdown 用 '前复权' if adj=='qfq' else '不复权' 把 hfq 说成不复权且不展示基准。本项修复三处：data.enrich/resample_ohlcv 显式回填 attrs（period_frame 随之保留）、charts 新增 _adj_caption 区分 qfq/hfq/none/未知并显示基准日与基准因子、补 10 个测试（4 传播 + 6 图注）。实跑复核：run_strategy 返回帧 attrs={'adj':'qfq','adj_base':'2026-11-19','base_factor':8.6463,'adj_source':'daily'}，bars=242、trades=6。全量 796 passed/1 skipped，门禁 33 passed，全仓 ruff（blocking）与 mypy 44 files 全绿，CI 44573239310 success，PR #37 OPEN/CLEAN 待评审。顺带把 plan-20261114-003 收口为 done（验收⑥由 plan-20261107-006/plan-20261114-002 落地）。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "enrich() 不能再丢 attrs[\"adjustment\"]：run_strategy() 返回帧与 UI 图表链路必须拿得到 qfq|hfq|none 与 adj_base",
+      "source": "plan-20261120-001 description 第 1 条 / 用户 2026-11-20「修了吧」"
+    },
+    {
+      "id": "R2",
+      "text": "summary_markdown 图注不得把 hfq 标成不复权；必须区分 qfq/hfq/none/未知并展示基准日（hfq 为『基准 <adj_base> 起 1.0』，qfq 为『基准 <adj_base>，因子 <base_factor>』）",
+      "source": "plan-20261120-001 description 第 2 条"
+    },
+    {
+      "id": "R3",
+      "text": "resample_ohlcv() 与 period_frame() 的周/月/季线保留 attrs[\"adjustment\"]（周期线沿用日线口径）",
+      "source": "plan-20261120-001 acceptance 第 2 条"
+    },
+    {
+      "id": "R4",
+      "text": "新增单元测试覆盖 attrs 传播与图注口径；run_strategy 实跑返回帧 attrs 非空",
+      "source": "plan-20261120-001 acceptance 第 4 条"
+    },
+    {
+      "id": "R5",
+      "text": "全量 pytest、架构门禁、ruff（含 CI 全仓 blocking 规则）、mypy 全绿",
+      "source": "plan-20261120-001 acceptance 第 5 条"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/data.py",
+      "summary": "enrich() 与 resample_ohlcv() 显式把输入 frame 的 attrs 带回派生帧；period_frame 经两者组合后 attrs[\"adjustment\"] 保留（含 adj/adj_base/base_factor/adj_source）",
+      "commit": "4b74337"
+    },
+    {
+      "path": "astock/charts.py",
+      "summary": "新增 _adj_caption(adj, daily)：优先读 attrs[\"adjustment\"]，区分 qfq/hfq/none/未知；hfq 显示「后复权（hfq）」「基准 <adj_base> 起 1.0」，qfq 显示「基准 <adj_base>，因子 <base_factor>」，无 attrs 时回退入参；替换 summary_markdown 里的 '前复权' if adj=='qfq' else '不复权' 三元表达式",
+      "commit": "4b74337"
+    },
+    {
+      "path": "tests/test_data_adj_caliber.py",
+      "summary": "新增 AdjustmentMetadataPropagationTests（4 例）：enrich/resample_ohlcv/period_frame/load_daily→enrich 全链路 attrs 保留；顺带修 RUF012（META 标 ClassVar）与 SIM117（合并 with）以过全仓 ruff",
+      "commit": "4b74337"
+    },
+    {
+      "path": "tests/test_charts_summary.py",
+      "summary": "新增 6 例图注测试：hfq 不得标成不复权、qfq 显示基准日与因子、none、无 attrs 回退入参、未知口径、summary_markdown 实际输出",
+      "commit": "4b74337"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-008-price-adjustment-limits.md",
+      "summary": "新增「落地（plan-20261120-001）：标注必须活着走到展示层」小节：attrs 随派生帧传播、图注三口径、对应测试清单",
+      "commit": "4b74337"
+    },
+    {
+      "path": ".devloop/architecture/adrs.json",
+      "summary": "ADR-008 summary 追加 plan-20261120-001 展示层要求",
+      "commit": "4b74337"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py tests/test_charts_summary.py -q -p no:cacheprovider",
+      "result": "35 passed / 12 subtests",
+      "passed": true,
+      "evidence": "35 passed, 1 warning, 12 subtests passed in 1.80s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "796 passed, 1 skipped",
+      "passed": true,
+      "evidence": "796 passed, 1 warning, 14 subtests passed in 92.50s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q -p no:cacheprovider",
+      "result": "33 passed",
+      "passed": true,
+      "evidence": "33 passed, 1 warning in 1.27s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "All checks passed!（全仓 blocking；首轮曾报 tests/test_data_adj_caliber.py:529 RUF012、:560 SIM117，已修）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "44 files clean",
+      "passed": true,
+      "evidence": "Success: no issues found in 44 source files（首轮 charts.py:426 arg-type 已改为 isinstance 收窄）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -c \"from astock.backtest import run_strategy; r,d=run_strategy('600519.SH','MA双均线',years='1年',name='贵州茅台'); print(d.attrs.get('adjustment'), r.metrics['bars'], r.metrics['trades'])\"",
+      "result": "attrs 非空（修复前为 None）",
+      "passed": true,
+      "evidence": "attrs={'adj': 'qfq', 'adj_base': '2026-11-19', 'base_factor': 8.6463, 'adj_source': 'daily'} bars=242 trades=6"
+    },
+    {
+      "command": "gh pr view 37 --json state,mergeStateStatus,statusCheckRollup",
+      "result": "CI 全绿",
+      "passed": true,
+      "evidence": "test SUCCESS / png-export SUCCESS，run 44573239310，head 4b74337，state OPEN，mergeStateStatus CLEAN"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI push / PR",
+      "reason": "创建 fix/adj-meta-display 分支并开 PR #37",
+      "status": "granted"
+    },
+    {
+      "name": "Tushare Token（本机 .env）",
+      "reason": "实跑 run_strategy 复核 attrs 与回测指标",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "fix/adj-meta-display",
+    "commit": "4b74337",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/37",
+    "ci": "GitHub Actions 44573239310（head 4b74337）test SUCCESS / png-export SUCCESS",
+    "merge": "未合并，等待评审；合并后需复跑 main CI 回填 run 号",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "1) 评审请走 diff 复核：重点看 astock/data.py enrich/resample_ohlcv 的 attrs 回填是否会覆盖调用方自带 attrs（当前是 update，语义为\"派生帧继承源帧标注\"），以及 charts._adj_caption 对未知口径的兜底。2) 合并 PR #37 后复跑 main CI 回填 run 号，plan-20261120-001 由 in_review → done。3) 剩余未收口（另行立项/评估）：分钟盘中 partial/factor_as_of 尚无下游消费（图注可考虑提示\"盘中近似\"）；plan-20261103-009 板块/停牌规则仍 backlog（limit_pct 已有 ST 5%/创业科创 20%/北交所 30%/IPO 首日豁免、vol=0 不成交，缺临时停牌专项用例与 README 规则差异说明）；回测引擎仍为日线 long-only 单标的。",
+  "createdAt": "2026-11-19T17:07:03.051Z",
+  "markdownPath": ".devloop/handoffs/ho-20261120-001.md"
+}

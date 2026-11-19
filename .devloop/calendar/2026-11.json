@@ -689,17 +689,6 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261114-003-planned",
-      "type": "planned",
-      "title": "复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
-      "start": "2026-11-18T00:00:00+08:00",
-      "end": "2026-11-22T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261114-003",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
       "id": "cal-plan-20261107-008-planned",
       "type": "planned",
       "title": "Agent 审计表与安全限额（v2：内容/版本/引用）",
@@ -707,6 +696,17 @@
       "end": "2026-11-28T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261107-008",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261114-003-planned",
+      "type": "planned",
+      "title": "复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
+      "start": "2026-11-18T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261114-003",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
