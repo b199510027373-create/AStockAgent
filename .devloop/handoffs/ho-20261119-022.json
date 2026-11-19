@@ -1,0 +1,121 @@
+{
+  "id": "ho-20261119-022",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+  "summary": "最终交付状态：PR #32 已合并至 main（merge commit 552780d，2026-11-19T10:22:16Z），第 4 轮评审 approve（rounds/4：本轮 0 问题，openP0=0/openP1=0），main push CI run 44505026186 success。本记录分支补入先前因合并时序未进入 main 的第 4 轮评审记录（rounds/4、ho-20261119-021）与 plan 合并信息；残存 TOCTOU 由总会话通过 PR #33（merge 4524e92，35b6806）闭环，其余非阻断项见 rounds/4 第五节。plan-20261107-007 保持 done / progress 100。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传、流式回答、步骤时间线、内嵌图表、引用列表、中断按钮；不新增 Tab；无模型/无网络时降级可用。",
+      "source": "plan-20261107-007 描述"
+    },
+    {
+      "id": "ac1",
+      "text": "可上传 1–5 个文件并显示解析状态。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac3",
+      "text": "图表内嵌渲染，可点开看 spec/来源。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留。",
+      "source": "验收标准"
+    },
+    {
+      "id": "boundary",
+      "text": "v1 无模型层流式；「流式」= UI 增量事件（步骤事件 + 回答分片）。",
+      "source": "interface freeze v1 + 架构门禁测试"
+    },
+    {
+      "id": "p2",
+      "text": "停止输出后 UI 不得用完整 result.answer 覆盖已截断分片（方案 A，已修）。",
+      "source": "review iss-mwn7nzfl-0c196c"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "ChatEvent.stopped；finish() 在 done 前释放 busy 锁。",
+      "commit": "fb185dc"
+    },
+    {
+      "path": "astock/agent_chat_ui.py",
+      "summary": "done 仅在 not stopped 时用完整回答覆盖。",
+      "commit": "fb185dc"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "UI 保留分片、done 提前放锁、done.stopped 断言。",
+      "commit": "fb185dc"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 44505026186 --json headSha,status,conclusion",
+      "result": "success",
+      "passed": true,
+      "evidence": "main push after merge 552780d → success"
+    },
+    {
+      "command": "gh run view 44482153964 --json headSha,status,conclusion",
+      "result": "success",
+      "passed": true,
+      "evidence": "fb185dc CI success（89 passed / 749 passed 已在本地目标与全量测试验证）"
+    },
+    {
+      "command": "gh pr view 32 --json state,mergedAt,mergeCommit",
+      "result": "MERGED",
+      "passed": true,
+      "evidence": "state MERGED，mergedAt 2026-11-19T10:22:16Z，mergeCommit 552780da78c5b1e23132b73f8c1b1c08f693011b"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "合并 PR、查询 CI",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "真实模型 E2E（已由总会话跟进，非本任务阻塞）",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui（已删除/归档）→ main",
+    "commit": "552780d（merge commit，包含 fb185dc / b3d464a）",
+    "pr": "#32 https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "PR #32 head 最终 CI success；main push run 44505026186（552780d）success",
+    "merge": "已合并至 main（PR #32，2026-11-19T10:22:16Z）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-020",
+  "next": "1) plan-20261107-007 完全解决，无需再改代码；2) 残存风险已由总会话接手：TOCTOU 已通过 PR #33（4524e92 / 35b6806 request_interrupt_if_running）闭环，其余（停止输出后引用面板用完整回答抽取、session.save 在锁外、smoke 夹具入库、queue_.get 依赖 httpx 超时）见 rounds/4 第五节；3) 本记录分支补入缺失的 rounds/4 与 ho-20261119-021（原 389cb6b 因 PR #32 先合并而未进入 main）。",
+  "createdAt": "2026-11-19T10:30:27.696Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-022.md"
+}
