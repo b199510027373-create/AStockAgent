@@ -103,3 +103,15 @@ ChartSpec v1 在 `docs/AStockAgent_interface_freeze_v1.md` §3 **逐字冻结**�
 - **D10**：`ChartSpec.data` 新增 `time_field` 与 `time_semantics ∈ bar_time|trade_date|none`；`chart_render.resolve_time_column()` 只认可证明的时间列（datetime 或 `YYYY-MM-DD[ HH:MM[:SS]]` 字符串），代码/文本标签/纯数字不猜，无法证明即报错。验收：`tests/test_agent_chart_render.py::test_unprovable_time_column_raises_instead_of_guessing` 等 4 个 D10 用例。
 - **D11**：`astock/stats.py::aggregate_groups()` 成为分组聚合唯一实现，`_transform_group` 委托它；空组/全 NaN 组保留 + warning、稳定排序、同名后缀。验收：`tests/test_agent_chart_render.py::test_transform_groupby_matches_stats_caliber` 等 4 个 D11 用例。
 - **Q3/Q1 附带**：`embed_html(html, div_id)` 实现每实例唯一 div id；`RenderedFigure` 用 `data_as_of/data_time` + `view_as_of/view_time` 两对字段取代 `time_point_scope`。
+
+
+## 评审回填（2026-11-19，rev-20261119-002）
+- **连续指标样本范围**：分钟周期（1/5/15/30/60min）只用连续竞价 bar；日/周/月线每根都是收盘 bar，
+  必须全量参与 MA/BOLL/MACD/RSI/KDJ 计算（旧实现一把梳子过滤全部周期，导致日/周/月指标恒为 NaN）。
+  指标样本为空时必须写「连续指标无可用 bar」warning，不允许静默全 NaN。
+  验收：`tests/test_agent_chart_render.py::test_period_indicators_are_numeric_and_match_indicators`、
+  `::test_auction_only_minute_frame_warns_indicators_are_empty`。
+- **图注归因**：`RenderedFigure.view_unknown_reason` 区分「聚合丢列」/「声明 time_semantics=none」/
+  其他未知，`_caption` 只在前者写「（聚合后无时间列）」。
+  验收：`tests/test_agent_chart_render.py::test_view_unknown_reason_names_time_semantics_none`、
+  `::test_groupby_drops_time_column_and_reports_unknown_view`。

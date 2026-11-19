@@ -9,7 +9,7 @@
   "start": "2026-11-30",
   "due": "2026-12-08",
   "estimateH": 32,
-  "progress": 88,
+  "progress": 92,
   "acceptance": [
     "Q4：panes/style/raw 别名删除，schema 只声明 layers/theme/adj=none，旧别名与未知键均报错",
     "Q1：data_as_of/data_time 行情时点 + view_as_of/view_time 视图时点，图注同时展示；runtime/gateway 仍读行情时点",
@@ -40,27 +40,30 @@
       "ADR-017",
       "ADR-018"
     ],
+    "branch": "feat/chart-pipeline-v2",
     "module": [
       "chart_render",
       "chart_service",
       "chart_spec",
       "agent_store",
       "stats",
-      "data"
+      "data",
+      "registry",
+      "runtime"
     ],
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/36",
-    "branch": "feat/chart-pipeline-v2",
+    "review": "rev-20261119-002",
     "test": [
-      "CI（PR #36，run 44531537237）：test job pass 1m8s、png-export job pass 1m18s",
-      "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests -q -p no:cacheprovider -m \"not png\" --timeout=600 => 771 passed, 5 deselected, 12 subtests passed in 74.19s",
-      "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests/test_agent_chart_render.py tests/test_artifact_admin.py -q -p no:cacheprovider => 64 passed (60 + 4)",
-      "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests/test_data_pit_events.py tests/test_data_time_semantics.py -q -p no:cacheprovider => 52 passed in 4.61s",
-      "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png -p no:cacheprovider --timeout=300 => 5 passed in 20.45s",
-      "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m ruff check astock tests => All checks passed!",
-      "C:/Users/b1995/Documents/AStockAgent/.venv/Scripts/python.exe -m mypy astock app.py => Success: no issues found in 44 source files"
+      "评审第 1 轮修复后：.venv/Scripts/python.exe -m pytest tests -q -m \"not png\" --timeout=900 -p no:cacheprovider => 780 passed, 5 deselected, 12 subtests passed in 77.21s",
+      "评审第 1 轮修复后：.venv/Scripts/python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png --timeout=300 -p no:cacheprovider => 5 passed in 18.83s",
+      "评审第 1 轮修复后：.venv/Scripts/python.exe -m pytest tests/test_agent_chart_render.py tests/test_agent_runtime.py -q -p no:cacheprovider => 121 passed in 18.05s（新增 daily/weekly/monthly MA20 数值断言、run 生命周期 3 例、runtime→tool link 端到端、meta 篡改检测、caption 归因）",
+      "评审第 1 轮修复后：.venv/Scripts/python.exe -m ruff check astock tests => All checks passed!",
+      "评审第 1 轮修复后：.venv/Scripts/python.exe -m mypy astock app.py => Success: no issues found in 44 source files",
+      "首轮交付（ho-20261119-024/025）：pytest tests -m \"not png\" => 771 passed, 5 deselected, 12 subtests passed in 74.19s；PNG 5 passed；ruff All checks passed；mypy Success 44 files",
+      "首轮 CI（PR #36，run 44531537237）：test pass 1m8s、png-export pass 1m18s；run 44531998927 同样全绿"
     ]
   },
   "createdAt": "2026-11-13T16:36:35.797Z",
-  "updatedAt": "2026-11-19T13:17:07.859Z",
+  "updatedAt": "2026-11-19T14:15:36.849Z",
   "devSessionId": "session-7f3600bf-2abb-44b4-a4c7-372e79943be7"
 }

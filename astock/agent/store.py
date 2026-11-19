@@ -620,6 +620,8 @@ class ArtifactRecord:
     meta: dict[str, Any]
     run_id: str | None = None
     step: int | None = None
+    #: 该版本写入时的 meta 摘要（``sha256:<hex>``）；回放时用来校验库内 meta 未被篡改。
+    meta_digest: str = ""
 
     @property
     def digest(self) -> str:
@@ -638,6 +640,7 @@ class ArtifactRecord:
             "env_fingerprint": self.env_fingerprint,
             "version": self.version,
             "meta": dict(self.meta),
+            "meta_digest": self.meta_digest,
             "created_at": self.created_at,
         }
 
@@ -894,6 +897,7 @@ def _row_to_record(
         meta=_load_meta(version_row["meta_json"]),
         run_id=link_row["run_id"] if link_row is not None else None,
         step=link_row["step"] if link_row is not None else None,
+        meta_digest=str(version_row["meta_digest"] or ""),
     )
 
 

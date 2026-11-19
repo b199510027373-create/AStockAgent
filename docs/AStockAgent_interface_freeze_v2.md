@@ -30,6 +30,14 @@
   `行情 2024-01-04 15:00 · 视图截止 2024-01-03` / `行情 2024-01-04 15:00（视图一致）` /
   `行情 2024-01-04 15:00 · 视图时点未知（聚合后无时间列）` / `行情时点未知 · 视图 2024-01-03`；
   v1 旧记录写作 `旧版记录时点 2024-01-04 15:00（语义未区分）`。
+  「视图时点未知」的括号原因由 `RenderedFigure.view_unknown_reason` 显式区分：只有 transforms
+  真的丢了时间列才写「（聚合后无时间列）」；`data.time_semantics="none"` 写
+  「（声明 time_semantics=none）」；其余情况不带括号原因。
+- `run_id` 只接受**已存在**的 `run_kind='agent'` run（由 `AgentRuntime` 先 `ensure_run`），
+  不存在直接 fail-fast——`chart_service` 不创建 run；成功渲染不改 run 状态（生命周期归 runtime
+  的 `finish_run`），只有 PNG 硬失败才把该 run 标 `failed`。Agent 循环通过
+  `astock/agent/registry.py::tool_context(run_id, step)` 把 `(run_id, step)` 传给工具，
+  `kline` 等工具据此落 `source='agent'` 的 link。
 - `ToolResult.data_as_of`/`data_time`、`metadata["freshness"]`/`["session"]` 仍然只读行情时点；
   `runtime.py`/`gateway.py` 的文案不变。视图时点只出现在 `metadata["view_as_of"]`/`["view_time"]`。
 - `meta_json` 只存小型 provenance（`schema_version="chart_meta_v2"`、`spec`、`params`、
@@ -45,7 +53,9 @@
 - 同一 `artifact_id` 重复渲染**不覆盖 meta**：追加 `agent_artifact_versions`（`meta_digest` /
   `reason` / `actor`）；修正只能追加 `corrections`（actor / 理由 / 旧值 / 新值 / 时间），
   且只允许维护脚本 `tools/artifact_admin.py` 或管理员执行，Agent/UI 没有入口。
-  回放 `as_recorded` 与 `recomputed` 分离：不一致只给 warning，不静默覆盖记录。
+  回放 `as_recorded` 与 `recomputed` 分离：不一致只给 warning，不静默覆盖记录；
+  回放同时用库内 `meta_digest` 校验 `meta_json`（绕过 correction 直接改库会被发现并拒绝回放，
+  抛 `ArtifactReplayUnavailable`）。
 
 ## 5. `agent_*` 表结构口径（v2 实现口径，plan-20261107-008 已落地）
 
@@ -86,5 +96,7 @@
 `astock/data.py` 新增 `classify_bar_time` / `bar_sessions` / `continuous_bars` / `validate_bar_time`；
 `latest_bar_time` 接受 09:25 集合竞价与 15:00 后固定价 bar，并在 `notes` 标注 `session=pre|post`，
 `strict=True` 只在需要时硬失败。K 线照常画这些 bar，`meta["session"]` 与
-`ToolResult.metadata["session"]` 如实标注；MA/BOLL/MACD/RSI/KDJ 默认只用连续竞价 bar；
+`ToolResult.metadata["session"]` 如实标注；MA/BOLL/MACD/RSI/KDJ 在**分钟周期**只用连续竞价 bar，
+日/周/月线（`session="close"`）全量参与计算——指标样本为空时必须写
+「连续指标无可用 bar」warning，不允许静默全 NaN；
 只有竞价数据时指标为空、图注写「盘前，暂无连续竞价数据」，**不回退前一日**。

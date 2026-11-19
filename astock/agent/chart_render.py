@@ -284,6 +284,11 @@ class RenderedFigure:
     png_bytes: bytes | None = None
     #: 旧版 artifact（meta 无 schema_version）：图注只能写「旧版记录时点（语义未区分）」。
     legacy: bool = False
+    #: 视图时点为空的原因（§3.2 归因）：``aggregated``=transforms 丢了时间列，
+    #: ``none``=数据声明 ``time_semantics=none``，空串=其他未知。
+    view_unknown_reason: str = ""
+    #: 渲染出的 plotly Figure（仅测试/调用方数值核对用，不落库、不进 meta）。
+    figure: Any = field(default=None, repr=False, compare=False)
 
     @property
     def caption(self) -> str:
@@ -297,6 +302,7 @@ class RenderedFigure:
             legacy=self.legacy,
             session=self.session,
             warnings=self.warnings,
+            view_unknown_reason=self.view_unknown_reason,
         )
 
     def summary_text(self) -> str:
@@ -509,9 +515,6 @@ def apply_transforms(
     # pandas 的切片/排序不保证传播 attrs，而 artifact 回放要靠它做时点兜底。
     out.attrs = dict(frame.attrs)
     return out
-    # pandas 的切片/排序不保证传播 attrs，而 artifact 回放要靠它做时点兜底。
-    out.attrs = dict(frame.attrs)
-    return out
 
 
 def _transform_filter(frame: pd.DataFrame, transform: Mapping[str, Any], path: str) -> pd.DataFrame:
@@ -583,6 +586,17 @@ def _transform_limit(frame: pd.DataFrame, transform: Mapping[str, Any], path: st
 # ---------------------------------------------------------------------------
 # 指标图层（全部复用 astock.indicators）
 # ---------------------------------------------------------------------------
+
+
+_INDICATOR_LAYER_TYPES = ("ma", "boll", "macd", "rsi", "kdj")
+
+
+def _requests_indicators(layers: Sequence[Mapping[str, Any]]) -> bool:
+    """layers 里是否请求了连续指标（MA/BOLL/MACD/RSI/KDJ）。
+
+    用途：指标样本为空时必须显式写 warning，不能静默全 NaN（评审 P0）。
+    """
+    return any(str(layer.get("type")) in _INDICATOR_LAYER_TYPES for layer in layers)
 
 
 def _indicator_frame(
@@ -683,12 +697,17 @@ def _caption(
     legacy: bool = False,
     session: str = "",
     warnings: Sequence[str] = (),
+    view_unknown_reason: str = "",
 ) -> str:
     """图注：行情时点 + 视图时点（Q1），并标注竞价/盘后时段（Q7）。
 
     组合口径见变更说明 §3.2（``行情 X · 视图截止 Y`` / ``行情 X（视图一致）`` /
     ``视图时点未知（聚合后无时间列）`` / ``行情时点未知 · 视图 Y`` /
     旧版「旧版记录时点 X（语义未区分）」）。
+
+    ``view_unknown_reason`` 只影响「视图为空」时的括号归因（评审 P2）：
+    只有 transforms 真的丢了时间列才写「聚合后无时间列」，声明
+    ``time_semantics=none`` 时写「声明 none」，其余不加括号原因。
     """
     data = spec.get("data") or {}
     period = str(data.get("period") or "day")
@@ -702,7 +721,12 @@ def _caption(
     elif not market:
         parts.append(f"行情时点未知 · 视图 {view}")
     elif not view:
-        parts.append(f"行情 {market} · 视图时点未知（聚合后无时间列）")
+        if view_unknown_reason == "aggregated":
+            parts.append(f"行情 {market} · 视图时点未知（聚合后无时间列）")
+        elif view_unknown_reason == "none":
+            parts.append(f"行情 {market} · 视图时点未知（声明 time_semantics=none）")
+        else:
+            parts.append(f"行情 {market} · 视图时点未知")
     elif view_as_of and view_as_of != data_as_of:
         parts.append(f"行情 {market} · 视图截止 {view_as_of}")
     elif view == market:
@@ -1547,8 +1571,18 @@ def render_figure(
     if transformed.empty:
         warnings.append("transforms 之后数据为空，图为空态")
     view_column = time_column if time_column and time_column in transformed.columns else None
-    if view_column is None and normalized["transforms"]:
+    # §3.2 归因：视图为空可能是「聚合丢了时间列」，也可能是数据本身声明了
+    # time_semantics=none（评审 P2：不要把所有情况都写成「聚合后无时间列」）。
+    time_semantics = str(data.get("time_semantics") or "")
+    if view_column is not None:
+        view_unknown_reason = ""
+    elif time_column is None:
+        view_unknown_reason = "none" if time_semantics == "none" else "unknown"
+    elif normalized["transforms"]:
+        view_unknown_reason = "aggregated"
         warnings.append("视图时点未知（聚合后无时间列）")
+    else:
+        view_unknown_reason = "unknown"
     v_as_of, v_time = _points_from_frame(
         transformed,
         period=period,
@@ -1574,9 +1608,30 @@ def render_figure(
         v_time,
         session=session,
         warnings=warnings,
+        view_unknown_reason=view_unknown_reason,
     )
-    # Q7：连续指标只吃连续竞价 bar（集合竞价/盘后固定价不参与 MA/BOLL/MACD/RSI/KDJ）。
-    indicator_frame = market.continuous_bars(transformed, freq=freq) if view_column else None
+    # Q7：分钟周期才有集合竞价/盘后固定价，连续指标只吃连续竞价 bar；
+    # 日/周/月线每根都是收盘 bar（classify_bar_time → "close"），必须全量参与，
+    # 否则 MA/BOLL/MACD/RSI/KDJ 会静默恒为 NaN（评审 P0）。
+    if freq in MINUTE_FREQS:
+        if view_column is None:
+            indicator_frame = None
+        else:
+            probe = (
+                transformed
+                if view_column in ("trade_time", "trade_date")
+                else _time_probe(transformed, view_column)
+            )
+            indicator_frame = market.continuous_bars(probe, freq=freq)
+    else:
+        indicator_frame = transformed
+    if _requests_indicators(normalized["layers"]):
+        if indicator_frame is None or indicator_frame.empty:
+            warnings.append(
+                "连续指标无可用 bar（集合竞价/盘后固定价不参与），MA/BOLL/MACD/RSI/KDJ 为空"
+            )
+        elif "close" in indicator_frame.columns and indicator_frame["close"].isna().all():
+            warnings.append("连续指标样本的 close 全为空，MA/BOLL/MACD/RSI/KDJ 为空")
     figure = _build_figure(
         transformed,
         normalized,
@@ -1679,6 +1734,8 @@ def render_figure(
         meta=meta,
         snapshot=snapshot,
         png_bytes=png_bytes,
+        view_unknown_reason=view_unknown_reason,
+        figure=figure,
     )
 
 

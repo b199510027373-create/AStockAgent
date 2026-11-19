@@ -112,3 +112,10 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
 - **回放语义**：`chart_service.load_chart_artifact(mode="as_recorded"|"recomputed")`
   分离——as_recorded 逐字读记录的 HTML/meta；recomputed 只重算 `view_*`，行情时点采信 meta，
   不一致只追加 warning，不静默覆盖。
+
+
+## 评审回填（2026-11-19，rev-20261119-002 / Q1 + Q7）
+- **指标样本**：`continuous_bars` 只用于分钟周期；日/周/月线（`classify_bar_time` 返回 `close`）
+  全量参与指标计算，避免日/周/月 MA/BOLL/MACD 静默为空。
+- **视图时点归因**：只有 transforms 丢掉时间列才写「（聚合后无时间列）」；`time_semantics=none`
+  写「（声明 time_semantics=none）」；图注文本由 `RenderedFigure.view_unknown_reason` 驱动。

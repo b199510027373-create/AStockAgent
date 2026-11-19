@@ -1069,6 +1069,19 @@ def _render_kline(
         "layers": layer_spec,
     }
     meta: dict[str, Any] = {"title": chart_title, "freshness_label": label}
+    # ADR-017 §7.1：runtime 通过 ToolContext 告诉工具本次调用的 run_id/step，
+    # 图表 artifact 才能挂到真实 run（source="agent"）；UI 直接渲染无上下文，
+    # 仍按 source="render" 记录（Q5/D9）。
+    from astock.agent.registry import current_tool_context
+
+    context = current_tool_context()
+    audit_kwargs: dict[str, Any] = {"session_id": "market_tools"}
+    if context is not None:
+        audit_kwargs = {
+            "run_id": context.run_id,
+            "step": context.step,
+            "session_id": context.session_id or "market_tools",
+        }
     try:
         rendered = renderer(
             spec,
@@ -1078,7 +1091,7 @@ def _render_kline(
             data_as_of=series.data_as_of,
             data_time=series.data_time,
             export_png=False,
-            session_id="market_tools",
+            **audit_kwargs,
         )
     except ChartSpecError as exc:
         warning = f"图表未生成（{exc}），K 线表仍可读"

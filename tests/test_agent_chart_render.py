@@ -17,7 +17,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from astock.agent import chart_render, store
+from astock import data as market
+from astock import indicators
+from astock.agent import chart_render, chart_service, store
 from astock.agent.chart_render import (
     FIGURE_DIV_ID,
     PRICE_DOWN,
@@ -515,7 +517,6 @@ def test_auction_only_minute_frame_renders_with_pre_session_and_no_indicators(
     assert "集合竞价" in rendered.caption
     assert "盘前，暂无连续竞价数据" in rendered.caption
     # Q7：连续指标只在连续竞价 bar 上算；集合竞价帧没有连续 bar。
-    from astock import data as market
 
     assert market.continuous_bars(auction, freq="5min").empty
     indicators = chart_render._indicator_frame(
@@ -582,6 +583,11 @@ def test_png_mode_require_raises_and_marks_run_failed(
     paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """显式请求 PNG 失败必须报错：不静默降级、不落半成品 artifact 行。"""
+    conn = store.connect(paths["db_path"])
+    try:
+        store.ensure_run(conn, "run_require", status="running")
+    finally:
+        conn.close()
 
     def failing(figure, *, width: int, height: int):
         return None, "kaleido not installed"
@@ -600,6 +606,51 @@ def test_png_mode_require_raises_and_marks_run_failed(
         conn.close()
     assert run is not None and run["status"] == "failed"
     assert artifacts == 0
+
+
+def test_unknown_run_id_fails_fast_without_creating_run(paths: dict[str, str]) -> None:
+    """chart_service 不替调用方造 run：run_id 不存在直接报错（评审 P1）。
+
+    旧行为是 ``ensure_run(status="running")`` 自建 run，成功路径又没人 finish，
+    会留下永久 running 的假审计记录。
+    """
+    with pytest.raises(ValueError, match="必须由 AgentRuntime 先 ensure_run"):
+        _render(inline_line_spec(), paths, run_id="run_missing", step=3)
+
+    conn = store.connect(paths["db_path"])
+    try:
+        runs = conn.execute("SELECT COUNT(*) AS n FROM agent_runs").fetchone()["n"]
+        artifacts = conn.execute("SELECT COUNT(*) AS n FROM agent_artifacts").fetchone()["n"]
+    finally:
+        conn.close()
+    assert runs == 0
+    assert artifacts == 0
+
+
+def test_successful_render_never_finishes_existing_run(paths: dict[str, str]) -> None:
+    """成功渲染只挂 link，不改 run 状态：finish 归 runtime（评审 P1）。"""
+    conn = store.connect(paths["db_path"])
+    try:
+        store.ensure_run(conn, "run_runtime", status="running", session_id="s1")
+    finally:
+        conn.close()
+
+    rendered = _render(inline_line_spec(), paths, run_id="run_runtime", step=2)
+
+    conn = store.connect(paths["db_path"])
+    try:
+        run = conn.execute(
+            "SELECT status FROM agent_runs WHERE run_id = ?", ("run_runtime",)
+        ).fetchone()
+        link = conn.execute(
+            "SELECT run_id, step, source FROM agent_run_artifacts WHERE artifact_id = ?",
+            (rendered.artifact_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    assert run is not None and run["status"] == "running"
+    assert link is not None
+    assert (link["run_id"], link["step"], link["source"]) == ("run_runtime", 2, "agent")
 
 
 def test_png_mode_require_fails_precreated_run(
@@ -871,6 +922,7 @@ def test_groupby_drops_time_column_and_reports_unknown_view(paths: dict[str, str
     rendered = _render(spec, paths)
     assert rendered.data_as_of == "2024-01-03"
     assert rendered.view_as_of == ""
+    assert rendered.view_unknown_reason == "aggregated"
     assert "行情 2024-01-03 15:00" in rendered.caption
     assert "视图时点未知（聚合后无时间列）" in rendered.caption
 
@@ -1346,3 +1398,112 @@ def test_same_name_groupby_output_is_disambiguated_with_warning() -> None:
     )
     assert "amount_sum_2" in grouped.columns
     assert any("同名" in note for note in notes)
+
+
+# ---------------------------------------------------------------- 评审第 1 轮修复
+# rev-20261119-002：P0 日/周/月指标恒空；P1 runtime→tool link；P1 run 生命周期；
+# P2 meta 摘要校验；P2 图注「视图时点未知」归因。
+
+
+@pytest.mark.parametrize("period", ["day", "week", "month"])
+def test_period_indicators_are_numeric_and_match_indicators(
+    period: str, paths: dict[str, str]
+) -> None:
+    """P0：日/周/月线的 MA/BOLL/MACD 必须真的算出来（不能静默全 NaN）。
+
+    ``classify_bar_time`` 对非分钟频率返回 ``close``，旧实现把所有周期都喂给
+    ``continuous_bars``（只留 ``continuous``）＝指标样本恒空；这里用数值对齐
+    :func:`astock.indicators.sma` 卡住回归。
+    """
+    frame = ohlcv_frame(120)
+    spec = candlestick_spec(layers=[{"type": "ma", "window": 20}, {"type": "volume"}])
+    spec["data"]["period"] = period
+    rendered = _render(spec, paths, frame=frame)
+
+    assert rendered.session == "close"
+    assert not any("连续指标无可用 bar" in note for note in rendered.warnings)
+
+    figure = rendered.figure
+    assert figure is not None
+    trace = next(trace for trace in figure.data if trace.name == "MA20")
+    values = pd.Series(trace.y, dtype="float64")
+    expected = indicators.sma(frame["close"], 20)
+
+    assert values.notna().sum() == expected.notna().sum() > 0
+    pd.testing.assert_series_equal(
+        values.iloc[-10:].reset_index(drop=True),
+        expected.iloc[-10:].reset_index(drop=True),
+        check_names=False,
+        rtol=1e-9,
+    )
+
+
+def test_auction_only_minute_frame_warns_indicators_are_empty(paths: dict[str, str]) -> None:
+    """P0：指标样本为空时必须显式写 warning，不能静默全 NaN。"""
+    auction = pd.DataFrame(
+        {
+            "ts_code": "000001.SZ",
+            "trade_time": pd.to_datetime(["2024-01-02 09:25:00"]),
+            "open": [10.0],
+            "high": [10.1],
+            "low": [9.9],
+            "close": [10.05],
+            "vol": [500.0],
+            "amount": [5_000.0],
+        }
+    )
+    spec = candlestick_spec(layers=[{"type": "ma", "window": 5}])
+    spec["data"]["period"] = "5min"
+    spec["encode"] = {"x": "trade_time"}
+    rendered = _render(spec, paths, frame=auction)
+
+    assert any("连续指标无可用 bar" in note for note in rendered.warnings)
+    assert any("连续指标无可用 bar" in note for note in rendered.meta["warnings"])
+
+
+def test_view_unknown_reason_names_time_semantics_none(paths: dict[str, str]) -> None:
+    """P2：只有聚合丢列才写「聚合后无时间列」，声明 none 时要写明原因。"""
+    spec = inline_line_spec()
+    spec["data"]["time_semantics"] = "none"
+    rendered = _render(
+        spec, paths, data_as_of="2024-01-04", data_time="2024-01-04 15:00"
+    )
+
+    assert rendered.view_unknown_reason == "none"
+    assert "视图时点未知（声明 time_semantics=none）" in rendered.caption
+    assert "聚合后无时间列" not in rendered.caption
+
+
+def test_replay_verifies_stored_meta_digest_and_rejects_tampering(
+    paths: dict[str, str],
+) -> None:
+    """P2：回放要拿库内 meta_digest 校验，绕过 correction 改 meta_json 必须报错。"""
+    rendered = _render(inline_line_spec(), paths)
+    conn = store.connect(paths["db_path"])
+    try:
+        record = store.get_artifact(conn, rendered.artifact_id)
+        assert record is not None
+        payload = chart_service.load_chart_artifact(
+            conn, rendered.artifact_id, root=paths["artifact_root"]
+        )
+        assert payload["meta_digest"] == record.meta_digest
+        assert record.meta_digest == store.meta_digest(record.meta)
+
+        tampered = dict(record.meta)
+        tampered["data_as_of"] = "1999-01-01"
+        # 模拟「维护脚本直接改库」：正常路径被 immutability trigger 挡住，
+        # 这里先去掉 trigger 再改，验证回放端的摘要校验确实能发现。
+        conn.execute("DROP TRIGGER IF EXISTS trg_agent_artifact_versions_no_update")
+        conn.execute(
+            "UPDATE agent_artifact_versions SET meta_json = ? "
+            "WHERE artifact_id = ? AND version = ?",
+            (store.canonical_json(tampered), record.artifact_id, record.version),
+        )
+        conn.commit()
+
+        with pytest.raises(store.ArtifactReplayUnavailable, match="meta 摘要不一致"):
+            chart_service.load_chart_artifact(
+                conn, rendered.artifact_id, root=paths["artifact_root"]
+            )
+    finally:
+        conn.close()

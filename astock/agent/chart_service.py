@@ -10,9 +10,12 @@
 - :class:`ArtifactReader` 是**只读**协议，供 ``data.source="artifact"`` 取数
   （渲染器只拿到 ``reader.frame`` 这个函数，拿不到连接）。
 
-``run_id`` 语义（Q7/D9）：真实 Agent 渲染传 ``run_id`` + ``step``（link ``source="agent"``）；
-直接渲染（工具、UI 预览、导出）传 ``None``，只落 artifact/version/link（``source="render"``），
-**绝不**再创建 ``run_chart_*`` 假 run，也不会改动 ``agent_runs``。
+``run_id`` 语义（Q7/D9）：真实 Agent 渲染传 ``run_id`` + ``step``（link ``source="agent"``），
+该 run 必须由 :class:`astock.agent.runtime.AgentRuntime` 先 ``ensure_run``——这里不造 run，
+``run_id`` 不存在直接报错；直接渲染（工具、UI 预览、导出）传 ``None``，只落
+artifact/version/link（``source="render"``），**绝不**创建 ``run_chart_*`` 假 run。
+成功渲染不改 ``agent_runs`` 状态（生命周期归 runtime：``finish_run``）；只有 PNG 硬失败
+才会把已有 run 标成 ``failed``，避免留永久 running。
 """
 
 from __future__ import annotations
@@ -41,7 +44,6 @@ from astock.agent.store import (
     artifact_id_for,
     canonical_json,
     connect,
-    ensure_run,
     fail_run,
     get_artifact,
     load_artifact,
@@ -110,19 +112,25 @@ def render_chart(
             else ArtifactReader(connection, root=artifact_root).frame
         )
 
-        # D9：只有调用方明确给了真实 run 才登记；直接渲染绝不合成 run。
+        # D9 / §7：run 生命周期只归 runtime。chart_service 不替调用方造 run，
+        # 传入的 run_id 必须由 AgentRuntime 先 ensure_run，否则 fail-fast（评审 P1）。
         if run_id is not None:
-            exists = connection.execute(
-                "SELECT 1 FROM agent_runs WHERE run_id = ?", (run_id,)
+            row = connection.execute(
+                "SELECT run_kind FROM agent_runs WHERE run_id = ?", (run_id,)
             ).fetchone()
-            if exists is None:
-                ensure_run(
-                    connection,
-                    run_id,
-                    status="running",
-                    session_id=session_id or "chart",
-                    code_version=code_version,
+            if row is None:
+                raise ValueError(
+                    f"run_id={run_id!r} 不存在：run 必须由 AgentRuntime 先 ensure_run；"
+                    "chart_service 不创建 run（直接渲染请不传 run_id）"
                 )
+            run_kind = row[0] if not isinstance(row, sqlite3.Row) else row["run_kind"]
+            if run_kind != "agent":
+                raise ValueError(
+                    f"run_id={run_id!r} 的 run_kind={run_kind!r}，"
+                    "只有真实 Agent run（run_kind='agent'）才能挂图表 link"
+                )
+            if session_id is None:
+                session_id = "chart"
         try:
             rendered = render_figure(
                 spec,
@@ -138,7 +146,7 @@ def render_chart(
                 code_version=code_version,
             )
         except PNGExportError as exc:
-            # 硬失败不能留下永久 running（规格 §7「finish_run」）。
+            # 硬失败把 run 标成 failed（成功路径不改 run 状态，由 runtime finish_run）。
             if run_id is not None:
                 fail_run(connection, run_id, error=str(exc))
             raise
@@ -322,6 +330,18 @@ def load_chart_artifact(
         raise KeyError(f"artifact 不存在：{artifact_id!r}")
     recorded = load_artifact(conn, artifact_id, version=record.version, mode="as_recorded", root=root)
     meta = dict(record.meta)
+    # 评审 P2：meta 摘要以库里写入的值为准。库里 meta_json 被直接改过（绕过
+    # correction）时摘要对不上，回放必须报错，而不是拿篡改后的 meta 继续渲染。
+    stored_digest = str(record.meta_digest or "")
+    if stored_digest:
+        actual_digest = meta_digest(meta)
+        if actual_digest != stored_digest:
+            raise ArtifactReplayUnavailable(
+                f"artifact {artifact_id!r} v{record.version} 的 meta 摘要不一致："
+                f"库内 {stored_digest}，实际 {actual_digest}（meta 被绕过 correction 修改过）"
+            )
+    else:  # pragma: no cover - 迁移前的旧行可能没有 meta_digest
+        stored_digest = meta_digest(meta)
     legacy = CHART_META_SCHEMA_VERSION not in meta
     spec = spec_from_artifact(meta)
     payload: dict[str, Any] = {
@@ -336,8 +356,7 @@ def load_chart_artifact(
         "view_time": str(meta.get("view_time") or ""),
         "session": str(meta.get("session") or ""),
         "content_digest": record.content_digest,
-        # ArtifactRecord 不带 meta_digest：由 meta 规范化重算（与库里 meta_json 同源）。
-        "meta_digest": meta_digest(meta),
+        "meta_digest": stored_digest,
         "warnings": list(meta.get("warnings") or []),
     }
     if mode == "as_recorded":

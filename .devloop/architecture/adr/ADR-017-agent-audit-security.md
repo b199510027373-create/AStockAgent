@@ -110,3 +110,17 @@ Agent 会读用户文件、查行情、画图、调用多个工具。一旦没�
 - **合成 run 退场**：直接渲染不建 `run_chart_*`，link 的 `run_id=NULL`、`source='render'`；
   `agent_runs.run_kind ∈ agent|render|legacy`，metrics 只统计 `agent`。
   验收：`tests/test_agent_chart_render.py::test_direct_render_records_artifact_without_synthetic_run`。
+
+
+## 评审回填（2026-11-19，rev-20261119-002）
+- **run 生命周期只归 runtime**：`chart_service.render_chart` 不再 `ensure_run`；传入不存在的
+  `run_id` 直接 fail-fast，成功渲染不改 run 状态，只有 PNG 硬失败才 `fail_run`。
+  验收：`tests/test_agent_chart_render.py::test_unknown_run_id_fails_fast_without_creating_run`、
+  `::test_successful_render_never_finishes_existing_run`。
+- **runtime→tool 上下文**：`astock/agent/registry.py` 新增 `ToolContext` + `current_tool_context()` +
+  `tool_context(run_id, step)`；runtime 在 dispatch 前设置，`kline` 等工具据此把 artifact link 挂到
+  真实 run（`source="agent"`），无上下文的直接渲染仍是 `source="render"` + `run_id=NULL`。
+  验收：`tests/test_agent_runtime.py::test_runtime_passes_run_context_so_chart_artifact_links_real_run`。
+- **meta 摘要校验**：`ArtifactRecord.meta_digest` 取自库内版本行；回放时校验
+  `meta_digest(meta_json) == meta_digest`，不一致抛 `ArtifactReplayUnavailable`（绕过 correction 改库可被发现）。
+  验收：`tests/test_agent_chart_render.py::test_replay_verifies_stored_meta_digest_and_rejects_tampering`。
