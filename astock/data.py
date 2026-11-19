@@ -858,13 +858,24 @@ def resample_ohlcv(df: pd.DataFrame, rule: str) -> pd.DataFrame:
     out["trade_date"] = last_dates.to_numpy()
     out = out.reset_index(drop=True)
     out["trade_date"] = pd.to_datetime(out["trade_date"])
-    return out.sort_values("trade_date").reset_index(drop=True)
+    out = out.sort_values("trade_date").reset_index(drop=True)
+    # 聚合会新建 DataFrame，attrs（如 attrs["adjustment"] 复权标注）默认丢失；
+    # 周期线沿用日线口径，故显式带回（plan-20261114-003 验收⑥）。
+    if df.attrs:
+        out.attrs.update(df.attrs)
+    return out
 
 
 def enrich(df: pd.DataFrame) -> pd.DataFrame:
+    """追加技术指标；保留输入 frame 的 ``attrs``（复权标注不因加指标而丢失）。"""
     if df is None or df.empty:
         return pd.DataFrame()
-    return ta.add_all(df)
+    out = ta.add_all(df)
+    # indicators.add_all 通过 join/replace 生成新 frame，必须显式带回
+    # attrs["adjustment"]，否则回测/图表链路拿不到 qfq|hfq|none 与 adj_base。
+    if df.attrs:
+        out.attrs.update(df.attrs)
+    return out
 
 
 def period_frame(df: pd.DataFrame, period: str) -> pd.DataFrame:

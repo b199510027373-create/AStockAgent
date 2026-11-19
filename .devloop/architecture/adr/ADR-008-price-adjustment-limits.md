@@ -48,6 +48,14 @@
 7. **测试**：`tests/test_data_adj_caliber.py` 覆盖 hfq/qfq/raw 对照（逐行比值恒定）、hfq 收益率与已知因子序列、基准不受请求区间影响（断言查询起点为 `19900101` 且走 `query_all`）、因子异常（空/`=0`/负/NaN/inf）与缺行、因子表首/末被截断时 hfq/qfq 报错、分钟 attrs、盘中当日 bar 的 `partial`/`factor_as_of`、非当日缺因子仍报错、缓存 `base_factor`/`adj_base` 篡改与基准日不在窗口内、qfq 基准随请求 `end` 变化、旧 qfq meta 无 `adj_base` 失效。
 8. **评审修复（rev-20261116-002）**：新增 `_query_adj_history`（优先 `query_all`，测试替身只有 `query` 时回退）与 `_check_factor_coverage`（仅日线 `_fetch_daily` 调用）；`_cache_base_valid` 增 `end_eff` 形参与 `adj_base` 前置校验；`_apply_minute_adj` 增盘中 `partial` 分支；`load_adj_factors` 改走分页助手。第 3 轮复核（iss-mwixznmz-2f393e）：曾短暂在 `_apply_minute_adj` 增加 `covered` + `_check_factor_coverage` 调用，经复核该断言在缺因子硬失败之后恒为真（不可达），已删除，分钟路径改由缺因子分支兜底并在用例中断言异常文案来自该分支（第 8 条与此保持同步）。
 
+## 落地（plan-20261120-001，2026-11-20）：标注必须活着走到展示层
+
+2026-11-20 实跑回测发现：口径本身对，但标注在派生帧上会消失，图注也会说错话。
+
+1. **attrs 随派生帧传播**：`astock.data.enrich()`（内部 `indicators.add_all`）与 `resample_ohlcv()` 都会新建 frame，必须显式带回 `attrs["adjustment"]`；`period_frame()` 经二者组合后同样保留。否则 `run_strategy()` 返回帧、UI 图表的周/月/季线与 `adj_base`/`base_factor` 全部丢失。
+2. **图注区分三种口径**：`astock.charts.summary_markdown()` 不再用 `'前复权' if adj == 'qfq' else '不复权'` 的三元表达式，改为按 `attrs["adjustment"]["adj"]` 取 `qfq`/`hfq`/`none`/未知；`hfq` 必须显示"后复权（hfq）"与"基准 `<adj_base>` 起 1.0"，`qfq` 显示"基准 `<adj_base>`，因子 `<base_factor>`"，任何口径都不得把 hfq 标成不复权。
+3. **测试**：`tests/test_data_adj_caliber.py` 新增 `AdjustmentMetadataPropagationTests`（`enrich`/`resample_ohlcv`/`period_frame`/`load_daily→enrich` 全链路保留 attrs）；`tests/test_charts_summary.py` 覆盖 hfq/qfq/none/未知/无 attrs 回退与 `summary_markdown` 实际图注。
+
 ## 证据
 
 - `astock/data.py`（`raw_*`、`base_factor`）

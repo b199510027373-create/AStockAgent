@@ -844,6 +844,17 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-plan-20261120-001-planned",
+      "type": "planned",
+      "title": "复权口径展示收口：enrich/周期聚合保留复权标注 + 图注标注 hfq 与基准",
+      "start": "2026-11-20T00:00:00+08:00",
+      "end": "2026-11-25T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261120-001",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",
