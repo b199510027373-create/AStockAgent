@@ -587,6 +587,100 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(again[-1].kind, "done")
         self.assertEqual(runtime.runs, 1)
 
+    def test_interrupt_after_finished_run_does_not_poison_next_question(self) -> None:
+        """run 已返回后点「中断」不能给缓存 runtime 留下中断标记（iss-mwmvlhso）。"""
+        model = FakeModel(
+            [
+                ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                "第一次回答：1680.00 元。",
+                ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                "第二次回答：1680.00 元。",
+            ]
+        )
+        controller = make_controller(model)
+        first = list(controller.ask("第一问"))
+        self.assertIs(first[-1].result.stop_reason, StopReason.COMPLETED)
+
+        # 空闲时点「中断」：明确告知没有在生成，且不留下任何运行时中断标记。
+        self.assertIn("没有正在生成", controller.interrupt())
+
+        second = list(controller.ask("第二问"))
+        done = second[-1]
+        self.assertIsNotNone(done.result)
+        self.assertIs(done.result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(len(done.result.steps), 1)
+        self.assertNotIn("已中断", done.text)
+        answer = "".join(event.text for event in second if event.kind == "answer")
+        self.assertIn("1680.00", answer)
+
+    def test_stop_output_during_streaming_keeps_text_and_next_question_completes(
+        self,
+    ) -> None:
+        """回答流式输出阶段点「停止输出」：保留已产出内容，下一问仍正常（AC5）。"""
+        model = FakeModel(
+            [
+                ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                "回答内容" * 20 + " 1680.00 元。",
+                ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                "第二问 1680.00 元。",
+            ]
+        )
+        controller = make_controller(model)
+        stream = controller.ask("第一问")
+        events: list[ChatEvent] = []
+        stopped = ""
+        for event in stream:
+            events.append(event)
+            if event.kind == "answer":
+                stopped = controller.interrupt()
+                break
+        events.extend(stream)
+
+        self.assertIn("中断输出", stopped)
+        done = events[-1]
+        self.assertEqual(done.kind, "done")
+        self.assertIn("停止输出", done.text)
+        # 已产出的回答分片保留，不因停止输出而清空。
+        answer = "".join(event.text for event in events if event.kind == "answer")
+        self.assertTrue(answer)
+
+        second = list(controller.ask("第二问"))
+        self.assertIs(second[-1].result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(len(second[-1].result.steps), 1)
+
+    def test_interrupt_while_runtime_ready_does_not_poison_next_question(self) -> None:
+        """runtime 已缓存的预运行阶段中断，同样不能污染下一问（路径 B）。"""
+        model = FakeModel(
+            [
+                ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                "预热回答：1680.00 元。",
+                ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                "第三问回答：1680.00 元。",
+            ]
+        )
+        calls = {"n": 0}
+        holder: dict[str, AgentChatController] = {}
+
+        def context_provider(question: str) -> str:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                holder["controller"].interrupt()
+            return ""
+
+        controller = make_controller(model, context_provider=context_provider)
+        holder["controller"] = controller
+
+        warm = list(controller.ask("预热"))
+        self.assertIs(warm[-1].result.stop_reason, StopReason.COMPLETED)
+        # runtime 已缓存；在上下文检索阶段点中断：本轮 0 步、以中断收尾。
+        aborted = list(controller.ask("第二问"))
+        self.assertIn("中断", aborted[-1].text)
+        # 下一问必须恢复正常：不能被上一轮留下的 runtime 中断标记污染。
+        third = list(controller.ask("第三问"))
+        self.assertIs(third[-1].result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(len(third[-1].result.steps), 1)
+        self.assertIn("1680.00", "".join(e.text for e in third if e.kind == "answer"))
+
     def test_run_and_step_records_are_persisted(self) -> None:
         """生产入口传了审计库时，run 与每个步骤都要落库（评审 P1-1）。"""
         with _tempdir() as tmp:

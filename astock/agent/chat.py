@@ -655,6 +655,11 @@ class AgentChatController:
         self._runtime: AgentRuntime | None = None
         self._busy = threading.Lock()
         self._cancelled = threading.Event()
+        # 是否真的有 run 在途：只有它为真时才把中断转发给 runtime，避免
+        # 在「run 已返回、回答仍在流式输出」时空转中断标记污染下一问。
+        self._running = threading.Event()
+        # 回答已开始流式输出时的「停止输出」：只截断展示，不影响 runtime。
+        self._stop_output = threading.Event()
         self.session_path = Path(session_path) if session_path else None
         self.session = session or self._load_session()
 
@@ -698,14 +703,27 @@ class AgentChatController:
     # ---- 中断 -------------------------------------------------------------
 
     def interrupt(self) -> str:
-        """请求中断：协作式，在当前模型/工具调用返回后的检查点生效。"""
-        self._cancelled.set()
+        """请求中断：协作式，在当前模型/工具调用返回后的检查点生效。
+
+        只有 run 真正在途（``self._running``）时才转发给 runtime；runtime 的
+        中断标记只在 ``run()`` 的 finally 里清理，若在 run 已返回后误转发，
+        下一次 run 会在首个 guard 直接判为中断（评审 iss-mwmvlhso）。
+        """
         runtime = self._runtime
-        if runtime is not None:
+        if runtime is not None and self._running.is_set():
+            self._cancelled.set()
             runtime.request_interrupt()
-        if self._busy.locked():
             return "⏹ 已请求中断：当前步骤完成后停止，已产出的内容会保留。"
-        return "当前没有正在生成的回答。"
+        if not self._busy.locked():
+            return "当前没有正在生成的回答。"
+        # 建模型/检索新闻阶段（runtime 未就绪）或回答流式输出阶段：
+        # 只用控制器的取消标记收尾，不碰 runtime 的中断标记。重复点击时保留
+        # 第一次中断已经产出的完整部分回答，不再二次截断。
+        already = self._cancelled.is_set()
+        self._cancelled.set()
+        if not already:
+            self._stop_output.set()
+        return "⏹ 已中断输出：本轮已生成的回答会保留。"
 
     # ---- 主体 -------------------------------------------------------------
 
@@ -725,6 +743,7 @@ class AgentChatController:
             yield ChatEvent("done", text="上一轮仍在生成，请先点「中断」或等待完成。")
             return
         self._cancelled.clear()
+        self._stop_output.clear()
         try:
             current_attachments = list(attachments)
             if not current_attachments:
@@ -758,15 +777,20 @@ class AgentChatController:
             queue_: queue.Queue[tuple[str, Any]] = queue.Queue()
 
             def worker() -> None:
+                self._running.set()
                 try:
                     result = runtime.run(
                         prompt,
                         cancel_event=self._cancelled,
                         on_step=lambda step: queue_.put(("step", step)),
                     )
-                    queue_.put(("result", result))
                 except Exception as exc:  # noqa: BLE001 - 交给 UI 显示
                     queue_.put(("error", exc))
+                    return
+                finally:
+                    # 先清标记再投递结果：主线程开始流式输出后，runtime 已不在途。
+                    self._running.clear()
+                queue_.put(("result", result))
 
             thread = threading.Thread(target=worker, name="agent-chat", daemon=True)
             thread.start()
@@ -794,10 +818,15 @@ class AgentChatController:
                 result.answer if result else "", chunk_chars=self._chunk_chars
             ):
                 yield ChatEvent("answer", text=chunk)
+                # 流式输出阶段点「停止输出」：保留已产出的回答，不再继续追加。
+                if self._stop_output.is_set():
+                    break
             text = stop_reason_label(result.stop_reason) if result else "已完成"
             if result is not None and result.error:
                 text += f"（{result.error}）"
-            if self._cancelled.is_set():
+            if self._stop_output.is_set():
+                text = "⏹ 已停止输出：已生成的回答保留。"
+            elif self._cancelled.is_set():
                 text = _STOP_LABELS["interrupted"]
             yield ChatEvent("done", text=text, result=result)
             if self.session_path is not None:
