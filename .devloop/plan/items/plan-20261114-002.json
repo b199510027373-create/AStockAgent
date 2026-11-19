@@ -9,7 +9,7 @@
   "start": "2026-11-30",
   "due": "2026-12-08",
   "estimateH": 32,
-  "progress": 92,
+  "progress": 93,
   "acceptance": [
     "Q4：panes/style/raw 别名删除，schema 只声明 layers/theme/adj=none，旧别名与未知键均报错",
     "Q1：data_as_of/data_time 行情时点 + view_as_of/view_time 视图时点，图注同时展示；runtime/gateway 仍读行情时点",
@@ -54,6 +54,7 @@
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/36",
     "review": "rev-20261119-002",
     "test": [
+      "评审修复 CI（PR #36，run 44541882652，commit 89572cb）：test job pass（含 coverage gate）、png-export job pass",
       "评审第 1 轮修复后：.venv/Scripts/python.exe -m pytest tests -q -m \"not png\" --timeout=900 -p no:cacheprovider => 780 passed, 5 deselected, 12 subtests passed in 77.21s",
       "评审第 1 轮修复后：.venv/Scripts/python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png --timeout=300 -p no:cacheprovider => 5 passed in 18.83s",
       "评审第 1 轮修复后：.venv/Scripts/python.exe -m pytest tests/test_agent_chart_render.py tests/test_agent_runtime.py -q -p no:cacheprovider => 121 passed in 18.05s（新增 daily/weekly/monthly MA20 数值断言、run 生命周期 3 例、runtime→tool link 端到端、meta 篡改检测、caption 归因）",
@@ -64,6 +65,6 @@
     ]
   },
   "createdAt": "2026-11-13T16:36:35.797Z",
-  "updatedAt": "2026-11-19T14:15:36.849Z",
+  "updatedAt": "2026-11-19T14:17:28.618Z",
   "devSessionId": "session-7f3600bf-2abb-44b4-a4c7-372e79943be7"
 }
