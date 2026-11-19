@@ -802,6 +802,28 @@
       "notes": "第 3 轮 · approve"
     },
     {
+      "id": "cal-plan-20261119-001-planned",
+      "type": "planned",
+      "title": "Agent 会话 UI 冒烟脚本入库与可复现",
+      "start": "2026-11-20T00:00:00+08:00",
+      "end": "2026-11-24T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261119-001",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261119-002-planned",
+      "type": "planned",
+      "title": "Agent 会话真实模型 E2E 验证（DeepSeek/兼容网关）",
+      "start": "2026-11-20T00:00:00+08:00",
+      "end": "2026-11-26T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261119-002",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",

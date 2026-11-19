@@ -142,6 +142,10 @@ class BlockingRuntime:
     def request_interrupt(self) -> None:
         self.interrupts += 1
 
+    def request_interrupt_if_running(self) -> bool:
+        self.request_interrupt()
+        return True
+
 
 def step_with(
     result: ToolResult,
