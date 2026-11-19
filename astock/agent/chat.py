@@ -512,12 +512,15 @@ def resolve_citation(
 
     source_path = str(directory / "extracted.jsonl")
     matched: dict[str, Any] | None = None
+    matched_scope = ""
     for chunk in chunks:
         if citation.page is not None and chunk.get("page") == citation.page:
             matched = chunk
+            matched_scope = "page"
             break
         if citation.sheet and chunk.get("sheet") == citation.sheet:
             matched = chunk
+            matched_scope = "sheet"
             break
     note = ""
     if matched is None and chunks:
@@ -525,6 +528,12 @@ def resolve_citation(
         note = "未在提取内容中精确命中该页/工作表，先展示文件首段内容。"
     elif matched is None:
         note = "文件没有可读正文（可能是扫描件或空文本）。"
+    elif matched_scope == "sheet" and (citation.row is not None or citation.cell):
+        # 只匹配到工作表时不要说成行/单元格级定位（评审 iss-mwmtta2g）。
+        precision = (
+            f"第 {citation.row} 行" if citation.row is not None else f"单元格 {citation.cell}"
+        )
+        note = f"工作表级定位：未精确到{precision}，先展示该工作表首段内容。"
     snippet = _clip(
         _mapping(matched).get("text") if matched else "", _CITATION_SNIPPET_CHARS
     )
@@ -539,8 +548,13 @@ def resolve_citation(
 
 
 def render_citations_html(
-    citations: Sequence[Citation], *, root: str | Path | None = None, limit: int = 20
+    citations: Sequence[Citation],
+    *,
+    root: str | Path | None = None,
+    limit: int = 20,
+    memo: dict[tuple[Any, ...], CitationDetail] | None = None,
 ) -> str:
+    """渲染引用列表；``memo`` 用于跨帧复用定位结果（评审 iss-mwmtt39d）。"""
     if not citations:
         return (
             '<p class="astock-muted">本轮没有文件引用。文件结论会以'
@@ -549,7 +563,12 @@ def render_citations_html(
     cards: list[str] = []
     links: list[str] = []
     for position, citation in enumerate(citations[:limit], start=1):
-        detail = resolve_citation(citation, root=root)
+        key = (citation.label, citation.page, citation.sheet, citation.file_id)
+        detail = memo.get(key) if memo is not None else None
+        if detail is None:
+            detail = resolve_citation(citation, root=root)
+            if memo is not None:
+                memo[key] = detail
         anchor = f"cite-{position}"
         links.append(f'<li><a href="#{anchor}">{_esc(citation.label)}</a></li>')
         if detail.found:
@@ -655,6 +674,11 @@ class AgentChatController:
         self.session = AgentSession(path=self.session_path)
         self._runtime = None
 
+    @property
+    def db_path(self) -> Path | None:
+        """审计库路径（未配置时为 None，页面入口据此判断是否落库）。"""
+        return Path(self._db_path) if self._db_path is not None else None
+
     def model_banner(self) -> str:
         try:
             model = self._ensure_model()
@@ -677,8 +701,9 @@ class AgentChatController:
         """请求中断：协作式，在当前模型/工具调用返回后的检查点生效。"""
         self._cancelled.set()
         runtime = self._runtime
-        if runtime is not None and self._busy.locked():
+        if runtime is not None:
             runtime.request_interrupt()
+        if self._busy.locked():
             return "⏹ 已请求中断：当前步骤完成后停止，已产出的内容会保留。"
         return "当前没有正在生成的回答。"
 
@@ -724,15 +749,19 @@ class AgentChatController:
                 )
                 return
 
+            # 建模型/检索新闻阶段点过「中断」也要生效（评审 iss-mwmtt3ab）：
+            # 不再启动 worker，直接以中断收尾并释放锁。
+            if self._cancelled.is_set():
+                yield ChatEvent("done", text=_STOP_LABELS["interrupted"])
+                return
+
             queue_: queue.Queue[tuple[str, Any]] = queue.Queue()
-            cancel = threading.Event()
-            self._cancelled.clear()
 
             def worker() -> None:
                 try:
                     result = runtime.run(
                         prompt,
-                        cancel_event=cancel,
+                        cancel_event=self._cancelled,
                         on_step=lambda step: queue_.put(("step", step)),
                     )
                     queue_.put(("result", result))

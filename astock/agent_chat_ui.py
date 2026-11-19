@@ -62,6 +62,23 @@ def _paths(value: Any) -> list[str]:
     return paths
 
 
+def _content_text(content: Any) -> str:
+    """Gradio 6 回传的 content 可能是 str，也可能是 text block 列表。"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, (list, tuple)):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text")
+                if text:
+                    parts.append(str(text))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return str(content or "")
+
+
 def _normalise_history(value: Any) -> list[dict[str, str]]:
     history: list[dict[str, str]] = []
     for item in value or []:
@@ -70,8 +87,7 @@ def _normalise_history(value: Any) -> list[dict[str, str]]:
         role = item.get("role")
         if role not in {"user", "assistant"}:
             continue
-        content = item.get("content")
-        history.append({"role": role, "content": str(content or "")})
+        history.append({"role": role, "content": _content_text(item.get("content"))})
     return history
 
 
@@ -79,9 +95,17 @@ def build_agent_chat_tab(
     *,
     controller: AgentChatController | None = None,
     context_provider: Callable[[str], str] | None = None,
+    db_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """装配 AI 对话 Tab，返回关键组件（供 app.py 与其他 Tab 联动/测试）。"""
-    controller = controller or AgentChatController(context_provider=context_provider)
+    """装配 AI 对话 Tab，返回关键组件（供 app.py 与其他 Tab 联动/测试）。
+
+    ``db_path`` 透传到 ``AgentChatController``：生产入口必须传
+    ``astock.agent.store.DEFAULT_DB_PATH``，否则本轮的 run / 工具步骤不会落
+    ``agent_runs`` / ``agent_steps``（AGENT-02 / ADR-017）。
+    """
+    controller = controller or AgentChatController(
+        context_provider=context_provider, db_path=db_path
+    )
 
     with gr.Row():
         with gr.Column(scale=3):
@@ -141,12 +165,27 @@ def build_agent_chat_tab(
         steps: list[StepRecord] = []
         figures: list[Any] = []
         citations: list[Citation] = []
+        # 引用定位要读盘/扫目录，只在引用集合变化时重算（评审 iss-mwmtt39d）。
+        cite_key: tuple[tuple[Any, ...], ...] | None = None
+        cite_html = _EMPTY_CITATIONS
+        cite_memo: dict[tuple[Any, ...], Any] = {}
+
+        def citations_block() -> str:
+            nonlocal cite_key, cite_html
+            key = tuple(
+                (item.label, item.page, item.sheet, item.file_id) for item in citations
+            )
+            if key != cite_key:
+                cite_key = key
+                cite_html = render_citations_html(citations, memo=cite_memo)
+            return cite_html
+
         yield (
             chat,
             "",
             render_steps_html([], pending="正在分析问题…"),
             render_figures_html([]),
-            render_citations_html([]),
+            citations_block(),
             "正在分析问题…",
         )
         try:
@@ -182,7 +221,7 @@ def build_agent_chat_tab(
                     "",
                     timeline,
                     render_figures_html(figures),
-                    render_citations_html(citations),
+                    citations_block(),
                     status_text,
                 )
         except Exception as exc:  # noqa: BLE001 - 页面不能因为一轮对话而白屏
@@ -191,22 +230,21 @@ def build_agent_chat_tab(
                 "",
                 render_steps_html(steps),
                 render_figures_html(figures),
-                render_citations_html(citations),
+                citations_block(),
                 f"⚠️ 本轮出错：{type(exc).__name__}: {exc}",
             )
 
     outputs = [chatbot, message, steps_html, figures_html, citations_html, status]
 
-    send_event = send.click(respond, [message, chatbot, attachments_state, uploader], outputs)
-    submit_event = message.submit(
-        respond, [message, chatbot, attachments_state, uploader], outputs
-    )
+    send.click(respond, [message, chatbot, attachments_state, uploader], outputs)
+    message.submit(respond, [message, chatbot, attachments_state, uploader], outputs)
     stop.click(
         lambda: controller.interrupt(),
         None,
         [status],
+        # 不走 cancels：取消生成器会丢掉「已产出内容保留」的半截回答，
+        # 也会让 runtime 的协作式中断来不及回填 partial answer。
         queue=False,
-        cancels=[send_event, submit_event],
     )
     uploader.change(handle_uploads, [uploader], [attachments_state, upload_status])
     clear.click(

@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import shutil
+import sqlite3
 import tempfile
+import threading
 import time
 import unittest
 import uuid
@@ -16,6 +18,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from astock.agent import (
     AgentRuntime,
@@ -49,7 +52,7 @@ from astock.agent.chat import (
     stop_reason_label,
 )
 from astock.agent.tools.citations import citation_for_sheet
-from astock.agent.types import StepRecord
+from astock.agent.types import AgentRunResult, StepRecord
 
 
 @contextmanager
@@ -105,6 +108,39 @@ def make_controller(model: Any, *, delay: float = 0.0, **kwargs: Any) -> AgentCh
         chunk_chars=12,
         **kwargs,
     )
+
+
+class BlockingRuntime:
+    """测试用运行时：run 阻塞到 release，用来制造并发与预运行中断窗口。"""
+
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.runs = 0
+        self.interrupts = 0
+
+    def run(
+        self,
+        question: str = "",
+        *,
+        cancel_event: Any = None,
+        on_step: Any = None,
+    ) -> AgentRunResult:
+        self.runs += 1
+        self.started.set()
+        self.release.wait(5)
+        return AgentRunResult(
+            answer="好的",
+            stop_reason=StopReason.COMPLETED,
+            steps=[],
+            tokens_used=0,
+            elapsed_seconds=0.0,
+            session_id="s-blocking",
+            error=None,
+        )
+
+    def request_interrupt(self) -> None:
+        self.interrupts += 1
 
 
 def step_with(
@@ -338,6 +374,80 @@ class CitationTests(unittest.TestCase):
         self.assertIn("中断", stop_reason_label(StopReason.INTERRUPTED))
         self.assertIn("something_else", stop_reason_label("something_else"))
 
+    def test_page_mismatch_falls_back_to_first_chunk(self) -> None:
+        """引用页码不命中时退回首段，并明确说明未精确命中（评审 P2）。"""
+        with _tempdir() as tmp:
+            root = Path(tmp) / "files"
+            path = Path(tmp) / "年报.csv"
+            path.write_text("项目,金额\n营收,100\n", encoding="utf-8")
+            ingested = ingest_attachments([path], root=root, index=False)[0]
+            self.assertTrue(ingested.ok)
+            citation = Citation(
+                label="《年报.csv》第 999 页",
+                name="年报.csv",
+                page=999,
+                file_id=ingested.file_id,
+            )
+            detail = resolve_citation(citation, root=root)
+            self.assertTrue(detail.found)
+            self.assertIn("项目", detail.snippet)
+            self.assertIn("未在提取内容中精确命中", detail.note)
+
+    def test_sheet_level_match_with_cell_does_not_claim_cell_precision(self) -> None:
+        """只匹配到工作表时不能说成行/单元格级定位（评审 iss-mwmtta2g）。"""
+        with _tempdir() as tmp:
+            root = Path(tmp) / "files"
+            path = Path(tmp) / "利润表.csv"
+            path.write_text("项目,金额\n营收,100\n", encoding="utf-8")
+            ingested = ingest_attachments([path], root=root, index=False)[0]
+            self.assertTrue(ingested.ok)
+            from astock.agent import files as file_store
+
+            meta = file_store.load_meta(ingested.file_id or "", root=root)
+            first_sheet = meta["sheets"][0]
+            sheet_name = (
+                first_sheet["name"] if isinstance(first_sheet, dict) else str(first_sheet)
+            )
+            citation = Citation(
+                label=f"《利润表.csv》工作表「{sheet_name}」B2",
+                name="利润表.csv",
+                sheet=sheet_name,
+                cell="B2",
+                file_id=ingested.file_id,
+            )
+            detail = resolve_citation(citation, root=root)
+            self.assertTrue(detail.found)
+            self.assertIn("工作表级定位", detail.note)
+            self.assertIn("B2", detail.note)
+
+    def test_more_than_limit_truncates_with_hint(self) -> None:
+        citations = [
+            Citation(label=f"《f{index}.pdf》第 {index + 1} 页", name=f"f{index}.pdf", page=index + 1)
+            for index in range(21)
+        ]
+        markup = render_citations_html(citations)
+        self.assertIn("还有 1 条引用未展示", markup)
+        self.assertEqual(markup.count('class="astock-cite-card"'), 20)
+        self.assertIn("引用（21）", markup)
+
+    def test_memo_reuses_resolved_details(self) -> None:
+        citations = [Citation(label="《年报.pdf》第 3 页", name="年报.pdf", page=3)]
+        memo: dict[tuple[Any, ...], Any] = {}
+        from astock.agent import chat as chat_module
+
+        calls = 0
+        real = chat_module.resolve_citation
+
+        def counting(citation: Citation, **kwargs: Any) -> Any:
+            nonlocal calls
+            calls += 1
+            return real(citation, **kwargs)
+
+        with mock.patch.object(chat_module, "resolve_citation", counting):
+            render_citations_html(citations, memo=memo)
+            render_citations_html(citations, memo=memo)
+        self.assertEqual(calls, 1)
+
 
 class ControllerTests(unittest.TestCase):
     def test_streams_steps_then_answer_and_finishes(self) -> None:
@@ -432,6 +542,83 @@ class ControllerTests(unittest.TestCase):
         self.assertIn("模型不可用", events[-1].text)
         self.assertIn("模型未就绪", controller.model_banner())
 
+    def test_busy_round_is_rejected_and_lock_released(self) -> None:
+        """并发第二次提问直接拒绝，且第一轮结束后锁释放（评审 P2）。"""
+        runtime = BlockingRuntime()
+        controller = AgentChatController(
+            model_factory=lambda: FakeModel(["好的"]),
+            runtime_factory=lambda model: runtime,
+        )
+        first: list[ChatEvent] = []
+        worker = threading.Thread(target=lambda: first.extend(controller.ask("第一问")))
+        worker.start()
+        self.assertTrue(runtime.started.wait(5))
+        second = list(controller.ask("第二问"))
+        self.assertEqual(len(second), 1)
+        self.assertEqual(second[0].kind, "done")
+        self.assertIn("上一轮仍在生成", second[0].text)
+        runtime.release.set()
+        worker.join(5)
+        self.assertFalse(worker.is_alive())
+        third = list(controller.ask("第三问"))
+        self.assertEqual(third[-1].kind, "done")
+        self.assertEqual(runtime.runs, 2)
+
+    def test_interrupt_before_runtime_starts_skips_run(self) -> None:
+        """模型/运行时准备阶段的中断也必须生效（评审 iss-mwmtt3ab）。"""
+        runtime = BlockingRuntime()
+        holder: dict[str, AgentChatController] = {}
+
+        def factory(model: Any) -> BlockingRuntime:
+            holder["controller"].interrupt()
+            return runtime
+
+        controller = AgentChatController(
+            model_factory=lambda: FakeModel(["不该被调用"]),
+            runtime_factory=factory,
+        )
+        holder["controller"] = controller
+        events = list(controller.ask("有新闻吗？"))
+        self.assertEqual(runtime.runs, 0)
+        self.assertIn("中断", events[-1].text)
+        # 锁已释放，可以立刻再问。
+        runtime.release.set()
+        again = list(controller.ask("再问一次"))
+        self.assertEqual(again[-1].kind, "done")
+        self.assertEqual(runtime.runs, 1)
+
+    def test_run_and_step_records_are_persisted(self) -> None:
+        """生产入口传了审计库时，run 与每个步骤都要落库（评审 P1-1）。"""
+        with _tempdir() as tmp:
+            db = Path(tmp) / "audit.db"
+            model = FakeModel(
+                [
+                    ToolCall(name="lookup_price", arguments={"code": "600519.SH"}),
+                    "收盘价 1680.00 元。",
+                ]
+            )
+            controller = AgentChatController(
+                model_factory=lambda: model,
+                runtime_factory=lambda m: AgentRuntime(
+                    m,
+                    registry=price_registry(),
+                    session=AgentSession(),
+                    db_path=db,
+                ),
+            )
+            events = list(controller.ask("600519.SH 收盘价？"))
+            done = events[-1]
+            self.assertIsNotNone(done.result)
+            with sqlite3.connect(db) as conn:
+                runs = conn.execute("SELECT status FROM agent_runs").fetchall()
+                rows = conn.execute(
+                    "SELECT kind, tool FROM agent_steps ORDER BY step"
+                ).fetchall()
+            self.assertEqual(len(runs), 1)
+            self.assertIn(runs[0][0], {"success", "partial"})
+            self.assertEqual(len(rows), len(done.result.steps) + 1)
+            self.assertEqual(rows[-1][0], "final")
+
 
 class UiBuilderTests(unittest.TestCase):
     def test_tab_builds_with_upload_streaming_and_stop(self) -> None:
@@ -472,3 +659,91 @@ class UiBuilderTests(unittest.TestCase):
         self.assertIn("1680.00", final[0][-1]["content"])
         self.assertIn("lookup_price", final[2])
         self.assertIn("已完成", final[5])
+
+    def test_db_path_reaches_controller(self) -> None:
+        import gradio as gr
+
+        from astock.agent_chat_ui import build_agent_chat_tab
+
+        with _tempdir() as tmp:
+            db = Path(tmp) / "ui.db"
+            with gr.Blocks():
+                components = build_agent_chat_tab(db_path=db)
+        self.assertEqual(components["controller"].db_path, db)
+
+    def test_structured_history_is_not_stringified_as_repr(self) -> None:
+        """Gradio 6 回传的 text block 列表必须还原成纯文本，不能显示成 dict 的 repr。"""
+        import gradio as gr
+
+        from astock.agent_chat_ui import build_agent_chat_tab
+
+        controller = make_controller(FakeModel(["补充回答"]))
+        with gr.Blocks():
+            components = build_agent_chat_tab(controller=controller)
+        history = [
+            {"role": "user", "content": [{"text": "上一问", "type": "text"}]},
+            {"role": "assistant", "content": [{"text": "上一答", "type": "text"}]},
+        ]
+        frames = list(components["respond"]("追问", history, [], []))
+        rendered = frames[0][0]
+        self.assertEqual(rendered[0], {"role": "user", "content": "上一问"})
+        self.assertEqual(rendered[1], {"role": "assistant", "content": "上一答"})
+        self.assertEqual(rendered[2], {"role": "user", "content": "追问"})
+
+    def test_citation_html_rendered_once_per_round(self) -> None:
+        """引用面板只在引用集合变化时重算，不随回答分片反复读盘（评审 P2）。"""
+        import gradio as gr
+
+        import astock.agent_chat_ui as chat_ui
+
+        with _tempdir() as tmp:
+            root = Path(tmp) / "files"
+            path = Path(tmp) / "年报.csv"
+            path.write_text("项目,金额\n营收,100\n", encoding="utf-8")
+            registry = ToolRegistry()
+
+            def handler(**_kwargs: Any) -> ToolResult:
+                return ToolResult(
+                    text="营收 100",
+                    metadata={"citations": ["《年报.csv》工作表「Sheet1」"]},
+                )
+
+            registry.register(
+                ToolSpec(
+                    name="read_file",
+                    description="读取文件",
+                    parameters=SCHEMA,
+                    handler=handler,
+                    permissions=(Permission.FILE_READ,),
+                )
+            )
+            model = FakeModel(
+                [
+                    ToolCall(name="read_file", arguments={"code": "600519.SH"}),
+                    "营收 100（见《年报.csv》工作表「Sheet1」）。",
+                ]
+            )
+            controller = AgentChatController(
+                model_factory=lambda: model,
+                runtime_factory=lambda m: AgentRuntime(
+                    m, registry=registry, session=AgentSession(), auto_save=False
+                ),
+                root=root,
+                chunk_chars=8,
+            )
+            real = chat_ui.render_citations_html
+            counts: list[int] = []
+
+            def counting(citations: Any, **kwargs: Any) -> str:
+                counts.append(len(citations))
+                return real(citations, **kwargs)
+
+            with gr.Blocks():
+                components = chat_ui.build_agent_chat_tab(controller=controller)
+            with mock.patch.object(chat_ui, "render_citations_html", counting):
+                frames = list(
+                    components["respond"]("营收如何？", [], [], [str(path)])
+                )
+        self.assertEqual([count for count in counts if count], [1])
+        self.assertIn("cite-1", frames[-1][4])
+        self.assertIn("年报.csv", frames[-1][4])

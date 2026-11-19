@@ -25,6 +25,7 @@ from astock.scheduler import start_background as start_recommend_scheduler
 from astock.events import build_ai_context
 from astock.llm import chat as llm_chat
 from astock.agent_chat_ui import build_agent_chat_tab
+from astock.agent.store import DEFAULT_DB_PATH as AGENT_DB_PATH
 
 # >>>>>>>>>>>> 配置区 <<<<<<<<<<<<<
 TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN", "")
@@ -480,7 +481,9 @@ with gr.Blocks(title="AStockAgent") as app:
             build_agent_chat_tab(
                 context_provider=lambda question: _chat_page_context(
                     question, portfolio_in.value
-                )
+                ),
+                # 生产入口必须传审计库，否则 run/工具步骤不落 agent_runs/agent_steps。
+                db_path=AGENT_DB_PATH,
             )
 
         # — 多周期（新）
