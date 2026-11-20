@@ -1,0 +1,55 @@
+name: agent-ui-smoke
+
+# Agent 会话 UI 冒烟（六条主路径）。默认不进普通 CI：
+#   - ci.yml 只跑 test / png-export；
+#   - 本 workflow 只在每天一次定时 + 手动触发时运行，需要真实浏览器、耗时较长。
+# 判据：run_smoke.py 退出码 0（六条路径全过）。失败时上传 report.json 与日志。
+
+on:
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: agent-ui-smoke
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Show browser version
+        run: |
+          $edge = "$env:PROGRAMFILES (x86)\Microsoft\Edge\Application\msedge.exe"
+          if (Test-Path $edge) { & $edge --version } else { Write-Host "Edge 不在默认路径，run_smoke.py 会继续查找 Chrome" }
+
+      - name: Run smoke (six paths)
+        run: python tests/smoke/agent_ui/run_smoke.py --workdir tests/smoke/agent_ui/.workdir --keep-workdir
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-ui-smoke-evidence
+          path: |
+            tests/smoke/agent_ui/.workdir/report.json
+            tests/smoke/agent_ui/.workdir/run.json
+            tests/smoke/agent_ui/.workdir/*.log
+          if-no-files-found: warn
+          retention-days: 7

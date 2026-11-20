@@ -18,3 +18,6 @@ coverage==7.17.0
 pytest==9.2.0
 pytest-timeout==2.4.0
 pyyaml==6.0.3
+# UI 冒烟驱动（tests/smoke/agent_ui/cdp.py）用 websocket-client 直连 CDP；
+# 只在 nightly / 手动冒烟里使用，主测试 job 装了不影响行为。
+websocket-client==1.9.0
