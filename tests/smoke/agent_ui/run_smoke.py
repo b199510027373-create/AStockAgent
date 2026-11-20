@@ -234,6 +234,29 @@ def _write_summary(workdir: Path, summary: dict[str, object]) -> Path:
     return path
 
 
+def _as_text(value: object) -> str:
+    """``TimeoutExpired.stdout`` 在 text 模式是 str，二进制模式下是 bytes。"""
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+    return str(value)
+
+
+def _driver_error(report_path: Path, exit_code: int) -> str:
+    """驱动非零退出时，把它写进 report.json 的原因带进 run.json。"""
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):  # 报告缺失或半截：只保留退出码
+        return f"driver exited with code {exit_code}"
+    text = str(payload.get("error") or "").strip()
+    if "driver timeout" in text:
+        return "driver timeout"
+    if text:
+        return f"driver failed: {text}"
+    return f"driver exited with code {exit_code}"
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     _console_safe()
@@ -401,15 +424,29 @@ def main(argv: list[str] | None = None) -> int:
             completed.stdout + ("\n[stderr]\n" + completed.stderr if completed.stderr else ""),
             encoding="utf-8",
         )
+        summary["driver_log"] = "driver.log"
+        if driver_exit != 0:
+            summary["error"] = _driver_error(workdir / "report.json", driver_exit)
         print(completed.stdout, end="", flush=True)
         if completed.stderr:
             print(completed.stderr, end="", file=sys.stderr, flush=True)
     except _Abort:
         driver_exit = 1
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         print(f"FAIL 驱动超过 {args.timeout + 120}s 未结束", flush=True)
         summary["error"] = "driver timeout"
         driver_exit = 1
+        # 强杀路径同样要留下 driver.log：否则 README 承诺的「失败保留现场」在这里不成立
+        # （评审 iss-mwoy6git-5678ab）。
+        driver_log = workdir / "driver.log"
+        out = _as_text(exc.stdout)
+        err = _as_text(exc.stderr)
+        driver_log.write_text(
+            out + ("\n[stderr]\n" + err if err.strip() else ""),
+            encoding="utf-8",
+        )
+        summary["driver_log"] = "driver.log"
+        print(f"INFO 强制结束前的输出已写入 {driver_log}", flush=True)
     except (OSError, RuntimeError) as exc:
         print(f"FAIL {type(exc).__name__}: {exc}", flush=True)
         summary["error"] = f"{type(exc).__name__}: {exc}"

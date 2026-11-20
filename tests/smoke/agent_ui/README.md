@@ -96,7 +96,7 @@ export PYTHONPATH=$PWD     # Linux / macOS
 | 3 | `steps` | 生成结束 | `ol.astock-steps li` ≥ 3 且 `data-status` 全为 `ok`，每步有参数与耗时；正文含 `read_file`、`已读取工具结果`、`✅ 已完成` |
 | 4 | `figure` | 检查图表区 | `iframe.astock-figure-frame` 的 `srcdoc` 含 `smoke-chart`；图注为 `营收趋势｜数据截至 2025-12-31｜数据时间 2026-03-20`；正文含 `查看图表 spec / 来源` |
 | 5 | `citations` | 点击首个引用链接 | `a[href^="#cite-"]` ≥ 2；点击后 `location.hash === "#cite-1"`，卡片含 `文件：年报.pdf` 与 `定位：` |
-| 6 | `interrupt` | 流式开始后点 `⏹ 中断`，再问一轮 | 状态含 `已停止输出` 或 `已中断`，半截回答非空且含 `保留`；随后一轮仍能完成（末条 > 60 字且含 `✅ 已完成`） |
+| 6 | `interrupt` | 流式开始后点 `⏹ 中断`，再问一轮 | 状态含 `已停止输出` 或 `已中断`，半截回答非空且含 `保留`；随后一轮必须**新增**一次 `✅ 已完成`（数量比发送前多），且末条不再含 `正在输出回答` / `正在分析问题`（只看全页存在会被上一轮完成标记或本轮流式中间态提前满足） |
 | + | `audit` | 查夹具 sqlite | `agent_runs` ≥ 2 且 `agent_steps` ≥ 4（AGENT-02 每次工具调用落库） |
 | + | `degraded` | 打开未配置模型的实例 | 横幅含 `模型未就绪` |
 
@@ -107,7 +107,9 @@ export PYTHONPATH=$PWD     # Linux / macOS
   浏览器 60s 内没有 `/json/version`、或驱动超时 → `FAIL ...` 并打印对应日志尾部，退出码 **1**。
 - **`run.json` 在每条失败路径上都会写**，`stage` 字段指出失败停在 `fixture` / `degraded` /
   `browser` / `driver` 哪一段，成功时为 `done`；`ok` 同时要求驱动退出码为 0 且没有 `error`。
-- 失败时**保留**工作目录（`app.log` / `browser.log` / `driver.log` / `report.json` / `run.json`）；
+  驱动非零退出时 `error` 取自 `report.json`（驱动自己撞上 `--timeout` 预算时记为 `driver timeout`）。
+- 失败时**保留**工作目录：`app.log` / `browser.log` / `driver.log` / `run.json` 都会写入；
+  驱动被外层 `--timeout + 120s` 强杀时 `report.json` 可能缺失，但 `driver.log` 会被补写。
   成功时默认删除临时目录，加 `--keep-workdir` 可保留。
 
 ## 环境变量

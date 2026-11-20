@@ -387,3 +387,39 @@ def test_driver_timeout_budget_is_wired_not_ignored() -> None:
     assert "driver timeout" in source
     leftovers = re.findall(r"\btimeout=[0-9]", source)
     assert not leftovers, f"还有硬编码 timeout 没用预算收敛：{leftovers}"
+
+
+def test_interrupt_recheck_requires_a_new_completion_marker() -> None:
+    # 回归：第三轮的完成判据只看全页 ✅ 已完成，会被第一轮标记或本轮流式中间态提前满足。
+    source = DRIVER.read_text(encoding="utf-8")
+    assert "_completed_count" in source
+    assert "completed_before = _completed_count(cdp)" in source
+    assert "done > {completed_before}" in source
+    assert "!last.includes('正在输出回答')" in source
+    assert "!last.includes('正在分析问题')" in source
+    assert "没有新增完成标记" in source
+    readme = README.read_text(encoding="utf-8")
+    assert "必须**新增**一次" in readme, "README 的 interrupt 判据要与增量断言一致"
+
+
+def test_driver_timeout_keeps_driver_log(tmp_path: Path) -> None:
+    # 回归：TimeoutExpired 分支丢掉 stdout/stderr，README 的「失败保留 driver.log」不成立。
+    source = RUNNER.read_text(encoding="utf-8")
+    assert "except subprocess.TimeoutExpired as exc:" in source
+    assert 'summary["driver_log"] = "driver.log"' in source
+    assert "_as_text(exc.stdout)" in source
+    assert "强制结束前的输出已写入" in source
+
+    runner = _load(RUNNER, "agent_smoke_run_log")
+    assert runner._as_text(None) == ""
+    assert runner._as_text("partial") == "partial"
+    assert runner._as_text(b"\xe5\xa4\xb1\xe8\xb4\xa5") == "失败"
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps({"ok": False, "error": "AssertionError: driver timeout（预算用尽）"}),
+        encoding="utf-8",
+    )
+    assert runner._driver_error(report, 1) == "driver timeout"
+    assert runner._driver_error(tmp_path / "missing.json", 2) == "driver exited with code 2"
+    readme = README.read_text(encoding="utf-8")
+    assert "可能缺失" in readme, "README 要写清强杀时 report.json 可能缺失、driver.log 仍会写"
