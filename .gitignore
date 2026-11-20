@@ -50,3 +50,8 @@ tools/*.pkl
 
 # Gradio 在仓库根生成的 UI 编辑历史目录（测试实例化 Blocks 时产生，勿提交）
 gradio/
+
+# 手工 CDP 冒烟的历史草稿目录（完整 Edge profile / 临时截图 / 解析产物，勿提交）
+# 正式脚本在 tests/smoke/agent_ui/，工作目录与截图不落库。
+.smoke-agent-ui/
+tests/smoke/agent_ui/.workdir/
