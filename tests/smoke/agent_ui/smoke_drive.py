@@ -93,6 +93,14 @@ def _message_count(cdp: CDP) -> int:
     return int(cdp.eval("document.querySelectorAll('.message-content').length") or 0)
 
 
+_COMPLETED_JS = "(document.body.innerText.match(/✅ 已完成/g) || []).length"
+
+
+def _completed_count(cdp: CDP) -> int:
+    """页面上「✅ 已完成」出现的次数，用来判断某一轮是否新增了终态。"""
+    return int(cdp.eval(_COMPLETED_JS) or 0)
+
+
 def _set_question(cdp: CDP, text: str) -> None:
     if not cdp.eval(_SET_QUESTION_JS % json.dumps(text, ensure_ascii=False)):
         raise RuntimeError("页面上找不到问题输入框（textarea）")
@@ -284,19 +292,34 @@ def check_interrupt(cdp: CDP, shots_dir: Path | None) -> str:
     if shots_dir is not None:
         shot = cdp.screenshot(shots_dir / "3-interrupt.png")
     # 中断后立刻再问一轮，验证锁已释放（回归 iss-mwmvlhso 的同类问题）。
+    # 完成判据必须是「本轮新增」的终态：只看全页有没有 ✅ 已完成，会被第一轮的
+    # 完成标记或第三轮流式中间态提前满足，挂住的第三轮也会 PASS
+    # （评审 iss-mwoy6ghr-f8e6cd）。
+    completed_before = _completed_count(cdp)
     _set_question(cdp, "第三次：中断后马上再问")
     _click(cdp, "发送")
     cdp.wait_for(
         "(() => {"
         " const nodes = [...document.querySelectorAll('.message-content')];"
+        " const last = nodes.length > 0 ? nodes[nodes.length - 1].innerText : '';"
+        " const done = (document.body.innerText.match(/✅ 已完成/g) || []).length;"
         f" return nodes.length > {before} + 2"
-        " && nodes[nodes.length - 1].innerText.length > 60"
-        " && document.body.innerText.includes('✅ 已完成');"
+        f" && done > {completed_before}"
+        " && last.length > 60"
+        " && !last.includes('正在输出回答')"
+        " && !last.includes('正在分析问题');"
         "})()",
         timeout=_timeout(180),
     )
-    return f"中断保留 {len(partial)} 字，随后再问一轮已完成" + (
-        f"，截图 {shot}" if shot else ""
+    completed_after = _completed_count(cdp)
+    if completed_after <= completed_before:
+        raise AssertionError(
+            f"第三次提问没有新增完成标记：{completed_before} -> {completed_after}"
+        )
+    return (
+        f"中断保留 {len(partial)} 字，随后再问一轮新增完成标记"
+        f"（{completed_before}→{completed_after}）"
+        + (f"，截图 {shot}" if shot else "")
     )
 
 
