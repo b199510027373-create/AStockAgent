@@ -207,6 +207,11 @@ class MarketSeries:
     #: 此时 ``factor_as_of`` 给出该因子的实际交易日，图注/表注据此标「盘中近似」。
     partial: bool = False
     factor_as_of: str | None = None
+    #: ADR-008 第 6 条：metadata 必须能回答「后复权基准是哪天 / 基准因子多少 /
+    #: 因子来自哪」。数据层缺失时保持 None，**不要**用 1.0 或今天伪造基准。
+    adj_base: str | None = None
+    base_factor: float | None = None
+    adj_source: str | None = None
 
     def metadata(self) -> dict[str, Any]:
         """写进 ``ToolResult.metadata`` 的固定键集（C2 两键必须存在）。"""
@@ -215,6 +220,9 @@ class MarketSeries:
             "freshness": self.freshness,
             "adjustment": self.adj,
             "adjustment_label": _ADJ_LABELS.get(self.adj, self.adj),
+            "adj_base": self.adj_base,
+            "base_factor": self.base_factor,
+            "adj_source": self.adj_source,
             "source": self.source,
             "period": self.period,
             "requested_period": self.requested_period,
@@ -587,6 +595,14 @@ def load_series(
     adjust_meta = dict(getattr(frame, "attrs", {}).get("adjustment") or {})
     partial = bool(adjust_meta.get("partial"))
     factor_as_of = str(adjust_meta["factor_as_of"]) if adjust_meta.get("factor_as_of") else None
+    # ADR-008 第 6 条：Agent/LLM 只读 ToolResult.metadata，调仓口径的「基准日/
+    # 基准因子/来源」必须在这里可读；数据层没给就保持 None，不伪造。
+    adj_base = str(adjust_meta["adj_base"]) if adjust_meta.get("adj_base") else None
+    adj_source = str(adjust_meta["adj_source"]) if adjust_meta.get("adj_source") else None
+    base_factor: float | None = None
+    factor_value = adjust_meta.get("base_factor")
+    if isinstance(factor_value, (int, float)) and not isinstance(factor_value, bool):
+        base_factor = float(factor_value)
     if partial:
         notes.append(
             f"盘中近似：当日 bar 按最近已发布因子（截至 {factor_as_of or '最近交易日'}）复权，"
@@ -608,6 +624,9 @@ def load_series(
         notes=notes,
         partial=partial,
         factor_as_of=factor_as_of,
+        adj_base=adj_base,
+        base_factor=base_factor,
+        adj_source=adj_source,
     )
 
 
@@ -1088,15 +1107,23 @@ def _render_kline(
         "encode": {"x": "trade_time" if period in MINUTE_PERIODS else "trade_date"},
         "layers": layer_spec,
     }
-    if series.partial:
-        # spec.meta 是自由对象（chart_spec._validate_meta），不占 data 白名单；
-        # 图注据此标「盘中近似（因子截至 X）」。
-        spec["meta"] = {"partial": True, "factor_as_of": series.factor_as_of}
+    # spec.meta 是自由对象（chart_spec._validate_meta），不占 data 白名单：
+    # ADR-008 第 6 条要求口径细节可读，第 7 条要求盘中近似可见，两者都放这里。
+    spec["meta"] = {
+        "partial": series.partial,
+        "factor_as_of": series.factor_as_of,
+        "adj_base": series.adj_base,
+        "base_factor": series.base_factor,
+        "adj_source": series.adj_source,
+    }
     meta: dict[str, Any] = {
         "title": chart_title,
         "freshness_label": label,
         "partial": series.partial,
         "factor_as_of": series.factor_as_of,
+        "adj_base": series.adj_base,
+        "base_factor": series.base_factor,
+        "adj_source": series.adj_source,
     }
     # ADR-017 §7.1：runtime 通过 ToolContext 告诉工具本次调用的 run_id/step，
     # 图表 artifact 才能挂到真实 run（source="agent"）；UI 直接渲染无上下文，
