@@ -29,25 +29,28 @@
       "ADR-008"
     ],
     "branch": "fix/adj-meta-display",
-    "commit": "4b74337",
+    "commit": "ac5f853",
     "module": [
       "data",
-      "charts"
+      "charts",
+      "agent"
     ],
     "pr": "37",
     "review": [
       "rev-20261116-002"
     ],
     "test": [
-      "pytest tests/test_data_adj_caliber.py tests/test_charts_summary.py -q → 35 passed, 12 subtests",
-      "pytest tests -q → 796 passed, 1 skipped, 14 subtests (92.50s)",
+      "pytest tests/test_data_adj_caliber.py tests/test_charts_summary.py -q → 35 passed, 12 subtests（4b74337）",
+      "pytest tests -q → 796 passed, 1 skipped, 14 subtests (92.50s)（4b74337）",
       "pytest tests/test_architecture_gate.py -q → 33 passed",
       "ruff check astock tests → All checks passed（全仓 blocking，含 RUF012/SIM117）",
       "mypy astock app.py → Success: no issues found in 44 source files",
       "实跑 run_strategy(600519.SH, MA双均线, 1年) → attrs={adj:qfq, adj_base:2026-11-19, base_factor:8.6463, adj_source:daily}, bars=242, trades=6",
-      "GitHub Actions 44573239310 (4b74337) test+png-export success；PR #37 OPEN/CLEAN"
+      "评审 P2 修复（ac5f853）：pytest tests/test_data_adj_caliber.py tests/test_charts_summary.py tests/test_data_time_semantics.py -q → 66 passed, 16 subtests",
+      "评审 P2 后全量 pytest tests -q → 801 passed, 1 skipped, 18 subtests (82.73s)；门禁 33 passed；ruff 全仓通过；mypy 44 files",
+      "CI run 44573239310 (4b74337) success；CI run 44679937924 (ac5f853) success（test 含覆盖率门禁 + png-export）；PR #37 OPEN/CLEAN"
     ]
   },
   "createdAt": "2026-11-19T16:57:51.363Z",
-  "updatedAt": "2026-11-19T17:06:47.895Z"
+  "updatedAt": "2026-11-20T05:21:36.844Z"
 }

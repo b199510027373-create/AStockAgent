@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwoit6on-7d19f2",
+  "threadId": "rev-20261116-002",
+  "roundNo": 5,
+  "severity": "P2",
+  "category": "契约/展示",
+  "file": "astock/data.py",
+  "lines": "744-747",
+  "title": "分钟盘中 partial/factor_as_of 已产出但全仓无消费方，ADR-008 第 7 条要的「盘中近似」提示至今不存在",
+  "evidence": "data.py:744-747 写入 meta[\"partial\"]=True 与 meta[\"factor_as_of\"]，但 astock/ 下检索 factor_as_of|partial 只命中 data.py 自身（696-697、717-718、734-735、744-747）；展示侧三处都不读：charts.py:404-432 `_adj_caption` 只拼 adj/adj_base/base_factor/adj_source，astock/agent/chart_render.py:680-687 `_adj_label` 只按 qfq/hfq/none 给标签，astock/agent/tools/market_tools.py:207-219 `MarketSeries.metadata` 无 partial/factor_as_of。验收⑥ 已由 ho-20261120-002 声明具备收口条件，而 ho-20261120-001 的 next 自认「分钟盘中 partial/factor_as_of 尚无下游消费」。后果：盘中分钟图用昨日因子复权的最后一根 K 线，在图上与历史 bar 无差别呈现，用户无法得知口径是近似的。",
+  "suggestion": "二选一并落文档：(a) 补消费方——chart_render._caption（分钟图）与 charts._adj_caption 读 meta.get(\"partial\")/meta.get(\"factor_as_of\")，追加「盘中近似（因子截至 <factor_as_of>）」，market_tools.MarketSeries.metadata 增加 partial/factor_as_of 两键，并在 tests/test_charts_summary.py 或 test_data_adj_caliber.py 增加 partial=True 用例；(b) 若本轮不做，把该条拆成独立计划项（如 plan-xxxx 分钟盘中标注），在 ADR-008 第 7 条注明「推迟到该计划项」，同时不在验收⑥ 里声称已覆盖。推荐 (a)，改动量约 10 行。",
+  "confidence": 0.7,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-20T05:10:27.863Z"
+}
