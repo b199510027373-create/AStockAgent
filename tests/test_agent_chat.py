@@ -258,6 +258,49 @@ class TimelineTests(unittest.TestCase):
         self.assertIn("📋 表格", markup)
         self.assertIn("继续分析…", markup)
         self.assertIn("0.12s", markup)
+        self.assertIn("收盘价 1680.00 元", markup)
+
+    def test_steps_show_tool_output_beside_reflection(self) -> None:
+        """真实运行里 reflection 是通用提示，工具结果必须单独可见（AC2）。"""
+
+        step = StepRecord(
+            index=0,
+            plan="",
+            tool="quote",
+            arguments={"ts_code": "600519.SH"},
+            result=ToolResult(
+                text="600519.SH 最新价 1,485.75 元（数据截至 2026-11-20）",
+                data_as_of="2026-11-20",
+                source="market:quote:daily",
+                figure="<html>SHOULD-NOT-INLINE</html>",
+            ),
+            observation="",
+            reflection="工具执行成功，继续判断是否已有足够信息。",
+            tokens=0,
+            elapsed=0.5,
+        )
+        markup = render_steps_html([step])
+        self.assertIn("工具执行成功", markup)
+        self.assertIn("最新价 1,485.75 元", markup)
+        self.assertIn('class="step-output"', markup)
+        self.assertNotIn("SHOULD-NOT-INLINE", markup)
+
+    def test_step_output_is_escaped_and_clipped(self) -> None:
+        step = StepRecord(
+            index=0,
+            plan="",
+            tool="file_read",
+            arguments={},
+            result=ToolResult(text="<script>alert(1)</script>" + "x" * 600),
+            observation="",
+            reflection="成功",
+            tokens=0,
+            elapsed=0.1,
+        )
+        markup = render_steps_html([step])
+        self.assertIn("&lt;script&gt;", markup)
+        self.assertNotIn("<script>", markup)
+        self.assertLessEqual(len(markup), 1200)
 
     def test_failed_step_marked_error(self) -> None:
         step = step_with(ToolResult(error="参数非法"), tool="file_search")

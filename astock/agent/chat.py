@@ -60,6 +60,7 @@ ANSWER_CHUNK_CHARS = 40
 
 #: 单条步骤里参数/结果的展示上限，避免把整张表塞进 HTML。
 _SNIPPET_CHARS = 220
+_STEP_OUTPUT_CHARS = 240
 
 #: 图表 spec 的展示上限。
 _SPEC_CHARS = 4000
@@ -251,7 +252,14 @@ def render_steps_html(
                 tags.append("📋 表格")
             if getattr(result, "truncated", False):
                 tags.append("✂️ 已截断")
-            reflection = step.reflection or getattr(result, "text", "") or ""
+            reflection = step.reflection or ""
+            output = getattr(result, "text", "") or ""
+            output_html = ""
+            if output and _clip(output) != _clip(reflection):
+                output_html = (
+                    '<div class="step-output">'
+                    f"{_esc(_clip(output, _STEP_OUTPUT_CHARS))}</div>"
+                )
             items.append(
                 f'<li data-status="{status}">'
                 f'<div class="step-head"><span class="step-no">{position}</span>'
@@ -259,6 +267,7 @@ def render_steps_html(
                 f'<span class="step-elapsed">{step.elapsed:.2f}s</span></div>'
                 f'<div class="step-args">{_esc(_render_arguments(step.arguments))}</div>'
                 f'<div class="step-result">{_esc(_clip(reflection))}</div>'
+                + output_html
                 + (f'<div class="step-tags">{" · ".join(tags)}</div>' if tags else "")
                 + "</li>"
             )
