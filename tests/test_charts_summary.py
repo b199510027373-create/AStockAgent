@@ -89,6 +89,32 @@ class AdjCaptionTests(unittest.TestCase):
         caption = _adj_caption("raw_v2", _daily(attrs={"adj": "raw_v2"}))
         self.assertIn("口径未知（raw_v2）", caption)
 
+    def test_partial_intraday_factor_is_disclosed(self):
+        """ADR-008 第 7 条：盘中当日 bar 用最近已发布因子，图注必须说「盘中近似」。"""
+        daily = _daily(
+            attrs={
+                "adj": "qfq",
+                "adj_base": "2025-01-06",
+                "base_factor": 4.0,
+                "adj_source": "daily",
+                "partial": True,
+                "factor_as_of": "2025-01-03",
+            }
+        )
+        caption = _adj_caption("qfq", daily)
+        self.assertIn("盘中近似（因子截至 2025-01-03）", caption)
+
+    def test_partial_marker_absent_for_published_factor(self):
+        daily = _daily(
+            attrs={
+                "adj": "qfq",
+                "adj_base": "2025-01-06",
+                "base_factor": 4.0,
+                "adj_source": "daily",
+            }
+        )
+        self.assertNotIn("盘中近似", _adj_caption("qfq", daily))
+
     def test_summary_markdown_uses_caliber_caption(self):
         daily = _daily(
             n=4,

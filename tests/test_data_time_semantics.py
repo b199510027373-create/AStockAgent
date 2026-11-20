@@ -538,6 +538,55 @@ def test_kline_chart_title_carries_freshness_hint() -> None:
     assert "最近交易日收盘" in result.metadata["chart"]["title"]
 
 
+def test_kline_surfaces_partial_intraday_factor() -> None:
+    """ADR-008 第 7 条：盘中当日 bar 用最近已发布因子，工具必须把 partial 透出来。
+
+    数据层在 ``attrs["adjustment"]`` 标 ``partial``/``factor_as_of``；工具侧若不
+    消费，图注/表注就永远看不到"盘中近似"（评审 iss-mwoit6on-7d19f2）。
+    """
+    minute = _minute_frame("2024-01-03", ["09:31", "09:32"])
+    minute.attrs["adjustment"] = {
+        "adj": "qfq",
+        "adj_base": "2025-01-03",
+        "base_factor": 4.0,
+        "adj_source": "daily",
+        "partial": True,
+        "factor_as_of": "2024-01-02",
+    }
+    context = _Deps(minute=minute, clock="2024-01-03 09:33")
+    renderer = _StubRenderer()
+    result = M.kline(
+        CODE,
+        period="1min",
+        chart=True,
+        limit=2,
+        now=context.clock,
+        deps=context.deps(),
+        renderer=renderer,
+    )
+    _assert_contract(result)
+    assert result.metadata["partial"] is True
+    assert result.metadata["factor_as_of"] == "2024-01-02"
+    assert "盘中近似" in result.text
+    spec, _kwargs = renderer.calls[0]
+    assert spec["meta"] == {"partial": True, "factor_as_of": "2024-01-02"}
+
+    from astock.agent.chart_render import _caption
+
+    caption = _caption(spec, result.data_as_of, result.data_time, result.data_as_of, result.data_time)
+    assert "盘中近似（因子截至 2024-01-02）" in caption
+
+
+def test_kline_published_factor_has_no_partial_marker() -> None:
+    """因子已发布（当日不是 partial）时不得冒出"盘中近似"。"""
+    context = _Deps(minute=_minute_frame("2024-01-03", ["09:31"]), clock="2024-01-03 09:32")
+    result = M.kline(CODE, period="1min", limit=1, now=context.clock, deps=context.deps())
+    _assert_contract(result)
+    assert result.metadata["partial"] is False
+    assert result.metadata["factor_as_of"] is None
+    assert "盘中近似" not in result.text
+
+
 def test_kline_without_chart_has_no_figure() -> None:
     context = _Deps()
     result = M.kline(CODE, now=context.clock, deps=context.deps())

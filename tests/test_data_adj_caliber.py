@@ -550,10 +550,22 @@ class AdjustmentMetadataPropagationTests(unittest.TestCase):
         self.assertEqual(weekly.attrs.get("adjustment"), self.META)
 
     def test_period_frame_keeps_adjustment_attrs(self):
-        for period in ("week", "month"):
+        for period in ("week", "month", "quarter"):
             with self.subTest(period=period):
                 out = data.period_frame(self._frame_with_meta(), period)
                 self.assertFalse(out.empty)
+                self.assertEqual(out.attrs.get("adjustment"), self.META)
+
+    def test_empty_frame_keeps_adjustment_attrs(self):
+        """空区间快速返回（停牌整段/窗口内无交易日）也不能丢复权标注（评审 P2）。"""
+        empty = self._frame_with_meta().iloc[0:0]
+        for name, out in (
+            ("enrich", data.enrich(empty)),
+            ("resample_ohlcv", data.resample_ohlcv(empty, "W-FRI")),
+            ("period_frame", data.period_frame(empty, "month")),
+        ):
+            with self.subTest(path=name):
+                self.assertTrue(out.empty)
                 self.assertEqual(out.attrs.get("adjustment"), self.META)
 
     def test_load_daily_metadata_survives_enrich(self):

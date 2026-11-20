@@ -855,6 +855,26 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-rev-20261119-002-r3",
+      "type": "review",
+      "title": "评审：评审：图表管线 v2：语义收口、审计迁移与 Q4/Q5",
+      "start": "2026-11-20T05:07:13.956Z",
+      "end": "2026-11-20T05:07:30.677Z",
+      "planItemId": "plan-20261114-002",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261116-002-r5",
+      "type": "review",
+      "title": "评审：评审：复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
+      "start": "2026-11-20T05:10:17.317Z",
+      "end": "2026-11-20T05:10:38.950Z",
+      "planItemId": "plan-20261114-003",
+      "source": "reviewer-agent",
+      "notes": "第 5 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",

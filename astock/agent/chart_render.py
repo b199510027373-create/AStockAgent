@@ -740,6 +740,11 @@ def _caption(
         parts.append("盘前，暂无连续竞价数据")
     if data.get("source") == "market":
         parts.append(f"价格口径：{_adj_label(str(data.get('adj', 'qfq')))}")
+        meta = spec.get("meta") or {}
+        if isinstance(meta, Mapping) and meta.get("partial"):
+            # ADR-008 第 7 条：盘中当日 bar 用最近已发布因子，图注必须说明。
+            as_of = str(meta.get("factor_as_of") or "最近交易日")
+            parts.append(f"盘中近似（因子截至 {as_of}）")
         parts.append(f"周期：{period}")
     else:
         parts.append(f"数据来源：{data.get('source', 'inline')}")

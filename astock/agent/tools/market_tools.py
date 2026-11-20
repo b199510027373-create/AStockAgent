@@ -203,6 +203,10 @@ class MarketSeries:
     adj: str
     suspended: bool
     notes: list[str] = field(default_factory=list)
+    #: 分钟盘中当日 bar 用最近已发布因子复权（ADR-008 补充裁决第 7 条）时为 True，
+    #: 此时 ``factor_as_of`` 给出该因子的实际交易日，图注/表注据此标「盘中近似」。
+    partial: bool = False
+    factor_as_of: str | None = None
 
     def metadata(self) -> dict[str, Any]:
         """写进 ``ToolResult.metadata`` 的固定键集（C2 两键必须存在）。"""
@@ -216,6 +220,8 @@ class MarketSeries:
             "requested_period": self.requested_period,
             "suspended": self.suspended,
             "notes": list(self.notes),
+            "partial": self.partial,
+            "factor_as_of": self.factor_as_of,
         }
 
 
@@ -575,6 +581,18 @@ def load_series(
     if period != requested_period:
         notes.append(f"请求的 {requested_period} 不可用，实际返回 {period} 数据")
 
+    # ADR-008 补充裁决第 7 条：分钟盘中当日 bar 用最近已发布因子复权，
+    # 数据层在 attrs["adjustment"] 标 partial/factor_as_of，工具侧必须把它
+    # 透出到 metadata + notes，否则"盘中近似"只存在于没人读的地方（评审 P2）。
+    adjust_meta = dict(getattr(frame, "attrs", {}).get("adjustment") or {})
+    partial = bool(adjust_meta.get("partial"))
+    factor_as_of = str(adjust_meta["factor_as_of"]) if adjust_meta.get("factor_as_of") else None
+    if partial:
+        notes.append(
+            f"盘中近似：当日 bar 按最近已发布因子（截至 {factor_as_of or '最近交易日'}）复权，"
+            "收盘后因子发布才变为终值"
+        )
+
     return MarketSeries(
         code=code,
         period=period,
@@ -588,6 +606,8 @@ def load_series(
         adj=adj,
         suspended=suspended,
         notes=notes,
+        partial=partial,
+        factor_as_of=factor_as_of,
     )
 
 
@@ -1068,7 +1088,16 @@ def _render_kline(
         "encode": {"x": "trade_time" if period in MINUTE_PERIODS else "trade_date"},
         "layers": layer_spec,
     }
-    meta: dict[str, Any] = {"title": chart_title, "freshness_label": label}
+    if series.partial:
+        # spec.meta 是自由对象（chart_spec._validate_meta），不占 data 白名单；
+        # 图注据此标「盘中近似（因子截至 X）」。
+        spec["meta"] = {"partial": True, "factor_as_of": series.factor_as_of}
+    meta: dict[str, Any] = {
+        "title": chart_title,
+        "freshness_label": label,
+        "partial": series.partial,
+        "factor_as_of": series.factor_as_of,
+    }
     # ADR-017 §7.1：runtime 通过 ToolContext 告诉工具本次调用的 run_id/step，
     # 图表 artifact 才能挂到真实 run（source="agent"）；UI 直接渲染无上下文，
     # 仍按 source="render" 记录（Q5/D9）。

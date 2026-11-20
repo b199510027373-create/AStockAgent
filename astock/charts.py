@@ -429,6 +429,11 @@ def _adj_caption(adj: str, daily: pd.DataFrame) -> str:
     source = meta.get("adj_source")
     if source:
         parts.append(f"因子来源 {source}")
+    # 分钟盘中当日 bar 用的是最近已发布因子（ADR-008 补充裁决第 7 条）：
+    # 图注必须把"盘中近似"说出来，否则读者会以为当天因子已发布。
+    if meta.get("partial"):
+        as_of = meta.get("factor_as_of") or "最近已发布交易日"
+        parts.append(f"盘中近似（因子截至 {as_of}）")
     return "，".join(parts)
 
 

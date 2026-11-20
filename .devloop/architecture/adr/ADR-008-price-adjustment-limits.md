@@ -56,6 +56,14 @@
 2. **图注区分三种口径**：`astock.charts.summary_markdown()` 不再用 `'前复权' if adj == 'qfq' else '不复权'` 的三元表达式，改为按 `attrs["adjustment"]["adj"]` 取 `qfq`/`hfq`/`none`/未知；`hfq` 必须显示"后复权（hfq）"与"基准 `<adj_base>` 起 1.0"，`qfq` 显示"基准 `<adj_base>`，因子 `<base_factor>`"，任何口径都不得把 hfq 标成不复权。
 3. **测试**：`tests/test_data_adj_caliber.py` 新增 `AdjustmentMetadataPropagationTests`（`enrich`/`resample_ohlcv`/`period_frame`/`load_daily→enrich` 全链路保留 attrs）；`tests/test_charts_summary.py` 覆盖 hfq/qfq/none/未知/无 attrs 回退与 `summary_markdown` 实际图注。
 
+## 落地（plan-20261120-001 评审 P2，2026-11-20）：partial 必须被消费，空帧也要带标注
+
+评审 rev-20261116-002 第 5 轮（iss-mwoit6on-7d19f2 / iss-mwoit6pr-6c8c9f / iss-mwoit6qf-174fb1）指出三处标注"写得出、看不到"的残余：
+
+1. **`partial`/`factor_as_of` 被消费**（选 (a)，未拆后续计划项）：`astock/agent/tools/market_tools.py` 的 `MarketSeries` 增加 `partial`/`factor_as_of` 字段，`load_series()` 从 `frame.attrs["adjustment"]` 读并追加一条 notes「盘中近似：当日 bar 按最近已发布因子（截至 X）复权」；`metadata()` 固定输出这两个键；`_render_kline()` 把它们写进 `ChartSpec.meta`（自由对象，不占 `data` 白名单）；`astock/agent/chart_render.py:_caption()` 与 `astock/charts.py:_adj_caption()` 据此追加「盘中近似（因子截至 X）」。因子已发布时不得出现该提示。
+2. **空帧也带标注**：`astock/data.py` 新增 `_empty_with_attrs()`，`enrich()`/`resample_ohlcv()` 的空帧快速返回改为回填输入 `attrs`（停牌整段、窗口内无交易日时图注/回测不再退回调用方 adj）。
+3. **周期线回归**：`period_frame` 用例的 subTest 覆盖 `week`/`month`/`quarter`（`data.py` 有 `QE` 规则），季线标注通道有回归保护。
+
 ## 证据
 
 - `astock/data.py`（`raw_*`、`base_factor`）
