@@ -1,0 +1,114 @@
+{
+  "id": "ho-20261120-007",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261120-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "复权口径展示收口：enrich/周期聚合保留复权标注 + 图注标注 hfq 与基准",
+  "summary": "按评审第 6 轮唯一 P2（iss-mwojg80u-28e11e）选方案 (a) 补齐「口径可读性」：ADR-008 第 6 条要求 metadata 暴露 adj/adj_base/adj_source，但此前只有 adjustment 标签，基准日/基准因子/来源只活在图注文本里，Agent 读 ToolResult 无法回答「后复权基准是哪天」。本轮 MarketSeries 增 adj_base/base_factor/adj_source（缺省 None，不用 1.0 或今天伪造基准），metadata() 与 kline 工具 meta 固定输出三键，load_series 从 attrs[\"adjustment\"] 读取，_render_kline 的 ChartSpec.meta 改为始终携带三键 + partial/factor_as_of（自由对象，不占 data 白名单）。新增 2 例测试（三键可读、无 attrs 不伪造），partial 用例补完整 spec.meta 断言，ADR-008 第 6 条补落地位置。本地 803 passed / 1 skipped（+2）、ruff 全仓通过、mypy 44 files、实跑 metadata 返回 adj_base=2026-11-20/base_factor=8.6463/adj_source=daily；提交 dd79e34，CI 44690527676 全绿，PR #37 OPEN/CLEAN。",
+  "requirements": [
+    {
+      "id": "iss-mwojg80u-28e11e",
+      "text": "ADR-008 第 6 条要求图表与行情工具 metadata 暴露 adj/adj_base/adj_source，但 MarketSeries.metadata() 缺 adj_base/base_factor/adj_source，基准日只存在于图注文本；需 metadata() 补三键（缺省 None 不造假）、_render_kline 两种情况下都带三键、补测试断言与无 attrs 用例、ADR 第 6 条注明落地位置",
+      "source": "评审 rev-20261116-002 第 6 轮（P2）"
+    },
+    {
+      "id": "plan-20261120-001-A3",
+      "text": "summary_markdown 图注区分 qfq/hfq/none/未知并展示基准日与基准因子（含本轮新增的 metadata 可读性，不再只靠图注文本）",
+      "source": "计划项 plan-20261120-001 验收 3"
+    },
+    {
+      "id": "ADR-008-D1.6",
+      "text": "图表与行情工具的 metadata 暴露 adj/adj_base/adj_source；ChartSpec.data.adj 增 hfq 枚举",
+      "source": "ADR-008 补充裁决第 6 条"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "MarketSeries 增 adj_base/base_factor/adj_source 字段（缺省 None）；metadata() 与 kline 工具 meta 固定输出三键；load_series 从 attrs['adjustment'] 读取（isinstance 守门，bool 不算因子）；_render_kline 的 spec['meta'] 改为始终携带三键 + partial/factor_as_of",
+      "commit": "dd79e34"
+    },
+    {
+      "path": "tests/test_data_time_semantics.py",
+      "summary": "test_kline_surfaces_partial_intraday_factor 补三键断言（spec.meta 完整字典）；新增 test_kline_metadata_exposes_adjustment_caliber 与 test_kline_metadata_without_adjustment_attrs_is_not_faked（无 attrs 时三键必须 None，不得用 1.0/今天伪造）",
+      "commit": "dd79e34"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-008-price-adjustment-limits.md",
+      "summary": "第 6 条补「落地位置（2026-11-20 评审 iss-mwojg80u-28e11e）」：metadata()/kline meta 固定三键、ChartSpec.meta 携带、图注另由 chart_render/charts 渲染",
+      "commit": "dd79e34"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_data_time_semantics.py -q -p no:cacheprovider",
+      "result": "30 passed",
+      "passed": true,
+      "evidence": "30 passed in 3.56s（含新增 2 例与 partial 用例扩充断言）"
+    },
+    {
+      "command": "pytest tests -q -p no:cacheprovider",
+      "result": "803 passed, 1 skipped, 18 subtests",
+      "passed": true,
+      "evidence": "803 passed, 1 skipped, 18 subtests passed in 137.40s（上一轮 801，+2 新用例）"
+    },
+    {
+      "command": "python -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "All checks passed!（CI 同口径全仓阻塞集）"
+    },
+    {
+      "command": "python -m mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "Success: no issues found in 44 source files"
+    },
+    {
+      "command": "python -c \"from astock.agent.tools import market_tools as M; print(M.load_series('600519.SH','day',adj='qfq',bars=5).metadata())\"",
+      "result": "metadata 三键可读（实跑）",
+      "passed": true,
+      "evidence": "{'adjustment': 'qfq', 'adj_base': '2026-11-20', 'base_factor': 8.6463, 'adj_source': 'daily', 'partial': False} —— 真实数据下三键可读"
+    },
+    {
+      "command": "gh run view 44690527676",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "head dd79e34，test（含覆盖率门禁）+ png-export 均 success，整体 conclusion=success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI 推送与读写 CI（gh auth 已登录 b199510027373-create）",
+      "reason": "推送 dd79e34 到 PR #37 并读取 CI 结论 44690527676",
+      "status": "granted"
+    },
+    {
+      "name": "TUSHARE_TOKEN（.env）",
+      "reason": "实跑 load_series(600519.SH, qfq) 验证 metadata 三键（走本地缓存，无新抓取）",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "fix/adj-meta-display",
+    "commit": "dd79e34",
+    "pr": "37",
+    "ci": "dd79e34 → GitHub Actions run 44690527676 success（test + png-export）",
+    "merge": "未合并，等待评审复核 r7",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261120-005",
+  "next": "1) 请评审复核第 7 轮（diff c8d59ee..dd79e34，仅 market_tools.py + tests/test_data_time_semantics.py + ADR-008）：选 (a) 已补齐 iss-mwojg80u-28e11e，metadata 与 ChartSpec.meta 均带 adj_base/base_factor/adj_source，缺省 None 不伪造。2) 合并 PR #37 后复跑 main CI 回填 run 号，plan-20261120-001 可置 done（验收 1/2/3 已满足）。3) 仍未收口且不在本项：plan-20261103-009 板块/停牌/北交所与 IPO 规则；astock/ui.py:138「前复权」写死在 qfq-only 视图（非错标，可选 UI 文案）。",
+  "createdAt": "2026-11-20T06:51:46.882Z",
+  "markdownPath": ".devloop/handoffs/ho-20261120-007.md"
+}

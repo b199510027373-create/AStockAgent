@@ -1,88 +1,61 @@
 # PR 评审：评审：复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注
 
-> 自动生成于 2026-11-20T05:10:38.950Z；可直接转交开发会话。
+> 自动生成于 2026-11-20T05:28:31.100Z；可直接转交开发会话。
 
 ## 概览
 
 - 线程：`rev-20261116-002`
 - 计划项：`plan-20261114-003`
 - 分支：`fix/data-adj-caliber` → `main`
-- 轮次：第 5 轮（diff）
+- 轮次：第 6 轮（diff）
 - 结论：通过（approve）
 - 开发会话：未关联
-- 本轮问题：3（P0 0 / P1 0 / P2 3）
-- 线程未闭环：P0 0 / P1 0 / P2 3
+- 本轮问题：1（P0 0 / P1 0 / P2 1）
+- 线程未闭环：P0 0 / P1 0 / P2 4
 
 ## 本轮结论
 
-## 第 5 轮评审结论（scope=diff，main..HEAD=80cc765）
+## 第 6 轮评审结论（scope=diff，80cc765..c8d59ee，代码提交 ac5f853）
 
-### 范围确认
-- 实际 diff 只有 4 个文件：astock/charts.py、astock/data.py、tests/test_charts_summary.py（新增）、tests/test_data_adj_caliber.py；用户列出的 astock/contracts.py 与 tests/test_data_pit_events.py 与 main 无差异，本轮无可评审内容（对应验收③④⑤ 的既有覆盖仍由 test_data_adj_caliber.py 的 25 用例承担）。
-- 分支说明：线程与 plan.links.branch 仍记 fix/data-adj-caliber，该分支已合并（PR #15/196cfb2）；本轮实际评审 fix/adj-meta-display（PR #37/4b74337 + 80cc765 docs）。建议同步 plan.links.branch 与线程 branch，避免后续轮次误判 base。
+### 范围与凭据
+按开发交付 ho-20261120-005 复核第 5 轮三条 P2。本轮代码 diff 在 80cc765..ac5f853（fix(agent,chart,data)），c8d59ee 仅为交付/文档记录；未触碰上一轮已关闭的 P1 路径（761e9fa 的分钟缺因子硬失败、query_all 分页、缓存 adj_base）。测试执行归开发，本轮不重复执行；引用 ho-20261120-005 证据：目标 3 文件 66 passed/16 subtests、全量 801 passed/1 skipped、门禁 33、ruff 全仓通过、mypy 44 files、CI run 44679937924（head ac5f853）success。
 
-### 前序问题复核（7/7 已闭环）
-r1 两条 P1（分钟盘中硬失败、adj_factor 非分页截断）、r1/r2 三条 P2、r3 P1（死覆盖断言）均已在 code 中消失：分钟路径改为 partial 因子 + 缺因子硬失败（data.py:717-747），日线覆盖校验只在 _check_factor_coverage，缓存带 adj_base。本轮 diff 未回退这些行为。
+### 第 5 轮三条 P2：逐条核验为 fixed
+1. **iss-mwoit6on-7d19f2（partial 无消费方）fixed**：market_tools.py:205-210 `MarketSeries` 增 `partial`/`factor_as_of` 字段，:220-224 `metadata()` 透出两键；load_series:584-594 从 `frame.attrs["adjustment"]` 读取并追加 notes（「盘中近似：…（截至 X）复权，收盘后因子发布才变为终值」）；_render_kline:1092-1098 把 `{partial, factor_as_of}` 写进 `ChartSpec.meta`；chart_render.py:743-747 `_caption` 与 charts.py:432-436 `_adj_caption` 据此追加「盘中近似（因子截至 X）」。测试 test_kline_surfaces_partial_intraday_factor 覆盖 attrs→metadata→spec.meta→图注全链路，published 用例断言不出现提示；`meta` 经 chart_spec.py:110/770-782 校验合法（Mapping+JSON+≤1KB），MarketSeries 唯一构造点用关键字参数，无位置参数破坏。
+2. **iss-mwoit6pr-6c8c9f（空帧丢 attrs）fixed**：data.py 新增 `_empty_with_attrs()`（≈:835-846），resample_ohlcv 空帧分支（:852）与 enrich 空帧分支（:883）改用它；test_empty_frame_keeps_adjustment_attrs 对三个空帧路径断言 attrs 仍在，去掉修复即失败，非空断言。
+3. **iss-mwoit6qf-174fb1（缺 quarter）fixed**：tests/test_data_adj_caliber.py 的 test_period_frame_keeps_adjustment_attrs 已遍历 ("week","month","quarter") 并保留 assertFalse(empty)+attrs 断言，与 data.py:882 的 QE 规则对齐。
 
-### 本轮变更判定
-- astock/data.py:862-865、876-877 在 resample_ohlcv / enrich 尾部整体回填 df.attrs，与 chart_render.py:516/1542-1543、chart_service.py:299-302、track.py:858-859 的既有 attrs 约定一致；backtest.run_strategy（backtest.py:429-444）返回 enrich(daily) 后即可携带 adj/adj_base/base_factor/adj_source，验收⑥ 的「标注活着走到展示层」主链已闭合。
-- astock/charts.py:404-432 _adj_caption 区分 qfq/hfq/none/未知，hfq 标「基准 X 起 1.0」、qfq 标基准日+因子、none 隐藏基准，且优先读 attrs 保证与数据层同源；tests/test_charts_summary.py 6 个用例覆盖了「hfq 不得标不复权」这一核心错误模式与 summary_markdown 真实输出。
-- 结论：0 P0、0 P1，本轮 approve；plan-20261114-003 的验收①–⑤ 与 ⑥ 的口径区分部分完全解决。
+附带核验：`load_series` 在 :521 `frame.copy()` 与 :524 sort/reset 之后 attrs 仍可达（新用例已实证）；astock/ui.py:138 的「前复权」写死属 qfq-only 视图（ui.py:129 入参固定 "qfq"、load_minute 默认 qfq），不是口径错标，开发列为可选 UI 文案可接受。
 
-### 未闭环 P2（不阻断 resolved，需由开发在后续小 PR 修）
-1. iss-mwoit6on-7d19f2（astock/data.py:744-747）分钟盘中 partial/factor_as_of 全仓无消费方，「盘中近似」提示未落地（ADR-008 第 7 条为「下游可提示」性质，故记 P2 不阻断）。责任人：plan-20261114-003 开发。二选一：a) chart_render._caption 与 charts._adj_caption 追加「盘中近似（因子截至 X）」+ market_tools.MarketSeries.metadata 增 partial/factor_as_of + 一条 partial=True 用例；b) 拆独立计划项并在 ADR-008 第 7 条注明推迟。判完全解决条件：a 落地且测试通过，或 b 的计划项 id 写进 ADR 与 plan.links。
-2. iss-mwoit6pr-6c8c9f（astock/data.py:841-842、871-872）enrich/resample_ohlcv 空帧快速返回丢 attrs，空区间回测/图注退回调用方 adj。判完全解决条件：两个空帧分支补 attrs 回填 + test_empty_frame_keeps_adjustment_attrs 通过。
-3. iss-mwoit6qf-174fb1（tests/test_data_adj_caliber.py:552-557）period_frame 用例缺 quarter（data.py:882 有 QE 规则）。判完全解决条件：subTest 覆盖 ("week","month","quarter") 且断言不弱化。
+### 本轮新问题（1 条，P2，不阻断）
+**iss-mwojg80u-28e11e**：ADR-008 第 6 条（ADR 文件 :35）要求「图表与行情工具的 metadata 暴露 adj/adj_base/adj_source」，但 market_tools.py:207-224 `metadata()` 仍只有 adjustment/label + 本轮新增的 partial/factor_as_of，缺 adj_base/base_factor/adj_source（load_series:587-589 的 adjust_meta 已具备）；图表侧 ChartSpec.data 白名单仅 "adj"（chart_spec.py:112-122），spec["meta"] 只带 partial/factor_as_of，基准日只存在于图注文本。后果是 Agent/LLM 读 ToolResult.metadata 无法回答 hfq 基准日/因子来源。建议见 issue：metadata() 补三键（缺省 None 不造假基准）、_render_kline 的 meta 两种情况都带三键、test_kline_surfaces_partial_intraday_factor 补三键断言与无 attrs 用例、ADR 第 6 条注明落地位置。
 
-### 测试充分性
-开发交付证据（ho-20261120-001/002）：目标 4 文件 99 passed、全量 796 passed/1 skipped、门禁 33、ruff + mypy 44 files 全绿、CI 44573239310（head 4b74337）success、PR #37 OPEN/CLEAN。本轮不重复执行测试（执行归开发），仅核对覆盖点：新增用例覆盖 attrs 三条传播路径与真实 load_daily→enrich 链，未覆盖空帧与 quarter，已按 P2 记录。
-
-### 判定
-verdict=approve，openP0=0、openP1=0 → 工具按规则将 plan-20261114-003 标为完全解决。3 条 P2 为延后项，若不修则「盘中近似提示」保持缺失、空区间标注缺失、季线标注通道无回归保护；修复以 3 条 issue 各自列出的判据为准。
+### 判定与责任人/收口条件
+- verdict=approve；openP0=0、openP1=0（新 P2 不阻断）→ 线程按规则标记完全解决；第 5 轮三条 P2 在本轮闭环。
+- 责任人与条件：plan-20261120-001 开发在合并 PR #37 前，二选一——(a) 顺手补齐 iss-mwojg80u-28e11e（约 3+3 行 + 2 条断言）并推送新 commit、CI 绿；(b) 若明确不在本项做，则把该条拆为独立计划项（如「行情工具/图表 metadata 暴露 adj_base/adj_source」）写进 plan.links 与 ADR-008 第 6 条，注明推迟项 id 与预期落地计划项。
+- 何时算完全解决：选 (a) 时以「metadata 三键可读 + 用例通过 + ADR 第 6 条注明落地位置」为准；选 (b) 时以「计划项 id 已写入 ADR 与 plan.links，且验收⑥ 的表述不再声称 metadata 已含三键」为准。plan-20261120-001 的验收 1/2/3 已满足，可在 PR #37 合并且 CI 绿后置 done；plan-20261114-003（本线程 planItem）保持 done。
 
 ## 本轮问题
 
-### P2 · 分钟盘中 partial/factor_as_of 已产出但全仓无消费方，ADR-008 第 7 条要的「盘中近似」提示至今不存在
+### P2 · 行情工具/图表 metadata 仍缺 adj_base/adj_source，ADR-008 第 6 条只落地了 adj 与 partial
 
-- 位置：`astock/data.py:744-747`
+- 位置：`astock/agent/tools/market_tools.py:207-224`
 - 状态：未闭环
 - 置信度：0.7
 
 **证据**
 
-data.py:744-747 写入 meta["partial"]=True 与 meta["factor_as_of"]，但 astock/ 下检索 factor_as_of|partial 只命中 data.py 自身（696-697、717-718、734-735、744-747）；展示侧三处都不读：charts.py:404-432 `_adj_caption` 只拼 adj/adj_base/base_factor/adj_source，astock/agent/chart_render.py:680-687 `_adj_label` 只按 qfq/hfq/none 给标签，astock/agent/tools/market_tools.py:207-219 `MarketSeries.metadata` 无 partial/factor_as_of。验收⑥ 已由 ho-20261120-002 声明具备收口条件，而 ho-20261120-001 的 next 自认「分钟盘中 partial/factor_as_of 尚无下游消费」。后果：盘中分钟图用昨日因子复权的最后一根 K 线，在图上与历史 bar 无差别呈现，用户无法得知口径是近似的。
+ADR-008 第 6 条（.devloop/architecture/adr/ADR-008-price-adjustment-limits.md:35）明确要求「图表与行情工具的 metadata 暴露 adj/adj_base/adj_source」，但本轮改动的 market_tools.py:207-224 `MarketSeries.metadata()` 只输出 adjustment/adjustment_label/source/period/session/freshness/notes/partial/factor_as_of，缺 adj_base/base_factor/adj_source；同函数 load_series 在 :587-589 已经把 adjust_meta（含 adj、adj_base、base_factor、adj_source）从 frame.attrs 解析出来，数据就在手边。图表侧同样缺：ChartSpec.data 白名单只有 "adj"（chart_spec.py:112-122），本轮新增的 spec["meta"] 只带 {partial, factor_as_of}（market_tools.py:1092-1098），基准日只出现在渲染后的图注文本里（charts.py:418-431），结构化 metadata 拿不到。后果：Agent/LLM 读 ToolResult.metadata 时无法回答「这只票 hfq 的基准日/因子来源是什么」，而 hfq 的语义（基准 1.0 起于最早交易日）恰恰依赖 adj_base；ADR 第 6 条至今没有落地位置。
 
 **建议**
 
-二选一并落文档：(a) 补消费方——chart_render._caption（分钟图）与 charts._adj_caption 读 meta.get("partial")/meta.get("factor_as_of")，追加「盘中近似（因子截至 <factor_as_of>）」，market_tools.MarketSeries.metadata 增加 partial/factor_as_of 两键，并在 tests/test_charts_summary.py 或 test_data_adj_caliber.py 增加 partial=True 用例；(b) 若本轮不做，把该条拆成独立计划项（如 plan-xxxx 分钟盘中标注），在 ADR-008 第 7 条注明「推迟到该计划项」，同时不在验收⑥ 里声称已覆盖。推荐 (a)，改动量约 10 行。
+最小改动补齐 ADR 第 6 条：1) `MarketSeries.metadata()` 增加 adj_base、base_factor、adj_source 三键，值取 load_series 已解析的 adjust_meta（缺省 None/""，不要给假基准）；2) `_render_kline` 的 spec["meta"] 不论 partial 与否都带同样三键（meta 是自由对象，无需改 data 白名单），旧 spec 无该键时图注已按缺省处理；3) 在 tests/test_data_time_semantics.py::test_kline_surfaces_partial_intraday_factor 里对 metadata 的 adj_base/base_factor/adj_source 各加一条断言，并补一条「无 attrs 时三键为 None 且不崩」；4) 落地后在 ADR-008 第 6 条注明位置（market_tools.MarketSeries.metadata + ChartSpec.meta）。
 
-### P2 · enrich / resample_ohlcv 空帧快速返回绕过了 attrs 回填，空帧仍丢复权标注
+## 历史未闭环问题
 
-- 位置：`astock/data.py:841-842, 871-872`
-- 状态：未闭环
-- 置信度：0.7
-
-**证据**
-
-resample_ohlcv 在 :841-842 `if df.empty: return pd.DataFrame()`，enrich 在 :871-872 同样直接 `return pd.DataFrame()`，两处都早于本轮新增的 `out.attrs.update(df.attrs)`（:862-865、:876-877）。本轮测试只断言非空帧（tests/test_data_adj_caliber.py:542-557 全用 _daily_frame() 且断言 assertFalse(out.empty)），所以遗漏未被发现。影响：选到停牌区间/无数据区间时，回测返回帧与图表图注退回调用方 adj 参数、丢失 adj_base/base_factor，标注在空数据场景下失效；charts.summary_markdown 的空帧分支直接返回「⚠️ 无数据」，也无口径可显示。
-
-**建议**
-
-两个空帧分支改为保留 attrs，例如 `empty = pd.DataFrame(); empty.attrs.update(df.attrs); return empty`（enrich 保持现有空返回列语义则不复制 df 列，只带 attrs）；在 AdjustmentMetadataPropagationTests 增加 `test_empty_frame_keeps_adjustment_attrs`，用 `df.iloc[0:0].copy()`（attrs 已设）分别过 enrich 与 resample_ohlcv 并断言 attrs 仍在。
-
-### P2 · period_frame 标注用例只测 week/month，quarter 通道（QE）未覆盖
-
-- 位置：`tests/test_data_adj_caliber.py:552-557`
-- 状态：未闭环
-- 置信度：0.7
-
-**证据**
-
-test_period_frame_keeps_adjustment_attrs 的 subTest 只遍历 ("week", "month")（tests/test_data_adj_caliber.py:553），而 data.py:882 的 rules 明确包含 "quarter": "QE"，走的是与 week/month 相同的 resample_ohlcv+enrich 链；一旦有人改动 quarter 规则或这条路被旁路，现有用例不会失败。ADR-008 落地第 1 条与图表「周/月/季」口径都覆盖季线，缺一条即为通道漏测。
-
-**建议**
-
-把遍历改为 ("week", "month", "quarter") 并保留 assertFalse(out.empty) 与 attrs 断言；若季度在 _daily_frame() 数据窗（约数日）内无足够数据导致空帧，则改用跨季的固定帧或直接断言 attrs 而非非空，避免为了通过而弱化断言。
+- P2 · 分钟盘中 partial/factor_as_of 已产出但全仓无消费方，ADR-008 第 7 条要的「盘中近似」提示至今不存在 · `astock/data.py:744-747`（第 5 轮）
+- P2 · enrich / resample_ohlcv 空帧快速返回绕过了 attrs 回填，空帧仍丢复权标注 · `astock/data.py:841-842, 871-872`（第 5 轮）
+- P2 · period_frame 标注用例只测 week/month，quarter 通道（QE）未覆盖 · `tests/test_data_adj_caliber.py:552-557`（第 5 轮）
 
 ## 变更文件
 
