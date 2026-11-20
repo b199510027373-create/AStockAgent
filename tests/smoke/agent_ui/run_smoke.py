@@ -221,6 +221,19 @@ def _console_safe() -> None:
                 continue
 
 
+class _Abort(Exception):
+    """启动阶段失败：交给统一收尾写 run.json，避免只 return 1 丢掉证据。"""
+
+
+def _write_summary(workdir: Path, summary: dict[str, object]) -> Path:
+    """无论成功失败都落 run.json；``stage`` 标明失败发生在启动的哪一段。"""
+    path = workdir / "run.json"
+    path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     _console_safe()
@@ -257,7 +270,9 @@ def main(argv: list[str] | None = None) -> int:
         "workdir": str(workdir),
         "app_url": f"http://127.0.0.1:{port}",
         "debug_port": debug_port,
-        "degraded": not args.no_degraded,
+        "stage": "fixture",
+        "degraded_expected": not args.no_degraded,
+        "degraded_ran": False,
     }
     try:
         print(f"INFO 工作目录 {workdir}", flush=True)
@@ -282,11 +297,12 @@ def main(argv: list[str] | None = None) -> int:
         if not wait_for_log(app_log, "READY url=", timeout=180):
             print(f"FAIL 夹具没有就绪，app.log 尾部：\n{_log_tail(app_log)}", flush=True)
             summary["error"] = "fixture app not ready"
-            return 1
+            raise _Abort
         print(f"INFO 夹具就绪 http://127.0.0.1:{port}", flush=True)
 
         degraded_url = ""
         if not args.no_degraded:
+            summary["stage"] = "degraded"
             degraded = _start(
                 [
                     sys.executable,
@@ -305,13 +321,20 @@ def main(argv: list[str] | None = None) -> int:
             )
             if wait_for_log(degraded_log, "READY url=", timeout=180):
                 degraded_url = f"http://127.0.0.1:{degraded_port}"
+                summary["degraded_ran"] = True
                 print(f"INFO 降级夹具就绪 {degraded_url}", flush=True)
             else:
                 print(
-                    f"WARN 降级夹具没有就绪，跳过该断言：\n{_log_tail(degraded_log)}",
+                    "FAIL 降级夹具没有就绪（默认要求该断言，"
+                    f"--no-degraded 才能显式跳过）：\n{_log_tail(degraded_log)}",
                     flush=True,
                 )
+                summary["error"] = "degraded fixture not ready"
+                raise _Abort
+        else:
+            print("INFO --no-degraded：跳过降级横幅断言", flush=True)
 
+        summary["stage"] = "browser"
         browser_path = find_browser(args.browser)
         profile = workdir / "browser-profile"
         print(f"INFO 浏览器 {browser_path}（headless，调试端口 {debug_port}）", flush=True)
@@ -335,8 +358,9 @@ def main(argv: list[str] | None = None) -> int:
         if not wait_debug_endpoint(debug_port, timeout=60):
             print(f"FAIL 浏览器调试端口没起来：\n{_log_tail(browser_log)}", flush=True)
             summary["error"] = "browser debug endpoint not ready"
-            return 1
+            raise _Abort
 
+        summary["stage"] = "driver"
         driver_args = [
             sys.executable,
             "-m",
@@ -380,6 +404,8 @@ def main(argv: list[str] | None = None) -> int:
         print(completed.stdout, end="", flush=True)
         if completed.stderr:
             print(completed.stderr, end="", file=sys.stderr, flush=True)
+    except _Abort:
+        driver_exit = 1
     except subprocess.TimeoutExpired:
         print(f"FAIL 驱动超过 {args.timeout + 120}s 未结束", flush=True)
         summary["error"] = "driver timeout"
@@ -395,10 +421,10 @@ def main(argv: list[str] | None = None) -> int:
 
     summary["driver_exit"] = driver_exit
     summary["duration_s"] = round(time.monotonic() - started, 2)
-    summary["ok"] = driver_exit == 0
-    (workdir / "run.json").write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    summary["ok"] = driver_exit == 0 and not summary.get("error")
+    if summary["ok"]:
+        summary["stage"] = "done"
+    _write_summary(workdir, summary)
     print(f"INFO 证据目录 {workdir}（report.json / run.json / *.log）", flush=True)
     if driver_exit == 0 and not args.keep_workdir:
         shutil.rmtree(workdir, ignore_errors=True)

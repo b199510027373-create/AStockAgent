@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import re
 import socket
 import sys
@@ -87,6 +88,45 @@ def _driver_checks() -> tuple[str, ...]:
         ):
             return tuple(ast.literal_eval(node.value))
     raise AssertionError("smoke_drive.py 里找不到 CHECKS 常量")
+
+
+def _module_literal(path: Path, name: str) -> object:
+    """读模块顶层的常量（不执行模块，避免为一个字符串拉起 Gradio）。
+
+    支持字面量与「只由本模块顶层字面量拼出来的 f-string」，例如
+    ``FIGURE_CAPTION = f"{CHART_TITLE}｜数据截至 {DATA_AS_OF}..."``。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    scalars: dict[str, object] = {}
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Constant)
+        ):
+            scalars[node.targets[0].id] = node.value.value
+    for node in tree.body:
+        if not (
+            isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == name for target in node.targets)
+        ):
+            continue
+        value = node.value
+        if isinstance(value, ast.Constant):
+            return value.value
+        if isinstance(value, ast.JoinedStr):
+            parts: list[str] = []
+            for item in value.values:
+                if isinstance(item, ast.Constant):
+                    parts.append(str(item.value))
+                elif isinstance(item, ast.FormattedValue) and isinstance(item.value, ast.Name):
+                    parts.append(str(scalars[item.value.id]))
+                else:
+                    raise TypeError(f"{path.name}:{name} 含无法静态求值的片段")
+            return "".join(parts)
+        raise AssertionError(f"{path.name}:{name} 不是可静态求值的常量")
+    raise AssertionError(f"{path.name} 里找不到常量 {name}")
 
 
 def _workflow(path: Path) -> dict:
@@ -199,9 +239,15 @@ def test_nightly_workflow_is_scheduled_and_manual_only() -> None:
     steps = raw["jobs"]["smoke"]["steps"]
     runs = [str(step.get("run", "")) for step in steps]
     assert any("tests/smoke/agent_ui/run_smoke.py" in run for run in runs), "nightly 必须调用固定启动脚本"
+    assert any("--keep-workdir" in run for run in runs), "nightly 必须保留工作目录，失败才有日志可看"
     uploads = [step for step in steps if "upload-artifact" in str(step.get("uses", ""))]
-    assert uploads, "nightly 需要上传失败证据（report.json / 日志）"
-    assert "report.json" in str(uploads[0].get("with", {}).get("path", ""))
+    assert uploads, "nightly 需要上传失败证据（report.json / run.json / 日志）"
+    path = str(uploads[0].get("with", {}).get("path", ""))
+    for needed in ("report.json", "run.json", "*.log"):
+        assert needed in path, f"artifact 路径应包含 {needed}（启动失败只有 run.json/日志）"
+    assert str(uploads[0].get("if", "")).strip().lower() == "always()", (
+        "上传步骤必须用 if: always()，否则失败时不会上传证据"
+    )
 
 
 def test_nightly_installs_the_websocket_driver_dependency() -> None:
@@ -278,3 +324,63 @@ def test_gitignore_excludes_local_scratch_artifacts() -> None:
     text = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
     for needle in (".smoke-agent-ui/", "tests/smoke/agent_ui/.workdir/"):
         assert needle in text, f".gitignore 缺少 {needle}"
+
+
+# ---------------------------------------------------------------------------
+# 评审回归（rev-20261120-001）：启动失败也要留证据、降级断言不能静默跳过、
+# 图注双方一致、驱动超时预算真的生效。
+# ---------------------------------------------------------------------------
+def test_driver_and_fixture_agree_on_chart_marker_and_caption() -> None:
+    # 回归：两处各写一份常量，注释却说契约测试会看——现在真的看。
+    assert _module_literal(DRIVER, "CHART_MARKER") == _module_literal(FIXTURE_APP, "CHART_MARKER")
+    caption = _module_literal(DRIVER, "FIGURE_CAPTION")
+    assert caption == _module_literal(FIXTURE_APP, "FIGURE_CAPTION")
+    assert isinstance(caption, str) and caption in README.read_text(encoding="utf-8"), (
+        "README 的图注判据必须与夹具/驱动保持一致"
+    )
+
+
+def test_runner_writes_run_json_on_every_startup_stage(tmp_path: Path) -> None:
+    # 回归：启动失败曾直接 return 1，工作目录里没有 run.json，nightly 拿不到证据。
+    runner = _load(RUNNER, "agent_smoke_run")
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    path = runner._write_summary(
+        workdir,
+        {"stage": "browser", "ok": False, "error": "browser debug endpoint not ready"},
+    )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["stage"] == "browser"
+    assert payload["ok"] is False
+    assert payload["error"] == "browser debug endpoint not ready"
+
+    source = RUNNER.read_text(encoding="utf-8")
+    for stage in (
+        '"stage": "fixture"',
+        'summary["stage"] = "degraded"',
+        'summary["stage"] = "browser"',
+        'summary["stage"] = "driver"',
+        'summary["stage"] = "done"',
+    ):
+        assert stage in source, f"run.json 缺少阶段标记 {stage}"
+    assert "raise _Abort" in source, "启动失败必须走统一收尾，否则 run.json 会缺证据"
+
+
+def test_expected_degraded_fixture_is_not_skipped_silently() -> None:
+    # 回归：降级夹具没起来只 WARN，结果仍 SMOKE OK，与 --no-degraded 无法区分。
+    source = RUNNER.read_text(encoding="utf-8")
+    assert '"degraded_expected": not args.no_degraded' in source
+    assert 'summary["error"] = "degraded fixture not ready"' in source
+    assert "INFO --no-degraded：跳过降级横幅断言" in source
+    driver = DRIVER.read_text(encoding="utf-8")
+    assert '"skipped": "no --degraded-url"' in driver, "驱动要在 report.json 标记降级断言未运行"
+
+
+def test_driver_timeout_budget_is_wired_not_ignored() -> None:
+    # 回归：--timeout 解析后从未使用，各步硬编码最坏约 765s。
+    source = DRIVER.read_text(encoding="utf-8")
+    assert "_DEADLINE = started + args.timeout" in source
+    assert "def _timeout(" in source
+    assert "driver timeout" in source
+    leftovers = re.findall(r"\btimeout=[0-9]", source)
+    assert not leftovers, f"还有硬编码 timeout 没用预算收敛：{leftovers}"

@@ -50,17 +50,23 @@ Windows：
 
 它会自动完成：挑空闲端口 → 起夹具 app（含降级场景）→ 起 headless 浏览器 → 跑驱动 →
 打印证据目录 → 成功时删除临时目录。**退出码 0 表示六条路径全过**，可直接被 nightly 或脚本消费。
+默认要求降级场景也起来；只有显式传 `--no-degraded` 才跳过该断言（此时 `run.json` 记
+`degraded_expected=false`）。
 
 常用参数：
 
 | 参数 | 说明 |
 | --- | --- |
-| `--workdir PATH` | 固定工作目录（日志、`report.json`、临时 sqlite） |
+| `--workdir PATH` | 固定工作目录（日志、`report.json`、`run.json`、临时 sqlite） |
 | `--shots-dir PATH` | 可选：把 3 张关键截图写到该目录（默认不截图、不入库） |
 | `--keep-workdir` | 成功后也保留工作目录，便于看日志 |
 | `--browser PATH` | 指定浏览器可执行文件 |
 | `--no-degraded` | 跳过「未配置模型」降级横幅断言 |
-| `--port` / `--timeout` | 夹具端口 / 驱动超时（默认 300s） |
+| `--port` | 夹具端口（默认自动挑空闲端口） |
+| `--timeout` | **驱动总预算**（默认 300s）。驱动内部每次等待都收敛到剩余预算；`run_smoke.py` 给子进程的硬兜底是 `--timeout + 120s`，超了就按 `driver timeout` 失败 |
+
+手动两步时 `smoke_drive.py` 也接受 `--timeout`，语义相同：整轮断言（含导航、上传、流式、
+中断后重问）共用这一个预算，预算用尽即报 `driver timeout（--timeout 预算已用尽）`。
 
 ## 手动两步（调试用）
 
@@ -97,8 +103,10 @@ export PYTHONPATH=$PWD     # Linux / macOS
 ## 失败判据
 
 - 任一检查抛 `AssertionError` → 打印 `FAIL <id> :: <detail>` 与上下文，写 `report.json`，退出码 **1**。
-- 启动失败：夹具 180s 内没有 `READY url=`、浏览器 60s 内没有 `/json/version`、或驱动超时 → `FAIL ...`
-  并打印对应日志尾部，退出码 **1**。
+- 启动失败：夹具 180s 内没有 `READY url=`、降级夹具 180s 内没有就绪（未传 `--no-degraded` 时）、
+  浏览器 60s 内没有 `/json/version`、或驱动超时 → `FAIL ...` 并打印对应日志尾部，退出码 **1**。
+- **`run.json` 在每条失败路径上都会写**，`stage` 字段指出失败停在 `fixture` / `degraded` /
+  `browser` / `driver` 哪一段，成功时为 `done`；`ok` 同时要求驱动退出码为 0 且没有 `error`。
 - 失败时**保留**工作目录（`app.log` / `browser.log` / `driver.log` / `report.json` / `run.json`）；
   成功时默认删除临时目录，加 `--keep-workdir` 可保留。
 
@@ -114,7 +122,7 @@ export PYTHONPATH=$PWD     # Linux / macOS
 ## 截图
 
 默认**不产生任何截图**，仓库不保存截图。需要人工核对视觉时用 `--shots-dir`，只写 3 张关键帧
-（流式进行中、图表区、引用卡片）。截图目录不要提交。
+（图表区、引用卡片、中断后保留的半截回答）。截图目录不要提交。
 
 ## 为什么不进普通 CI
 
@@ -123,7 +131,7 @@ export PYTHONPATH=$PWD     # Linux / macOS
 
 - `schedule`：每天一次（UTC 18:17）；
 - `workflow_dispatch`：手动触发；
-- 产物：`report.json` 与 `*.log`（保留 7 天）。
+- 产物：`report.json`、`run.json` 与 `*.log`（保留 7 天）。
 
 ## 已知限制
 

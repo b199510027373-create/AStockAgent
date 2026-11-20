@@ -132,6 +132,20 @@ def _wait_any(cdp: CDP, needles: tuple[str, ...], timeout: float) -> str:
     raise TimeoutError(f"页面没有出现任意一条：{needles!r}")
 
 
+#: main() 里设置的成本次运行的总截止时间；单步等待一律收敛到它，避免串起来超预算。
+_DEADLINE: float | None = None
+
+
+def _timeout(seconds: float) -> float:
+    """把单步超时收敛到 ``--timeout`` 的总预算内；预算用尽就按超时失败。"""
+    if _DEADLINE is None:
+        return seconds
+    left = _DEADLINE - time.monotonic()
+    if left <= 0:
+        raise AssertionError("driver timeout（--timeout 预算已用尽）")
+    return min(seconds, left)
+
+
 def _scroll_shot(cdp: CDP, selector: str, path: Path) -> str:
     cdp.eval(f"document.querySelector({json.dumps(selector)}).scrollIntoView({{block: 'center'}})")
     time.sleep(0.4)
@@ -147,14 +161,14 @@ def check_upload(cdp: CDP, fixtures: Path) -> str:
     for path in (pdf, xlsx):
         if not path.is_file():
             raise FileNotFoundError(f"缺少夹具：{path}（见 README「夹具」一节）")
-    cdp.wait_for("document.querySelector('input[type=file]') !== null", timeout=60)
+    cdp.wait_for("document.querySelector('input[type=file]') !== null", timeout=_timeout(60))
     root = cdp.call("DOM.getDocument")["root"]["nodeId"]
     node = cdp.call("DOM.querySelector", nodeId=root, selector="input[type=file]")
     node_id = node.get("nodeId")
     if not node_id:
         raise RuntimeError("input[type=file] 节点取不到 nodeId")
     cdp.call("DOM.setFileInputFiles", files=[str(pdf), str(xlsx)], nodeId=node_id)
-    text = _wait_text(cdp, "附件解析：2/2 成功", timeout=90)
+    text = _wait_text(cdp, "附件解析：2/2 成功", timeout=_timeout(90))
     expected = (
         "✅ 年报.pdf（PDF 3 页）",
         "✅ 利润表.xlsx（1 张表：利润表）",
@@ -169,7 +183,7 @@ def check_stream(cdp: CDP) -> str:
     cdp.eval(_OBSERVER_JS)
     _set_question(cdp, "请分析附件并画图")
     _click(cdp, "发送")
-    _wait_text(cdp, "✅ 已完成", timeout=180)
+    _wait_text(cdp, "✅ 已完成", timeout=_timeout(180))
     seen = cdp.eval("window.__smokeSeen || []") or []
     lens = cdp.eval("window.__smokeLens || []") or []
     if "正在输出回答" not in seen:
@@ -202,7 +216,7 @@ def check_steps(cdp: CDP) -> str:
 
 def check_figure(cdp: CDP, shots_dir: Path | None) -> str:
     cdp.wait_for(
-        "document.querySelectorAll('iframe.astock-figure-frame').length > 0", timeout=60
+        "document.querySelectorAll('iframe.astock-figure-frame').length > 0", timeout=_timeout(60)
     )
     frames = cdp.eval(
         "[...document.querySelectorAll('iframe.astock-figure-frame')]"
@@ -230,7 +244,7 @@ def check_citations(cdp: CDP, shots_dir: Path | None) -> str:
     if links < 2:
         raise AssertionError(f"引用锚点只有 {links} 条（期望 ≥2）")
     cdp.eval("document.querySelector('a[href=\"#cite-1\"]').click()")
-    cdp.wait_for("location.hash === '#cite-1'", timeout=15)
+    cdp.wait_for("location.hash === '#cite-1'", timeout=_timeout(15))
     if not cdp.eval("document.querySelector('#cite-1') !== null"):
         raise AssertionError("#cite-1 详情卡不存在")
     text = _body(cdp)
@@ -257,10 +271,10 @@ def check_interrupt(cdp: CDP, shots_dir: Path | None) -> str:
         " return nodes.length > 0 && nodes[nodes.length - 1].innerText.length > 0"
         " && text.includes('正在输出回答');"
         "})()",
-        timeout=120,
+        timeout=_timeout(120),
     )
     _click(cdp, "⏹ 中断")
-    _wait_any(cdp, ("已停止输出", "已中断"), timeout=60)
+    _wait_any(cdp, ("已停止输出", "已中断"), timeout=_timeout(60))
     partial = _last_assistant(cdp)
     if not partial.strip():
         raise AssertionError("中断后助手气泡被清空")
@@ -279,7 +293,7 @@ def check_interrupt(cdp: CDP, shots_dir: Path | None) -> str:
         " && nodes[nodes.length - 1].innerText.length > 60"
         " && document.body.innerText.includes('✅ 已完成');"
         "})()",
-        timeout=180,
+        timeout=_timeout(180),
     )
     return f"中断保留 {len(partial)} 字，随后再问一轮已完成" + (
         f"，截图 {shot}" if shot else ""
@@ -298,8 +312,8 @@ def check_audit(db_path: Path) -> str:
 
 
 def check_degraded(cdp: CDP, url: str) -> str:
-    cdp.navigate(url, timeout=60)
-    cdp.wait_for("document.querySelector('input[type=file]') !== null", timeout=60)
+    cdp.navigate(url, timeout=_timeout(60))
+    cdp.wait_for("document.querySelector('input[type=file]') !== null", timeout=_timeout(60))
     text = _body(cdp)
     if "模型未就绪" not in text:
         raise AssertionError(f"降级页没有「模型未就绪」横幅：{text[:400]}")
@@ -370,16 +384,19 @@ def main(argv: list[str] | None = None) -> int:
         shots_dir.mkdir(parents=True, exist_ok=True)
 
     started = time.monotonic()
+    global _DEADLINE
+    _DEADLINE = started + args.timeout
     results: dict[str, Any] = {}
     report: dict[str, Any] = {
         "url": args.url,
+        "timeout_s": args.timeout,
         "checks": results,
         "ok": False,
     }
     cdp: CDP | None = None
     try:
         cdp = CDP(page_target())
-        cdp.navigate(args.url, timeout=60)
+        cdp.navigate(args.url, timeout=_timeout(60))
         cdp.call("DOM.enable")
         phases: list[tuple[str, Any]] = [
             ("upload", lambda: check_upload(cdp, args.fixtures_dir)),
@@ -393,6 +410,9 @@ def main(argv: list[str] | None = None) -> int:
             phases.append(("audit", lambda: check_audit(args.db)))
         if args.degraded_url:
             phases.append(("degraded", lambda: check_degraded(cdp, args.degraded_url)))
+        else:
+            # 单独跑驱动时降级断言没被要求；记进报告，避免和「跑过且通过」混淆。
+            results["degraded"] = {"ok": False, "skipped": "no --degraded-url"}
 
         for name, phase in phases:
             begin = time.monotonic()
@@ -418,8 +438,11 @@ def main(argv: list[str] | None = None) -> int:
     report["ok"] = True
     report["duration_s"] = round(time.monotonic() - started, 2)
     _write_report(args.report, report)
+    passed = sum(
+        1 for value in results.values() if isinstance(value, dict) and value.get("ok")
+    )
     print(
-        f"SMOKE OK :: {len(results)} 项断言全部通过，用时 {report['duration_s']}s",
+        f"SMOKE OK :: {passed} 项断言全部通过，用时 {report['duration_s']}s",
         flush=True,
     )
     return 0
