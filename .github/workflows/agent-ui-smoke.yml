@@ -36,8 +36,13 @@ jobs:
 
       - name: Show browser version
         run: |
-          $edge = "$env:PROGRAMFILES (x86)\Microsoft\Edge\Application\msedge.exe"
-          if (Test-Path $edge) { & $edge --version } else { Write-Host "Edge 不在默认路径，run_smoke.py 会继续查找 Chrome" }
+          # 只读文件版本号：直接执行 msedge.exe --version 在 Windows 上不会打印版本，还会拉起浏览器进程。
+          $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          if (Test-Path $edge) {
+            Write-Host ("Edge product version: " + (Get-Item $edge).VersionInfo.ProductVersion)
+          } else {
+            Write-Host "Edge 不在默认路径，run_smoke.py 会继续查找 Chrome"
+          }
 
       - name: Run smoke (six paths)
         run: python tests/smoke/agent_ui/run_smoke.py --workdir tests/smoke/agent_ui/.workdir --keep-workdir
