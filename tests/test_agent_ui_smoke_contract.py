@@ -248,6 +248,9 @@ def test_nightly_workflow_is_scheduled_and_manual_only() -> None:
     assert str(uploads[0].get("if", "")).strip().lower() == "always()", (
         "上传步骤必须用 if: always()，否则失败时不会上传证据"
     )
+    assert uploads[0].get("with", {}).get("include-hidden-files") is True, (
+        "工作目录是 .workdir（点开头），upload-artifact v4 默认排除隐藏文件，必须显式打开"
+    )
 
 
 def test_nightly_installs_the_websocket_driver_dependency() -> None:
