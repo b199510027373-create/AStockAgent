@@ -47,6 +47,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: agent-ui-smoke-evidence
+          # upload-artifact v4 默认排除以「.」开头的文件/目录；工作目录叫 .workdir，必须显式打开。
+          include-hidden-files: true
           path: |
             tests/smoke/agent_ui/.workdir/report.json
             tests/smoke/agent_ui/.workdir/run.json
