@@ -832,6 +832,19 @@ def load_minute(
     return df.copy()
 
 
+def _empty_with_attrs(df: pd.DataFrame | None) -> pd.DataFrame:
+    """空帧也要带着输入 frame 的 ``attrs`` 返回（plan-20261120-001 评审 P2）。
+
+    空区间（停牌整段/窗口内无交易日）走快速返回时若直接 ``pd.DataFrame()``，
+    ``attrs["adjustment"]`` 会丢，图注/回测就退回调用方传的 adj，标注与数据脱节。
+    """
+    out = pd.DataFrame()
+    attrs = getattr(df, "attrs", None)
+    if attrs:
+        out.attrs.update(attrs)
+    return out
+
+
 def resample_ohlcv(df: pd.DataFrame, rule: str) -> pd.DataFrame:
     """日线聚合到周/月/季线。rule: W-FRI / ME / QE。
 
@@ -839,7 +852,7 @@ def resample_ohlcv(df: pd.DataFrame, rule: str) -> pd.DataFrame:
     避免图上出现 10-31 这种尚未发生的日期。
     """
     if df is None or df.empty:
-        return pd.DataFrame()
+        return _empty_with_attrs(df)
     x = df.copy()
     x["_date"] = pd.to_datetime(x["trade_date"])
     x = x.set_index("trade_date").sort_index()
@@ -858,13 +871,24 @@ def resample_ohlcv(df: pd.DataFrame, rule: str) -> pd.DataFrame:
     out["trade_date"] = last_dates.to_numpy()
     out = out.reset_index(drop=True)
     out["trade_date"] = pd.to_datetime(out["trade_date"])
-    return out.sort_values("trade_date").reset_index(drop=True)
+    out = out.sort_values("trade_date").reset_index(drop=True)
+    # 聚合会新建 DataFrame，attrs（如 attrs["adjustment"] 复权标注）默认丢失；
+    # 周期线沿用日线口径，故显式带回（plan-20261114-003 验收⑥）。
+    if df.attrs:
+        out.attrs.update(df.attrs)
+    return out
 
 
 def enrich(df: pd.DataFrame) -> pd.DataFrame:
+    """追加技术指标；保留输入 frame 的 ``attrs``（复权标注不因加指标而丢失）。"""
     if df is None or df.empty:
-        return pd.DataFrame()
-    return ta.add_all(df)
+        return _empty_with_attrs(df)
+    out = ta.add_all(df)
+    # indicators.add_all 通过 join/replace 生成新 frame，必须显式带回
+    # attrs["adjustment"]，否则回测/图表链路拿不到 qfq|hfq|none 与 adj_base。
+    if df.attrs:
+        out.attrs.update(df.attrs)
+    return out
 
 
 def period_frame(df: pd.DataFrame, period: str) -> pd.DataFrame:

@@ -2,7 +2,7 @@
   "id": "plan-20261114-003",
   "title": "复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
   "description": "2026-11-14 用户裁决 D1。明确 hfq 为“标准后复权，基准 1.0”：以该证券最早可用交易日的 adj_factor 为 1.0，价格 = raw * adj_factor / base_factor；不得把最新因子当 1.0（那是 qfq）。adj_factor 缺失/空/<=0/非有限一律抛 DataContractError，禁止静默回退 qfq 或用 1.0 填充。分钟线按交易日日线 adj_factor 复权，metadata 单独标注 adj=hfq、adj_base、adj_source=daily；分钟 hfq 不与日线 hfq 连续序列混用，缺因子报错。涨跌停/成交额/绝对价位仍用 raw。同步 ADR-008 与 data.py 测试。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
@@ -55,5 +55,5 @@
     ]
   },
   "createdAt": "2026-11-13T19:08:42.756Z",
-  "updatedAt": "2026-11-16T07:44:27.901Z"
+  "updatedAt": "2026-11-19T17:00:17.840Z"
 }

@@ -1,0 +1,56 @@
+{
+  "id": "plan-20261120-001",
+  "title": "复权口径展示收口：enrich/周期聚合保留复权标注 + 图注标注 hfq 与基准",
+  "description": "2026-11-20 实跑回测时发现的两处展示侧缺口（数据层口径本身已在 plan-20261114-003 收口）：\n1) `astock.data.enrich()` → `indicators.add_all()` 用 join/replace 生成新 frame，attrs[\"adjustment\"] 丢失，导致 `run_strategy()` 返回帧、UI 图表链路拿不到 qfq|hfq|none 与 adj_base——回测/图表无法标注复权口径。\n2) `astock.charts.summary_markdown()` 图注用 `'前复权' if adj == 'qfq' else '不复权'` 三元表达式，把 hfq 误标为\"不复权\"，且不展示 adj_base/base_factor；后复权\"基准 1.0 是哪天\"在图上看不出来。\n另：`resample_ohlcv()` 聚合出的周/月/季线同样丢 attrs（周期线沿用日线口径，应一并保留）。",
+  "status": "in_review",
+  "priority": "P1",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-20",
+  "due": "2026-11-25",
+  "estimateH": 3,
+  "progress": 100,
+  "acceptance": [
+    "enrich() 保留输入 frame 的 attrs，load_daily → enrich 后 attrs['adjustment'] 与原始一致（含 adj/adj_base/base_factor/adj_source）",
+    "resample_ohlcv() 与 period_frame() 的周/月/季线保留 attrs['adjustment']",
+    "summary_markdown 图注区分 qfq/hfq/none/未知，hfq 显示『后复权（hfq）』绝不出现『不复权』，并展示基准日（hfq 为『基准 YYYY-MM-DD 起 1.0』，qfq 为『基准 YYYY-MM-DD，因子 x.xxxx』）",
+    "新增单元测试覆盖上述三点；run_strategy 实跑返回帧 attrs 非空",
+    "全量 pytest、架构门禁、ruff E9/F63/F7/F82、mypy 全绿"
+  ],
+  "tags": [
+    "data",
+    "chart",
+    "adj",
+    "regression"
+  ],
+  "deps": [],
+  "links": {
+    "adr": [
+      "ADR-008"
+    ],
+    "branch": "fix/adj-meta-display",
+    "commit": "dd79e34",
+    "module": [
+      "data",
+      "charts",
+      "agent"
+    ],
+    "pr": "37",
+    "review": [
+      "rev-20261116-002"
+    ],
+    "test": [
+      "pytest tests/test_data_adj_caliber.py tests/test_charts_summary.py -q → 35 passed, 12 subtests（4b74337）",
+      "pytest tests -q → 796 passed, 1 skipped, 14 subtests (92.50s)（4b74337）",
+      "pytest tests/test_data_adj_caliber.py tests/test_charts_summary.py tests/test_data_time_semantics.py -q → 66 passed, 16 subtests（ac5f853，评审第 5 轮 3 条 P2）",
+      "pytest tests -q → 801 passed, 1 skipped, 18 subtests (82.73s)（ac5f853）",
+      "pytest tests/test_data_time_semantics.py -q → 30 passed；pytest tests -q → 803 passed, 1 skipped, 18 subtests (137.40s)（dd79e34，评审第 6 轮 iss-mwojg80u-28e11e）",
+      "pytest tests/test_architecture_gate.py -q → 33 passed",
+      "ruff check astock tests → All checks passed（全仓 blocking，含 RUF012/SIM117）；mypy astock app.py → Success 44 files",
+      "实跑 run_strategy(600519.SH, MA双均线, 1年) → attrs adj=qfq/adj_base=2026-11-19/base_factor=8.6463；load_series(600519.SH, qfq) metadata → adj_base=2026-11-20, base_factor=8.6463, adj_source=daily",
+      "CI run 44573239310 (4b74337) / 44679937924 (ac5f853) / 44680534513 (c8d59ee) / 44690527676 (dd79e34) 均 success（test 含覆盖率门禁 + png-export）；PR #37 OPEN/CLEAN"
+    ]
+  },
+  "createdAt": "2026-11-19T16:57:51.363Z",
+  "updatedAt": "2026-11-20T06:51:37.112Z"
+}

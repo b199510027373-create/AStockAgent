@@ -32,7 +32,7 @@
 3. **因子缺失/异常硬失败**：`adj_factor` 缺失、为空、`<= 0`、NaN、inf 一律抛 `DataContractError`；禁止静默回退 qfq、禁止用 1.0 填充、禁止跳过该标的继续算。
 4. **分钟复权单列**：分钟线使用该交易日日线的 `adj_factor` 复权，metadata 必须写 `adj=hfq`、`adj_base=<最早交易日>`、`adj_source=daily`；分钟 hfq 不与日线 hfq 拼成连续序列，缺因子报错。
 5. **raw 边界不变**：涨跌停、成交额/成交量、绝对价位判断仍用 raw；缓存 meta 的 `base_factor` 变化即失效。
-6. **可追溯**：图表与行情工具的 metadata 暴露 `adj`/`adj_base`/`adj_source`；`ChartSpec.data.adj` 增加 `hfq` 枚举（默认仍 `qfq`），旧 `none` 保留给涨跌停/成交类图。落地项 `plan-20261114-003`（D1）与 `plan-20261114-002`（图注）。
+6. **可追溯**：图表与行情工具的 metadata 暴露 `adj`/`adj_base`/`adj_source`；`ChartSpec.data.adj` 增加 `hfq` 枚举（默认仍 `qfq`），旧 `none` 保留给涨跌停/成交类图。落地项 `plan-20261114-003`（D1）与 `plan-20261114-002`（图注）。**落地位置（2026-11-20 评审 iss-mwojg80u-28e11e）**：`astock/agent/tools/market_tools.py` 的 `MarketSeries.metadata()` 与 `kline` 工具 meta 固定输出 `adj_base`/`base_factor`/`adj_source`（数据层没给就 `None`，不伪造基准）；`_render_kline` 把同三键写进 `ChartSpec.meta`（自由对象，不占 `data` 白名单），图注文本另由 `chart_render._caption`/`charts._adj_caption` 渲染。
 7. **盘中当日 bar 例外（2026-11-16 评审补充）**：Tushare 当日 `adj_factor` 收盘后才发布，而 `rt_min` 的当日 bar 盘中已存在。仅当"缺因子的行都是今天、且因子表末行早于今天"时，用最近已发布因子复权，并在 metadata 标 `partial=true` 与 `factor_as_of=<该因子交易日>`，供图注提示"盘中近似"；其它任何缺因子（含非当日历史缺失）仍按第 3 条硬失败。禁止 ffill/bfill。该例外只放宽"当日尚未发布"，不放宽"因子表缺行"。
 8. **全历史因子必须分页；覆盖校验落在日线路径**：单次 `query` 受服务端行数上限截断。实测 000001.SZ 自 `19900101` 起：单次查询 6000 行、最早 20020304（该股 19910403 上市，最早段被截断）；`query_all` 分页 8692 行、最早 19910403。因此日线与分钟线的因子历史一律优先走 `query_all`（`_query_adj_history`，测试替身只有 `query` 时回退单次查询）。**覆盖校验的分工**：日线路径用 `_check_factor_coverage` 显式校验——hfq 要求因子表首日 <= 行情首日，qfq 要求因子表末日 >= 行情末日，不满足抛 `DataContractError(code="AdjFactor")`；分钟路径**不设**覆盖断言，由缺因子硬失败兜底（盘中当日 bar 按第 7 条例外），因为因子截断若落在分钟窗口之内必然表现为窗口内某天缺因子，而窗口内每天都有因子时首末比较恒为真、断言不可达（评审 iss-mwixznmz-2f393e 指出该死调用已删除）。**可观测边界**：截断边界恰好早于窗口起点、且窗口内每天都有因子的情形无法在分钟内自证，只能靠 `query_all` 分页完整性——因此两条路径都不得把单次 `query` 作为常态，回退仅用于没有 `query_all` 的测试替身。
 9. **缓存基准可自证才命中**：任何复权口径的缓存 meta 必须带 `adj_base`（旧版缺失一律失效）；qfq 用请求 `end` 对应的最后一行因子作基准（不是缓存末行，否则同一请求随缓存窗口漂移）；hfq 要求缓存覆盖基准日，否则视为"基准不可证"直接失效重拉（CACHE-01）。
@@ -47,6 +47,22 @@
 6. **raw 边界不变**：涨跌停、成交额/成交量与 `raw_*` 列保持原始价；分钟线只改价格列与涨跌幅。
 7. **测试**：`tests/test_data_adj_caliber.py` 覆盖 hfq/qfq/raw 对照（逐行比值恒定）、hfq 收益率与已知因子序列、基准不受请求区间影响（断言查询起点为 `19900101` 且走 `query_all`）、因子异常（空/`=0`/负/NaN/inf）与缺行、因子表首/末被截断时 hfq/qfq 报错、分钟 attrs、盘中当日 bar 的 `partial`/`factor_as_of`、非当日缺因子仍报错、缓存 `base_factor`/`adj_base` 篡改与基准日不在窗口内、qfq 基准随请求 `end` 变化、旧 qfq meta 无 `adj_base` 失效。
 8. **评审修复（rev-20261116-002）**：新增 `_query_adj_history`（优先 `query_all`，测试替身只有 `query` 时回退）与 `_check_factor_coverage`（仅日线 `_fetch_daily` 调用）；`_cache_base_valid` 增 `end_eff` 形参与 `adj_base` 前置校验；`_apply_minute_adj` 增盘中 `partial` 分支；`load_adj_factors` 改走分页助手。第 3 轮复核（iss-mwixznmz-2f393e）：曾短暂在 `_apply_minute_adj` 增加 `covered` + `_check_factor_coverage` 调用，经复核该断言在缺因子硬失败之后恒为真（不可达），已删除，分钟路径改由缺因子分支兜底并在用例中断言异常文案来自该分支（第 8 条与此保持同步）。
+
+## 落地（plan-20261120-001，2026-11-20）：标注必须活着走到展示层
+
+2026-11-20 实跑回测发现：口径本身对，但标注在派生帧上会消失，图注也会说错话。
+
+1. **attrs 随派生帧传播**：`astock.data.enrich()`（内部 `indicators.add_all`）与 `resample_ohlcv()` 都会新建 frame，必须显式带回 `attrs["adjustment"]`；`period_frame()` 经二者组合后同样保留。否则 `run_strategy()` 返回帧、UI 图表的周/月/季线与 `adj_base`/`base_factor` 全部丢失。
+2. **图注区分三种口径**：`astock.charts.summary_markdown()` 不再用 `'前复权' if adj == 'qfq' else '不复权'` 的三元表达式，改为按 `attrs["adjustment"]["adj"]` 取 `qfq`/`hfq`/`none`/未知；`hfq` 必须显示"后复权（hfq）"与"基准 `<adj_base>` 起 1.0"，`qfq` 显示"基准 `<adj_base>`，因子 `<base_factor>`"，任何口径都不得把 hfq 标成不复权。
+3. **测试**：`tests/test_data_adj_caliber.py` 新增 `AdjustmentMetadataPropagationTests`（`enrich`/`resample_ohlcv`/`period_frame`/`load_daily→enrich` 全链路保留 attrs）；`tests/test_charts_summary.py` 覆盖 hfq/qfq/none/未知/无 attrs 回退与 `summary_markdown` 实际图注。
+
+## 落地（plan-20261120-001 评审 P2，2026-11-20）：partial 必须被消费，空帧也要带标注
+
+评审 rev-20261116-002 第 5 轮（iss-mwoit6on-7d19f2 / iss-mwoit6pr-6c8c9f / iss-mwoit6qf-174fb1）指出三处标注"写得出、看不到"的残余：
+
+1. **`partial`/`factor_as_of` 被消费**（选 (a)，未拆后续计划项）：`astock/agent/tools/market_tools.py` 的 `MarketSeries` 增加 `partial`/`factor_as_of` 字段，`load_series()` 从 `frame.attrs["adjustment"]` 读并追加一条 notes「盘中近似：当日 bar 按最近已发布因子（截至 X）复权」；`metadata()` 固定输出这两个键；`_render_kline()` 把它们写进 `ChartSpec.meta`（自由对象，不占 `data` 白名单）；`astock/agent/chart_render.py:_caption()` 与 `astock/charts.py:_adj_caption()` 据此追加「盘中近似（因子截至 X）」。因子已发布时不得出现该提示。
+2. **空帧也带标注**：`astock/data.py` 新增 `_empty_with_attrs()`，`enrich()`/`resample_ohlcv()` 的空帧快速返回改为回填输入 `attrs`（停牌整段、窗口内无交易日时图注/回测不再退回调用方 adj）。
+3. **周期线回归**：`period_frame` 用例的 subTest 覆盖 `week`/`month`/`quarter`（`data.py` 有 `QE` 规则），季线标注通道有回归保护。
 
 ## 证据
 

@@ -401,6 +401,42 @@ def normalized_compare_figure(
     return fig
 
 
+def _adj_caption(adj: str, daily: pd.DataFrame) -> str:
+    """复权口径图注（ADR-008 D1）：口径名 + 基准日 + 基准因子，绝不把 hfq 当不复权。
+
+    优先读 ``daily.attrs["adjustment"]``（由 :func:`astock.data.load_daily` 写入），
+    缺失时退回调用方传入的 ``adj`` 参数。
+    """
+    meta = dict(daily.attrs.get("adjustment") or {}) if hasattr(daily, "attrs") else {}
+    key = str(meta.get("adj") or adj or "none").lower()
+    label = {
+        "qfq": "前复权（qfq）",
+        "hfq": "后复权（hfq）",
+        "none": "不复权（原始成交价）",
+    }.get(key, f"口径未知（{key}）")
+    parts = [label]
+    base = meta.get("adj_base")
+    factor = meta.get("base_factor")
+    if base:
+        if key == "hfq":
+            parts.append(f"基准 {base} 起 1.0")
+        elif key == "qfq":
+            text = f"基准 {base}"
+            value = float(factor) if isinstance(factor, (int, float)) else float("nan")
+            if np.isfinite(value) and value > 0:
+                text += f"，因子 {value:.4f}"
+            parts.append(text)
+    source = meta.get("adj_source")
+    if source:
+        parts.append(f"因子来源 {source}")
+    # 分钟盘中当日 bar 用的是最近已发布因子（ADR-008 补充裁决第 7 条）：
+    # 图注必须把"盘中近似"说出来，否则读者会以为当天因子已发布。
+    if meta.get("partial"):
+        as_of = meta.get("factor_as_of") or "最近已发布交易日"
+        parts.append(f"盘中近似（因子截至 {as_of}）")
+    return "，".join(parts)
+
+
 def summary_markdown(
     code: str,
     daily: pd.DataFrame,
@@ -458,5 +494,5 @@ def summary_markdown(
         f"### {code} 多周期概览\n\n"
         f"| 指标 | 数值 |\n|---|---|\n{body}\n\n"
         f"<sub>区间 {pd.Timestamp(start):%Y-%m-%d} ~ {pd.Timestamp(end):%Y-%m-%d}，"
-        f"{'前复权' if adj == 'qfq' else '不复权'}，共 {len(daily)} 根日线</sub>"
+        f"{_adj_caption(adj, daily)}，共 {len(daily)} 根日线</sub>"
     )

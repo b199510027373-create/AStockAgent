@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261116-002-r5",
+  "threadId": "rev-20261116-002",
+  "roundNo": 5,
+  "scope": "diff",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "## 第 5 轮评审结论（scope=diff，main..HEAD=80cc765）\n\n### 范围确认\n- 实际 diff 只有 4 个文件：astock/charts.py、astock/data.py、tests/test_charts_summary.py（新增）、tests/test_data_adj_caliber.py；用户列出的 astock/contracts.py 与 tests/test_data_pit_events.py 与 main 无差异，本轮无可评审内容（对应验收③④⑤ 的既有覆盖仍由 test_data_adj_caliber.py 的 25 用例承担）。\n- 分支说明：线程与 plan.links.branch 仍记 fix/data-adj-caliber，该分支已合并（PR #15/196cfb2）；本轮实际评审 fix/adj-meta-display（PR #37/4b74337 + 80cc765 docs）。建议同步 plan.links.branch 与线程 branch，避免后续轮次误判 base。\n\n### 前序问题复核（7/7 已闭环）\nr1 两条 P1（分钟盘中硬失败、adj_factor 非分页截断）、r1/r2 三条 P2、r3 P1（死覆盖断言）均已在 code 中消失：分钟路径改为 partial 因子 + 缺因子硬失败（data.py:717-747），日线覆盖校验只在 _check_factor_coverage，缓存带 adj_base。本轮 diff 未回退这些行为。\n\n### 本轮变更判定\n- astock/data.py:862-865、876-877 在 resample_ohlcv / enrich 尾部整体回填 df.attrs，与 chart_render.py:516/1542-1543、chart_service.py:299-302、track.py:858-859 的既有 attrs 约定一致；backtest.run_strategy（backtest.py:429-444）返回 enrich(daily) 后即可携带 adj/adj_base/base_factor/adj_source，验收⑥ 的「标注活着走到展示层」主链已闭合。\n- astock/charts.py:404-432 _adj_caption 区分 qfq/hfq/none/未知，hfq 标「基准 X 起 1.0」、qfq 标基准日+因子、none 隐藏基准，且优先读 attrs 保证与数据层同源；tests/test_charts_summary.py 6 个用例覆盖了「hfq 不得标不复权」这一核心错误模式与 summary_markdown 真实输出。\n- 结论：0 P0、0 P1，本轮 approve；plan-20261114-003 的验收①–⑤ 与 ⑥ 的口径区分部分完全解决。\n\n### 未闭环 P2（不阻断 resolved，需由开发在后续小 PR 修）\n1. iss-mwoit6on-7d19f2（astock/data.py:744-747）分钟盘中 partial/factor_as_of 全仓无消费方，「盘中近似」提示未落地（ADR-008 第 7 条为「下游可提示」性质，故记 P2 不阻断）。责任人：plan-20261114-003 开发。二选一：a) chart_render._caption 与 charts._adj_caption 追加「盘中近似（因子截至 X）」+ market_tools.MarketSeries.metadata 增 partial/factor_as_of + 一条 partial=True 用例；b) 拆独立计划项并在 ADR-008 第 7 条注明推迟。判完全解决条件：a 落地且测试通过，或 b 的计划项 id 写进 ADR 与 plan.links。\n2. iss-mwoit6pr-6c8c9f（astock/data.py:841-842、871-872）enrich/resample_ohlcv 空帧快速返回丢 attrs，空区间回测/图注退回调用方 adj。判完全解决条件：两个空帧分支补 attrs 回填 + test_empty_frame_keeps_adjustment_attrs 通过。\n3. iss-mwoit6qf-174fb1（tests/test_data_adj_caliber.py:552-557）period_frame 用例缺 quarter（data.py:882 有 QE 规则）。判完全解决条件：subTest 覆盖 (\"week\",\"month\",\"quarter\") 且断言不弱化。\n\n### 测试充分性\n开发交付证据（ho-20261120-001/002）：目标 4 文件 99 passed、全量 796 passed/1 skipped、门禁 33、ruff + mypy 44 files 全绿、CI 44573239310（head 4b74337）success、PR #37 OPEN/CLEAN。本轮不重复执行测试（执行归开发），仅核对覆盖点：新增用例覆盖 attrs 三条传播路径与真实 load_daily→enrich 链，未覆盖空帧与 quarter，已按 P2 记录。\n\n### 判定\nverdict=approve，openP0=0、openP1=0 → 工具按规则将 plan-20261114-003 标为完全解决。3 条 P2 为延后项，若不修则「盘中近似提示」保持缺失、空区间标注缺失、季线标注通道无回归保护；修复以 3 条 issue 各自列出的判据为准。",
+  "startedAt": "2026-11-20T05:10:17.317Z",
+  "finishedAt": "2026-11-20T05:10:38.950Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 3,
+    "total": 3
+  }
+}

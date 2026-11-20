@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwoit6qf-174fb1",
+  "threadId": "rev-20261116-002",
+  "roundNo": 5,
+  "severity": "P2",
+  "category": "测试充分性",
+  "file": "tests/test_data_adj_caliber.py",
+  "lines": "552-557",
+  "title": "period_frame 标注用例只测 week/month，quarter 通道（QE）未覆盖",
+  "evidence": "test_period_frame_keeps_adjustment_attrs 的 subTest 只遍历 (\"week\", \"month\")（tests/test_data_adj_caliber.py:553），而 data.py:882 的 rules 明确包含 \"quarter\": \"QE\"，走的是与 week/month 相同的 resample_ohlcv+enrich 链；一旦有人改动 quarter 规则或这条路被旁路，现有用例不会失败。ADR-008 落地第 1 条与图表「周/月/季」口径都覆盖季线，缺一条即为通道漏测。",
+  "suggestion": "把遍历改为 (\"week\", \"month\", \"quarter\") 并保留 assertFalse(out.empty) 与 attrs 断言；若季度在 _daily_frame() 数据窗（约数日）内无足够数据导致空帧，则改用跨季的固定帧或直接断言 attrs 而非非空，避免为了通过而弱化断言。",
+  "confidence": 0.7,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-20T05:10:27.927Z"
+}

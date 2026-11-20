@@ -14,6 +14,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, ClassVar
 from unittest.mock import patch
 
 import numpy as np
@@ -521,6 +522,68 @@ class DailyCacheBaseInvalidationTests(unittest.TestCase):
             out = self._load(fake2, adj="qfq")
             self.assertIn("daily", fake2.calls)
             self.assertEqual(out.attrs["adjustment"]["adj_base"], "2025-01-06")
+
+
+class AdjustmentMetadataPropagationTests(unittest.TestCase):
+    """验收⑥：复权标注要能跟着 frame 走到回测/图表，不能加指标就丢。"""
+
+    META: ClassVar[dict[str, Any]] = {
+        "adj": "hfq",
+        "adj_base": "2025-01-02",
+        "base_factor": 2.0,
+        "adj_source": "daily",
+    }
+
+    def _frame_with_meta(self) -> pd.DataFrame:
+        df = _daily_frame()
+        df.attrs["adjustment"] = dict(self.META)
+        return df
+
+    def test_enrich_keeps_adjustment_attrs(self):
+        out = data.enrich(self._frame_with_meta())
+        self.assertIn("macd_hist", out.columns)
+        self.assertEqual(out.attrs.get("adjustment"), self.META)
+
+    def test_resample_ohlcv_keeps_adjustment_attrs(self):
+        weekly = data.resample_ohlcv(self._frame_with_meta(), "W-FRI")
+        self.assertFalse(weekly.empty)
+        self.assertEqual(weekly.attrs.get("adjustment"), self.META)
+
+    def test_period_frame_keeps_adjustment_attrs(self):
+        for period in ("week", "month", "quarter"):
+            with self.subTest(period=period):
+                out = data.period_frame(self._frame_with_meta(), period)
+                self.assertFalse(out.empty)
+                self.assertEqual(out.attrs.get("adjustment"), self.META)
+
+    def test_empty_frame_keeps_adjustment_attrs(self):
+        """空区间快速返回（停牌整段/窗口内无交易日）也不能丢复权标注（评审 P2）。"""
+        empty = self._frame_with_meta().iloc[0:0]
+        for name, out in (
+            ("enrich", data.enrich(empty)),
+            ("resample_ohlcv", data.resample_ohlcv(empty, "W-FRI")),
+            ("period_frame", data.period_frame(empty, "month")),
+        ):
+            with self.subTest(path=name):
+                self.assertTrue(out.empty)
+                self.assertEqual(out.attrs.get("adjustment"), self.META)
+
+    def test_load_daily_metadata_survives_enrich(self):
+        """真实调用链：load_daily → enrich（回测/图表都这么用）。"""
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            data, "DAILY_DIR", Path(tmp)
+        ), patch.object(data, "_DAILY_MEM", {}), patch.object(
+            data, "_today", return_value=pd.Timestamp("2025-01-10")
+        ), patch.object(data, "last_open_date", side_effect=lambda x: pd.Timestamp(x)):
+            daily = data.load_daily(
+                "600519.SH", start="2025-01-02", end="2025-01-06", adj="hfq",
+                client=FakeClient(_daily_frame(), _factors()),
+            )
+            meta = dict(daily.attrs["adjustment"])
+            enriched = data.enrich(daily)
+            self.assertEqual(enriched.attrs.get("adjustment"), meta)
+            self.assertEqual(meta["adj"], "hfq")
+            self.assertEqual(meta["adj_base"], "2025-01-02")
 
 
 if __name__ == "__main__":
