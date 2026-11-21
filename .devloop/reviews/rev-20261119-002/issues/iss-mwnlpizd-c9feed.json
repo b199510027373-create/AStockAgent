@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwnlpizd-c9feed",
+  "threadId": "rev-20261119-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "audit",
+  "file": "astock/agent/tools/market_tools.py",
+  "lines": "1073-1082",
+  "title": "Agent 出图未关联真实 run，全部落成 source=\"render\"、run_id=NULL",
+  "evidence": "`_render_chart_payload` 调用 renderer 时传了 spec/frame/db_path/artifact_root/data_as_of/data_time/export_png/session_id，但没有传 `run_id`/`step`（market_tools.py:1073-1082）。AgentRuntime 在 `_start_audit` 生成 `run_<uuid16>` 并 `ensure_run(... status=\"running\")`（runtime.py:555-581），工具执行走 `self.registry.invoke(call.name, prepared)`（runtime.py:495），整条链路没有把 run_id 传给工具。chart_service.render_chart 因此在 145-147 行落到 `source=\"render\"`、`reason=\"render\"`、`actor=\"system\"`，artifact link 的 run_id 为 NULL。规格 §7.1 明确「Agent 调用必须 record_artifact(run_id=run_id, step=step, source=\"agent\")」；v2 冻结 §5 也要求真实 run 与 artifact link 成对。现有 `test_agent_render_links_real_run...`（tests/test_agent_chart_render.py:1209-1231）先手工 `ensure_run` 再直接调 render，绕过了 runtime/tool，故 CI 全绿但线上 Agent 出图没有 run 关联，审计无法回答「这张图属于哪次对话/哪一步」。`source=\"render\"` 还会让直接渲染与 Agent 渲染在审计上不可区分。",
+  "suggestion": "在 runtime 与工具之间建立显式上下文：AgentRuntime 在 dispatch 前把当前 `run_id` 与 step 序号写入 `ToolContext`/`ContextVar`（或扩展 `registry.invoke` 签名），`_render_chart_payload` 从中取 `run_id`/`step` 并传给 `render_chart`；直接 UI 渲染不设置上下文，仍走 `source=\"render\"`。补一个端到端测试：通过 AgentRuntime + 默认 registry 触发 chart 工具，断言 `agent_run_artifacts` 的 link 为 `(真实 run_id, \"agent\", step)`，且该 run 最终 status 由 runtime finish；另保留「无 run 的直接渲染 link.run_id 为 NULL」用例。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T15:29:15.488Z"
+  },
+  "createdAt": "2026-11-19T13:43:49.849Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T15:29:15.488Z"
+    }
+  ]
+}

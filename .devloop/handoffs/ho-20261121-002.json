@@ -1,0 +1,34 @@
+{
+  "id": "ho-20261121-002",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261120-002",
+  "sessionId": "",
+  "title": "评审：Agent 会话真实模型 E2E 验证（DeepSeek/兼容网关）",
+  "summary": "第 2 轮 full 评审（针对第 1 轮 3 条 P2 + 2 条顺带项）：代码 delta 为 base ade6143 → head ce3d812，仅 tests/test_agent_live_e2e.py 与 docs/AStockAgent_agent_live_e2e.md（commit a0c78a1 主体，9da7852/ce3d812 为 plan 与 handoff 回填）。逐条复核全部按建议修复，未发现新增缺陷，判定完全解决。\n\n逐条复核：\n1) iss-mwp5xl5h-ef2edd（R2 \"Revenue\" 断言可被 .step-args 参数回显满足）已修复：test_round2_stop_keeps_partial_and_citations_resolve 改为 `re.findall(r'<div class=\"step-output\">([^<]*)</div>', record.steps_html)`，并断言 `record.steps_html.count('class=\"step-output\"') >= 1` 且 `any(\"Revenue\" in text for text in step_outputs)`。失败信息还会打印每个 step-output 前 60 字符，失败时可直接定位「正文没渲染」而非参数回显。\n2) iss-mwp5xl6b-9842dc（AC5 报告与费用口径无断言、非法价格静默 None）已修复：`_cost` 价格非数字时返回 `{\"error\": \"AGENT_PRICE_INPUT_PER_M/AGENT_PRICE_OUTPUT_PER_M 不是数字：{raw!r}；费用未估算\", \"input_per_m\": raw_in, \"output_per_m\": raw_out}` 而不是 None；新增 4 个纯本地用例：test_cost_estimate_uses_price_env（2/8 每百万 → estimated 10.0、currency CNY、input/output_per_m 2.0/8.0）、test_cost_without_price_env_is_unknown（未配置 → None）、test_cost_invalid_price_reports_error_instead_of_none（\"two\" 出现在 error 且指明变量名）、test_round_report_records_timing_usage_and_cost（`_round_report` 必含 17 个键、chunks 2、answer_chars 4、ttft_ms 250.0 <= elapsed_ms 500.0、空回答 ttft_ms None / chunks 0、`json.dumps(report)` 可序列化）。TTFT/token/cost 字段的回归现在由普通 CI 兜住，不再只靠 live 跑。\n3) iss-mwp5xrvs-0658e1（文档 §2 漏变量、§6 与实现不符）已修复：§2 补齐 AGENT_LIVE_E2E_WORKDIR / AGENT_TIMEOUT_SECONDS / AGENT_MAX_STEPS / AGENT_TOKEN_BUDGET 并说明非法价格行为；§6 拆成「缺 key → 规则兜底 + mark_degraded（astock/agent/gateway.py:1413-1425）」与「有 key 但网关不通 → probe 置 degraded 并降 JSON 协议（astock/agent/gateway.py:1003-1008）、运行时抛异常走 stop_reason=model_error」，与代码一致；§6 第 2 条还补了「已保留此前产出的内容」，与 test_model_failure_surfaces_clear_degradation 的断言对齐。\n顺带项 (a) 已修：`_run_live` 在 `gateway.probe()` 之后 `probe_usage = list(usage.records)`，`_write_report` 顶层单列 `probe_usage`，并写 `totals.scope=\"三轮对话（不含 probe 探测调用，probe 见 probe_usage）\"`，共用 `_tokens_of(records)` 统一 calls/prompt/completion/total 口径；doc §5 同步为「三轮 6 次/21,622 tokens + probe 1 次/343」，与 handoff 数字一致（20,506 + 1,116 = 21,622 自洽）。\n顺带项 (b) 已修：R2 在 `if len(record.result.answer) <= CHUNK_CHARS:` 时 `pytest.skip` 并打印完整回答，位置在 startswith 前缀断言之后、`len(partial) < len(full)` 之前，语义正确（回答容纳不下第二个分片时确实无法验证「停止后不覆盖」，且不会误报红）。\n\n证据链：`AGENT_LIVE_E2E=1 ... -m live -q` → 3 passed, 8 deselected, 15.91s（report .tmp-tests/live-e2e/20261121-031843/report.json）；单文件 8 passed 3 skipped；chat+live 48 passed 3 skipped；全量 829 passed, 3 skipped, 5 deselected, 18 subtests；ruff All checks passed；mypy Success 44 files；CI run 44877921356 success @ 9da7852；PR #42 mergeStateStatus=CLEAN/MERGEABLE。第 1 轮结论不变：astock/agent/chat.py 的 `.step-output`（`_STEP_OUTPUT_CHARS=240`、先 `_clip` 再 `_esc`、不内联 figure HTML）实现正确，AC1-AC6 均有可复现证据锚点。\n\n本轮计数：P0=0、P1=0、新增 P2=0；第 1 轮 3 条 P2 全部关闭。完全解决判定：满足（openP0=0 且 openP1=0 且无新增问题）。\n\n后续（不阻塞本次评审，由维护者执行）：合并 PR #42 → 将 plan-20261119-002 标 done/100% 并把本次 live report 路径与 commit 回填 planItem.links.test → 合并后在 main 上复跑夜间 workflow_dispatch 真实模型 E2E 确认无回归。若合并后 CI（含 png-export）或夜间跑变红，由开发在 main 上开 follow-up 修复并重开评审线程；calendar/worklog 的历史未提交条目仍由维护者决定归属。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 2,
+    "verdict": "approve",
+    "resolved": true,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261120-021",
+  "next": "",
+  "createdAt": "2026-11-21T07:29:41.159Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-002.md"
+}

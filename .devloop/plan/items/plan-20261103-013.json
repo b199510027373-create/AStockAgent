@@ -2,14 +2,14 @@
   "id": "plan-20261103-013",
   "title": "根目录卫生与仓库单一真源校验",
   "description": "旧前提已过时：当前 git 仓库就是根目录 C:\\Users\\b1995\\Documents\\AStockAgent，remote 为 github.com/b199510027373-create/AStockAgent；release/AStockAgent 是旧的独立仓库，不再需要“双目录源码同步”。目标改为：清理根目录临时产物（mypy_core.txt/mypy_full.txt/coverage_report.txt/temp_*.png/daily_report.txt 等）；归档或忽略 handoff/review 草稿；加一个“当前仓库根/remote/分支”校验脚本，防止再按旧 release 目录发布；文档删除双目录同步表述。",
-  "status": "todo",
+  "status": "in_review",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
-  "start": "2026-11-28",
-  "due": "2026-11-30",
+  "start": "2026-11-21",
+  "due": "2026-11-22",
   "estimateH": 4,
-  "progress": 0,
+  "progress": 100,
   "acceptance": [
     "根目录只保留源码/配置/文档，临时产物归档或删除",
     "脚本校验 `git rev-parse --show-toplevel` 指向工作区根且 remote 为 b199510027373-create/AStockAgent",
@@ -24,9 +24,30 @@
   ],
   "links": {
     "docs": [
-      "docs/AStockAgent_CI_work_calendar.md"
+      "docs/AStockAgent_CI_work_calendar.md",
+      "docs/AStockAgent_repo_source_of_truth.md"
+    ],
+    "files": [
+      "tools/check_repo_source.py",
+      "tests/test_repo_source_check.py",
+      "tests/conftest.py",
+      "tests/test_sw_crosswalk.py",
+      ".gitignore"
+    ],
+    "test": [
+      "pytest tests/test_repo_source_check.py -q -p no:cacheprovider -> 22 passed, 1 warning in 4.91s",
+      "pytest tests/test_sw_crosswalk.py -q -p no:cacheprovider -> 25 passed in 1.67s",
+      "pytest tests -q -m \"not png\" -p no:cacheprovider -> 854 passed, 3 skipped, 5 deselected, 18 subtests passed in 72.13s",
+      "mypy astock app.py -> Success: no issues found in 44 source files",
+      "ruff check astock tests -> All checks passed",
+      "python tools/check_repo_source.py --any-branch -> exit 0 (root/toplevel/origin/branch OK; historical release warning only)",
+      "python tools/check_repo_source.py --root release/AStockAgent --any-branch -> exit 1 (blocked as historical old clone)",
+      "git diff --check -> OK (CRLF warnings only on .devloop files)",
+      "GitHub Actions CI for PR #44 -> test + png-export both SUCCESS (run 44887441629)",
+      "review fix: pytest tests/test_repo_source_check.py -> 23 passed in 6.63s; pytest tests -m \"not png\" -> 855 passed, 3 skipped, 5 deselected, 18 subtests in 69.40s; mypy -> 44 files OK; ruff -> All checks passed; check_repo_source --any-branch -> exit 0"
     ]
   },
   "createdAt": "2026-11-03T12:10:59.950Z",
-  "updatedAt": "2026-11-13T19:09:24.706Z"
+  "updatedAt": "2026-11-21T09:13:36.040Z",
+  "devSessionId": "session-4106a9e9-99f3-4ef0-b0b5-fdc3b93c25db"
 }

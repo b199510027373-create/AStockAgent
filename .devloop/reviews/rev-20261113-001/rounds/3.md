@@ -1,0 +1,58 @@
+# PR 评审：评审：调度状态机迁移 jobs 表 + 心跳告警
+
+> 自动生成于 2026-11-21T08:32:19.866Z；可直接转交开发会话。
+
+## 概览
+
+- 线程：`rev-20261113-001`
+- 计划项：`plan-20261103-007`
+- 分支：`feat/plan-20261103-007-scheduler-ledger` → `main`
+- 轮次：第 3 轮（targeted）
+- 结论：通过（approve）
+- 开发会话：`session-680f1ea7-de6d-4144-b50d-61c8204ae454`
+- 本轮问题：0（P0 0 / P1 0 / P2 0）
+- 线程未闭环：P0 0 / P1 0 / P2 0
+
+## 本轮结论
+
+第 3 轮 targeted 复核（base aabc2cb → 8ab44b4，专项验证第 2 轮遗留 P2）结论：通过，无新增问题。
+
+一、本轮验证对象与结论
+1) P2 iss-mwdwnlvb-1e70b4（长期停摆被判成“无历史”）已修复且实现正确：astock/scheduler.py:308-316 历史存在性改为查 jobs 全表（ledger.list_jobs(slot="close", limit=2)，任一行 trade_date < 今天或 status != pending 即 initialized=True），不再局限于 60 日窗口；scheduler.py:333-339 窗口内无任何行时不做 min() 截断，保留全部 missed，streak=HEARTBEAT_LOOKBACK_DAYS 并照常写告警；ADR-004 §10 同步该语义。
+2) 测试已覆盖：tests/test_scheduler_ledger.py:311-323 test_heartbeat_detects_long_outage_beyond_lookback_window（仅 2026-06-01 success，now=2026-11-06 16:45 → initialized=True、ok=False、alerted=True、streak=60、last_success=None、alerts 仅 1 行）。
+3) 8ab44b4 相对 aabc2cb 的代码改动仅上述初始化/截断逻辑 + 该用例 + ADR 文本，未引入其他行为变化；此前 r2 已 approve 的 _due_reference、告警签名持久化、loop/run_once 容错逻辑未被触碰。
+4) 第 1/2 轮 6 条 issue 现全部 status=fixed 且 developer feedback 均为 effective：openP0=0、openP1=0、openP2=0。
+
+二、交付与测试证据核对
+- 合并：PR #9（base main）squash 合并为 a9c1248，远端特性分支已删除；ho-20261113-007 记录 PR CI run 43291879416 test pass（1m14s）、main push CI run 43292151867 success，planItem.links.ci 与之一致。本会话无 shell 工具，无法现场执行 gh/pytest，CI 结论采信 planItem 登记与交付文档；本地证据为 50 passed（目标两组）/320 passed 1 skipped（全量）/mypy 31 files/ruff E9,F63,F7,F82/compileall exit 0。
+- 测试充分性：状态机往返与非法值、legacy 迁移只补不覆盖、running 超时恢复、sync_due_job 时点、15:30 report/heartbeat、持久化去重、空台账、长期停摆、loop 成功/stale/启动失败、save_job 失败兜底、CLI 退出码均有对应用例，验收标准 ①–③ 与 REQ-007-04 的“可复现”部分满足。
+
+三、生产运行事实（只读核对，非本轮 issue）
+- data/recommendations/acceptance_5d.json（generated 2026-11-20T23:51:47）显示 all_success=false、passed=1：11-16/11-17/11-18/11-20 四天 failed，错误均为 RuntimeError: 契约校验失败：[EventFrame] 列 ['code'] 存在非字符串或空值，attempts 7–11、late_by_min 382–431；11-19 success（attempts 4，as_of=2026-11-19）。
+- 该失败根因在事件装配链而非调度器：scheduler 侧按设计记录了 failed/attempts/error 并按 CATCHUP_END_HOUR 重试；根因由今日 442fbb9（#43，2026-11-21 15:55）修复（丢弃无股票代码研报行）。
+- 心跳告警在真实数据下符合预期：scheduler_alerts.jsonl 每日一条、signature 形如 2026-11-12:4:2，跨进程去重生效；11-20 18:52 maintenance 因 11-19 已 success、streak=1 < 阈值 2 未告警，与实现一致。
+
+四、结论与责任
+- 代码与评审问题层面：完全解决。verdict=approve，线程 resolved。开发者在 aabc2cb/8ab44b4 上的修复与测试已全部验证；无需再开评审轮次。
+- 剩余非阻断事项（由开发者负责，不阻断本次评审）：REQ-007-04 的生产侧 5 日全 success 尚未达成，窗口被数据契约缺陷打断。完成条件：在 #43 生效后的首个干净窗口 2026-11-23–11-27 连续收盘成功后，执行 python -m astock.jobs --report 5 退出码 0、5 行 success、data/recommendations/acceptance_5d.ok 生成，并在新 plan item 或本 plan 的运营记录里贴证据；若窗口内再出现 stale/failed，按 jobs 表 attempts/error 定位，属新问题另开 plan，不重新打开本条评审。
+- 若后续代码再次改动 astock/scheduler.py 或 astock/ledger.py 的调度/台账路径，请新开评审线程，不要复用本条已 resolved 的结论。
+
+## 本轮问题
+
+本轮未记录问题。
+
+## 变更文件
+
+- `README.md`
+- `astock/jobs.py`
+- `astock/ledger.py`
+- `astock/scheduler.py`
+- `tests/test_hardening.py`
+- `tests/test_scheduler_ledger.py`
+- `tools/build_product_doc.py`
+
+## 交给开发会话
+
+1. 在分支 `feat/plan-20261103-007-scheduler-ledger` 上处理上面的未闭环问题；只改相关文件。
+2. 修复后回到评审线程，逐条填写真实反馈（已修复 / 换方案 / 延后 / 不采纳 / 重复）。
+3. 只有 P0 全部闭环后才可请求 approve；有 P1/P2 未闭环时在结论中说明取舍。

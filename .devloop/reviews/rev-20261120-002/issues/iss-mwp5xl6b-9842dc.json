@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwp5xl6b-9842dc",
+  "threadId": "rev-20261120-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_agent_live_e2e.py",
+  "lines": "266-288, 291-364, 458-467",
+  "title": "AC5 的报告与费用产出没有任何断言，价格变量非法时静默降级为 null",
+  "evidence": "AC5 要求“记录 TTFT/总耗时/token/费用”，但落盘报告无测试：`_round_report`（291-364）只在第 466 行被调用一次且返回值丢弃，report.json 的 ttft_ms/elapsed_ms/usage/cost/totals 键没有任何断言；`_cost`（266-288）也没有单测，且第 277-278 行 `except ValueError: return None` 与 `live_config._number`（139-146）对同一个 AGENT_PRICE_* 变量抛 LiveSkip 的处理不一致——价格写错时费用估算会无声消失，报告里只剩 `cost: null`，与“未配置价格”无法区分。",
+  "suggestion": "补两个不需要 key 的纯函数用例：① `_cost({\"prompt_tokens\": 1_000_000, \"completion_tokens\": 1_000_000, \"total_tokens\": 2_000_000, \"calls\": 1}, {\"AGENT_PRICE_INPUT_PER_M\": \"2\", \"AGENT_PRICE_OUTPUT_PER_M\": \"8\", \"AGENT_PRICE_CURRENCY\": \"CNY\"})` 断言 estimated/currency；非法价格按 `_number` 的口径抛 LiveSkip（或在报告里写 `\"cost\": {\"error\": \"...\"}`），不要返回 None。② 用构造的 RoundRecord 调 `_round_report`，断言必含键集合且 `ttft_ms is None or ttft_ms <= elapsed_ms`。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-21T07:31:46.618Z"
+  },
+  "createdAt": "2026-11-20T15:57:44.435Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-21T07:31:46.618Z"
+    }
+  ]
+}

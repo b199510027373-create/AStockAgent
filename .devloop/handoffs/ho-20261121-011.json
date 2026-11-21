@@ -1,0 +1,59 @@
+{
+  "id": "ho-20261121-011",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-013",
+  "threadId": null,
+  "sessionId": "",
+  "title": "根目录卫生与仓库单一真源校验（CI 已通过）",
+  "summary": "相对上一份交付无源码改动，仅补充交付状态：分支已推送，PR #44 已创建，GitHub Actions CI 的 test 与 png-export 均 SUCCESS，PR mergeable/mergeStateStatus=CLEAN，等待评审。初始交付中的 13 个文件、commit 309591a、测试结果保持不变。",
+  "requirements": [],
+  "changes": [],
+  "tests": [
+    {
+      "command": "GitHub Actions CI for PR #44 (run 44887441629)",
+      "result": "test: SUCCESS 1m50s；png-export: SUCCESS 1m5s",
+      "passed": true,
+      "evidence": "job 136795730694 (test) 与 job 136795730592 (png-export) 均 completed/success；gh pr view 44 显示 mergeable=MERGEABLE, mergeStateStatus=CLEAN"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "854 passed, 3 skipped, 5 deselected, 18 subtests passed in 72.13s",
+      "passed": true,
+      "evidence": "本地全量非 PNG 套件；与 CI test job 一致"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "本地类型检查"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "本地 lint"
+    }
+  ],
+  "permissions": [],
+  "delivery": {
+    "branch": "chore/repo-single-source",
+    "commit": "309591ade3d5def24aeaecdc41cf092733905282",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/44",
+    "ci": "success: test + png-export (run 44887441629)",
+    "merge": "not merged; mergeable=MERGEABLE, mergeStateStatus=CLEAN",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261121-010",
+  "next": "等待人工/评审 Agent 评审 PR #44；评审通过并合并后，把 plan-20261103-013 状态改为 done，并再写一份 update handoff 记录 merge 状态。合并前不要删除分支；release/AStockAgent 仍仅作本地历史参考。",
+  "createdAt": "2026-11-21T09:02:08.931Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-011.md"
+}

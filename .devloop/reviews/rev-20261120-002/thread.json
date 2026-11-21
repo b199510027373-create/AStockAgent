@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261120-002",
+  "title": "评审：Agent 会话真实模型 E2E 验证（DeepSeek/兼容网关）",
+  "planItemId": "plan-20261119-002",
+  "sourceDevSessionId": "session-924a90ce-d5f5-4e69-997b-ed79301a0f43",
+  "branch": "feat/agent-live-e2e",
+  "base": "main",
+  "files": [
+    "astock/agent/chat.py",
+    "docs/AStockAgent_agent_live_e2e.md",
+    "pytest.ini",
+    "tests/test_agent_chat.py",
+    "tests/test_agent_live_e2e.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-20T15:53:45.939Z",
+  "updatedAt": "2026-11-21T07:31:52.833Z",
+  "reviewSessionId": "session-bc8cbb8a-7480-4e41-a7b7-936f9a39db50"
+}

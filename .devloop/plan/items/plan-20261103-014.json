@@ -6,8 +6,8 @@
   "priority": "P3",
   "milestone": "ms-research",
   "owner": "human",
-  "start": null,
-  "due": null,
+  "start": "2027-01-11",
+  "due": "2027-01-12",
   "estimateH": 4,
   "progress": 0,
   "acceptance": [
@@ -28,5 +28,5 @@
     ]
   },
   "createdAt": "2026-11-03T12:11:02.745Z",
-  "updatedAt": "2026-11-07T14:13:40.688Z"
+  "updatedAt": "2026-11-21T07:38:22.309Z"
 }

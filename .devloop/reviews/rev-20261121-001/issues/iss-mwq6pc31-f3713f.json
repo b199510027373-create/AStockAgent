@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwq6pc31-f3713f",
+  "threadId": "rev-20261121-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "repo-hygiene",
+  "file": ".gitignore",
+  "lines": "78-97",
+  "title": "根目录卫生段把一次性个人文件写死进 .gitignore，且与既有规则重复",
+  "evidence": "`.gitignore:78-97` 新增段把一次性个人文件逐个写死：`/甲.txt`(L92)、`/name_crop.png`(L85)、`/pil_name.png`(L86)、`/build_resume.py`(L87)、`/build_boss_guide.py`(L88)、`/rebuild_template.py`(L89)、`/inspect_resume*`(L90)、`/list_images.py`(L91)、`/font_test*`(L82)、`/probe_*`(L83)、`/resume_*`(L84)、`/py_path_test.py`(L96)、`/test_py_workspace.txt`(L97)。这些是「永久屏蔽」而非验收项要求的「归档或删除」，会把同名未来真实文件静默变成未跟踪；同时 `/01_test.ipynb`(L93) 与既有 `01_test.ipynb`(L44)、`/my_stocks.csv`(L94) 与既有 `my_stocks.csv`(L46) 重复。开发 handoff 已说明这些产物被移入本地 `_archive/`，因此逐个文件名的规则并非必要。",
+  "suggestion": "由开发确认这些一次性文件已删除或移入 `_archive/`（该目录已整体忽略），随后删除 L82-97 中针对单个文件名的规则，只保留描述运行期产物的模式规则（`/astock-chat-*/`、`/.pytest-*/`、`/pip-*/`、`/tmp*/`、`/coverage_*.txt`、`/_archive/`）；删除与 L44/L46 重复的 L93/L94。改完后补一条 `git status --short` 只含预期条目的证据，避免靠 ignore 掩盖根目录残留。若确需保留某个前缀规则（如 `/probe_*`），在规则上方注明它对应哪类可复现产物，而不是个人草稿。",
+  "confidence": 0.7,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-21T09:07:05.197Z"
+}

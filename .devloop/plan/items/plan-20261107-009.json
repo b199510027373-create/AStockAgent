@@ -6,8 +6,8 @@
   "priority": "P2",
   "milestone": "ms-agent",
   "owner": "human",
-  "start": "2026-12-05",
-  "due": "2026-12-12",
+  "start": "2026-11-23",
+  "due": "2026-11-26",
   "estimateH": 10,
   "progress": 0,
   "acceptance": [
@@ -33,5 +33,5 @@
     ]
   },
   "createdAt": "2026-11-07T14:12:19.320Z",
-  "updatedAt": "2026-11-07T14:13:12.231Z"
+  "updatedAt": "2026-11-21T08:38:23.569Z"
 }

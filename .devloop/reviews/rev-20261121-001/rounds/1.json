@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261121-001-r1",
+  "threadId": "rev-20261121-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "第 1 轮全量评审（base=main，分支 chore/repo-single-source，HEAD=309591a，13 文件 +742/−51）。已读 ADR/契约与 plan-20261103-013 五条验收标准，逐文件核对 diff、脚本行为与测试充分性，并核对 handoff ho-20261121-010/011 的证据。\n\n结论：approve。未发现 P0/P1，openP0=0、openP1=0。核心实现正确：check_repo_source.py 对 toplevel/remote 归一化（https/ssh/scp/省略协议、去 .git、大小写）、release/AStockAgent 历史目录识别、detached 需显式放行、legacy clone 只警告不阻断，CLI 退出码 0/1 与文档表格一致；ci.yml 在装依赖前运行门禁（PR 用 --any-branch --allow-detached，main 严格）；双目录同步要求已从 CI 日历、development_status、contracts 交付与 PR handoff、chart pipeline 决策中移除并标注为历史；README 补链。架构层面未触及 astock/app.py，ARCH/STAT/AGENT 规则无违反，.gitignore 仍保留 data/*.db、data/agent/ 等数据规则（LEDGER-01 未被破坏）。测试充分性：22 个新用例覆盖 remote 归一化 7 变体与 4 类不可解析输入、canonical/错误 remote、子目录作根、错误分支、detached、legacy clone、CLI 退出码，对本次\"脚本+文档+忽略规则\"改动属可接受水平；行为级 ignore 断言列为 P2 改进项而非阻断。开发报告的 pytest 854 passed/3 skipped、mypy 44 files、ruff、CI run 44887441629（test+png-export SUCCESS）、PR #44 MERGEABLE/CLEAN 均按 handoff 采信（本会话无 shell/gh，未复跑）。\n\n剩余 4 条 P2（均 open，不阻断 approve，但需在合并后 follow-up 修完才算彻底收口）：(1) docs/AStockAgent_repo_source_of_truth.md:78-79 称正式 handoff/review 记录「随仓库提交」，实测 22 组 handoff（44 文件）与 calendar/reviews 新目录全部未跟踪且 .gitignore 未覆盖，文档与 git status 不一致；(2) tools/check_repo_source.py:169-185 只校验 remote.origin.url，未校验 pushurl，推送目标被改到 release/fork 仍 exit 0；(3) tests/test_repo_source_check.py:212-234 的 ignore 测试仅字符串包含、tempdir 测试因 conftest 强制赋值而恒真，缺少 check-ignore 行为级断言；(4) .gitignore:78-97 把一次性个人文件名写死（/甲.txt、/name_crop.png、/font_test*、/probe_*、/resume_* 等）且 L93/L94 与 L44/L46 重复，属永久屏蔽而非归档/删除。\n\n责任与判定：以上 4 条由开发在 PR #44 合并后以独立 follow-up 提交修复——文档口径与 git status 对齐（入库或改写文案+补 ignore）、pushurl 纳入校验或文档声明不校验、ignore 断言改为 `git check-ignore -q` 正反例、清理单文件 ignore 并附 `git status --short` 证据。4 条全部关闭（或开发明确书面降级理由被接受）时判定完全解决。",
+  "startedAt": "2026-11-21T09:04:24.285Z",
+  "finishedAt": "2026-11-21T09:07:27.838Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 4,
+    "total": 4
+  }
+}

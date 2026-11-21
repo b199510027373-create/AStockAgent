@@ -1,0 +1,211 @@
+{
+  "id": "ho-20261121-010",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261103-013",
+  "threadId": null,
+  "sessionId": "",
+  "title": "根目录卫生与仓库单一真源校验",
+  "summary": "已把仓库根确立为唯一源码/发布源：新增 tools/check_repo_source.py 校验 toplevel、origin 与 main 分支，并阻断从历史 release/AStockAgent 目录执行；CI 在装依赖前运行该校验；归档根目录临时产物与 PR 草稿，补齐根锚定 .gitignore；tests/conftest.py 将 pytest 临时目录固定到 .tmp-tests，避免系统 TEMP 不可写时污染根目录；新增真源说明文档并清理 CI/发布文档中的双目录同步表述。目标测试 22 passed，全量 pytest 854 passed，mypy 44 files 与 ruff 全绿。PR #44 已创建，CI 观察中。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "清理根目录临时产物（mypy_core.txt/mypy_full.txt/coverage_report.txt/temp_*.png/daily_report.txt 等）",
+      "source": "plan-20261103-013 description"
+    },
+    {
+      "id": "R2",
+      "text": "归档或忽略 handoff/review 草稿",
+      "source": "plan-20261103-013 description"
+    },
+    {
+      "id": "R3",
+      "text": "加一个“当前仓库根/remote/分支”校验脚本，防止再按旧 release 目录发布",
+      "source": "plan-20261103-013 description"
+    },
+    {
+      "id": "R4",
+      "text": "文档删除双目录同步表述",
+      "source": "plan-20261103-013 description"
+    },
+    {
+      "id": "A1",
+      "text": "根目录只保留源码/配置/文档，临时产物归档或删除",
+      "source": "plan-20261103-013 acceptance"
+    },
+    {
+      "id": "A2",
+      "text": "脚本校验 `git rev-parse --show-toplevel` 指向工作区根且 remote 为 b199510027373-create/AStockAgent",
+      "source": "plan-20261103-013 acceptance"
+    },
+    {
+      "id": "A3",
+      "text": "release/AStockAgent 标记为历史旧仓库，不再作为发布源；删除双目录同步要求",
+      "source": "plan-20261103-013 acceptance"
+    },
+    {
+      "id": "A4",
+      "text": "handoff/review 草稿有归档目录或忽略规则，不污染 git status",
+      "source": "plan-20261103-013 acceptance"
+    },
+    {
+      "id": "A5",
+      "text": "清理后全量 pytest 与 mypy 通过；CI/发布文档同步更新",
+      "source": "plan-20261103-013 acceptance"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tools/check_repo_source.py",
+      "summary": "新增 stdlib 校验脚本：标准化 https/ssh/scp remote，校验 toplevel、origin、main 分支；从 release/AStockAgent 目录执行直接阻断；CLI 退出码 0/1",
+      "commit": "309591a"
+    },
+    {
+      "path": "tests/test_repo_source_check.py",
+      "summary": "新增 22 个测试：remote 归一化、错误 remote、子目录根、分支/游离 HEAD、旧 release clone 阻断、CLI 退出码、当前工作区集成、.gitignore 与测试临时目录",
+      "commit": "309591a"
+    },
+    {
+      "path": "tests/conftest.py",
+      "summary": "将 pytest 临时目录固定到仓库内已忽略的 .tmp-tests，避免系统 TEMP 不可写时 Python 回退到仓库根",
+      "commit": "309591a"
+    },
+    {
+      "path": "tests/test_sw_crosswalk.py",
+      "summary": "7 处硬编码 .tmp-test 改用 .tmp-tests，统一测试临时产物位置",
+      "commit": "309591a"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "summary": "新增 Verify repository source of truth 步骤：PR 使用 --any-branch --allow-detached，main 严格校验；更新 pytest 收集注释",
+      "commit": "309591a"
+    },
+    {
+      "path": ".gitignore",
+      "summary": "增加根锚定的临时目录/探针/草稿/归档忽略规则；release/ 注释改为历史嵌套 clone",
+      "commit": "309591a"
+    },
+    {
+      "path": "docs/AStockAgent_repo_source_of_truth.md",
+      "summary": "新增唯一真源权威说明：根/remote/main、历史 release、脚本用法与退出码、CI 行为、根目录卫生与失败排查",
+      "commit": "309591a"
+    },
+    {
+      "path": "docs/AStockAgent_CI_work_calendar.md",
+      "summary": "仓库位置、开发/发布流程、推荐操作与开场提示改为根目录直接开发 + 校验脚本，移除双目录同步",
+      "commit": "309591a"
+    },
+    {
+      "path": "docs/AStockAgent_chart_pipeline_decisions_v1.md",
+      "summary": "pytest 收集说明改为旧 release clone 仅历史参考",
+      "commit": "309591a"
+    },
+    {
+      "path": "docs/AStockAgent_contracts_delivery_2026-11-09.md",
+      "summary": "旧发布副本/未同步表述标注为历史记录",
+      "commit": "309591a"
+    },
+    {
+      "path": "docs/AStockAgent_contracts_PR_handoff_2026-11-09.md",
+      "summary": "旧 release 发布副本要求标注为历史记录",
+      "commit": "309591a"
+    },
+    {
+      "path": "docs/AStockAgent_development_status_2026-11-08.md",
+      "summary": "旧双目录同步状态标注为历史记录",
+      "commit": "309591a"
+    },
+    {
+      "path": "README.md",
+      "summary": "文档列表增加仓库单一真源与根目录校验入口",
+      "commit": "309591a"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_repo_source_check.py -q -p no:cacheprovider",
+      "result": "22 passed, 1 warning in 4.91s",
+      "passed": true,
+      "evidence": "新增测试全部通过；覆盖 remote 归一化、toplevel、分支、旧 release 阻断、CLI 退出码、.gitignore 与临时目录"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_sw_crosswalk.py -q -p no:cacheprovider",
+      "result": "25 passed, 1 warning in 1.67s",
+      "passed": true,
+      "evidence": "临时目录路径调整后 crosswalk 测试保持全绿"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "854 passed, 3 skipped, 5 deselected, 1 warning, 18 subtests passed in 72.13s",
+      "passed": true,
+      "evidence": "全量非 PNG 套件通过；跳过项为既有 png 标记/条件跳过"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "类型检查全绿"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "lint 全绿"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe tools/check_repo_source.py --any-branch",
+      "result": "exit 0；根/remote/分支正确，仅 WARN 历史 release/AStockAgent",
+      "passed": true,
+      "evidence": "本地特性分支使用 --any-branch 验证；main 严格模式由 CI push 覆盖"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe tools/check_repo_source.py --root release/AStockAgent --any-branch",
+      "result": "exit 1；ERROR 检查目录是历史旧仓库 release/AStockAgent",
+      "passed": true,
+      "evidence": "确认旧发布目录不能被误当作发布源"
+    },
+    {
+      "command": "git diff --check",
+      "result": "OK；仅 .devloop 文件 CRLF 提示",
+      "passed": true,
+      "evidence": "无空白错误"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI 登录 b199510027373-create",
+      "reason": "推送分支、创建 PR 与读取 CI 状态",
+      "status": "granted"
+    },
+    {
+      "name": "本地 danger-full-access 文件权限",
+      "reason": "清理被 ACL 拒绝的临时目录并运行 pytest 临时仓库测试",
+      "status": "granted"
+    },
+    {
+      "name": "CI Actions 运行权限",
+      "reason": "PR #44 自动触发 ci.yml",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "chore/repo-single-source",
+    "commit": "309591a",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/44",
+    "ci": "running",
+    "merge": "not merged",
+    "status": "ci-running"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "等待 PR #44 CI 结果；若 CI 失败，按日志修复并补 update handoff；CI 通过后请求评审/合并。评审通过后把 plan-20261103-013 从 in_review 改为 done。注意 .devloop 既有官方 handoff/review 记录仍未跟踪，不在本 PR 混入。",
+  "createdAt": "2026-11-21T09:00:20.619Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-010.md"
+}

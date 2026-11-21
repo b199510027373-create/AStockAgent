@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261119-002-r2",
+  "threadId": "rev-20261119-002",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "第 2 轮：全量代码",
+  "status": "completed",
+  "verdict": "comment",
+  "summary": "第 2 轮 full 复核（c853cea..89572cb）：第 1 轮 6 条问题均已在代码、测试与文档中落实，未发现新的 P0/P1/P2，本轮不需要再改代码。核验要点：① chart_render.py:1616-1627 仅 MINUTE_FREQS 使用 continuous_bars，日/周/月线指标改由 transformed 计算；1628-1634 对无可连续竞价样本写 warning；新增 daily/weekly/monthly MA20 数值断言 tests/test_agent_chart_render.py:1400+。② registry.py:85-120 新增 ToolContext ContextVar，runtime.py:496-504 注入、market_tools.py:1069-1094 透传 run_id/step/session_id，tests/test_agent_runtime.py:1172+ 覆盖真实 runtime→kline link=(run_id, step=0, source='agent')。③ chart_service.py:114-135 删除自建 run，run_id 缺失 fail-fast、run_kind 非 agent 拒绝，仅 PNGExportError 置 failed；④ 死代码已删；ArtifactRecord.meta_digest 已落库并在回放校验（篡改抛 ArtifactReplayUnavailable）；caption 按 aggregated/none/unknown 三态归因。文档 freeze v2、ADR-016/017/018 正文、modules.json 均已回填。\n\n唯一阻塞不是代码，而是评审台账：旧 issue（iss-mwnlpfyt-26f425 等 6 条）仍 status=open、feedback=null，finish approve 被工具拒绝，原文「还有 1 个 P0 未闭环，不能 approve」。评审侧没有关闭入口，需开发在 rev-20261119-002 上逐条提交 option=fixed、effective=true 的反馈（引用 89572cb 及上述测试），使 openP0=0、openP1=0；随后 reviewer 开 targeted 轮复核并 approve。完全解决判据：6 条 feedback=fixed 且 targeted 轮 approve。另：load_chart_artifact 的 recomputed 路径仍对 include_plotlyjs 用 str()（bool False 会变 \\\"False\\\"），仅边角、未记 issue；ADR summary 元数据偏旧但正文已回填。",
+  "startedAt": "2026-11-19T14:52:09.711Z",
+  "finishedAt": "2026-11-19T14:56:18.247Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 0,
+    "total": 0
+  }
+}

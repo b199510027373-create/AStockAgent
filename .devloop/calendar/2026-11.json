@@ -408,17 +408,6 @@
       "notes": "第 4 轮 · request_changes"
     },
     {
-      "id": "cal-plan-20261114-004-planned",
-      "type": "planned",
-      "title": "PR #9 调度 5 日生产验收与心跳告警观察",
-      "start": "2026-11-14T00:00:00+08:00",
-      "end": "2026-11-21T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261114-004",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
       "id": "cal-plan-20261103-005-planned",
       "type": "planned",
       "title": "「无显著 alpha」实时横幅（ledger 驱动）",
@@ -822,6 +811,17 @@
       "notes": "第 2 轮 · comment"
     },
     {
+      "id": "cal-plan-20261120-001-planned",
+      "type": "planned",
+      "title": "复权口径展示收口：enrich/周期聚合保留复权标注 + 图注标注 hfq 与基准",
+      "start": "2026-11-20T00:00:00+08:00",
+      "end": "2026-11-25T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261120-001",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261119-001-planned",
       "type": "planned",
       "title": "Agent 会话 UI 冒烟脚本入库与可复现",
@@ -840,17 +840,6 @@
       "end": "2026-11-26T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261119-002",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
-      "id": "cal-plan-20261120-001-planned",
-      "type": "planned",
-      "title": "复权口径展示收口：enrich/周期聚合保留复权标注 + 图注标注 hfq 与基准",
-      "start": "2026-11-20T00:00:00+08:00",
-      "end": "2026-11-25T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261120-001",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
@@ -885,6 +874,119 @@
       "notes": "第 6 轮 · approve"
     },
     {
+      "id": "cal-rev-20261120-001-r1",
+      "type": "review",
+      "title": "评审：评审：Agent 会话 UI 冒烟脚本入库与可复现",
+      "start": "2026-11-20T11:36:56.141Z",
+      "end": "2026-11-20T11:40:38.282Z",
+      "planItemId": "plan-20261119-001",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261120-001-r2",
+      "type": "review",
+      "title": "评审：评审：Agent 会话 UI 冒烟脚本入库与可复现",
+      "start": "2026-11-20T12:19:03.093Z",
+      "end": "2026-11-20T12:20:50.029Z",
+      "planItemId": "plan-20261119-001",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261120-001-r3",
+      "type": "review",
+      "title": "评审：评审：Agent 会话 UI 冒烟脚本入库与可复现",
+      "start": "2026-11-20T13:12:28.774Z",
+      "end": "2026-11-20T13:13:20.513Z",
+      "planItemId": "plan-20261119-001",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261120-001-r4",
+      "type": "review",
+      "title": "评审：评审：Agent 会话 UI 冒烟脚本入库与可复现",
+      "start": "2026-11-20T13:21:07.493Z",
+      "end": "2026-11-20T13:21:14.817Z",
+      "planItemId": "plan-20261119-001",
+      "source": "reviewer-agent",
+      "notes": "第 4 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261120-002-r1",
+      "type": "review",
+      "title": "评审：评审：Agent 会话真实模型 E2E 验证（DeepSeek/兼容网关）",
+      "start": "2026-11-20T15:53:46.045Z",
+      "end": "2026-11-20T15:58:00.802Z",
+      "planItemId": "plan-20261119-002",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · approve"
+    },
+    {
+      "id": "cal-plan-20261121-001-planned",
+      "type": "planned",
+      "title": "修复研报空 ts_code 导致收盘任务连续失败",
+      "start": "2026-11-21T00:00:00+08:00",
+      "end": "2026-11-23T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261121-001",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261110-002-planned",
+      "type": "planned",
+      "title": "修复 P2：AppBannerWiringTests 导入异常不得降级为 skip",
+      "start": "2026-11-21T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261110-002",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261103-013-planned",
+      "type": "planned",
+      "title": "根目录卫生与仓库单一真源校验",
+      "start": "2026-11-21T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-013",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-rev-20261120-002-r2",
+      "type": "review",
+      "title": "评审：评审：Agent 会话真实模型 E2E 验证（DeepSeek/兼容网关）",
+      "start": "2026-11-21T07:28:53.518Z",
+      "end": "2026-11-21T07:29:40.944Z",
+      "planItemId": "plan-20261119-002",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261113-001-r3",
+      "type": "review",
+      "title": "评审：评审：调度状态机迁移 jobs 表 + 心跳告警",
+      "start": "2026-11-21T08:32:04.150Z",
+      "end": "2026-11-21T08:32:19.866Z",
+      "planItemId": "plan-20261103-007",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261121-001-r1",
+      "type": "review",
+      "title": "评审：评审：根目录卫生与仓库单一真源校验",
+      "start": "2026-11-21T09:04:24.285Z",
+      "end": "2026-11-21T09:07:27.838Z",
+      "planItemId": "plan-20261103-013",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",
@@ -892,17 +994,6 @@
       "end": "2026-11-27T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261103-008",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
-      "id": "cal-plan-20261117-001-planned",
-      "type": "planned",
-      "title": "观察期后收口：Ruff 豁免移除与文档基线守护加固",
-      "start": "2026-11-23T00:00:00+08:00",
-      "end": "2026-11-27T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261117-001",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
@@ -940,6 +1031,39 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-plan-20261114-004-planned",
+      "type": "planned",
+      "title": "PR #9 调度 5 日生产验收与心跳告警观察",
+      "start": "2026-11-23T00:00:00+08:00",
+      "end": "2026-11-27T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261114-004",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261103-009-planned",
+      "type": "planned",
+      "title": "板块/停牌/北交所交易规则补齐",
+      "start": "2026-11-23T00:00:00+08:00",
+      "end": "2026-11-26T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-009",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261107-009-planned",
+      "type": "planned",
+      "title": "Agent 评测集与离线回归",
+      "start": "2026-11-23T00:00:00+08:00",
+      "end": "2026-11-26T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261107-009",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
       "id": "cal-plan-20261107-007-planned",
       "type": "planned",
       "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
@@ -951,13 +1075,13 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261103-013-planned",
+      "id": "cal-plan-20261117-001-planned",
       "type": "planned",
-      "title": "根目录卫生与仓库单一真源校验",
-      "start": "2026-11-28T00:00:00+08:00",
-      "end": "2026-11-30T23:59:00+08:00",
+      "title": "观察期后收口：Ruff 豁免移除与文档基线守护加固",
+      "start": "2026-11-27T00:00:00+08:00",
+      "end": "2026-11-28T23:59:00+08:00",
       "allDay": true,
-      "planItemId": "plan-20261103-013",
+      "planItemId": "plan-20261117-001",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },

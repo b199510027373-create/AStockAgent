@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwnlppp6-b47e47",
+  "threadId": "rev-20261119-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "audit",
+  "file": "astock/agent/chart_service.py",
+  "lines": "339-340",
+  "title": "load_chart_artifact 重算 meta_digest，无法校验记录 meta 是否被篡改",
+  "evidence": "chart_service.load_chart_artifact 在 339-340 行把 `payload[\"meta_digest\"]` 设为 `meta_digest(meta)`，而 `meta = dict(record.meta)` 正是从同一条 version 记录读出的 meta_json；重算值必然与同一输入自洽，无法证明库内 `agent_artifact_versions.meta_digest` 未被篡改。store.ArtifactRecord（612-622）没有 meta_digest 字段，`_row_to_record`（886-897）也没把 `version_row[\"meta_digest\"]` 带出来（record_artifact 在 819-826 行确实写入了该列）。v2 冻结 §7 写明「真实性以 content_digest + meta_digest 为准」；当前 as_recorded 只通过 load_artifact 校验了 HTML 的 content_digest，meta 的完整性没有校验。",
+  "suggestion": "给 `ArtifactRecord` 增加 `meta_digest: str` 字段，在 `_row_to_record` 中传 `version_row[\"meta_digest\"]`；`load_chart_artifact` 改用 `record.meta_digest`，并断言 `meta_digest(record.meta) == record.meta_digest`，不一致抛 `ArtifactReplayUnavailable`（或至少追加高优先级 warning 并在 payload 标 `meta_verified=False`），不要静默用重算值。补一个测试：直接改库内 meta_json 后重新 `load_chart_artifact(..., mode=\"as_recorded\")`，应检测到 meta_digest 不匹配；再补正常路径断言 payload.meta_digest 等于写入时的 digest。",
+  "confidence": 0.92,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T15:29:37.005Z"
+  },
+  "createdAt": "2026-11-19T13:43:58.554Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T15:29:37.005Z"
+    }
+  ]
+}

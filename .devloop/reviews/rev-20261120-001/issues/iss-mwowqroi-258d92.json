@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwowqroi-258d92",
+  "threadId": "rev-20261120-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "evidence",
+  "file": "tests/smoke/agent_ui/run_smoke.py",
+  "lines": "282-285,335-338,399-401",
+  "title": "启动失败路径直接 return 1，跳过 run.json，与 README/workflow 承诺的「失败保留 run.json 与 report.json」不符",
+  "evidence": "两条启动失败分支在 try 内直接返回：`if not wait_for_log(app_log, \"READY url=\", timeout=180): ... summary[\"error\"] = \"fixture app not ready\"; return 1`（run_smoke.py:282-285）与 `if not wait_debug_endpoint(debug_port, timeout=60): ... summary[\"error\"] = \"browser debug endpoint not ready\"; return 1`（:335-338）。写证据在最后：(workdir / \"run.json\").write_text(...)（:399-401）位于 finally 之后，这两条路径永不执行，也不会打印「INFO 证据目录」。而 README.md:102-103 写「失败时**保留**工作目录（app.log / browser.log / driver.log / report.json / run.json）」，workflow 注释第 6 行写「失败时上传 report.json 与日志」，上传路径 :51-52 也列了 report.json 与 run.json。夜里最常见的两类失败（夹具没起、浏览器调试端口没起）恰好落在这两条路径上：artifact 里只有 *.log，没有 run.json/report.json（if-no-files-found: warn 也不会让步骤变红），机器可读的失败摘要缺失。",
+  "suggestion": "抽出 `_write_summary(workdir, summary)`，在 `finally` 块里（或每个 return 前）统一落 run.json，并给 summary 加 `stage` 字段（\"fixture\" / \"browser\" / \"driver\"）区分阶段；若不希望启动失败也产出 run.json，则改为同步修订 README.md:100-103 与 workflow:6/51-52，明确「启动失败只有日志，无 run.json/report.json」。二者必须选一，且建议在 tests/test_agent_ui_smoke_contract.py 里加一条断言，防止 README 与 workflow 的路径清单再次与代码脱节。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T13:01:06.361Z"
+  },
+  "createdAt": "2026-11-20T11:40:29.730Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T13:01:06.361Z"
+    }
+  ]
+}

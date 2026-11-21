@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwowqrnm-0644cf",
+  "threadId": "rev-20261120-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "test-evidence",
+  "file": ".github/workflows/agent-ui-smoke.yml",
+  "lines": "8-11,42-43",
+  "title": "nightly 入口从未在目标 runner（windows-latest）上跑过，验收 1/5 的「干净检出可运行」只有本机脏工作区证据",
+  "evidence": "workflow 触发器只有 `schedule`（cron \"17 18 * * *\"）与 `workflow_dispatch`（.github/workflows/agent-ui-smoke.yml:8-11），因此它不会出现在 PR #38 的 check 里。planItem.links.test 与 ho-20261120-010 的 tests[] 中唯一的真机证据是本机命令 `run_smoke.py --workdir tests/smoke/agent_ui/.workdir --keep-workdir` → 8 项 PASS / 13.42s，环境自述为「Windows + Edge headless（本会话以 danger-full-access 运行）」；delivery.ci 只有 ci.yml 的 `test pass 1m42s / png-export pass 1m38s`（run 44728326382），不含 smoke job。handoff.next 第 2 条自己写明「合并后可手动触发一次 agent-ui-smoke workflow（workflow_dispatch）确认在 windows-latest 上跑通」——即目标 runner 上目前零运行记录。验收 1「冒烟脚本在干净检出上可运行」因此只有本机工作树证据，而本机工作树含 data/astock.db 等按 LEDGER-01 忽略的本地状态，不等于干净检出。（说明：本会话无 shell 工具，无法执行 `gh run list --workflow agent-ui-smoke.yml` 复核；上述结论取自 handoff/plan 记录，若已有成功 run 记录，请直接附上 run URL 反驳本条。）",
+  "suggestion": "合并后由开发执行 `gh workflow run agent-ui-smoke.yml --ref main`（或 Actions 页面 workflow_dispatch），把 run URL、artifact 名（应含 report.json 的 8 项 PASS 与 run.json ok=true）、windows-latest 上的 Edge/Chrome 版本记入新的 developer handoff，并追加到 planItem.links.test；若首次运行失败，按 app.log/browser.log/driver.log 修脚本后重跑至绿。完成条件：handoff 里能点到一次成功的 agent-ui-smoke run，且其 report.json 含 upload/stream/steps/figure/citations/interrupt/audit/degraded 八项。在此之前 plan-20261119-001 不得置 done。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T13:00:59.522Z"
+  },
+  "createdAt": "2026-11-20T11:40:29.698Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T13:00:59.522Z"
+    }
+  ]
+}

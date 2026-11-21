@@ -1,0 +1,60 @@
+# PR 评审：评审：Agent 会话 UI 冒烟脚本入库与可复现
+
+> 自动生成于 2026-11-20T13:21:14.817Z；可直接转交开发会话。
+
+## 概览
+
+- 线程：`rev-20261120-001`
+- 计划项：`plan-20261119-001`
+- 分支：`test/agent-ui-smoke` → `main`
+- 轮次：第 4 轮（diff）
+- 结论：通过（approve）
+- 开发会话：`session-8ce0dece-ba21-4e45-a4d1-6cb898fb3157`
+- 本轮问题：0（P0 0 / P1 0 / P2 0）
+- 线程未闭环：P0 0 / P1 0 / P2 0
+
+## 本轮结论
+
+第 4 轮（scope=diff，base=368f684 / HEAD=368f684，无新代码变更）收口复核：本线程 8 条问题全部 fixed，openP0=0、openP1=0，判定**完全解决**，可关闭线程并把 plan-20261119-001 置 done。
+
+一、本轮核对方式与结论
+- 代码面无新增 diff：devloop_git log 顶端仍是 368f684（PR #41 squash），工作树 tests/smoke/agent_ui 与 .github/、requirements-dev.txt、.gitignore 无未提交改动（仅 .devloop 元数据与历史草稿目录有变动，不属本线程评审范围），因此不再重复全量读码。
+- 前轮遗留两条已由开发侧回填 fixed（.devloop/reviews/rev-20261120-001/issues/ 下 status=fixed，feedback.at 13:16:56Z / 13:17:07Z）：
+  - iss-mwoy6ghr-f8e6cd（P1，interrupt 第三轮判据）：smoke_drive.py:96/101 `_COMPLETED_JS`/`_completed_count`，:298 发送前采样 completed_before，:307 `done > {completed_before}`，:315-317 等待后再断言新增，配合 test_agent_ui_smoke_contract.py:392 的源码+README 双重断言 → 假通过路径已被堵住。
+  - iss-mwoy6git-5678ab（P2，强杀不留 driver.log）：run_smoke.py:435-449 补写 driver.log + summary["driver_log"]，:246 `_driver_error` 把 report.json 原因带进 run.json，README 失败清单同步；负向用例 `--timeout 0.01` 退出码 1、driver.log 570B 已取证。
+- 更早 6 条（r1 的 1×P1 + 5×P2）此前两轮已逐条判定 fixed，ledger 状态一致，无反复。
+
+二、验收 5 条最终证据
+1) 干净检出可运行：REPO_ROOT 由 __file__ 推导（run_smoke.REPO_ROOT 契约测试守住）、全部路径 resolve，windows-latest 上 nightly run 44741630551（main 368f684）success，八项 PASS。
+2) 无密钥/个人路径/大截图：契约测试 _PERSONAL_OR_SECRET_PATTERNS + 夹具/包体积上限 + 默认不截图。
+3) README 依赖/启动命令/失败判据/已知限制与代码一致（本轮两处措辞已同步）。
+4) 六条主路径 upload/stream/steps/figure/citations/interrupt + audit + degraded 均有可执行判据，且绑定真实产品 DOM/文案。
+5) 不进普通 CI（ci.yml 无 smoke，契约测试反向断言）+ 手动/nightly 入口（schedule 18:17Z + workflow_dispatch，artifact 含 report.json/run.json/*.log）。
+
+三、后续（非阻塞，不占本轮配额）
+- plan-20261119-001 当前仍是 in_review：评审不修改计划状态，请开发（或按流程的架构侧）置 done；置前无需再改动代码。
+- 长期观察项（若日后改 UI 文案或升级 Gradio 会触发，不必现在处理）：check_steps 统计全页 `ol.astock-steps li` 而非本轮流（smoke_drive.py:184-191 区）；run_smoke.py 无条件 --no-sandbox（CI 一次性 runner 可接受，本机跑需知悉）。
+
+## 本轮问题
+
+本轮未记录问题。
+
+## 变更文件
+
+- `.github/workflows/agent-ui-smoke.yml`
+- `.gitignore`
+- `requirements-dev.txt`
+- `tests/smoke/agent_ui/README.md`
+- `tests/smoke/agent_ui/cdp.py`
+- `tests/smoke/agent_ui/fixture_app.py`
+- `tests/smoke/agent_ui/fixtures/利润表.xlsx`
+- `tests/smoke/agent_ui/fixtures/年报.pdf`
+- `tests/smoke/agent_ui/run_smoke.py`
+- `tests/smoke/agent_ui/smoke_drive.py`
+- `tests/test_agent_ui_smoke_contract.py`
+
+## 交给开发会话
+
+1. 在分支 `test/agent-ui-smoke` 上处理上面的未闭环问题；只改相关文件。
+2. 修复后回到评审线程，逐条填写真实反馈（已修复 / 换方案 / 延后 / 不采纳 / 重复）。
+3. 只有 P0 全部闭环后才可请求 approve；有 P1/P2 未闭环时在结论中说明取舍。

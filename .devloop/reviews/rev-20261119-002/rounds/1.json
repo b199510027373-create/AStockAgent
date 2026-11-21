@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261119-002-r1",
+  "threadId": "rev-20261119-002",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮全量评审完成，共 6 条问题：P0 1 条、P1 2 条、P2 3 条。结论：request_changes，不能 approve。\n\n阻断项：\n1) P0（iss-mwnlpfyt-26f425）日/周/月线连续指标全部为空。chart_render.py:1579 对非分钟周期也无条件调用 continuous_bars；data.py:923-925 对 D/W/M 返回 \"close\"，continuous_bars 只留 \"continuous\"，导致 indicator_frame 空表，MA/BOLL/MACD/RSI/KDJ 全 NaN，图例有名无线且无 warning。现有测试 412-422/425-429 只查图例文字，故 CI 未发现。\n2) P1（iss-mwnlpizd-c9feed）Agent 出图未关联真实 run。market_tools.py:1073-1082 未传 run_id/step，runtime.py:495/555-581 也没有把 run_id 传入工具，chart_service.py:145-147 落成 source=\"render\"、run_id=NULL，违反 §7.1 的 source=\"agent\" 要求；现有 1209-1231 只测直接 render，未覆盖 runtime→tool 链路。\n3) P1（iss-mwnlpll3-c475bb）chart_service.py:114-125 对不存在的 run_id 自建 status=\"running\" 的 run，仅 PNGExportError 时 fail_run，成功路径永不 finish；与 store.py:447 和 v2 §5 的成对约束冲突，测试 581-602 还把该行为固化成期望。\n\nP2：apply_transforms 509-514 return 后重复死代码；load_chart_artifact 339-340 重算 meta_digest，无法校验库内 meta_digest；_caption 704-705 把所有视图时点未知都归因为“聚合后无时间列”。\n\n测试证据：开发自报 CI PR #36 run 44531537237 两个 job pass、pytest 771 passed、ruff/mypy 通过，均接受；但测试充分性有缺口——日/周/月指标无数值断言，Agent 出图无 runtime 端到端 link 断言。修复方为开发（feat/chart-pipeline-v2 / PR #36）：先修 P0 并补 daily/weekly/monthly 指标数值断言；再修两个 P1（ToolContext 传 run_id/step；chart_service 对缺失 run fail-fast 并调整测试）；P2 建议同 PR 处理（死代码、meta_digest 读库校验、caption 归因），至少给出明确 defer 理由。复评条件：上述 P0/P1 关闭、新增测试在 CI 通过、无回归；届时第 2 轮 diff 评审确认后方可判完全解决。",
+  "startedAt": "2026-11-19T13:35:57.496Z",
+  "finishedAt": "2026-11-19T13:44:16.433Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 1,
+    "P1": 2,
+    "P2": 3,
+    "total": 6
+  }
+}
