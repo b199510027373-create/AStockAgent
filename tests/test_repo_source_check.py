@@ -48,6 +48,22 @@ def _git(repo: Path, *args: str) -> None:
     )
 
 
+def _is_ignored(path: str) -> bool:
+    """按真实忽略规则判断路径，而不是对 .gitignore 做字符串匹配。"""
+
+    return (
+        subprocess.run(
+            ["git", "check-ignore", "-q", path],
+            cwd=str(ROOT),
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).returncode
+        == 0
+    )
+
+
 @pytest.fixture()
 def repo(tmp_path: Path) -> Path:
     _git(tmp_path, "init", "-q", "-b", "main")
@@ -138,6 +154,22 @@ def test_check_rejects_unexpected_branch(repo: Path) -> None:
     assert _module().check_repo(repo, require_branch=None).ok is True
 
 
+def test_check_rejects_pushurl_to_other_remote(repo: Path) -> None:
+    """fetch URL 正确但 pushurl 指向别处时，不能认为发布源可信。"""
+
+    _git(
+        repo,
+        "config",
+        "remote.origin.pushurl",
+        "https://github.com/other/repo.git",
+    )
+
+    result = _module().check_repo(repo)
+
+    assert result.ok is False
+    assert any("pushurl" in problem for problem in result.problems)
+
+
 def _commit(repo: Path) -> None:
     (repo / "README.md").write_text("test\n", encoding="utf-8")
     _git(repo, "add", "README.md")
@@ -209,29 +241,35 @@ def test_cli_exit_codes(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert "ERROR:" in capsys.readouterr().err
 
 
-def test_gitignore_keeps_root_hygiene_and_ignores_release_clone() -> None:
-    """根目录临时产物、旧 release 副本和 DevLoop 草稿都不能进入 git status。"""
+def test_gitignore_hygiene_rules_ignore_real_paths() -> None:
+    """用 git check-ignore 验证行为，而不是只检查 .gitignore 文本。"""
 
-    text = (ROOT / ".gitignore").read_text(encoding="utf-8")
-    for needle in (
+    ignored = (
+        "astock-chat-x/",
+        ".pytest-x/",
+        "pip-x/",
+        "tmp-x/",
+        "_archive/x",
+        ".devloop/drafts/x",
+        ".devloop/handoffs/archive/x",
+        ".devloop/reviews/archive/x",
+        ".tmp-tests/x",
         "release/",
-        "/astock-chat-*/",
-        "/.pytest-*/",
-        "/pip-*/",
-        "/tmp*/",
-        "/_archive/",
-        "/.devloop/drafts/",
-        "/.devloop/handoffs/archive/",
-        "/.devloop/reviews/archive/",
-    ):
-        assert needle in text, f".gitignore 缺少根目录卫生规则：{needle}"
+    )
+    tracked = ("astock/data.py", "docs/repo_source.md", "tests/test_repo_source_check.py")
+
+    for path in ignored:
+        assert _is_ignored(path), f"应被忽略：{path}"
+    for path in tracked:
+        assert not _is_ignored(path), f"不应被忽略：{path}"
 
 
 def test_pytest_tempdir_stays_inside_repo_ignored_dir() -> None:
-    """系统 TEMP 不可写时，pytest 的临时目录不能退回仓库根。"""
+    """明确断言 conftest 的设置，且该目录确实被 git 忽略。"""
 
-    temp_root = Path(tempfile.gettempdir()).resolve()
-    assert temp_root.is_relative_to((ROOT / ".tmp-tests").resolve())
+    expected = (ROOT / ".tmp-tests").resolve()
+    assert Path(tempfile.gettempdir()).resolve() == expected
+    assert _is_ignored(".tmp-tests/x")
 
 
 def test_current_workspace_is_single_source() -> None:

@@ -39,10 +39,11 @@ C:\Users\b1995\Documents\AStockAgent
 
 1. `git rev-parse --show-toplevel` 与 `--root` 解析后的目录一致；
 2. `remote.origin.url` 归一化后等于 `github.com/b199510027373-create/AStockAgent`；
-3. 当前分支等于 `main`（`--any-branch` 可跳过）；
-4. detached HEAD 默认报错，`--allow-detached` 仅用于 CI 的 PR checkout；
-5. 若检查目录本身就是 `release/AStockAgent`（旧仓库自身也能通过 toplevel/remote 检查），直接阻断；
-6. 从仓库根检查时发现 `release/AStockAgent/.git` 只输出告警，提醒它不是发布源。
+3. `git remote get-url --push origin` 的生效推送地址（含 `pushurl` / `pushInsteadOf`）也指向同一仓库；
+4. 当前分支等于 `main`（`--any-branch` 可跳过）；
+5. detached HEAD 默认报错，`--allow-detached` 仅用于 CI 的 PR checkout；
+6. 若检查目录本身就是 `release/AStockAgent`（旧仓库自身也能通过 toplevel/remote 检查），直接阻断；
+7. 从仓库根检查时发现 `release/AStockAgent/.git` 只输出告警，提醒它不是发布源。
 
 退出码：`0` 通过；`1` 存在阻断问题。告警不影响退出码。
 
@@ -58,8 +59,10 @@ CI 在 `.github/workflows/ci.yml` 的 `test` job 中、依赖安装之前运行�
 - `mypy_*.txt`、`coverage_*.txt`、`daily_report.txt`、`temp_*.png` 等一次性报告/截图；
 - `astock-chat-*`、`astock-files-*`、`astock-tools-*`、`.dsh-office-*`、`.pytest-*`、
   `pip-*`、`tmp*` 等运行时目录；
-- `.pr-body-*.md`、`.pr-comment-*.md` 等 PR 草稿；
-- 个人探针脚本（`probe_*`、`resume_*`、`font_test*` 等）。
+- `.pr-body-*.md`、`.pr-comment-*.md` 等 PR 草稿。
+
+一次性个人探针、截图和脚本已移入 `_archive/`，不再为单个文件名维护永久忽略规则；
+`_archive/` 整体忽略。
 
 忽略规则在 `.gitignore` 末尾的「根目录卫生」段，全部以 `/` 锚定仓库根，避免误伤
 `astock/`、`tests/` 下的同名文件。`tests/conftest.py` 还会把 pytest 的临时目录固定到
@@ -75,8 +78,8 @@ _archive/                 # 本地归档，整体忽略
 .devloop/reviews/archive/
 ```
 
-正式 handoff 和评审记录仍放在 `.devloop/handoffs/`、`.devloop/reviews/` 并随仓库提交；
-只有草稿进入 `drafts/` 或 `archive/`。
+正式 handoff 和评审记录放在 `.devloop/handoffs/`、`.devloop/reviews/`，由开发在会话结束时
+随仓库提交；未提交前会短暂出现在 `git status`。只有草稿进入 `drafts/` 或 `archive/`。
 
 ## 4. 常见失败与处理
 
@@ -84,6 +87,7 @@ _archive/                 # 本地归档，整体忽略
 | --- | --- | --- |
 | `git 工作区根与检查目录不一致` | 在子目录或 `release/AStockAgent` 里执行 | `cd` 回仓库根，或把 `--root` 指向根目录 |
 | `origin 指向 ...，期望 ...` | remote 被改成 fork/旧仓库 | `git remote set-url origin https://github.com/b199510027373-create/AStockAgent.git` |
+| `origin.pushurl 指向 ...，期望 ...` | 只改了推送地址（`pushurl` / `pushInsteadOf`） | `git config --unset-all remote.origin.pushurl`，并检查 `git remote get-url --push origin` |
 | `当前分支为 ...，期望 main` | 在功能分支上做发布检查 | 合并到 `main` 后重跑；功能分支用 `--any-branch` |
 | `当前为 detached HEAD` | CI PR checkout 或手工 checkout 提交 | CI 用 `--allow-detached`；本地切回 `main` |
 | `检查目录是历史旧仓库 release/AStockAgent` | 在旧副本里执行了检查 | `cd` 回仓库根后重跑；不要从该目录提交/发布 |

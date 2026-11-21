@@ -75,26 +75,9 @@ tests/smoke/agent_ui/.workdir/
 /.chmodtest/
 /.worktrees/
 
-# 根目录一次性探针、生成报告与个人草稿（不是产品源码）。
+# 根目录生成报告与临时 PR 草稿；一次性个人文件已移入 _archive/，不再逐文件名忽略。
 /.pr-*.md
-/.dsh_pytest.py
 /coverage_*.txt
-/font_test*
-/probe_*
-/resume_*
-/name_crop.png
-/pil_name.png
-/build_resume.py
-/build_boss_guide.py
-/rebuild_template.py
-/inspect_resume*
-/list_images.py
-/甲.txt
-/01_test.ipynb
-/my_stocks.csv
-/.thesis_data/
-/py_path_test.py
-/test_py_workspace.txt
 
 # 根目录清理归档：只留在本地，绝不提交。
 /_archive/

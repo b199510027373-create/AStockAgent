@@ -166,6 +166,11 @@ def check_repo(
                 f"toplevel={toplevel}，期望={resolved_root}"
             )
 
+    try:
+        canonical_expected = normalize_remote(expected_remote)
+    except RemoteFormatError:
+        canonical_expected = expected_remote.strip()
+
     remote = _run_git(resolved_root, "config", "--get", "remote.origin.url")
     if not remote:
         problems.append("未配置 origin remote（git config --get remote.origin.url 失败）")
@@ -175,13 +180,24 @@ def check_repo(
         except RemoteFormatError as exc:
             problems.append(str(exc))
         else:
-            try:
-                canonical_expected = normalize_remote(expected_remote)
-            except RemoteFormatError:
-                canonical_expected = expected_remote.strip()
             if actual_remote.casefold() != canonical_expected.casefold():
                 problems.append(
                     f"origin 指向 {actual_remote}，期望 {canonical_expected}"
+                )
+
+    # ``remote.origin.pushurl``（或 url.<base>.pushInsteadOf）可以只改推送目标。
+    # 用 ``git remote get-url --push`` 取生效值，避免 fetch URL 正确但 push 到别处。
+    push_remote = _run_git(resolved_root, "remote", "get-url", "--push", "origin")
+    if push_remote:
+        try:
+            actual_push_remote = normalize_remote(push_remote)
+        except RemoteFormatError as exc:
+            problems.append(f"origin.pushurl 无法解析：{exc}")
+        else:
+            if actual_push_remote.casefold() != canonical_expected.casefold():
+                problems.append(
+                    f"origin.pushurl 指向 {actual_push_remote}，"
+                    f"期望 {canonical_expected}"
                 )
 
     branch = _run_git(resolved_root, "symbolic-ref", "--quiet", "--short", "HEAD")
