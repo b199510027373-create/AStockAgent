@@ -1,0 +1,139 @@
+{
+  "id": "ho-20261121-017",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261110-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "修复 P2：AppBannerWiringTests 导入异常不得降级为 skip",
+  "summary": "更新交付状态（相对 ho-20261121-016 的修改痕迹）：\n\n1) 记录已落库并推送：新增提交 8d0f192「chore(devloop): plan-20261110-002 记录修复与交付（in_review）」，包含 .devloop/plan/items/plan-20261110-002.json（status=in_review、progress=100、links.test 5 条证据）、.devloop/calendar/2026-11.json、.devloop/worklog/2026-11.jsonl、.devloop/handoffs/ho-20261121-016.{json,md}。\n2) PR #45 head 从 3abe12b 变为 8d0f192，CI 对记录提交重跑并全绿：run 44890948780，test pass 1m27s、png-export pass 56s。\n3) 删除临时文件 .tmp-pr-body.md，工作区现在无未跟踪垃圾。\n4) 计划项状态已由 doing 改为 in_review（不再重复改状态），PR 仍待评审合并；交付结论与测试证据不变，无需重跑本地套件。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "AppBannerWiringTests.setUpClass 不得用 except Exception 把所有 app 导入/构建异常降级为 SkipTest；import 链断裂或 app.py 接线被删时必须失败而非静默 skip。",
+      "source": "plan-20261110-002 描述 / 评审 rev-20261110-002 P2 iss-mwaf2gr0 (tests/test_alpha_banner.py:237-245)"
+    },
+    {
+      "id": "REQ-2",
+      "text": "只对可选依赖缺失跳过（ModuleNotFoundError 且模块在显式声明的可选依赖白名单内，或 skipUnless 显式声明），其余异常直接抛出。",
+      "source": "plan-20261110-002 描述「建议」"
+    },
+    {
+      "id": "REQ-3",
+      "text": "验证：临时删除 app.py 的 bind_banner_refresh 接线时该测试 fail。",
+      "source": "plan-20261110-002 描述「验证」"
+    },
+    {
+      "id": "REQ-4",
+      "text": "改行为必须新增/更新测试并记录真实命令/结果；至少运行目标测试、相关全量测试和类型检查。",
+      "source": "会话硬规则 / DevLoop 开发协议"
+    },
+    {
+      "id": "REQ-5",
+      "text": "测试失败或证据缺失不得标 in_review；结束前写 developer handoff（需求对标/改动/测试/权限/交付状态）。",
+      "source": "会话硬规则 / DevLoop 开发协议"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/test_alpha_banner.py",
+      "summary": "代码改动不变（+77/−5）：import_app_for_wiring_test 只对可选依赖 gradio 缺失 SkipTest，其余异常抛出；setUpClass 改用该 helper；新增 AppBannerWiringGuardTests 5 用例/2 subtests。",
+      "commit": "3abe12b"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-002.json",
+      "summary": "status=in_review、progress=100、links 保留 review/issue，新增 branch/pr/test（4 条本地证据 + 1 条 CI run）。",
+      "commit": "8d0f192"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "记录 2026-11-21 work-log 事件（category=dev，durationMin=110）。",
+      "commit": "8d0f192"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "同上 worklog 条目。",
+      "commit": "8d0f192"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261121-016.md",
+      "summary": "首个 developer handoff（需求对标/改动/测试/权限/交付/下一步）。",
+      "commit": "8d0f192"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_alpha_banner.py -q -p no:cacheprovider",
+      "result": "22 passed, 2 subtests passed",
+      "passed": true,
+      "evidence": "本地复跑结果未变（22 passed, 2 subtests passed），本轮 only 记录提交，未改代码。"
+    },
+    {
+      "command": "pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "860 passed, 3 skipped, 5 deselected, 20 subtests passed",
+      "passed": true,
+      "evidence": "本地全量结果未变（860 passed, 3 skipped, 5 deselected, 20 subtests passed）。"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "本地结果未变。"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "本地结果未变。"
+    },
+    {
+      "command": "gh pr checks 45 --watch（run 44890767554 @ 3abe12b）",
+      "result": "test pass 1m43s；png-export pass 1m21s",
+      "passed": true,
+      "evidence": "代码提交的 CI。"
+    },
+    {
+      "command": "gh pr checks 45 --watch（run 44890948780 @ 8d0f192）",
+      "result": "test pass 1m27s；png-export pass 56s",
+      "passed": true,
+      "evidence": "记录提交的 CI 重跑，全绿。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "sandbox: danger-full-access",
+      "reason": "本机 .tmp-tests 的 Windows ACL 限制导致 tempfile 子目录创建失败（PermissionError WinError 5），与代码无关；用户已把会话策略切到 danger-full-access。",
+      "status": "granted"
+    },
+    {
+      "name": "git push origin test/plan-20261110-002-app-banner-skip",
+      "reason": "推送代码提交 3abe12b 与记录提交 8d0f192。",
+      "status": "granted"
+    },
+    {
+      "name": "PR #45 合并",
+      "reason": "等评审验收后合并；本 handoff 不自行合并。",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "test/plan-20261110-002-app-banner-skip",
+    "commit": "8d0f192",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/45",
+    "ci": "run 44890948780 (head 8d0f192): test pass 1m27s, png-export pass 56s；run 44890767554 (head 3abe12b) 亦全绿",
+    "merge": "pending",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261121-016",
+  "next": "1) 评审验收 PR #45（白名单仅 gradio、GuardTests 覆盖度）；2) 合并入 main；3) 合并后把 plan-20261110-002 置 done；4) 复核 iss-mwaf2gr0 关闭依据。",
+  "createdAt": "2026-11-21T09:47:17.273Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-017.md"
+}
