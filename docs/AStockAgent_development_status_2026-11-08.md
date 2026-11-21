@@ -4,6 +4,8 @@
 用途：交接给其他 Codex / ChatGPT 会话继续开发  
 项目根目录：`C:\Users\b1995\Documents\AStockAgent`
 
+> 历史说明（2026-11-21）：本文记录 2026-11-08 的状态。文中涉及 `release/AStockAgent` 的「同步」均为当时行为，现已废弃；该目录仅保留旧提交供查阅，不再作为发布源。当前唯一真源是仓库根，校验命令见 `docs/AStockAgent_repo_source_of_truth.md`。
+
 ## 1. 当前状态摘要
 
 - 项目根目录现在已经是正式 Git 仓库。
@@ -12,7 +14,7 @@
 - 本地 `main` 与 `origin/main` 完全一致。
 - PR #1、PR #2 均已合并。
 - 最新 `main` CI 已通过。
-- 根目录和 `release/AStockAgent` 均已同步到 `3bf61a2`。
+- 历史记录：当时根目录和 `release/AStockAgent` 均曾同步到 `3bf61a2`；该双目录同步做法已于 2026-11-21 废弃，`release/AStockAgent` 仅保留旧提交供查阅。
 - Jupyter Notebook 当前正在运行。
 - Tushare token 与 HTTP 地址已配置在未跟踪的 `.env`。
 - `.env` 没有被 Git 跟踪。
@@ -32,7 +34,7 @@ https://github.com/b199510027373-create/AStockAgent.git
 C:\Users\b1995\Documents\AStockAgent
 ```
 
-发布目录 Git 仓库：
+历史发布目录 Git 仓库（旧独立仓库，已停止同步，不作为发布源）：
 
 ```text
 C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
@@ -461,5 +463,5 @@ Tushare 已配置在未跟踪的 .env，且 trade_cal 和 daily 已验证可用�
 - 提交 `.gitignore`、本状态文档、`notebooks/ts_init.py`、`tools/build_product_doc.py` 到分支 `chore/status-and-cleanup`（提交 `1337a4e`），该分支已推送到 origin。
 - 以下本地生成物/临时文件已加入 `.gitignore`：`deliverables/`、`01_test.ipynb`、`daily_report.txt`、`my_stocks.csv`、`notebooks/Untitled.ipynb`、`notebooks/test.ipynb`、`notebooks/app_write.ipynb`、`tools/*.pkl`。
 - PR #2 已合并到 `main`，合并提交 `3bf61a2`。
-- `release/AStockAgent` 已执行 `git pull --ff-only`，同步到 `3bf61a2`。
+- 历史记录：当时 `release/AStockAgent` 曾执行 `git pull --ff-only` 同步到 `3bf61a2`；该做法已于 2026-11-21 废弃，该目录不再同步、不再作为发布源。
 

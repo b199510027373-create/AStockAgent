@@ -118,7 +118,7 @@ OK
 - `require_adj` 由调用方决定：指数日线与分钟线不强制 `adj_factor`。
 - dtype 不做强制转换：契约保证「可解析、无脏值」，不保证列 dtype 与 schema 完全一致（避免把供应商的 float32/int 强行改写）。
 - `astock/backfill.py` 自行拼装历史 payload，绕过 `_save`，本任务未接入校验（其结构缺 `schema_version`/`run_id`，接入需单独迁移）。
-- 根目录 `release/AStockAgent/` 是发布副本，未同步修改。
+- 历史说明：`release/AStockAgent/` 是旧独立仓库副本，仅保留旧提交供查阅；2026-11-21 起不再同步、不作为发布源，当前唯一真源是仓库根 `C:\Users\b1995\Documents\AStockAgent`（见 `docs/AStockAgent_repo_source_of_truth.md`）。
 - 评审 issue 的「已修复」状态由评审方填写，开发侧不代写评审结论。
 
 ## 9. 后续建议

@@ -29,6 +29,18 @@ jobs:
             requirements.txt
             requirements-dev.txt
 
+      # 防止误把 release/AStockAgent 旧仓库当发布源，或把 remote 指向 fork/旧地址。
+      # push/main 与 workflow_dispatch 严格校验 main；PR 的 GitHub Actions checkout 是 detached HEAD。
+      - name: Verify repository source of truth
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            python tools/check_repo_source.py --any-branch --allow-detached
+          else
+            python tools/check_repo_source.py
+          fi
+
       # 一次装齐运行时 + 工具链。工具版本由 requirements-dev.txt 精确锁定
       # （ruff==0.17.3 / mypy==2.4.1 / coverage==7.17.0 / pytest==9.2.0），
       # 不再 `pip install ruff mypy` 裸装最新版——2026-11-16 的 main 跑出了
@@ -65,7 +77,7 @@ jobs:
       # 提升路径见 .coveragerc 注释；每次上调都在 PR 里附 coverage report 的 Missing 列。
       - name: Run tests with coverage gate (P1 76.45% → 80% → 85%)
         run: |
-          # 固定用 pytest 并显式传 tests：直接 pytest 会连同 release/AStockAgent/tests 重复收集。
+          # 显式传 tests，避免收集非测试目录；release/ 已忽略且不再是发布源。
           # 真实 PNG 导出（marker=png）需要 Chrome/字体，只在独立 png-export job 里跑，
           # 不让宿主环境抖动拖红主流水线（评审 P1）。
           coverage run -m pytest tests -q -m "not png"
