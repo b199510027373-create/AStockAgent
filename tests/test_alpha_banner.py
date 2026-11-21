@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import sqlite3
+import sys
 import tempfile
 import unittest
 from datetime import date, timedelta
@@ -276,19 +278,89 @@ class RecommendTabBannerTests(unittest.TestCase):
         self.assertIn("alpha-banner", _load_output_element_ids(demo))
 
 
+# app.py 只在 Gradio UI 栈存在时可导入；gradio 是唯一「确实可选」的重依赖。
+# pandas/numpy/plotly/requests 与 astock.* 被套件其他用例强制覆盖，缺失即真实故障。
+APP_OPTIONAL_DEPENDENCIES = frozenset({"gradio"})
+
+
+def import_app_for_wiring_test(importer=importlib.import_module):
+    """导入真实 ``app`` 模块；只有已声明的可选依赖缺失才允许 skip。
+
+    其余情况（app/astock.* 模块缺失、app.py 构建 Blocks 时抛错、import 链断裂）
+    必须原样抛出，让用例失败而不是把接线回归藏进 CI 的绿灯里。
+    """
+    try:
+        return importer("app")
+    except ModuleNotFoundError as exc:
+        missing = (exc.name or "").split(".")[0]
+        if missing in APP_OPTIONAL_DEPENDENCIES:
+            raise unittest.SkipTest(
+                f"app import needs optional dependency {missing!r}: {exc}"
+            ) from exc
+        raise
+
+
 class AppBannerWiringTests(unittest.TestCase):
     """The real app must refresh the banner when the page is (re)opened."""
 
     @classmethod
     def setUpClass(cls):
-        try:
-            import app as app_module
-        except Exception as exc:  # pragma: no cover - optional heavy import
-            raise unittest.SkipTest(f"app import failed: {exc}") from exc
-        cls.app_module = app_module
+        cls.app_module = import_app_for_wiring_test()
 
     def test_app_registers_load_refresh_for_banner(self):
         self.assertIn("alpha-banner", _load_output_element_ids(self.app_module.app))
+
+
+class AppBannerWiringGuardTests(unittest.TestCase):
+    """app 导入/构建异常必须 fail，只有显式声明的可选依赖缺失才可以 skip。"""
+
+    @staticmethod
+    def _importer(exc: BaseException):
+        def _raise(_name: str):
+            raise exc
+
+        return _raise
+
+    def test_declared_optional_dependency_missing_skips(self):
+        exc = ModuleNotFoundError("No module named 'gradio'", name="gradio")
+
+        with self.assertRaises(unittest.SkipTest):
+            import_app_for_wiring_test(self._importer(exc))
+
+    def test_missing_app_module_fails_instead_of_skipping(self):
+        exc = ModuleNotFoundError("No module named 'app'", name="app")
+
+        with self.assertRaises(ModuleNotFoundError):
+            import_app_for_wiring_test(self._importer(exc))
+
+    def test_missing_domain_module_fails_instead_of_skipping(self):
+        exc = ModuleNotFoundError(
+            "No module named 'astock.recommend_ui'", name="astock.recommend_ui"
+        )
+
+        with self.assertRaises(ModuleNotFoundError):
+            import_app_for_wiring_test(self._importer(exc))
+
+    def test_import_chain_and_block_build_errors_fail_instead_of_skipping(self):
+        errors = (
+            ImportError("cannot import name 'bind_banner_refresh'"),
+            RuntimeError("gr.Blocks() build failed"),
+        )
+
+        for exc in errors:
+            with self.subTest(exc=type(exc).__name__), self.assertRaises(type(exc)):
+                import_app_for_wiring_test(self._importer(exc))
+
+    def test_set_up_class_does_not_swallow_import_errors(self):
+        class Probe(unittest.TestCase):
+            setUpClass = classmethod(AppBannerWiringTests.setUpClass.__func__)
+
+        with patch.object(
+            sys.modules[__name__],
+            "import_app_for_wiring_test",
+            side_effect=RuntimeError("app wiring broken"),
+        ), self.assertRaises(RuntimeError):
+            Probe.setUpClass()
 
 
 class TrackingSettlementTests(unittest.TestCase):
