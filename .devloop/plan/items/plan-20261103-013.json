@@ -2,7 +2,7 @@
   "id": "plan-20261103-013",
   "title": "根目录卫生与仓库单一真源校验",
   "description": "旧前提已过时：当前 git 仓库就是根目录 C:\\Users\\b1995\\Documents\\AStockAgent，remote 为 github.com/b199510027373-create/AStockAgent；release/AStockAgent 是旧的独立仓库，不再需要“双目录源码同步”。目标改为：清理根目录临时产物（mypy_core.txt/mypy_full.txt/coverage_report.txt/temp_*.png/daily_report.txt 等）；归档或忽略 handoff/review 草稿；加一个“当前仓库根/remote/分支”校验脚本，防止再按旧 release 目录发布；文档删除双目录同步表述。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
@@ -44,10 +44,10 @@
       "python tools/check_repo_source.py --root release/AStockAgent --any-branch -> exit 1 (blocked as historical old clone)",
       "git diff --check -> OK (CRLF warnings only on .devloop files)",
       "GitHub Actions CI for PR #44 -> test + png-export both SUCCESS (run 44887441629)",
-      "review fix: pytest tests/test_repo_source_check.py -> 23 passed in 6.63s; pytest tests -m \"not png\" -> 855 passed, 3 skipped, 5 deselected, 18 subtests in 69.40s; mypy -> 44 files OK; ruff -> All checks passed; check_repo_source --any-branch -> exit 0; CI run 44888601333 -> test + png-export SUCCESS"
+      "review fix: pytest tests/test_repo_source_check.py -> 23 passed in 6.63s; pytest tests -m \"not png\" -> 855 passed, 3 skipped, 5 deselected, 18 subtests in 69.40s; mypy -> 44 files OK; ruff -> All checks passed; check_repo_source --any-branch -> exit 0; PR CI 44888601333 -> SUCCESS; PR #44 merged (ff737a4); main strict check -> exit 0; main CI 44889535900 -> test + png-export SUCCESS"
     ]
   },
   "createdAt": "2026-11-03T12:10:59.950Z",
-  "updatedAt": "2026-11-21T09:15:40.914Z",
+  "updatedAt": "2026-11-21T09:27:47.893Z",
   "devSessionId": "session-4106a9e9-99f3-4ef0-b0b5-fdc3b93c25db"
 }
