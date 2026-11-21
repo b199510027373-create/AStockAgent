@@ -1,0 +1,47 @@
+{
+  "id": "plan-20261121-001",
+  "title": "修复研报空 ts_code 导致收盘任务连续失败",
+  "description": "plan-20261103-007 的真实 5 日验收发现：11-16、11-17、11-18、11-20 的 close job 均为 failed，attempts 7/9/7/11，错误 `RuntimeError: 契约校验失败：[EventFrame] 列 ['code'] 存在非字符串或空值`。复现 `fetch_reports(days=7)` 确认 `research_report` 返回了 ts_code 为空的市场级研报行，`require_code=True` 使整批失败，收盘任务因此每天重试到 23:00 仍失败。修复：研报归一化时丢弃无法归属到股票的 ts_code 空行（列缺失仍硬失败），补单元测试；修复完成后由 plan-20261114-004 从 11-23 起重跑连续 5 个交易日窗口。",
+  "status": "in_review",
+  "priority": "P1",
+  "milestone": "ms-quality",
+  "owner": "human",
+  "start": "2026-11-21",
+  "due": "2026-11-23",
+  "estimateH": 3,
+  "progress": 100,
+  "acceptance": [
+    "研报归一化对 ts_code 为空的市场级行丢弃，不再使整批 EventFrame 校验失败",
+    "ts_code 列缺失仍然抛 ContractError，不静默降级",
+    "新增/更新测试覆盖空 code 行、全空 code 与缺列三种情况",
+    "修复后由 plan-20261114-004 执行 11-23..11-27 连续 5 个交易日全 success"
+  ],
+  "tags": [
+    "events",
+    "contracts",
+    "scheduler",
+    "acceptance"
+  ],
+  "deps": [
+    "plan-20261103-007"
+  ],
+  "links": {
+    "adr": [
+      "ADR-002",
+      "ADR-004"
+    ],
+    "module": "events",
+    "followup": "plan-20261103-007",
+    "branch": "fix/events-blank-report-code",
+    "test": [
+      "pytest tests/test_data_pit_events.py -q -> 29 passed",
+      "pytest tests -q -> 837 passed, 3 skipped, 18 subtests passed",
+      "mypy astock app.py -> Success: no issues found in 44 source files",
+      "ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed",
+      "compileall -q astock app.py -> exit 0",
+      "live fetch_reports(days=7) -> rows 578, blank_codes 0"
+    ]
+  },
+  "createdAt": "2026-11-21T07:38:38.679Z",
+  "updatedAt": "2026-11-21T07:44:15.234Z"
+}

@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from astock import data, events, pit
+from astock.contracts import ContractError
 
 
 class FakeTushare:
@@ -377,6 +378,65 @@ class EventFetchParsingTests(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out["kind"].iloc[0], "policy")
         self.assertEqual(out["source"].iloc[0], "国务院")
+
+
+class FakeReportClient:
+    """report_rc / research_report 混合返回，可注入空 ts_code 或缺列。"""
+
+    def __init__(self, codes: list[str | None], *, include_ts_code: bool = True):
+        self.codes = codes
+        self.include_ts_code = include_ts_code
+
+    def query_all(self, api_name, **kwargs):
+        n = len(self.codes)
+        if api_name == "report_rc":
+            data = {
+                "report_date": ["20261101"] * n,
+                "report_title": [f"个股评级{i}" for i in range(n)],
+                "name": ["候选股"] * n,
+                "org_name": ["券商"] * n,
+                "rating": ["买入"] * n,
+            }
+            if self.include_ts_code:
+                data["ts_code"] = self.codes
+            return pd.DataFrame(data)
+        if api_name == "research_report":
+            return pd.DataFrame(
+                {
+                    "trade_date": ["20261101"] * n,
+                    "title": [f"深度报告{i}" for i in range(n)],
+                    "ts_code": self.codes,
+                    "name": ["候选股"] * n,
+                    "inst_csname": ["研究所"] * n,
+                    "ind_name": ["行业"] * n,
+                    "url": [""] * n,
+                }
+            )
+        raise AssertionError(f"unexpected api: {api_name}")
+
+
+class ReportEventContractTests(unittest.TestCase):
+    def _fetch(self, client: FakeReportClient) -> pd.DataFrame:
+        with (
+            patch.object(events, "get_client", return_value=client),
+            patch.object(events, "_cache_get", return_value=None),
+            patch.object(events, "_cache_put", side_effect=lambda key, df: df),
+        ):
+            return events.fetch_reports(days=7)
+
+    def test_fetch_reports_drops_blank_ts_code_rows(self):
+        out = self._fetch(FakeReportClient(["600519.SH", ""]))
+        self.assertEqual(len(out), 2)
+        self.assertTrue(out["code"].str.strip().ne("").all())
+        self.assertEqual(set(out["kind"]), {"rating", "research"})
+
+    def test_fetch_reports_returns_empty_when_all_codes_blank(self):
+        out = self._fetch(FakeReportClient(["", None]))
+        self.assertTrue(out.empty)
+
+    def test_fetch_reports_missing_ts_code_column_still_raises(self):
+        with self.assertRaises(ContractError):
+            self._fetch(FakeReportClient(["600519.SH"], include_ts_code=False))
 
 
 class AdjCaliberTests(unittest.TestCase):
