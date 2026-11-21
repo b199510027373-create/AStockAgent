@@ -37,7 +37,8 @@
     ],
     "handoff": [
       "ho-20261120-019",
-      "ho-20261120-020"
+      "ho-20261120-020",
+      "ho-20261121-001"
     ],
     "module": [
       "agent_chat_ui"
@@ -52,10 +53,10 @@
       "pytest tests -m 'not png' => 829 passed, 3 skipped, 5 deselected, 18 subtests (95.97s; sandbox shim for 0o700 temp dirs)",
       "ruff check astock tests => All checks passed",
       "mypy astock app.py => Success: no issues found in 44 source files",
-      "CI run 44764310257 (head ade6143) => success；评审后修复提交 a0c78a1 待 CI"
+      "CI run 44877921356 (head 9da7852) => success"
     ]
   },
   "createdAt": "2026-11-19T10:26:28.187Z",
-  "updatedAt": "2026-11-21T06:56:41.214Z",
+  "updatedAt": "2026-11-21T06:59:36.072Z",
   "devSessionId": "session-924a90ce-d5f5-4e69-997b-ed79301a0f43"
 }
