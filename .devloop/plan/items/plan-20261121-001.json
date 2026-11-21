@@ -2,7 +2,7 @@
   "id": "plan-20261121-001",
   "title": "修复研报空 ts_code 导致收盘任务连续失败",
   "description": "plan-20261103-007 的真实 5 日验收发现：11-16、11-17、11-18、11-20 的 close job 均为 failed，attempts 7/9/7/11，错误 `RuntimeError: 契约校验失败：[EventFrame] 列 ['code'] 存在非字符串或空值`。复现 `fetch_reports(days=7)` 确认 `research_report` 返回了 ts_code 为空的市场级研报行，`require_code=True` 使整批失败，收盘任务因此每天重试到 23:00 仍失败。修复：研报归一化时丢弃无法归属到股票的 ts_code 空行（列缺失仍硬失败），补单元测试；修复完成后由 plan-20261114-004 从 11-23 起重跑连续 5 个交易日窗口。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-quality",
   "owner": "human",
@@ -32,7 +32,10 @@
     ],
     "module": "events",
     "followup": "plan-20261103-007",
-    "branch": "fix/events-blank-report-code",
+    "branch": "main",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/43",
+    "ci": "run 44882349342 test/png-export pass",
+    "merge": "442fbb9",
     "test": [
       "pytest tests/test_data_pit_events.py -q -> 29 passed",
       "pytest tests -q -> 837 passed, 3 skipped, 18 subtests passed",
@@ -43,5 +46,5 @@
     ]
   },
   "createdAt": "2026-11-21T07:38:38.679Z",
-  "updatedAt": "2026-11-21T07:44:15.234Z"
+  "updatedAt": "2026-11-21T07:56:15.070Z"
 }
