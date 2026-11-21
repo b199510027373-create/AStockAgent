@@ -987,6 +987,16 @@
       "notes": "第 1 轮 · approve"
     },
     {
+      "id": "cal-rev-20261121-001-r2",
+      "type": "review",
+      "title": "评审：评审：根目录卫生与仓库单一真源校验",
+      "start": "2026-11-21T09:21:01.735Z",
+      "end": "2026-11-21T09:22:25.751Z",
+      "planItemId": "plan-20261103-013",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",
