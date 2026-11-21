@@ -6,7 +6,7 @@
   "threadId": null,
   "sessionId": "",
   "title": "修复 P2：AppBannerWiringTests 导入异常不得降级为 skip",
-  "summary": "更新交付状态（相对 ho-20261121-016 的修改痕迹）：\n\n1) 记录已落库并推送：新增提交 8d0f192「chore(devloop): plan-20261110-002 记录修复与交付（in_review）」，包含 .devloop/plan/items/plan-20261110-002.json（status=in_review、progress=100、links.test 5 条证据）、.devloop/calendar/2026-11.json、.devloop/worklog/2026-11.jsonl、.devloop/handoffs/ho-20261121-016.{json,md}。\n2) PR #45 head 从 3abe12b 变为 8d0f192，CI 对记录提交重跑并全绿：run 44890948780，test pass 1m27s、png-export pass 56s。\n3) 删除临时文件 .tmp-pr-body.md，工作区现在无未跟踪垃圾。\n4) 计划项状态已由 doing 改为 in_review（不再重复改状态），PR 仍待评审合并；交付结论与测试证据不变，无需重跑本地套件。",
+  "summary": "更新交付状态（相对 ho-20261121-016 的修改痕迹）：\n\n1) 记录已落库并推送：新增提交 8d0f192「chore(devloop): plan-20261110-002 记录修复与交付（in_review）」，包含 .devloop/plan/items/plan-20261110-002.json（status=in_review、progress=100、links.test 5 条证据）、.devloop/calendar/2026-11.json、.devloop/worklog/2026-11.jsonl、.devloop/handoffs/ho-20261121-016.{json,md}。\n2) PR #45 head 从 3abe12b 变为 8d0f192，CI 对记录提交重跑并全绿：run 44890948780，test pass 1m27s、png-export pass 56s。\n3) 补 update handoff 后 head 再前进到 3ce6f39（仅 .devloop 记录）：CI run 44891236449 test pass 1m31s、png-export pass 1m39s，全绿；三次提交（3abe12b 代码 / 8d0f192、3ce6f39 记录）CI 均通过，代码内容自 3abe12b 起未变。\n4) 删除临时文件 .tmp-pr-body.md，工作区现在无未跟踪垃圾。\n5) 计划项状态已由 doing 改为 in_review（不再重复改状态），PR 仍待评审合并；交付结论与测试证据不变，无需重跑本地套件。",
   "requirements": [
     {
       "id": "REQ-1",
@@ -97,6 +97,12 @@
       "result": "test pass 1m27s；png-export pass 56s",
       "passed": true,
       "evidence": "记录提交的 CI 重跑，全绿。"
+    },
+    {
+      "command": "gh pr checks 45 --watch（run 44891236449 @ 3ce6f39）",
+      "result": "test pass 1m31s；png-export pass 1m39s",
+      "passed": true,
+      "evidence": "补 update handoff 后最终 head 的 CI，全绿。"
     }
   ],
   "permissions": [
@@ -107,7 +113,7 @@
     },
     {
       "name": "git push origin test/plan-20261110-002-app-banner-skip",
-      "reason": "推送代码提交 3abe12b 与记录提交 8d0f192。",
+      "reason": "推送代码提交 3abe12b 与记录提交 8d0f192、3ce6f39。",
       "status": "granted"
     },
     {
@@ -118,9 +124,9 @@
   ],
   "delivery": {
     "branch": "test/plan-20261110-002-app-banner-skip",
-    "commit": "8d0f192",
+    "commit": "3ce6f39",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/45",
-    "ci": "run 44890948780 (head 8d0f192): test pass 1m27s, png-export pass 56s；run 44890767554 (head 3abe12b) 亦全绿",
+    "ci": "run 44891236449 (head 3ce6f39): test pass 1m31s, png-export pass 1m39s；run 44890948780 (head 8d0f192) 与 run 44890767554 (head 3abe12b) 亦全绿",
     "merge": "pending",
     "status": "ci-passed"
   },
