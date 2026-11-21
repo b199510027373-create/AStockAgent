@@ -1,0 +1,146 @@
+{
+  "id": "ho-20261121-001",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261119-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "update：按评审 rev-20261120-002 修完 3 条 P2 + 2 条顺带项，PR #42 head 9da7852 CI 绿",
+  "summary": "相对上一份交付 ho-20261120-020 的修改痕迹：按评审 rev-20261120-002（approve，P0=0/P1=0/P2=3）逐条修复并复跑。\n\n1) iss-mwp5xl5h-ef2edd（R2 工具正文断言可被参数回显满足）：tests/test_agent_live_e2e.py R2 改为正则抽取 `<div class=\"step-output\">([^<]*)</div>` 全部命中，断言 `.step-output` 计数 >=1 且至少一条正文含 \"Revenue\"，不再被 `.step-args` 的 arguments JSON 满足。\n2) iss-mwp5xl6b-9842dc（费用/报告无断言、非法价格静默 null）：`_cost` 遇非数字价格返回带 `error` 的结构（不再返回 None）；新增 4 个不需要 key 的纯函数用例：估算值 10.0/CNY、未配置返回 None、非法价格返回 error、`_round_report` 必含键集合且 `ttft_ms <= elapsed_ms`（空回答 ttft_ms is None）。\n3) iss-mwp5xrvs-0658e1（文档变量表与降级描述）：docs §2 补 `AGENT_LIVE_E2E_WORKDIR`/`AGENT_TIMEOUT_SECONDS`/`AGENT_MAX_STEPS`/`AGENT_TOKEN_BUDGET`；§6 拆成「缺 key → 规则兜底 + mark_degraded」与「有 key 但网关不通 → probe degraded + JSON 协议 + 运行时 model_error」两条，并写明非法价格在报告中带 error。\n4) 顺带项 (a)：`_run_live` 捕获 probe 产生的用量，报告新增 `probe_usage`，`totals` 增加 scope 说明（只含三轮对话）。\n5) 顺带项 (b)：R2 完整回答不足一个分片（CHUNK_CHARS=40）时 `pytest.skip` 并打印回答，不再以“无法验证不覆盖”误报红。\n\n复跑结果（2026-11-21，DeepSeek deepseek-chat，真实调用）：`AGENT_LIVE_E2E=1 pytest tests/test_agent_live_e2e.py -m live -q` → 3 passed, 8 deselected（15.91s）；报告 `.tmp-tests/live-e2e/20261121-031843/report.json`：probe_usage 1 次/343 tokens，totals 6 次/21,622 tokens（prompt 20,506 / completion 1,116），R1 TTFT 6,364.3ms/耗时 6,369.3ms/282 字/9 分片、R2 TTFT 2,651.0ms/耗时 2,655.1ms/40 字/stopped、3 条引用全定位、R3 TTFT 3,761.1ms/耗时 3,765.2ms/676 字/19 分片/内嵌图 4,862,205 字符。无 opt-in 单文件 8 passed, 3 skipped；chat+live 48 passed, 3 skipped；全量 829 passed, 3 skipped, 5 deselected, 18 subtests（95.97s）；ruff All checks passed；mypy Success in 44 files。CI run 44877921356（head 9da7852）success；PR #42 mergeStateStatus=CLEAN / MERGEABLE。",
+  "requirements": [
+    {
+      "id": "AC1",
+      "text": "真实模型 3 轮对话完成，流式分片可见且最终回答不覆盖已停止分片。本轮复跑 R1 9 分片、R2 stopped=true 且 partial 为完整回答前缀、R3 19 分片；新增“不足一个分片时 skip”的保护避免误报。",
+      "source": "plan-20261119-002 验收标准 + 评审 iss-mwp5xl5h-ef2edd/(b)"
+    },
+    {
+      "id": "AC2",
+      "text": "至少一次工具调用步骤出现在时间线，结果可被用户看到。R2 断言改为锚定 `.step-output` 正文（含 Revenue），R1 仍断言 quote 正文“最新价”；生产渲染逻辑未变（astock/agent/chat.py `_STEP_OUTPUT_CHARS`/`step-output`）。",
+      "source": "plan-20261119-002 验收标准 + 评审 iss-mwp5xl5h-ef2edd"
+    },
+    {
+      "id": "AC3",
+      "text": "引用可定位、内嵌图可渲染。R2 3 条引用全部 found、snippet 命中 PDF 三页；R3 iframe/sandbox/astock-figure-frame 断言通过。",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC4",
+      "text": "生成中停止后下一问不受中断标记污染。R3 无 ⏹/已停止输出，session.history 的 assistant 消息无中断标记。",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC5",
+      "text": "记录首字延迟/总耗时/token 或费用估算；失败时有明确降级提示。报告新增 probe_usage 与 totals.scope；`_cost` 非法价格返回 error 结构；新增 4 个费用/报告纯函数用例。",
+      "source": "plan-20261119-002 验收标准 + 评审 iss-mwp5xl6b-9842dc/(a)"
+    },
+    {
+      "id": "AC6",
+      "text": "无 API key 时自动 skip，不把未验证说成已验证。3 个 LiveSkip 语义用例保持通过；单文件无 opt-in 运行 8 passed, 3 skipped。",
+      "source": "plan-20261119-002 验收标准 + 评审 iss-mwp5xrvs-0658e1"
+    },
+    {
+      "id": "RV3",
+      "text": "文档修正：§2 补 4 个环境变量，§6 拆清缺 key 与网关不通两种降级路径。",
+      "source": "评审 iss-mwp5xrvs-0658e1"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/test_agent_live_e2e.py",
+      "summary": "R2 改为正则锚定 .step-output 正文；_cost 非法价格返回 error 结构；新增 test_cost_estimate_uses_price_env / test_cost_without_price_env_is_unknown / test_cost_invalid_price_reports_error_instead_of_none / test_round_report_records_timing_usage_and_cost；_run_live 捕获 probe_usage，_write_report 单列并注明 totals 口径；R2 完整回答不足一个分片时 pytest.skip。相对 ho-20261120-020 新增 168 行、删除 19 行。",
+      "commit": "a0c78a1"
+    },
+    {
+      "path": "docs/AStockAgent_agent_live_e2e.md",
+      "summary": "§2 补 AGENT_LIVE_E2E_WORKDIR/AGENT_TIMEOUT_SECONDS/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET 与非法价格行为；§3 补纯函数用例与 probe_usage 口径；§4 补短回答 skip；§5 更新为 2026-11-21 实测（6 次/21,622 tokens + probe 343 tokens）；§6 拆清缺 key 与网关不通；§7 补成本 error 行为。",
+      "commit": "a0c78a1"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261119-002.json",
+      "summary": "links.test 回填本轮复跑证据与 CI run；links.review=rev-20261120-002；progress 92→96，status 维持 in_review。",
+      "commit": "9da7852"
+    }
+  ],
+  "tests": [
+    {
+      "command": "AGENT_LIVE_E2E=1 .venv\\Scripts\\python.exe -m pytest tests/test_agent_live_e2e.py -m live -q -s",
+      "result": "3 passed, 8 deselected, 15.91s",
+      "passed": true,
+      "evidence": "DeepSeek deepseek-chat；report .tmp-tests/live-e2e/20261121-031843/report.json（probe_usage 1 次/343 tokens；totals 6 次/21,622 tokens）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_live_e2e.py -q",
+      "result": "8 passed, 3 skipped",
+      "passed": true,
+      "evidence": "无 AGENT_LIVE_E2E：4 个纯函数用例新增后由 4 passed 变 8 passed，live 用例仍 skip"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_live_e2e.py tests/test_agent_chat.py -q",
+      "result": "48 passed, 3 skipped",
+      "passed": true,
+      "evidence": "test_agent_chat.py 40 + live 文件 8"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe .tmp-tests/run_tests_sandbox.py（pytest tests -m 'not png'，沙箱 tmp 目录 shim）",
+      "result": "829 passed, 3 skipped, 5 deselected, 18 subtests passed, 95.97s",
+      "passed": true,
+      "evidence": "exit 0；沙箱对 0o700 目录不可 readdir，脚本把 Path.mkdir/tempfile 改为默认 mode"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "ruff 0.17.3（requirements-dev 锁定）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "mypy 2.4.1"
+    },
+    {
+      "command": "gh run view 44877921356 --json status,conclusion",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "head 9da7852（test + png-export 均绿）"
+    },
+    {
+      "command": "gh pr view 42 --json state,mergeable,mergeStateStatus",
+      "result": "OPEN / MERGEABLE / CLEAN",
+      "passed": true,
+      "evidence": "head 9da7852da97ca8d35ae673bfe981c1706c8d36ad"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "DeepSeek API key（真实模型调用）",
+      "reason": "来自本机 .env（gitignored），仅真跑 live 用例时使用；未写入仓库、未打印",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub 推送与 PR",
+      "reason": "gh 已登录；git 用一次性 GIT_ASKPASS + http.sslBackend=openssl 推送，token 未落盘",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-live-e2e",
+    "commit": "9da7852da97ca8d35ae673bfe981c1706c8d36ad",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/42",
+    "ci": "run 44877921356 success（head 9da7852，test + png-export）",
+    "merge": "未合并；PR mergeStateStatus=CLEAN、MERGEABLE",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261120-020",
+  "next": "由维护者评审/合并 PR #42（评审 rev-20261120-002 已 approve，3 条 P2 与 2 条顺带项已在本轮 a0c78a1 修复）。合并后把 plan-20261119-002 标 done/100%，并按需复跑夜间 workflow_dispatch 真实模型 E2E；若本轮之后仅追加 .devloop 台账提交，以该提交的 CI 结果为准。",
+  "createdAt": "2026-11-21T06:59:33.189Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-001.md"
+}
