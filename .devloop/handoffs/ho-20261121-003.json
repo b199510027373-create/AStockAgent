@@ -1,0 +1,161 @@
+{
+  "id": "ho-20261121-003",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261119-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261119-002 合并收口：PR #42 → main f080ca6",
+  "summary": "维护者要求合并（m00814）。PR #42 已 squash-merge 到 main（merge commit f080ca6，2026-11-21T07:32:34Z，8 files / 1180 insertions），feat/agent-live-e2e 已删除；plan-20261119-002 标 done / progress 100。相对 ho-20261121-001 的修改痕迹：(1) 删除远端与本地功能分支，main 前进到 f080ca6；(2) plan 状态 in_review→done、progress 96→100、links.test 追加合并记录；(3) 新增本份 merge-status handoff。CI：分支 head 9da7852 / ce3d812 两次 success；main f080ca6 的 CI run 44880730238 在写本 handoff 时仍 in_progress，合入内容与分支 head 一致。",
+  "requirements": [
+    {
+      "id": "AC1",
+      "text": "真实模型 3 轮对话完成，流式分片可见且最终回答不覆盖已停止分片",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC2",
+      "text": "至少一次工具调用步骤出现在时间线，结果可被用户看到",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC3",
+      "text": "引用可定位，内嵌图可渲染（若该轮触发图表）",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC4",
+      "text": "生成中停止后下一问不受中断标记污染",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC5",
+      "text": "记录首字延迟/总耗时/token 或费用估算；失败时有明确降级提示",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC6",
+      "text": "无 API key 时自动 skip，不把未验证说成已验证",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "DEL-1",
+      "text": "PR #42 squash-merge 到 main，功能分支删除",
+      "source": "用户 m00814「请合并」"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "render_steps_html 在 reflection 之外追加 step-output（≤240 字符、转义），工具正文对用户可见（随 PR #42 合入）",
+      "commit": "f080ca6"
+    },
+    {
+      "path": "tests/test_agent_live_e2e.py",
+      "summary": "805 行真实 E2E：默认 skip、三轮 DeepSeek 用例、费用/报告纯函数用例、probe_usage 口径（随 PR #42 合入）",
+      "commit": "f080ca6"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 step-output 可见性与转义/截断用例（随 PR #42 合入）",
+      "commit": "f080ca6"
+    },
+    {
+      "path": "docs/AStockAgent_agent_live_e2e.md",
+      "summary": "运行方式、环境变量、实测指标、降级路径、已知限制（随 PR #42 合入）",
+      "commit": "f080ca6"
+    },
+    {
+      "path": "pytest.ini",
+      "summary": "注册 live marker（默认跳过，需 AGENT_LIVE_E2E=1）",
+      "commit": "f080ca6"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261119-002.json",
+      "summary": "status=done、progress=100、links.test 记录合并提交",
+      "commit": "本份收口提交"
+    }
+  ],
+  "tests": [
+    {
+      "command": "AGENT_LIVE_E2E=1 .venv\\Scripts\\python.exe -m pytest tests/test_agent_live_e2e.py -m live -q -s",
+      "result": "3 passed, 8 deselected in 15.91s（DeepSeek deepseek-chat）",
+      "passed": true,
+      "evidence": ".tmp-tests/live-e2e/20261121-031843/report.json：probe 343 tokens；三轮 6 calls/21,622 tokens；R1 TTFT 6,364.3ms、R2 stopped=true/3 引用全定位、R3 figure 4,862,205 字符"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_live_e2e.py -q",
+      "result": "8 passed, 3 skipped（无 opt-in 自动 skip）",
+      "passed": true,
+      "evidence": "本地运行，2026-11-21"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_live_e2e.py tests/test_agent_chat.py -q",
+      "result": "48 passed, 3 skipped",
+      "passed": true,
+      "evidence": "本地运行"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe .tmp-tests\\run_tests_sandbox.py",
+      "result": "829 passed, 3 skipped, 5 deselected, 18 subtests passed in 95.97s",
+      "passed": true,
+      "evidence": "pytest tests -m \"not png\" + 沙箱 0o700 目录 shim；exit 0"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "ruff 0.17.3"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "mypy 2.4.1"
+    },
+    {
+      "command": "gh pr merge 42 --squash --delete-branch",
+      "result": "PR #42 MERGED，main f080ca6",
+      "passed": true,
+      "evidence": "mergedAt=2026-11-21T07:32:34Z；mergeCommit=f080ca6265275ae4ea337e5e3b35a6497abcf5b3"
+    },
+    {
+      "command": "gh run list --branch main --workflow CI",
+      "result": "44880730238 (f080ca6) in_progress；44741606519 (368f684) success",
+      "passed": false,
+      "evidence": "写 handoff 时 main 的 CI 尚未结束；分支 head 的 44877921356 / 44878129207 均 success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "DeepSeek API key（环境变量）",
+      "reason": "真实模型 E2E 需实际调用，密钥仅来自 .env/环境变量，不进仓库",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub push / PR merge",
+      "reason": "gh 已登录；git 无 credential store，用 GIT_ASKPASS + GH_TOKEN 临时凭证，token 不落盘",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-live-e2e",
+    "commit": "f080ca6",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/42",
+    "ci": "PR 分支 head 9da7852 → run 44877921356 success；ce3d812 → 44878129207 success；main f080ca6 → run 44880730238 in_progress",
+    "merge": "squash-merged at 2026-11-21T07:32:34Z, merge commit f080ca6, 功能分支已删除",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261121-001",
+  "next": "等 main f080ca6 的 CI 44880730238 出结论（预期 success；分支同一内容已绿）。若转红，按日志修完补 update handoff。后续可选：把真实 E2E 挂到每周手动/夜间 workflow（需仓库 secret AGENT_API_KEY 与 nightly 预算）；按 AGENT_PRICE_INPUT_PER_M/AGENT_PRICE_OUTPUT_PER_M 配置费用估算后重跑一次记录 CNY 成本。",
+  "createdAt": "2026-11-21T07:33:47.644Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-003.md"
+}

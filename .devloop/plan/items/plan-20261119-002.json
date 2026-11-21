@@ -2,14 +2,14 @@
   "id": "plan-20261119-002",
   "title": "Agent 会话真实模型 E2E 验证（DeepSeek/兼容网关）",
   "description": "用真实 DeepSeek（或 OpenAI-compatible 网关）跑通 3 轮端到端：流式回答、一次工具步骤、引用、内嵌图、生成中停止；记录首字延迟、总耗时、token/费用与失败恢复。密钥只从环境变量读取，不写入仓库；无 key 时用例 skip 并明确提示。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P2",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-20",
   "due": "2026-11-26",
   "estimateH": 4,
-  "progress": 96,
+  "progress": 100,
   "acceptance": [
     "真实模型 3 轮对话完成，流式分片可见且最终回答不覆盖已停止分片",
     "至少一次工具调用步骤出现在时间线，结果可被用户看到",
@@ -38,7 +38,8 @@
     "handoff": [
       "ho-20261120-019",
       "ho-20261120-020",
-      "ho-20261121-001"
+      "ho-20261121-001",
+      "ho-20261121-003"
     ],
     "module": [
       "agent_chat_ui"
@@ -53,10 +54,11 @@
       "pytest tests -m 'not png' => 829 passed, 3 skipped, 5 deselected, 18 subtests (95.97s; sandbox shim for 0o700 temp dirs)",
       "ruff check astock tests => All checks passed",
       "mypy astock app.py => Success: no issues found in 44 source files",
-      "CI run 44877921356 (head 9da7852) => success"
+      "CI run 44877921356 (head 9da7852) => success",
+      "PR #42 squash-merged to main as f080ca6（2026-11-21T07:32:34Z）"
     ]
   },
   "createdAt": "2026-11-19T10:26:28.187Z",
-  "updatedAt": "2026-11-21T06:59:36.072Z",
+  "updatedAt": "2026-11-21T07:33:51.849Z",
   "devSessionId": "session-924a90ce-d5f5-4e69-997b-ed79301a0f43"
 }
