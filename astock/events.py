@@ -435,6 +435,24 @@ def fetch_announcements(codes: list[str], days: int = 30) -> pd.DataFrame:
     return out.sort_values("pub_time", ascending=False)
 
 
+def _drop_unattributed_reports(df: pd.DataFrame) -> pd.DataFrame:
+    """剔除没有 ``ts_code`` 的市场级研报行，并写回 ``code``。
+
+    ``report_rc`` / ``research_report`` 会混入策略、宏观等无法归属到个股的行，
+    其 ``ts_code`` 为空。下游按候选股票过滤，这些行本就不可用；若交给
+    ``EventFrame(require_code=True)`` 整批校验，一条空 code 会让当天收盘任务
+    连续失败。列缺失仍由 ``_require_source_columns`` 硬失败，这里只处理
+    “列在、个别行为空”的供应商行为。
+    """
+    codes = df["ts_code"].fillna("").astype(str).str.strip()
+    keep = codes.ne("")
+    if not keep.all():
+        df = df.loc[keep].copy()
+        codes = codes.loc[df.index]
+    df["code"] = codes
+    return df
+
+
 def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame:
     """研报评级 + 研报标题。
 
@@ -470,7 +488,7 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                 rc["source"] = _col(rc, "org_name")
                 rc["kind"] = "rating"
                 rc["url"] = ""
-                rc["code"] = rc["ts_code"].fillna("").astype(str)
+                rc = _drop_unattributed_reports(rc)
                 rc = validate_events(
                     rc.dropna(subset=["pub_time"])[
                         ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
@@ -507,7 +525,7 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                 rr["kind"] = "research"
                 rr["url"] = _col(rr, "url")
                 rr["rating"] = ""
-                rr["code"] = rr["ts_code"].fillna("").astype(str)
+                rr = _drop_unattributed_reports(rr)
                 rr = validate_events(
                     rr.dropna(subset=["pub_time"])[
                         ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
@@ -544,7 +562,7 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                     rc["source"] = _col(rc, "org_name")
                     rc["kind"] = "rating"
                     rc["url"] = ""
-                    rc["code"] = rc["ts_code"].fillna("").astype(str)
+                    rc = _drop_unattributed_reports(rc)
                     rc = validate_events(
                         rc.dropna(subset=["pub_time"])[
                             ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
@@ -575,7 +593,7 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
                     rr["kind"] = "research"
                     rr["url"] = _col(rr, "url")
                     rr["rating"] = ""
-                    rr["code"] = rr["ts_code"].fillna("").astype(str)
+                    rr = _drop_unattributed_reports(rr)
                     rr = validate_events(
                         rr.dropna(subset=["pub_time"])[
                             ["code", "pub_time", "ts_code", "name", "title", "content", "source", "kind", "url", "rating"]
