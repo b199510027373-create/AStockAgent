@@ -9,7 +9,7 @@
   "start": "2026-11-20",
   "due": "2026-11-26",
   "estimateH": 4,
-  "progress": 92,
+  "progress": 96,
   "acceptance": [
     "真实模型 3 轮对话完成，流式分片可见且最终回答不覆盖已停止分片",
     "至少一次工具调用步骤出现在时间线，结果可被用户看到",
@@ -36,24 +36,26 @@
       "docs/AStockAgent_agent_live_e2e.md"
     ],
     "handoff": [
-      "ho-20261120-019"
+      "ho-20261120-019",
+      "ho-20261120-020"
     ],
     "module": [
       "agent_chat_ui"
     ],
     "pr": "42",
+    "review": "rev-20261120-002",
     "test": [
       "tests/test_agent_live_e2e.py",
-      "pytest tests/test_agent_live_e2e.py -q => 4 passed, 3 skipped",
-      "AGENT_LIVE_E2E=1 pytest tests/test_agent_live_e2e.py -m live -q => 3 passed, 4 deselected (15.14s, DeepSeek deepseek-chat, report .tmp-tests/live-e2e/20261120-232813/report.json)",
-      "pytest tests/test_agent_chat.py -q => 40 passed",
-      "pytest tests -m 'not png' => 825 passed, 3 skipped, 5 deselected, 18 subtests (90.03s; sandbox shim for 0o700 temp dirs)",
+      "pytest tests/test_agent_live_e2e.py -q => 8 passed, 3 skipped（含 4 个费用/报告纯函数用例）",
+      "AGENT_LIVE_E2E=1 pytest tests/test_agent_live_e2e.py -m live -q => 3 passed, 8 deselected (15.91s, DeepSeek deepseek-chat, report .tmp-tests/live-e2e/20261121-031843/report.json)",
+      "pytest tests/test_agent_live_e2e.py tests/test_agent_chat.py -q => 48 passed, 3 skipped",
+      "pytest tests -m 'not png' => 829 passed, 3 skipped, 5 deselected, 18 subtests (95.97s; sandbox shim for 0o700 temp dirs)",
       "ruff check astock tests => All checks passed",
       "mypy astock app.py => Success: no issues found in 44 source files",
-      "CI run 44763876376 (test + png-export) => success"
+      "CI run 44764310257 (head ade6143) => success；评审后修复提交 a0c78a1 待 CI"
     ]
   },
   "createdAt": "2026-11-19T10:26:28.187Z",
-  "updatedAt": "2026-11-20T15:32:22.466Z",
+  "updatedAt": "2026-11-21T06:56:41.214Z",
   "devSessionId": "session-924a90ce-d5f5-4e69-997b-ed79301a0f43"
 }
