@@ -398,7 +398,7 @@ class BridgeDiffTests(unittest.TestCase):
 
 class ArtifactTests(unittest.TestCase):
     def test_crosswalk_artifact_cache_hit(self) -> None:
-        tmp = Path(".tmp-test") / "crosswalk_artifact_cache"
+        tmp = Path(".tmp-tests") / "crosswalk_artifact_cache"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         try:
@@ -422,7 +422,7 @@ class ArtifactTests(unittest.TestCase):
         )
 
     def test_threshold_change_forces_rebuild(self) -> None:
-        tmp = Path(".tmp-test") / "crosswalk_threshold_cache"
+        tmp = Path(".tmp-tests") / "crosswalk_threshold_cache"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         try:
@@ -444,7 +444,7 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(int(strict_edges["is_structural"].sum()), 7)
 
     def test_bridge_date_change_forces_rebuild(self) -> None:
-        tmp = Path(".tmp-test") / "crosswalk_date_cache"
+        tmp = Path(".tmp-tests") / "crosswalk_date_cache"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         try:
@@ -464,7 +464,7 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(second["bridge_old_date"], "2021-12-01")
 
     def test_distribution_window_changes_artifact_key_and_rebuilds(self) -> None:
-        tmp = Path(".tmp-test") / "crosswalk_distribution_cache"
+        tmp = Path(".tmp-tests") / "crosswalk_distribution_cache"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         summary = {
@@ -523,7 +523,7 @@ class ArtifactTests(unittest.TestCase):
         return pd.DataFrame(rows, columns=["date", "code", "industry", "weight", "industry_version"])
 
     def test_distribution_same_window_hits_cache_after_parquet_roundtrip(self) -> None:
-        tmp = Path(".tmp-test") / "crosswalk_distribution_cache_hit"
+        tmp = Path(".tmp-tests") / "crosswalk_distribution_cache_hit"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         calls: list[tuple[pd.Timestamp, pd.Timestamp]] = []
@@ -555,7 +555,7 @@ class ArtifactTests(unittest.TestCase):
         pd.testing.assert_frame_equal(first_metrics, second_metrics)
 
     def test_threshold_change_invalidates_distribution_meta(self) -> None:
-        tmp = Path(".tmp-test") / "crosswalk_distribution_threshold"
+        tmp = Path(".tmp-tests") / "crosswalk_distribution_threshold"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         calls: list[tuple[pd.Timestamp, pd.Timestamp]] = []
@@ -594,7 +594,7 @@ class ArtifactTests(unittest.TestCase):
         self.assertFalse(second_metrics.empty)
 
     def test_export_audit_docs_keeps_month_ends_plus_switch_day(self) -> None:
-        tmp = Path(".tmp-test") / "crosswalk_docs_export"
+        tmp = Path(".tmp-tests") / "crosswalk_docs_export"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         metrics = pd.DataFrame(

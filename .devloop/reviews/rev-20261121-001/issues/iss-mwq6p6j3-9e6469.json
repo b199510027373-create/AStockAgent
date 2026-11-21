@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwq6p6j3-9e6469",
+  "threadId": "rev-20261121-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "script-hardening",
+  "file": "tools/check_repo_source.py",
+  "lines": "169-185",
+  "title": "校验脚本只看 remote.origin.url，pushurl 指向别处仍会通过",
+  "evidence": "L169 `remote = _run_git(resolved_root, \"config\", \"--get\", \"remote.origin.url\")` 只校验 fetch URL；git 允许 `remote.origin.pushurl`（或 `url.<base>.pushInsteadOf`）把推送目标改到另一仓库。若把 pushurl 指向 `release/AStockAgent` 的 remote 或任意 fork，脚本仍输出 OK 并 exit 0，与本文件 L6-7「发布、提交、推送都必须在仓库根完成」及文档 §1 的承诺不符；现有 22 个测试也未覆盖该路径（tests/test_repo_source_check.py 仅设置 `remote set-url origin`）。",
+  "suggestion": "在 check_repo 中补一条：`push_url = _run_git(root, \"config\", \"--get\", \"remote.origin.pushurl\")`，非空时同样用 normalize_remote 归一化并与 expected_remote（忽略大小写）比较，不一致就 append 到 problems（文案如「origin.pushurl 指向 X，期望 Y」）；在 tests/test_repo_source_check.py 增加用例 `_git(repo, \"config\", \"remote.origin.pushurl\", \"https://github.com/other/repo.git\")` 断言 `result.ok is False`。若评定为超出本期范围，则必须在文档 §2 明确「本脚本不校验 pushurl」。",
+  "confidence": 0.75,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-21T09:06:57.999Z"
+}

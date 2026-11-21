@@ -14,16 +14,10 @@
 
 ## 2. 仓库位置
 
-主项目目录（**也是 Git 仓库根**，2026-11-17 起 `.git` 已在本目录）：
+**唯一 Git 仓库与发布源**（2026-11-17 起 `.git` 已在本目录，2026-11-21 明确为单一真源）：
 
 ```text
 C:\Users\b1995\Documents\AStockAgent
-```
-
-历史上曾使用过的发布仓库副本：
-
-```text
-C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
 ```
 
 远程仓库：
@@ -38,25 +32,23 @@ https://github.com/b199510027373-create/AStockAgent.git
 main
 ```
 
-本次提交：
+历史副本（仅保留查阅旧提交，**不再同步、不作为发布源**）：
 
 ```text
-e8cd9afe94e7d7ff97b191be6876a3fac30e623f
+C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
 ```
 
-提交信息：
+根目录的 `release/` 已在 `.gitignore` 中排除。提交、推送、发布和 CI 都只在仓库根执行；
+详细约定与校验命令见 `docs/AStockAgent_repo_source_of_truth.md`。
 
-```text
-Add CI and sync v1.1 application code
-```
-
-注意：`release/AStockAgent` 是历史发布副本，不再作为提交入口。提交/推送直接在仓库根目录进行；该副本已加入 `.gitignore`，不要再往里同步。
+> 本节旧版本中的「同步到发布仓库」「检查两个目录是否一致」均已废弃。2026-11-17 之前的
+> 提交哈希只用于历史追溯，不再作为当前操作入口。
 
 ## 3. 完成事项
 
-### 3.1 同步发布源码
+### 3.1 根目录直接开发（不再同步副本）
 
-已将当前 AStockAgent v1.1 代码同步到发布仓库，包括：
+AStockAgent v1.1 及之后的代码全部在仓库根目录开发和提交，包括：
 
 - `app.py`
 - `astock/`
@@ -67,6 +59,8 @@ Add CI and sync v1.1 application code
 - `start_scheduler.bat`
 - `ts_init.py`
 - 其他运行所需文件
+
+`release/AStockAgent` 是历史独立仓库，不再接收同步。不要从该目录提交、推送或发布。
 
 ### 3.2 新增 GitHub Actions
 
@@ -85,15 +79,17 @@ Add CI and sync v1.1 application code
 执行内容（plan-20261103-012 之后的当前形态）：
 
 1. 检出仓库。
-2. 安装 Python 3.13。
-3. 从 `requirements-dev.txt` 一次装齐运行时与工具链（全部精确锁定，CI 不再裸装 ruff/mypy）。
-4. 检查 Git 是否跟踪了密钥或运行产物。
-5. `compileall` 语法编译。
-6. `ruff check astock tests`（全仓 blocking；规则集固定在 `ruff.toml` 的显式 select/ignore）。
-7. `mypy astock app.py`（全部非 UI 模块；UI 文件在 `mypy.ini` 中排除）。
-8. `coverage run -m pytest tests -q -m "not png"` + `coverage report -m`（门槛在 `.coveragerc`，当前 76.45%，分阶段目标 80% / 85%）。
+2. 校验仓库单一真源：`python tools/check_repo_source.py`（push 到 `main` 严格校验 `main`；PR 用 `--any-branch --allow-detached`）。
+3. 安装 Python 3.13。
+4. 从 `requirements-dev.txt` 一次装齐运行时与工具链（全部精确锁定，CI 不再裸装 ruff/mypy）。
+5. 检查 Git 是否跟踪了密钥或运行产物。
+6. `compileall` 语法编译。
+7. `ruff check astock tests`（全仓 blocking；规则集固定在 `ruff.toml` 的显式 select/ignore）。
+8. `mypy astock app.py`（全部非 UI 模块；UI 文件在 `mypy.ini` 中排除）。
+9. `coverage run -m pytest tests -q -m "not png"` + `coverage report -m`（门槛在 `.coveragerc`，当前 76.45%，分阶段目标 80% / 85%）。
 
 ```text
+python tools/check_repo_source.py
 ruff check astock tests
 mypy astock app.py
 coverage run -m pytest tests -q -m "not png"
@@ -184,7 +180,7 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 - 本地 `HEAD`、`origin/main`、远端 `refs/heads/main` 均为 `e8cd9af`；该提交时 `git status --short` 为空。
 - **当前工作区已有 v1.2 未提交改动**（SQLite ledger、PIT 快照、原始价/ST、研究语义等）；推送后需要重新跑 GitHub Actions，不能沿用 `e8cd9af` 的 CI 结果。
 - GitHub Actions API 核验：run `41402554097` 为 `completed / success`，`head_sha=e8cd9af`。
-- 当时 unittest 全通过；根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希一致。
+- 历史基线（2026-11-02）：当时曾比对根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希；该「双目录同步」做法已于 2026-11-21 废弃。现在只以仓库根为唯一真源，`release/AStockAgent` 仅保留旧提交供查阅，不再比较或同步。
 - `git ls-files` 未发现 `.env`、`env.env`、`.venv/`、`cache/`、`data/recommendations/`、`__pycache__/`、`*.pyc`；`.env.example` 已跟踪。
 - CI 覆盖「依赖安装（精确锁定）+ 敏感文件检查 + 语法编译 + 全仓 `ruff check astock tests` + `mypy astock app.py` + pytest + 覆盖率门槛（`.coveragerc`，当前 76.45%）」；UI/图表模块在 `.coveragerc` 中排除。
 - 历史基线（2026-11-03，已被取代）：`mypy` 覆盖 22 个源文件；覆盖率 57%（3492 statements / 1493 miss）。
@@ -204,24 +200,25 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 
 ## 6. 推荐操作流程
 
-后续修改后，在发布仓库执行：
+所有操作都在仓库根执行，不再进入 `release/AStockAgent`：
 
 ```powershell
-Set-Location 'C:\Users\b1995\Documents\AStockAgent\release\AStockAgent'
+Set-Location 'C:\Users\b1995\Documents\AStockAgent'
 
+python tools\check_repo_source.py
 git status --short
 git diff --name-only
 git ls-files
 git diff --cached --name-only
 ```
 
-确认没有敏感文件后，再显式暂存需要的路径：
+确认当前是根仓库、remote 正确且没有敏感文件后，再显式暂存需要的路径：
 
 ```powershell
 git add -- app.py astock tests README.md requirements.txt
 ```
 
-推送前检查：
+提交前检查：
 
 ```powershell
 git status --short
@@ -239,13 +236,18 @@ cache/
 data/recommendations/
 __pycache__/
 *.pyc
+release/
 ```
 
-推送：
+提交并推送：
 
 ```powershell
+git commit -m "描述本次改动"
 git push origin main
 ```
+
+功能分支开发时，把最后一行换成 `git push -u origin <branch>` 并开 PR；CI 会用
+`python tools/check_repo_source.py --any-branch --allow-detached` 校验 PR checkout。
 
 ## 7. 后续待办
 
@@ -271,15 +273,13 @@ git push origin main
 
 ```text
 请继续维护 AStockAgent。
-主项目目录：C:\Users\b1995\Documents\AStockAgent
-Git 仓库：C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
+仓库根（唯一真源）：C:\Users\b1995\Documents\AStockAgent
 GitHub：https://github.com/b199510027373-create/AStockAgent.git
 分支：main
 已有 CI：.github/workflows/ci.yml
-最近成功提交：e8cd9af
-CI 状态：GitHub Actions 已通过
+历史副本：release/AStockAgent 仅保留旧提交，不再同步、不作为发布源。
 
-继续修改前先检查两个目录是否一致。
+开工前先运行：python tools\check_repo_source.py
 绝对不要提交 .env、env.env 或任何密钥。
 绝不提交 cache/、data/recommendations/、.venv/、__pycache__/、*.pyc。
 提交前必须审计暂存区，推送后检查 GitHub Actions 结果。

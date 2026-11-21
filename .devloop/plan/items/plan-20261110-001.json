@@ -6,8 +6,8 @@
   "priority": "P2",
   "milestone": "",
   "owner": "human",
-  "start": null,
-  "due": null,
+  "start": "2026-12-14",
+  "due": "2026-12-15",
   "estimateH": 0,
   "progress": 0,
   "acceptance": [],
@@ -22,5 +22,5 @@
     "issue": "iss-mwaf2gq4"
   },
   "createdAt": "2026-11-10T08:20:45.818Z",
-  "updatedAt": "2026-11-10T08:20:45.818Z"
+  "updatedAt": "2026-11-21T07:38:09.190Z"
 }

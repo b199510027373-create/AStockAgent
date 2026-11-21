@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwoy6git-5678ab",
+  "threadId": "rev-20261120-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "evidence",
+  "file": "tests/smoke/agent_ui/run_smoke.py",
+  "lines": "409-412",
+  "title": "驱动超时路径仍不写 driver.log，README「失败保留工作目录含 driver.log」对这条路径不成立",
+  "evidence": "P2-A 的修复把启动失败都收敛到 `_Abort` 后统一写 `run.json`，但驱动超时这条路径仍然是证据缺口：`subprocess.run(..., timeout=args.timeout + 120)`（`:388-397`）抛 `TimeoutExpired` 后，`:409-412` 只打印一行 FAIL 并把 `summary[\"error\"]` 设为 `driver timeout`，没有把 `exc.stdout` / `exc.stderr` 落到 `driver.log`（正常路径在 `:399-403` 才写）。`subprocess.run` 在超时时会先 kill 子进程并把已捕获输出挂在异常对象上，这部分内容现在直接丢弃。\n\n于是 README:110「失败时**保留**工作目录（`app.log` / `browser.log` / `driver.log` / `report.json` / `run.json`）」在这条失败路径上不成立：nightly artifact 只会拿到 `run.json`（`if-no-files-found: warn` 也不会报错），排障时看不到驱动卡在哪一步、最后的 PASS 是哪几项。",
+  "suggestion": "在 `except subprocess.TimeoutExpired as exc:` 里补写 `driver.log`：把 `(exc.stdout or \"\") + (\"\\n[stderr]\\n\" + exc.stderr if exc.stderr else \"\")` 写到 `workdir / \"driver.log\"`（text 模式下可能是 str，做一次 `str(...)` 兜底），并在 `summary` 里加 `summary[\"driver_log\"] = \"driver.log\"`；同时把 README:110 改成「失败时保留工作目录（除驱动被强杀时 `report.json` 可能缺失外，`app.log` / `browser.log` / `driver.log` / `run.json` 都会写入）」。请补一条负向取证：本机用 `--timeout 0.01` 跑一次，确认退出码 1、`run.json` `stage=driver` 且 `error=driver timeout`、`driver.log` 存在。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T13:17:07.150Z"
+  },
+  "createdAt": "2026-11-20T12:20:41.381Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T13:17:07.150Z"
+    }
+  ]
+}

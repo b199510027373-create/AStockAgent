@@ -6,8 +6,8 @@
   "priority": "P2",
   "milestone": "ms-contracts",
   "owner": "human",
-  "start": null,
-  "due": null,
+  "start": "2026-12-21",
+  "due": "2026-12-22",
   "estimateH": 4,
   "progress": 0,
   "acceptance": [
@@ -32,5 +32,5 @@
     "issue": "iss-mw81x690-cbec5c"
   },
   "createdAt": "2026-11-08T16:42:55.179Z",
-  "updatedAt": "2026-11-08T16:42:55.179Z"
+  "updatedAt": "2026-11-21T07:38:12.952Z"
 }

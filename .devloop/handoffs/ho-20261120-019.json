@@ -1,0 +1,175 @@
+{
+  "id": "ho-20261120-019",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261119-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "真实 DeepSeek 三轮 E2E + 工具结果时间线可见性（PR #42）",
+  "summary": "新增 tests/test_agent_live_e2e.py：在 AGENT_LIVE_E2E=1 且存在 key 时用真实 DeepSeek 跑三轮端到端（R1 quote 流式回答；R2 上传 PDF + file_search，在首个分片后 stop 并验证引用定位；R3 kline 内嵌图 + 停止后下一问无污染），记录 TTFT/总耗时/token/可选费用到 .tmp-tests/live-e2e/<ts>/report.json；无 key 或未 opt-in 时 skip 并声明「未运行，不能视为已验证」。真实运行暴露生产缺陷：render_steps_html 只渲染通用 reflection，工具结果正文对用户不可见（违反 AC2），已修（新增 step-output，240 字符裁剪 + HTML 转义，不内联图表 HTML）并补 2 条时间线用例。实测 2026-11-20：live 3 passed（8 calls / 29,447 tokens；TTFT 2.57s/4.06s/4.06s），全量 825 passed，ruff/mypy 通过，CI 双 job 绿，PR #42 待评审。",
+  "requirements": [
+    {
+      "id": "R0",
+      "text": "用真实 DeepSeek（或 OpenAI-compatible 网关）跑通 3 轮端到端：流式回答、一次工具步骤、引用、内嵌图、生成中停止；记录首字延迟、总耗时、token/费用与失败恢复。密钥只从环境变量读取，不写入仓库；无 key 时用例 skip 并明确提示。",
+      "source": "plan-20261119-002 描述"
+    },
+    {
+      "id": "AC1",
+      "text": "真实模型 3 轮对话完成，流式分片可见且最终回答不覆盖已停止分片",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC2",
+      "text": "至少一次工具调用步骤出现在时间线，结果可被用户看到",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC3",
+      "text": "引用可定位，内嵌图可渲染（若该轮触发图表）",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC4",
+      "text": "生成中停止后下一问不受中断标记污染",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC5",
+      "text": "记录首字延迟/总耗时/token 或费用估算；失败时有明确降级提示",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC6",
+      "text": "无 API key 时自动 skip，不把未验证说成已验证",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC7",
+      "text": "密钥只从环境变量读取，不写入仓库（报告与日志不打印密钥）",
+      "source": "plan-20261119-002 描述 + 用户硬规则"
+    },
+    {
+      "id": "AC8",
+      "text": "兼容网关路径（AGENT_PROVIDER=openai_compatible + AGENT_BASE_URL/AGENT_MODEL）可配置运行，缺项时明确 skip",
+      "source": "plan-20261119-002 标题「DeepSeek/兼容网关」"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/test_agent_live_e2e.py",
+      "summary": "新增：live_config 跳过语义（opt-in/key/网关缺项）、LiveRun fixture（run_dir/files/index.db/session.json/report.json）、三轮真实用例、_BoomModel 降级用例；断言分片保留、步骤与工具正文可见、引用 found、iframe 渲染、下一问无中断标记。",
+      "commit": "1c5bb47"
+    },
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "render_steps_html 在 reflection 之外新增 <div class=\"step-output\">，常量 _STEP_OUTPUT_CHARS=240，转义 + 裁剪，不内联 figure HTML。",
+      "commit": "1c5bb47"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 test_steps_show_tool_output_beside_reflection、test_step_output_is_escaped_and_clipped，并在 test_steps_render_tool_arguments_and_tags 补工具正文断言。",
+      "commit": "1c5bb47"
+    },
+    {
+      "path": "pytest.ini",
+      "summary": "注册 live marker（默认跳过，需 AGENT_LIVE_E2E=1）。",
+      "commit": "1c5bb47"
+    },
+    {
+      "path": "docs/AStockAgent_agent_live_e2e.md",
+      "summary": "运行方式、环境变量表、skip 语义、2026-11-20 实测指标表、失败降级路径、已知限制。",
+      "commit": "1c5bb47"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261119-002.json",
+      "summary": "状态 doing→in_review、progress 90、links 回填 branch/pr/doc/test 证据。",
+      "commit": "d9b51a2"
+    }
+  ],
+  "tests": [
+    {
+      "command": "AGENT_LIVE_E2E=1 .venv\\Scripts\\python.exe -m pytest tests\\test_agent_live_e2e.py -m live -q",
+      "result": "3 passed, 4 deselected, 2 warnings in 15.14s",
+      "passed": true,
+      "evidence": "DeepSeek deepseek-chat；报告 .tmp-tests/live-e2e/20261120-232813/report.json：calls=8 tokens=29,447（prompt 28,376 / completion 1,071），probe function_calling=true、degraded=false；R1 TTFT 2,565.0ms/总 2,568.7ms/338 字符；R2 TTFT 4,061.3ms/总 4,063.8ms/35 字符/stopped=true/3 条引用全部 found；R3 TTFT 4,057.2ms/总 4,060.4ms/446 字符/1 张内嵌图（iframe 约 4.86MB）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests\\test_agent_live_e2e.py -q",
+      "result": "4 passed, 3 skipped",
+      "passed": true,
+      "evidence": "无 opt-in 时 3 个 live 用例 skip，4 个语义/降级用例通过"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests\\test_agent_chat.py -q",
+      "result": "40 passed",
+      "passed": true,
+      "evidence": "含新增 2 条时间线用例"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe .tmp-tests\\run_tests_sandbox.py（等价 pytest tests -m 'not png'）",
+      "result": "825 passed, 3 skipped, 5 deselected, 1 warning, 18 subtests passed in 90.03s",
+      "passed": true,
+      "evidence": "DSH 沙箱拒绝 readdir 0o700 目录，脚本把 pathlib.Path.mkdir/tempfile.mkdtemp 改为默认模式并 deselect 会 hang 的 tests/test_scheduler_ledger.py::test_loop_runs_due_job_once_and_records_success（与环境时序有关，与本任务无关）；shim 不入库"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "ruff 0.17.3"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "mypy 2.4.1"
+    },
+    {
+      "command": "gh run watch 44763876376（PR #42 CI）",
+      "result": "conclusion=success：test（compileall / secrets / ruff+mypy / pytest+coverage gate）与 png-export 均通过",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/44763876376"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "DeepSeek API key（真实模型调用）",
+      "reason": "来自本机 .env（gitignored）的 DEEPSEEK_API_KEY/DEEPSEEK_BASE；未写入仓库、未打印",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub 推送与 PR",
+      "reason": "gh 已登录 b199510027373-create；本机 git 无 credential store 且 schannel 取凭证失败，改用 GIT_ASKPASS + http.sslBackend=openssl 一次性推送，未落盘 token",
+      "status": "granted"
+    },
+    {
+      "name": "写入全局 ~/.gitconfig（gh auth setup-git）",
+      "reason": "沙箱 workspace-write 拒绝 C:/Users/b1995/.gitconfig，改用一次性 GIT_ASKPASS，不需要该权限",
+      "status": "blocked"
+    },
+    {
+      "name": "pytest 临时目录（0o700）",
+      "reason": "沙箱拒绝 readdir 0o700 目录；用 .tmp-tests 下一次性 shim 改默认 mode 后跑全量，shim 不入库",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-live-e2e",
+    "commit": "d9b51a2",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/42",
+    "ci": "run 44763876376 success（test + png-export）；首个 run 44763832772 亦 success",
+    "merge": "未合并，等待评审",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "请评审 PR #42：重点看 render_steps_html 新增 step-output 的展示/转义/裁剪策略与 live 用例断言强度（步骤失败后恢复、停止分片前缀、iframe 标记）。评审通过后合并 main 并复跑夜间 workflow_dispatch；未合并前 plan 保持 in_review。另：.devloop/calendar 与 worklog 中本会话记录尚未提交（文件里混有 plan-20261119-001 的历史未提交条目），合并后由维护者决定是否一并入库。",
+  "createdAt": "2026-11-20T15:32:19.510Z",
+  "markdownPath": ".devloop/handoffs/ho-20261120-019.md"
+}

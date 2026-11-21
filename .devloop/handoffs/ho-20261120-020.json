@@ -1,0 +1,103 @@
+{
+  "id": "ho-20261120-020",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261119-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "update：PR #42 head ade6143、CI 三连绿、mergeable CLEAN",
+  "summary": "更新交付：PR #42 追加 ade6143（仅 .devloop/plan 证据回填：handoff=ho-20261120-019、CI run 证据、progress 92），head 变为 ade6143 后 CI run 44764310257 全绿（test + png-export），PR mergeStateStatus=CLEAN、MERGEABLE，仍等待评审合并。代码与测试相对 ho-20261120-019 无改动。",
+  "requirements": [
+    {
+      "id": "AC1",
+      "text": "真实模型 3 轮对话完成，流式分片可见且最终回答不覆盖已停止分片（本轮无变化，仍由 live R1/R2 覆盖）",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC2",
+      "text": "工具步骤与结果在时间线可见（本轮无变化，仍由 step-output 与 live R2 覆盖）",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC6",
+      "text": "无 key 自动 skip（本轮无变化）",
+      "source": "plan-20261119-002 验收标准"
+    },
+    {
+      "id": "AC9",
+      "text": "PR/CI 状态变化后补 update handoff：本份即为此更新（head d9b51a2→ade6143、CI 三连绿）",
+      "source": "交付流程硬规则"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261119-002.json",
+      "summary": "相对 ho-20261120-019 唯一新增改动：plan links 回填 handoff=ho-20261120-019 与 CI run 44763876376 证据，progress 90→92；无代码变更。",
+      "commit": "ade6143"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 44764310257 --json conclusion,headSha",
+      "result": "conclusion=success",
+      "passed": true,
+      "evidence": "headSha ade61432dc53a9a983321ea24c2214240e1a3f1e"
+    },
+    {
+      "command": "gh pr view 42 --json state,mergeable,mergeStateStatus",
+      "result": "OPEN, MERGEABLE, CLEAN",
+      "passed": true,
+      "evidence": "OPEN / MERGEABLE / CLEAN（三个 run 均 success）"
+    },
+    {
+      "command": "（沿用 ho-20261120-019 证据）AGENT_LIVE_E2E=1 pytest tests/test_agent_live_e2e.py -m live -q",
+      "result": "3 passed, 4 deselected, 15.14s",
+      "passed": true,
+      "evidence": "3 passed；report .tmp-tests/live-e2e/20261120-232813/report.json"
+    },
+    {
+      "command": "（沿用 ho-20261120-019 证据）pytest tests -m 'not png'（沙箱 shim）",
+      "result": "825 passed in 90.03s",
+      "passed": true,
+      "evidence": "825 passed, 3 skipped, 5 deselected, 18 subtests"
+    },
+    {
+      "command": "（沿用 ho-20261120-019 证据）ruff check astock tests && mypy astock app.py",
+      "result": "passed",
+      "passed": true,
+      "evidence": "ruff All checks passed；mypy Success in 44 files"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "DeepSeek API key（真实模型调用）",
+      "reason": "来自本机 .env（gitignored），未写入仓库、未打印",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub 推送与 PR",
+      "reason": "gh 已登录；git 用一次性 GIT_ASKPASS + http.sslBackend=openssl 推送，token 未落盘",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-live-e2e",
+    "commit": "ade6143",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/42",
+    "ci": "run 44764310257 success（head ade6143，test + png-export 均通过）；此前 44763876376、44763832772 亦 success",
+    "merge": "未合并，PR mergeStateStatus=CLEAN、MERGEABLE",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261120-019",
+  "next": "评审 PR #42（head ade6143）。合并后 plan 标 done 100%，并决定是否把 .devloop/calendar/2026-11.json 与 .devloop/worklog/2026-11.jsonl 中仍未提交的本会话记录一并入库（文件里混有 plan-20261119-001 更早的未提交条目）。",
+  "createdAt": "2026-11-20T15:34:47.218Z",
+  "markdownPath": ".devloop/handoffs/ho-20261120-020.md"
+}

@@ -1,0 +1,128 @@
+{
+  "id": "ho-20261121-013",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-013",
+  "threadId": null,
+  "sessionId": "session-4106a9e9-99f3-4ef0-b0b5-fdc3b93c25db",
+  "title": "review rev-20261121-001 的 4 项 P2 已修复并提交",
+  "summary": "按评审 rev-20261121-001 修复全部 4 项 P2：校验生效 push URL；用 git check-ignore 做行为测试；移除一次性个人文件忽略规则和重复项；提交正式 handoff/review 记录使工作树干净。代码提交 256de94，记录提交 7808cdb，已推送 PR #44；本地 855 passed，mypy/ruff 通过，CI run 44888601333 的 test 与 png-export 均成功。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "清理根目录临时产物（mypy_*.txt、coverage_report.txt、temp_*.png、daily_report.txt 等），根目录只保留源码/配置/文档",
+      "source": "plan-20261103-013 描述 + 验收 1"
+    },
+    {
+      "id": "R2",
+      "text": "脚本校验 git rev-parse --show-toplevel 指向工作区根，且 remote 为 b199510027373-create/AStockAgent",
+      "source": "验收 2"
+    },
+    {
+      "id": "R3",
+      "text": "release/AStockAgent 标记为历史旧仓库，不再作为发布源，删除双目录同步要求",
+      "source": "验收 3"
+    },
+    {
+      "id": "R4",
+      "text": "handoff/review 草稿有归档目录或忽略规则，不污染 git status",
+      "source": "验收 4"
+    },
+    {
+      "id": "R5",
+      "text": "清理后全量 pytest 与 mypy 通过，CI/发布文档同步更新",
+      "source": "验收 5"
+    },
+    {
+      "id": "R6",
+      "text": "修复 rev-20261121-001 全部 4 项 P2：文档与 git status 一致、pushurl 校验、测试强度、一次性忽略规则",
+      "source": "m00586 交付文档要求 + review rev-20261121-001"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tools/check_repo_source.py",
+      "summary": "新增 git remote get-url --push origin 校验，覆盖 pushurl / pushInsteadOf；保留 toplevel、fetch remote、分支和历史 release 克隆检查",
+      "commit": "256de94"
+    },
+    {
+      "path": "tests/test_repo_source_check.py",
+      "summary": "新增 pushurl 拒绝测试；改用 git check-ignore 验证忽略行为；tempdir 测试同时断言路径与忽略状态",
+      "commit": "256de94"
+    },
+    {
+      "path": ".gitignore",
+      "summary": "删除一次性个人文件名规则和重复项，只保留运行时目录、报告/PR 草稿、_archive 与 DevLoop drafts/archive 规则",
+      "commit": "256de94"
+    },
+    {
+      "path": "docs/AStockAgent_repo_source_of_truth.md",
+      "summary": "补充 pushurl 检查与失败处理；明确正式记录在会话结束时提交、提交前可能短暂出现在 git status；说明一次性探针已归档而非永久忽略",
+      "commit": "256de94"
+    },
+    {
+      "path": ".devloop/",
+      "summary": "提交 122 个正式 handoff/review/plan/calendar/worklog 记录，修复文档声称“随仓库提交”但实际未跟踪的问题",
+      "commit": "7808cdb"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_repo_source_check.py -q -p no:cacheprovider",
+      "result": "23 passed, 1 warning in 6.63s",
+      "passed": true,
+      "evidence": "新增 pushurl 测试与 git check-ignore 行为测试均通过"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "855 passed, 3 skipped, 5 deselected, 1 warning, 18 subtests passed in 69.40s",
+      "passed": true,
+      "evidence": "全量非 PNG 测试通过"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests tools/check_repo_source.py",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe tools\\check_repo_source.py --any-branch",
+      "result": "exit 0；root/toplevel/origin/push URL/分支正确，仅有历史 release/AStockAgent 告警",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "GitHub Actions PR #44 run 44888601333",
+      "result": "test SUCCESS 1m23s; png-export SUCCESS 1m19s",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/44888601333"
+    }
+  ],
+  "permissions": [],
+  "delivery": {
+    "branch": "chore/repo-single-source",
+    "commit": "7808cdb",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/44",
+    "ci": "SUCCESS run 44888601333 (test, png-export)",
+    "merge": "未合并；PR open，等待评审确认 4 项 P2 已关闭",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261121-011",
+  "next": "请评审确认 rev-20261121-001 的 4 项 P2；确认后合并 PR #44。合并后如需可再跑一次 main 上的 check_repo_source.py 严格模式。",
+  "createdAt": "2026-11-21T09:15:49.520Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-013.md"
+}

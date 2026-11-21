@@ -10,7 +10,24 @@
   "evidence": "ADR-008 第 6 条（.devloop/architecture/adr/ADR-008-price-adjustment-limits.md:35）明确要求「图表与行情工具的 metadata 暴露 adj/adj_base/adj_source」，但本轮改动的 market_tools.py:207-224 `MarketSeries.metadata()` 只输出 adjustment/adjustment_label/source/period/session/freshness/notes/partial/factor_as_of，缺 adj_base/base_factor/adj_source；同函数 load_series 在 :587-589 已经把 adjust_meta（含 adj、adj_base、base_factor、adj_source）从 frame.attrs 解析出来，数据就在手边。图表侧同样缺：ChartSpec.data 白名单只有 \"adj\"（chart_spec.py:112-122），本轮新增的 spec[\"meta\"] 只带 {partial, factor_as_of}（market_tools.py:1092-1098），基准日只出现在渲染后的图注文本里（charts.py:418-431），结构化 metadata 拿不到。后果：Agent/LLM 读 ToolResult.metadata 时无法回答「这只票 hfq 的基准日/因子来源是什么」，而 hfq 的语义（基准 1.0 起于最早交易日）恰恰依赖 adj_base；ADR 第 6 条至今没有落地位置。",
   "suggestion": "最小改动补齐 ADR 第 6 条：1) `MarketSeries.metadata()` 增加 adj_base、base_factor、adj_source 三键，值取 load_series 已解析的 adjust_meta（缺省 None/\"\"，不要给假基准）；2) `_render_kline` 的 spec[\"meta\"] 不论 partial 与否都带同样三键（meta 是自由对象，无需改 data 白名单），旧 spec 无该键时图注已按缺省处理；3) 在 tests/test_data_time_semantics.py::test_kline_surfaces_partial_intraday_factor 里对 metadata 的 adj_base/base_factor/adj_source 各加一条断言，并补一条「无 attrs 时三键为 None 且不崩」；4) 落地后在 ADR-008 第 6 条注明位置（market_tools.MarketSeries.metadata + ChartSpec.meta）。",
   "confidence": 0.7,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-20T05:28:22.686Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T11:10:26.558Z"
+  },
+  "createdAt": "2026-11-20T05:28:22.686Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T11:10:26.558Z"
+    }
+  ]
 }

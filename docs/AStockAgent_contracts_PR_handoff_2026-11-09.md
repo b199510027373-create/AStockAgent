@@ -56,7 +56,7 @@ Python 3.13 / pandas 3.0.3
 
 注意：
 
-- 必须带 `tests` 参数。仓库根目录还有 `release/AStockAgent/tests` 发布副本，直接 `pytest` 会重复收集并且可能因路径差异失败。
+- 必须带 `tests` 参数。历史原因：旧 `release/AStockAgent/tests` 副本会被根目录 pytest 重复收集；该副本已于 2026-11-21 标记为历史仓库，不再同步，也不参与 CI。当前仓库根是唯一真源。
 - `CitationBlockTests` 首次 setup 约 6.5s，是在 `import app`（gradio/plotly UI 模块），属预期。
 
 ### 3.2 备选：unittest runner（无 pytest 时）
@@ -127,7 +127,7 @@ git diff 885c6d8..8c5e0e9 -- app.py astock/contracts.py tests/test_contracts.py
 
 - `astock/backfill.py` 自行拼装历史 payload 且不调 `_save`，未接入 RecommendationRun 校验（其结构缺 `schema_version`/`run_id`，需单独迁移）。
 - `track.py` 尚未接入契约。
-- 根目录 `release/AStockAgent/` 为发布副本，未同步本次修改。
+- 历史说明：`release/AStockAgent/` 为旧独立仓库副本，仅保留旧提交供查阅；自 2026-11-21 起不再同步，也不作为发布源。当前唯一真源是仓库根（见 `docs/AStockAgent_repo_source_of_truth.md`）。
 - `requirements-dev.txt` 已加入 `pytest`；CI 建议直接跑 `python -m pytest tests -q` 并固定 pandas/pyarrow 版本。
 - 建议后续给 `ContractError` 增加诊断码（如 `BAR_MISSING_COLUMN`），供上层分类告警。
 

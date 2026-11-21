@@ -241,7 +241,7 @@
 | `pytest tests/test_architecture_gate.py -q` | 32 passed, 1 skipped |
 | CI（GitHub Actions） | run 43402817240 / 43405286628 → success |
 
-**注意**：根目录直接 `pytest` 会误收 `release/AStockAgent/test_ma.py`，造成同名模块冲突（`ModuleNotFoundError: No module named 'astock.agent'`），全量统一跑 `pytest tests`。
+**注意**：历史原因，根目录直接 `pytest` 曾误收 `release/AStockAgent/test_ma.py`，造成同名模块冲突（`ModuleNotFoundError: No module named 'astock.agent'`）。`release/AStockAgent` 已于 2026-11-21 标记为历史旧仓库、不再同步；全量测试仍统一跑 `pytest tests`，避免收集非测试目录。
 
 **artifact 复现的两个前提（现状）**
 1. 相同 plotly 版本（6.7.0 与 7.1.0 输出的 doctype 前缀不同，字节即不同）；

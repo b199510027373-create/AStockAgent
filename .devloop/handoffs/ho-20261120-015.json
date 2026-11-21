@@ -1,0 +1,162 @@
+{
+  "id": "ho-20261120-015",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261119-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261119-001 第三轮：评审 r2 的 P1/P2 已修，windows-latest nightly 44741630551 通过（interrupt 0→1）",
+  "summary": "按 rev-20261120-001 第 2 轮（verdict=request_changes，1×P1 + 1×P2）完成修复：P1 把 interrupt 第三轮改为增量判据——发送前记录 completed_before，等待 done > completed_before 且末条不再处于「正在输出回答/正在分析问题」，等待后再断言有新增完成标记（detail 输出 0→1）；P2 在 subprocess.TimeoutExpired 分支补写 driver.log（_as_text 兼容 bytes），run.json 增加 driver_log 并用 _driver_error 把 report.json 的原因带进来（预算用尽归一为 driver timeout），README 同步措辞。补 2 条契约测试（19→21）。证据：真机 8 项 PASS（16.49s，interrupt detail=“中断保留 32 字，随后再问一轮新增完成标记（0→1）”）、--timeout 0.01 负向（退出码 1，run.json stage=driver error=driver timeout driver_log=driver.log，driver.log 570B）、819 passed、ruff/mypy/compileall 全绿；PR #41 合并 368f684，windows-latest nightly run 44741630551 success 且 interrupt detail 为（0→1）。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "冒烟脚本在干净检出上可运行，不依赖本机绝对路径；windows-latest 上已有多轮成功运行（最新 run 44741630551）",
+      "source": "plan-20261119-001 验收 1 + round1 P1 iss-mwowqrnm-0644cf"
+    },
+    {
+      "id": "R2",
+      "text": "脚本不包含 API key、token、个人路径或大体积截图",
+      "source": "plan-20261119-001 验收 2"
+    },
+    {
+      "id": "R3",
+      "text": "README 写清依赖、启动命令、失败判据与已知限制，且与代码行为一致（本轮同步 interrupt 判据与强杀 evidence 措辞）",
+      "source": "plan-20261119-001 验收 3"
+    },
+    {
+      "id": "R4",
+      "text": "覆盖上传/流式/步骤/内嵌图/引用/中断六条主路径",
+      "source": "plan-20261119-001 验收 4"
+    },
+    {
+      "id": "R5",
+      "text": "默认不进入普通 CI；提供手动或 nightly 入口",
+      "source": "plan-20261119-001 验收 5"
+    },
+    {
+      "id": "REV-R2-P1",
+      "text": "中断后第三轮的完成判据不能被上一轮 ✅ 已完成或本轮流式中间态满足，必须验证本轮自身新增终态",
+      "source": "评审 rev-20261120-001 第 2 轮 iss-mwoy6ghr-f8e6cd"
+    },
+    {
+      "id": "REV-R2-P2",
+      "text": "驱动被强杀时必须写 driver.log，并让 run.json 记录 driver_log 与 error；README 的失败保留说明要与之相符",
+      "source": "评审 rev-20261120-001 第 2 轮 iss-mwoy6git-5678ab"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/smoke/agent_ui/smoke_drive.py",
+      "summary": "check_interrupt 改为增量判据：发送前取 completed_before=_completed_count(cdp)，等待 done > completed_before 且末条 >60 字且不再含「正在输出回答」/「正在分析问题」，等待后再取一次并断言有新增，detail 输出计数（0→1）；新增 _COMPLETED_JS 与 _completed_count",
+      "commit": "62f9170"
+    },
+    {
+      "path": "tests/smoke/agent_ui/run_smoke.py",
+      "summary": "except subprocess.TimeoutExpired as exc 分支把 exc.stdout/exc.stderr 写入 driver.log（_as_text 兼容 bytes）并设 summary['driver_log']；驱动非零退出时用 _driver_error(report.json, code) 把原因带进 run.json（预算用尽归一为 driver timeout）；成功路径也记 driver_log",
+      "commit": "62f9170"
+    },
+    {
+      "path": "tests/smoke/agent_ui/README.md",
+      "summary": "interrupt 判据改为「必须新增一次 ✅ 已完成且末条不再处于流式态」；失败判据写清强杀时 report.json 可能缺失但 driver.log 会补写、error 取自 report.json（预算用尽为 driver timeout）",
+      "commit": "62f9170"
+    },
+    {
+      "path": "tests/test_agent_ui_smoke_contract.py",
+      "summary": "新增 test_interrupt_recheck_requires_a_new_completion_marker 与 test_driver_timeout_keeps_driver_log（含 _as_text/_driver_error 单测与 README 措辞断言），契约测试 19→21",
+      "commit": "62f9170"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe tests/smoke/agent_ui/run_smoke.py --workdir tests/smoke/agent_ui/.workdir --keep-workdir",
+      "result": "SMOKE OK :: 8 项断言全部通过，用时 16.49s；EXIT=0",
+      "passed": true,
+      "evidence": "report.json interrupt detail=“中断保留 32 字，随后再问一轮新增完成标记（0→1）”；其余七项 detail 见 report.json；run.json stage=done, degraded_ran=true, driver_log=driver.log, driver_exit=0, ok=true"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe tests/smoke/agent_ui/run_smoke.py --workdir tests/smoke/agent_ui/.workdir-timeout --keep-workdir --timeout 0.01",
+      "result": "退出码 1（负向用例，期望失败）",
+      "passed": true,
+      "evidence": "run.json {stage:driver, error:driver timeout, driver_log:driver.log, driver_exit:1, ok:false}；report.json error=“AssertionError: driver timeout（--timeout 预算已用尽）”；driver.log 570B 已写入"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_ui_smoke_contract.py -q -p no:cacheprovider",
+      "result": "21 passed, 1 warning in 2.24s",
+      "passed": true,
+      "evidence": "新增 test_interrupt_recheck_requires_a_new_completion_marker（断言 completed_before / done > {completed_before} / 末条不再流式 / README 措辞）与 test_driver_timeout_keeps_driver_log（断言 TimeoutExpired 分支、_as_text、_driver_error 归一化、README）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "819 passed, 5 deselected, 18 subtests passed in 98.29s",
+      "passed": true,
+      "evidence": "全量非 png 用例，较上轮 817 增加 2 条契约回归"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同口径"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "CI 同口径"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m compileall -q astock app.py tests/smoke/agent_ui",
+      "result": "ok",
+      "passed": true,
+      "evidence": "语法/编译通过"
+    },
+    {
+      "command": "gh pr checks 41 --watch（PR #41，head 62f9170）",
+      "result": "test pass 1m30s / png-export pass 1m7s",
+      "passed": true,
+      "evidence": "CI run 44741314205"
+    },
+    {
+      "command": "gh workflow run agent-ui-smoke.yml --ref main（main 368f684，run 44741630551）",
+      "result": "success（windows-latest）",
+      "passed": true,
+      "evidence": "artifact agent-ui-smoke-evidence：report.json 八项全 true，interrupt detail=“中断保留 56 字，随后再问一轮新增完成标记（0→1）”；run.json stage=done, degraded_ran=true, driver_log=driver.log, driver_exit=0, duration_s=22.08；URL https://github.com/b199510027373-create/AStockAgent/actions/runs/44741630551"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "merge PR #41",
+      "reason": "评审 round2 要求修完两处后合并并复跑 nightly；用户指示按交付文档执行",
+      "status": "granted"
+    },
+    {
+      "name": "gh workflow run agent-ui-smoke.yml --ref main",
+      "reason": "验证修复后的增量中断判据在 windows-latest 上仍 8 项 PASS",
+      "status": "granted"
+    },
+    {
+      "name": "关闭评审线程 / 标记 issue resolved",
+      "reason": "按协议开发不代替评审写结论；请在第 3 轮复核后由评审 finish",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "main（fix/agent-ui-smoke-round3 已合并删除）",
+    "commit": "368f684（PR #41 squash，= 分支提交 62f9170）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/41（已合并）",
+    "ci": "PR #41 run 44741314205 → test success 1m30s / png-export success 1m7s",
+    "merge": "squash merged；main 上 dispatch nightly run 44741630551 success（windows-latest，八项 PASS，interrupt detail 0→1，run.json stage=done ok=true duration_s=22.08）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261120-013",
+  "next": "1) 请评审做 rev-20261120-001 第 3 轮（scope=diff 2364ccf..368f684）：核对 iss-mwoy6ghr-f8e6cd（P1）与 iss-mwoy6git-5678ab（P2）已 fixed，关闭后 openP1=0，再把线程 finish 并把 plan-20261119-001 置 done（开发已置 in_review）；2) 夜间证据可直接引用 run 44741630551（headSha 368f684）；3) 后续改动 UI 文案时契约测试会先挡住常量漂移。",
+  "createdAt": "2026-11-20T13:10:34.813Z",
+  "markdownPath": ".devloop/handoffs/ho-20261120-015.md"
+}

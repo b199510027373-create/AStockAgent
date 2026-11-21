@@ -1,0 +1,53 @@
+{
+  "id": "ho-20261120-021",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261120-002",
+  "sessionId": "",
+  "title": "评审：Agent 会话真实模型 E2E 验证（DeepSeek/兼容网关）",
+  "summary": "第 1 轮 full 评审（5 个文件：astock/agent/chat.py、docs/AStockAgent_agent_live_e2e.md、pytest.ini、tests/test_agent_chat.py、tests/test_agent_live_e2e.py；另只读 gateway.py/runtime.py/agent_chat_ui.py 片段核对契约与测试充分性）。结论：approve，P0=0、P1=0、P2=3。\n\n生产修复核对（chat.py 第 63、255-262、270 行）：本轮唯一的业务改动是把工具结果正文以 `.step-output` 加入时间线——先 `_clip` 裁剪（240 字符）再 `_esc`（html.escape quote=True），与原 `.step-result` 的通用 reflection 并存、相同内容去重、图表 HTML 不内联。核对 runtime.py:742-753 确认生产环境 `reflection` 永不为空，因此旧兜底永不触发、新分支才是正文可见的唯一路径；核对 chat.py:268 确认参数区仍在渲染 arguments，这正是第 1 条问题的成因。转义与去重逻辑无缺陷，测试 test_steps_show_tool_output_beside_reflection / test_step_output_is_escaped_and_clipped 覆盖了「正文可见 / 不内联图表 / 转义 / 裁剪」，接受。\n\n验收标准证据：AC1 由 test_round1（真实 DeepSeek，chunks>=2、TTFT<=elapsed）与 smoke 的 interrupt 路径（真实浏览器保留半截回答）共同覆盖；AC2 由 test_round1 第 582 行 `\"最新价\" in steps_html`（修复前必失败，参数只有 ts_code）+ 单测覆盖；AC3 由 R2 引用全 found/snippet 命中 PDF 与 R3 iframe/sandbox/astock-figure-frame 覆盖；AC4 由 R3 无中断标记 + session.history 断言覆盖；AC5 的运行时记录（TTFT/耗时/token）有断言、报告落盘与费用口径有缺口（下条）；AC6 由三个 LiveSkip 用例 + 明确“不能视为已验证”文案覆盖。pytest.ini 只注册 live marker、skip 由 fixture 实现，与文档 §4 一致，无问题。\n\nopenP2（不阻断合并，建议在本次 PR 的后续提交里顺手改，或由维护者确认后转成 plan 项跟进）：\n1) tests/test_agent_live_e2e.py:609-618 的 `\"Revenue\" in steps_html` 可被 `.step-args` 的参数回显满足，改成正则抽取 `<div class=\"step-output\">` 内文断言。\n2) tests/test_agent_live_e2e.py:266-288/291-364/458-467 报告与 `_cost` 无断言、非法 `AGENT_PRICE_*` 静默返回 None，与 `_number` 抛 LiveSkip 不一致；补两个无 key 纯函数用例。\n3) docs/AStockAgent_agent_live_e2e.md:20-29、74 §2 漏列 AGENT_LIVE_E2E_WORKDIR/AGENT_TIMEOUT_SECONDS/AGENT_MAX_STEPS/AGENT_TOKEN_BUDGET；§6「网关不通退规则兜底」与 gateway.py:1413-1425/1003-1008 不符，需拆成「缺 key → 规则兜底」与「有 key 但网关不通 → degraded + JSON 协议 + model_error」。\n\n另两条因同文件 P2 配额（每文件 2 条）未能立项，记录于此供开发顺手处理：(a) `_run_live` 第 389-390 行的 probe 会向同一个 UsageLogger 记一条 UsageRecord，而 `_ask` 第 213 行 `before=len(usage.records)` 把它排除、`_write_report` 第 347-351 行 totals 只累加各轮，导致 doc §5「三轮共 8 次调用」不是完整用量（真实 9 次），建议 report 单列 probe_usage 或注明口径；(b) 第 598-607 行在回答不足一个分片（CHUNK_CHARS=40）时会以“无法验证不覆盖”报红，建议先 `pytest.skip`。\n\n完全解决的判定：本线程按 P0=0、P1=0 判定为已解决（approve）。上述 3 条 openP2 属于提示级，不影响验收；若开发在本分支再提交一次修掉 1)、2)、(a)、(b) 与文档 3)，则无需新开评审轮，由维护者在 PR 描述中附 commit 与复跑结果（`AGENT_LIVE_E2E=1 ... -m live -q` + 全量 `pytest tests -m not png`）即可结案。合并后仍需按 handoff 的 next 复跑夜间 workflow_dispatch，并把 calendar/worklog 的历史未提交条目交由维护者决定。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "approve",
+    "resolved": true,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": [
+      {
+        "severity": "P2",
+        "title": "R2 的“工具正文可见”断言可被参数回显满足，未真正锚定 step-output",
+        "suggestion": "改为抽 `<div class=\"step-output\">([^<]*)</div>` 的全部命中，断言至少一条命中正文含 “Revenue”，并额外断言 `record.steps_html.count('class=\"step-output\"') >= 1`（R1 或 R2 均可）。这样断言只认工具结果区，不再被 `.step-args` 的回显满足，失败时也指向真正的回归点。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "AC5 的报告与费用产出没有任何断言，价格变量非法时静默降级为 null",
+        "suggestion": "补两个不需要 key 的纯函数用例：① `_cost({\"prompt_tokens\": 1_000_000, \"completion_tokens\": 1_000_000, \"total_tokens\": 2_000_000, \"calls\": 1}, {\"AGENT_PRICE_INPUT_PER_M\": \"2\", \"AGENT_PRICE_OUTPUT_PER_M\": \"8\", \"AGENT_PRICE_CURRENCY\": \"CNY\"})` 断言 estimated/currency；非法价格按 `_number` 的口径抛 LiveSkip（或在报告里写 `\"cost\": {\"error\": \"...\"}`），不要返回 None。② 用构造的 RoundRecord 调 `_round_report`，断言必含键集合且 `ttft_ms is None or ttft_ms <= elapsed_ms`。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "文档 §2 漏列影响运行的环境变量，§6「网关不通退规则兜底」与实现不符",
+        "suggestion": "§2 表补 `AGENT_LIVE_E2E_WORKDIR`（默认 `.tmp-tests/live-e2e`）、`AGENT_TIMEOUT_SECONDS`、`AGENT_MAX_STEPS`、`AGENT_TOKEN_BUDGET` 四行；§6 第 74 行拆成两条：缺 key → 规则兜底 + mark_degraded（gateway.py:1413-1425）；有 key 但网关不通 → probe 置 degraded、降 JSON 协议，运行时按 model_error 追加“模型调用失败……已保留此前产出的内容”。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-20T15:58:01.019Z",
+  "markdownPath": ".devloop/handoffs/ho-20261120-021.md"
+}

@@ -1,0 +1,16 @@
+{
+  "id": "iss-mwq6pc1u-dcf6c2",
+  "threadId": "rev-20261121-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-strength",
+  "file": "tests/test_repo_source_check.py",
+  "lines": "212-234",
+  "title": ".gitignore 相关测试只做字符串包含判断，且临时目录断言恒真",
+  "evidence": "`tests/test_repo_source_check.py:212-227` 的 `test_gitignore_keeps_root_hygiene_and_ignores_release_clone` 只做 `assert needle in text` 字符串包含判断：把 `/astock-chat-*/` 改成未锚定的 `astock-chat-*/`、或把 `/tmp*/` 写成 `/tmp*`（对目录失效），测试仍会通过，验收项「临时产物/草稿不污染 git status」实际上没有任何行为级验证。另外 `tests/test_repo_source_check.py:230-234` 的 `test_pytest_tempdir_stays_inside_repo_ignored_dir` 断言 `Path(tempfile.gettempdir()).is_relative_to(ROOT/'.tmp-tests')`，而 `tests/conftest.py:15-17` 在 import 时就把 `tempfile.tempdir` 强制设成该目录，因此它是恒真断言，即使 `.tmp-tests/` 未被忽略也照样通过。",
+  "suggestion": "把字符串包含判断换成行为断言：用 `subprocess.run([\"git\", \"check-ignore\", \"-q\", p], cwd=ROOT)` 对正例（`astock-chat-x/`、`.pytest-x/`、`pip-x/`、`_archive/x`、`.devloop/drafts/x`、`.tmp-tests/x`）断言 returncode==0，对反例（`astock/data.py`、`docs/x.md`）断言 returncode==1；git 不可用时沿用现有 `pytestmark` skip。恒真断言改为显式检查：`tempfile.tempdir == str((ROOT/'.tmp-tests'))` 且 `git check-ignore -q .tmp-tests/x` 为真，这样才验证了「临时目录落在已忽略目录」这一真实诉求。",
+  "confidence": 0.85,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-21T09:07:05.154Z"
+}
