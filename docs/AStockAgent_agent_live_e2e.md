@@ -27,6 +27,12 @@
 | `AGENT_PRICE_INPUT_PER_M` | 否 | 输入价格（每百万 token），配合下一项生成费用估算 |
 | `AGENT_PRICE_OUTPUT_PER_M` | 否 | 输出价格（每百万 token） |
 | `AGENT_PRICE_CURRENCY` | 否 | 费用币种标签，仅用于报告展示 |
+| `AGENT_LIVE_E2E_WORKDIR` | 否 | 报告与索引的落盘根目录，默认 `.tmp-tests/live-e2e` |
+| `AGENT_TIMEOUT_SECONDS` | 否 | 单轮运行时上限（秒），默认 120；会被透传给 `AgentRuntime` |
+| `AGENT_MAX_STEPS` | 否 | 单轮最大工具步数，默认 8 |
+| `AGENT_TOKEN_BUDGET` | 否 | 单轮 token 预算，默认 64000 |
+
+`AGENT_PRICE_*` 写错（非数字）时不会静默当作“未配置”：报告里 `cost` 变成带 `error` 字段的结构并说明哪个变量非法。`AGENT_*` 上限类变量同时会覆盖本测试内三层（网关/运行时/控制器绑定）的默认值。
 
 密钥只从环境变量读取：`.env` 由 `astock/config.py` 的 `load_dotenv` 载入，文件本身在 `.gitignore` 中；测试与报告都不打印密钥，只记录 provider/model/protocol。
 
@@ -43,38 +49,40 @@ $env:AGENT_LIVE_E2E = "1"
 
 用例划分：
 
-- 语义用例（默认运行）：`test_live_config_requires_explicit_opt_in`、`test_live_config_skips_without_api_key`、`test_live_config_skips_incomplete_compatible_gateway`、`test_model_failure_surfaces_clear_degradation`。
+- 语义用例（默认运行）：`test_live_config_requires_explicit_opt_in`、`test_live_config_skips_without_api_key`、`test_live_config_skips_incomplete_compatible_gateway`、`test_model_failure_surfaces_clear_degradation`，以及报告/费用口径的纯函数用例（`test_cost_estimate_uses_price_env`、`test_cost_without_price_env_is_unknown`、`test_cost_invalid_price_reports_error_instead_of_none`、`test_round_report_records_timing_usage_and_cost`）。
 - 真实用例（`-m live`）：`test_round1_real_answer_streams_with_tool_step`、`test_round2_stop_keeps_partial_and_citations_resolve`、`test_round3_next_question_clean_and_chart_renders`。
 
-产物写入 `.tmp-tests/live-e2e/<时间戳>/`（gitignored）：`report.json`、`files/`（上传件索引）、`index.db`、`session.json`。`report.json` 含每轮 TTFT、耗时、stop_reason、步骤、token 用量、费用估算、引用与图表摘要。
+产物写入 `.tmp-tests/live-e2e/<时间戳>/`（gitignored）：`report.json`、`files/`（上传件索引）、`index.db`、`session.json`。`report.json` 含每轮 TTFT、耗时、stop_reason、步骤、token 用量、费用估算、引用与图表摘要；`probe_usage` 单列探测调用的 token，`totals` 的口径只含三轮对话。
 
 ## 4. Skip 语义
 
 - 未设 `AGENT_LIVE_E2E=1`，或没有可用 key，或兼容网关缺 `AGENT_BASE_URL`/`AGENT_MODEL` 时，live 用例 `pytest.skip`，消息明确写“未运行，不能视为已验证”。
+- R2 若模型完整回答不足一个分片（`CHUNK_CHARS=40`），停止后“分片短于完整回答”无法验证，该用例 `pytest.skip` 并打印完整回答，而不是以断言失败报红。
 - skip 不是通过：CI 日志里 live 用例永远是 skipped，真实证据只能来自显式开启的运行结果。
 
-## 5. 2026-11-20 实测记录
+## 5. 2026-11-21 实测记录
 
-环境：DeepSeek 官方接口，`deepseek-chat`，probe `function_calling=true`、`degraded=false`。三轮共 8 次模型调用、29,447 tokens（prompt 28,376 / completion 1,071），未配置价格，`cost=null`。报告：`.tmp-tests/live-e2e/20261120-232813/report.json`。
+环境：DeepSeek 官方接口，`deepseek-chat`，probe `function_calling=true`、`degraded=false`、`probe_passed=true`。三轮对话共 6 次模型调用、21,622 tokens（prompt 20,506 / completion 1,116）；probe 探测另有 1 次调用、343 tokens，单列在报告的 `probe_usage` 中（不计入 `totals`）。未配置价格，`cost=null`。报告：`.tmp-tests/live-e2e/20261121-031843/report.json`。
 
 | 轮次 | 目标 | TTFT | 总耗时 | 回答字符 | 结果 |
 | --- | --- | --- | --- | --- | --- |
-| R1 | quote 查询 600519.SH | 2,565.0 ms | 2,568.7 ms | 338 | completed，9 个流式分片，quote 步骤 1 个 |
-| R2 | 附件 PDF + file_search，首个分片后停止 | 4,061.3 ms | 4,063.8 ms | 35 | stopped=true，运行已完成、仅截断输出；3 个步骤、3 条引用全部定位 |
-| R3 | kline 画图并验证下一问无污染 | 4,057.2 ms | 4,060.4 ms | 446 | completed，16 个分片，1 张内嵌图（iframe 约 4.86 MB），无中断标记 |
+| R1 | quote 查询 600519.SH | 6,364.3 ms | 6,369.3 ms | 282 | completed，9 个流式分片，quote 步骤 1 个（5,126.1 ms），2 次调用 |
+| R2 | 附件 PDF + file_search，首个分片后停止 | 2,651.0 ms | 2,655.1 ms | 40 | stopped=true，运行已完成、仅截断输出；file_search 1 个步骤，3 条引用全部定位 |
+| R3 | kline 画图并验证下一问无污染 | 3,761.1 ms | 3,765.2 ms | 676 | completed，19 个分片，1 张内嵌图（figure HTML 4,862,205 字符 / 嵌入后 5,550,370 字符），无中断标记 |
 
-R2 的模型先尝试 `file_search("年报.pdf")` 失败（提示改用 `file_list`），时间线以 `data-status="error"` 展示错误并继续；随后 `file_list` + `file_search` 成功，工具正文 “Revenue …” 出现在步骤区，引用 snippet 对应 PDF 的 3 页内容。这同时验证了失败恢复路径。
+R2 本次 `file_search("Revenue")` 首次即命中 3 页；上一轮实测出现过模型先传文件名导致失败、时间线以 `data-status="error"` 展示并以“改用 `file_list`”恢复的路径，测试对成功与失败恢复两种路径都做了断言（失败步骤必须给出可执行的下一步提示）。
 
-R1/R2 的首字延迟包含首轮模型思考与工具调用时间，因此高于纯吐字场景；比较跨轮延迟时应结合步骤数看。
+R1/R2 的首字延迟包含首轮模型思考与工具调用时间，因此高于纯吐字场景；比较跨轮延迟时应结合步骤数与网络状况看。
 
 ## 6. 失败与降级
 
 - 模型调用抛异常：运行时返回 `stop_reason=model_error`，回答区追加“模型调用失败……已保留此前产出的内容”并附错误摘要，`done` 正常释放 busy 锁；由 `test_model_failure_surfaces_clear_degradation` 覆盖。
 - 工具失败：步骤保留错误信息与 `data-status="error"`，模型可继续下一步；R2 真实跑通该路径。
-- 无 key/网关不通：`create_agent_model` 退规则兜底并 `mark_degraded`，UI 显示降级原因；E2E 不会因为没有 key 而假装通过。
+- 缺 key：`create_agent_model` 只在没有 key 时换成规则兜底并 `mark_degraded`（`astock/agent/gateway.py:1413-1425`）；E2E 不会因为没有 key 而假装通过，会直接 skip。
+- 有 key 但网关不通：不会退规则兜底。probe 把状态置为 `degraded` 并降级为 JSON 工具协议（`astock/agent/gateway.py:1003-1008`），主适配器仍是 DeepSeek；运行时调用抛异常后走 `stop_reason=model_error`，回答区追加“模型调用失败……已保留此前产出的内容”。
 
 ## 7. 已知限制
 
 - 模型侧无 token 流（ADR-014），TTFT 实际是“首个 UI 分片时间”。
 - 图表 `figure` HTML 体积大（本次约 4.86 MB），报告只记录长度与关键标记，不落库。
-- 真实 E2E 不进普通 CI，由维护者显式配置运行；费用估算依赖人工填写价格变量。
+- 真实 E2E 不进普通 CI，由维护者显式配置运行；费用估算依赖人工填写价格变量，未配置时 `cost=null`，写错时 `cost` 带 `error` 提示而不会静默消失。

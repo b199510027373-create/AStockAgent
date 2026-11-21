@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -256,6 +257,7 @@ class LiveRun:
     run_dir: Path
     rounds: list[RoundRecord]
     report_path: Path
+    probe_usage: list[Any] = field(default_factory=list)
 
 
 def _stop_reason_value(result: AgentRunResult | None) -> str | None:
@@ -266,6 +268,8 @@ def _stop_reason_value(result: AgentRunResult | None) -> str | None:
 def _cost(
     tokens: dict[str, int], env: dict[str, str] | None = None
 ) -> dict[str, Any] | None:
+    """费用估算；未配置价格返回 None，价格写错返回带 error 的结构而不是静默 None。"""
+
     source = os.environ if env is None else env
     raw_in = (source.get("AGENT_PRICE_INPUT_PER_M") or "").strip()
     raw_out = (source.get("AGENT_PRICE_OUTPUT_PER_M") or "").strip()
@@ -275,7 +279,14 @@ def _cost(
         price_in = float(raw_in)
         price_out = float(raw_out)
     except ValueError:
-        return None
+        return {
+            "error": (
+                "AGENT_PRICE_INPUT_PER_M/AGENT_PRICE_OUTPUT_PER_M 不是数字："
+                f"{raw_in!r}/{raw_out!r}；费用未估算"
+            ),
+            "input_per_m": raw_in,
+            "output_per_m": raw_out,
+        }
     estimated = (
         tokens["prompt_tokens"] / 1_000_000 * price_in
         + tokens["completion_tokens"] / 1_000_000 * price_out
@@ -344,18 +355,30 @@ def _round_report(record: RoundRecord, files_root: Path) -> dict[str, Any]:
     }
 
 
-def _write_report(run: LiveRun) -> Path:
-    totals = {
-        key: sum(record.tokens[key] for record in run.rounds)
-        for key in ("calls", "prompt_tokens", "completion_tokens", "total_tokens")
+def _tokens_of(records: list[Any]) -> dict[str, int]:
+    return {
+        "calls": len(records),
+        "prompt_tokens": sum(int(item.prompt_tokens or 0) for item in records),
+        "completion_tokens": sum(int(item.completion_tokens or 0) for item in records),
+        "total_tokens": sum(int(item.total_tokens or 0) for item in records),
     }
+
+
+def _write_report(run: LiveRun) -> Path:
+    totals = _tokens_of([item for record in run.rounds for item in record.usage])
     report = {
         "task": "plan-20261119-002",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "provider": run.config.provider,
         "model": run.config.model,
         "probe": run.probe.to_dict() if hasattr(run.probe, "to_dict") else {},
-        "totals": {**totals, "cost": _cost(totals)},
+        # probe 本身也会消耗一次调用；单列出来，totals 的口径只含三轮对话。
+        "probe_usage": _tokens_of(run.probe_usage),
+        "totals": {
+            **totals,
+            "cost": _cost(totals),
+            "scope": "三轮对话（不含 probe 探测调用，probe 见 probe_usage）",
+        },
         "rounds": [_round_report(record, run.files_root) for record in run.rounds],
     }
     run.report_path.write_text(
@@ -388,6 +411,9 @@ def _run_live(config: LiveConfig) -> LiveRun:
     usage = UsageLogger(None)
     gateway = build_gateway(settings, probe=True, usage_logger=usage)
     probe = gateway.probe()
+    # probe（含构建阶段的探测）也记了用量；_ask 以 len(records) 为起点会排除它们，
+    # 这里单独留存，报告里按 probe_usage 单列，避免 totals 少算一次调用。
+    probe_usage = list(usage.records)
     model = AgentModelAdapter(gateway)
 
     registry = register_market_tools(
@@ -462,6 +488,7 @@ def _run_live(config: LiveConfig) -> LiveRun:
         run_dir=run_dir,
         rounds=rounds,
         report_path=run_dir / "report.json",
+        probe_usage=probe_usage,
     )
     _write_report(run)
     return run
@@ -503,6 +530,105 @@ def test_live_config_skips_incomplete_compatible_gateway() -> None:
         live_config({"AGENT_LIVE_E2E": "1", "AGENT_PROVIDER": "openai_compatible"})
     message = str(info.value)
     assert "AGENT_BASE_URL" in message and "AGENT_MODEL" in message
+
+
+# ---------------------------------------------------------------------------
+# 报告与费用口径（纯函数，不需要 key，也不请求模型）
+# ---------------------------------------------------------------------------
+
+
+def test_cost_estimate_uses_price_env() -> None:
+    cost = _cost(
+        {
+            "prompt_tokens": 1_000_000,
+            "completion_tokens": 1_000_000,
+            "total_tokens": 2_000_000,
+            "calls": 1,
+        },
+        {
+            "AGENT_PRICE_INPUT_PER_M": "2",
+            "AGENT_PRICE_OUTPUT_PER_M": "8",
+            "AGENT_PRICE_CURRENCY": "CNY",
+        },
+    )
+    assert cost is not None
+    assert "error" not in cost
+    assert cost["input_per_m"] == 2.0
+    assert cost["output_per_m"] == 8.0
+    assert cost["currency"] == "CNY"
+    assert cost["estimated"] == 10.0
+
+
+def test_cost_without_price_env_is_unknown() -> None:
+    assert (
+        _cost(
+            {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "calls": 1},
+            {},
+        )
+        is None
+    )
+
+
+def test_cost_invalid_price_reports_error_instead_of_none() -> None:
+    cost = _cost(
+        {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "calls": 1},
+        {"AGENT_PRICE_INPUT_PER_M": "two", "AGENT_PRICE_OUTPUT_PER_M": "8"},
+    )
+    assert cost is not None, "价格写错时不能被静默当成“未配置价格”"
+    assert "error" in cost
+    assert "two" in cost["error"]
+    assert "AGENT_PRICE_INPUT_PER_M" in cost["error"]
+
+
+def test_round_report_records_timing_usage_and_cost() -> None:
+    record = RoundRecord(
+        name="unit-report",
+        question="报告里有什么？",
+        answer_chunks=["ab", "cd"],
+        ttft_seconds=0.25,
+        elapsed_seconds=0.5,
+        done_text="完成",
+    )
+    report = _round_report(record, Path(DEFAULT_WORKDIR))
+    required = {
+        "name",
+        "question",
+        "answer",
+        "answer_chars",
+        "chunks",
+        "ttft_ms",
+        "elapsed_ms",
+        "stopped",
+        "done_text",
+        "stop_reason",
+        "model_error",
+        "interrupt_text",
+        "steps",
+        "usage",
+        "cost",
+        "citations",
+        "figures",
+    }
+    assert required <= set(report)
+    assert report["chunks"] == 2
+    assert report["answer_chars"] == 4
+    assert report["ttft_ms"] == 250.0
+    assert report["elapsed_ms"] == 500.0
+    assert report["ttft_ms"] <= report["elapsed_ms"]
+    assert set(report["usage"]) >= {
+        "calls",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+    }
+    json.dumps(report)  # 报告必须可序列化后落盘
+
+    no_answer = _round_report(
+        RoundRecord(name="unit-empty", question="没有回答"), Path(DEFAULT_WORKDIR)
+    )
+    assert no_answer["ttft_ms"] is None
+    assert no_answer["answer_chars"] == 0
+    assert no_answer["chunks"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -600,6 +726,12 @@ def test_round2_stop_keeps_partial_and_citations_resolve(live_run: LiveRun) -> N
         "流式分片不是完整回答的前缀："
         f"partial={record.answer[:80]!r} full={record.result.answer[:80]!r}"
     )
+    if len(record.result.answer) <= CHUNK_CHARS:
+        pytest.skip(
+            "本轮完整回答不超过一个分片（CHUNK_CHARS="
+            f"{CHUNK_CHARS}），无法验证“停止后不覆盖已输出分片”："
+            f"answer={record.result.answer!r}"
+        )
     assert len(record.answer) < len(record.result.answer), (
         "停止发生在回答输出完之后，无法验证“不覆盖已停止分片”"
     )
@@ -614,8 +746,17 @@ def test_round2_stop_keeps_partial_and_citations_resolve(live_run: LiveRun) -> N
         if step.result.error:
             assert "file_list" in step.result.error, step.result.error
             assert 'data-status="error"' in record.steps_html
-    # 工具结果正文（而不只是模型转述）要出现在时间线里。
-    assert "Revenue" in record.steps_html, "file_search 的结果正文没有出现在时间线里"
+    # 工具结果正文（而不只是 .step-args 里回显的参数）要出现在时间线的 step-output 区。
+    step_outputs = re.findall(
+        r'<div class="step-output">([^<]*)</div>', record.steps_html
+    )
+    assert record.steps_html.count('class="step-output"') >= 1, (
+        "时间线没有渲染工具结果区（.step-output）"
+    )
+    assert any("Revenue" in text for text in step_outputs), (
+        "file_search 的结果正文没有出现在 step-output 区："
+        + repr([text[:60] for text in step_outputs])
+    )
     assert record.citations, "file_search 没有产生可定位的引用"
     details = [resolve_citation(item, root=live_run.files_root) for item in record.citations]
     assert all(detail.found for detail in details), [
