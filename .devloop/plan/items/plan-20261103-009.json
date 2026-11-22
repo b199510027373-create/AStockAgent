@@ -2,14 +2,14 @@
   "id": "plan-20261103-009",
   "title": "板块/停牌/北交所交易规则补齐",
   "description": "ADR-008 已覆盖 ST 5% 与原始价限价，但不同板块（创业板/科创板 20%、北交所 30%）、IPO 首日无涨跌幅、临时停牌的细则仍未补齐。这些规则会直接影响回测成交与推荐可买性，属于\"看起来对、实际偏乐观\"的风险点。建议先补规则与测试，再谈扩因子。",
-  "status": "todo",
+  "status": "doing",
   "priority": "P2",
   "milestone": "ms-research",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-26",
   "estimateH": 8,
-  "progress": 0,
+  "progress": 5,
   "acceptance": [
     "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试",
     "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖",
@@ -28,5 +28,6 @@
     ]
   },
   "createdAt": "2026-11-03T12:10:47.673Z",
-  "updatedAt": "2026-11-21T08:38:19.183Z"
+  "updatedAt": "2026-11-22T16:03:52.824Z",
+  "devSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613"
 }
