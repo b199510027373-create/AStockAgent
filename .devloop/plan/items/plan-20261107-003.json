@@ -40,7 +40,7 @@
     ],
     "module": "file_ingest",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/10（已合并）",
-    "prFollowup": "https://github.com/b199510027373-create/AStockAgent/pull/11（真实 PDF 验证，待评审）",
+    "prFollowup": "https://github.com/b199510027373-create/AStockAgent/pull/11（已合并 21ca37a）",
     "test": [
       "pytest tests/test_agent_files.py -q -p no:cacheprovider => 49 passed, 1 warning in 4.43s",
       "C:\\Anaconda\\python.exe -m pytest tests/test_agent_files.py -q -p no:cacheprovider => 49 passed in 6.20s",
@@ -51,10 +51,13 @@
       "CI run 43393535403（bd8d2da）success；main 合并后 CI run 43394027292（f11fa8e）success",
       "评审第 2 轮 approve（ho-20261113-015，openP0=0/openP1=0）；P2 iss-mweply8i-fc899f 已修；PR #10 已 squash 合并为 21dddaa",
       "真实 PDF（pdfplumber 0.11.10 已装）：pytest tests/test_agent_files.py => 55 passed；pytest tests => 375 passed, 1 skipped；ruff/mypy 通过；coverage 74%",
-      "真实 PDF 夹具：pdf_text_tables.pdf（两页+两张表格，行 bbox [2,1,2,3]/[3,1,3,3]，Amount=[1250000.0,230000.0]）、pdf_cjk.pdf（中文文本层完整）、pdf_scan_like.pdf => suspected_scan、pdf_encrypted.pdf => encrypted（PdfminerException 递归识别）"
+      "真实 PDF 夹具：pdf_text_tables.pdf（两页+两张表格，行 bbox [2,1,2,3]/[3,1,3,3]，Amount=[1250000.0,230000.0]）、pdf_cjk.pdf（中文文本层完整）、pdf_scan_like.pdf => suspected_scan、pdf_encrypted.pdf => encrypted（PdfminerException 递归识别）（为当时语义；合并 main 后按整表坐标断言，见下）",
+      "PR #11 follow-up（真实 PDF 端到端验证）：merge main 后 worktree 内 pytest tests/test_agent_files.py => 55 passed；pytest tests -q -m \"not png\" => 866 passed, 3 skipped, 5 deselected, 20 subtests in 91.79s；mypy astock app.py => 44 files no issues；ruff check astock tests => All checks passed",
+      "PR #11 CI run 45042229404（head 8567759）test + png-export 均 SUCCESS；合并为 merge commit 21ca37a（2026-11-22T16:11:27Z）",
+      "合并后 main（21ca37a）独立复跑：pytest tests/test_agent_files.py => 55 passed (5.48s)；pytest tests -q -m \"not png\" => 866 passed, 3 skipped, 5 deselected, 20 subtests (83.52s)；mypy astock app.py => 44 files no issues；ruff check astock tests => All checks passed"
     ]
   },
   "createdAt": "2026-11-07T14:12:00.858Z",
-  "updatedAt": "2026-11-13T09:07:45.582Z",
+  "updatedAt": "2026-11-22T16:14:31.156Z",
   "devSessionId": "session-3100e9bd-3b63-4022-9649-c18a3f5278f8"
 }
