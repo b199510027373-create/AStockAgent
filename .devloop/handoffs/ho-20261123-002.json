@@ -6,7 +6,7 @@
   "threadId": null,
   "sessionId": "",
   "title": "PR #11（真实 PDF 验证）合并后记录修复：worklog 换行恢复 + 证据入库",
-  "summary": "本份为 ho-20261123-001 之后的 update：PR #11 已合并（21ca37a），合并后 main 复跑全绿；随后发现并修复我自己在解决记录冲突时引入的 worklog 换行缺陷（426 条 JSON 被 -NoNewline 拼成 1 行），以 1d00058 恢复逐行格式，main CI run 45043514008 success。相对上一份交付的修改痕迹：新增提交 1d00058（仅 .devloop/worklog/2026-11.jsonl）；plan-20261107-003 links.test 增补 PR #11 合并/复跑/记录修复 4 条证据（工具单次最多保存 10 条，超出部分已手工补入，现 14 条）；新增日历记录 log-1795364696130-8aca14（fix，25 分钟）。代码与测试内容未再改动。",
+  "summary": "本份为 ho-20261123-001 之后的 update：PR #11 已合并（21ca37a），合并后 main 复跑全绿；随后发现并修复我自己在解决记录冲突时引入的 worklog 换行缺陷（426 条 JSON 被 -NoNewline 拼成 1 行），以 1d00058 恢复逐行格式，main CI run 45043514008 success。相对上一份交付的修改痕迹：新增提交 1d00058（仅 .devloop/worklog/2026-11.jsonl）；plan-20261107-003 links.test 增补 PR #11 合并/复跑/记录修复 4 条证据（工具单次最多保存 10 条，超出部分已手工补入，现 14 条）；新增日历记录 log-1795364696130-8aca14（fix，25 分钟）。代码与测试内容未再改动。 记录已入库 main：98675ca（cherry-pick 到 origin/main 后推送），CI run 45043780335 success。",
   "requirements": [
     {
       "id": "REQ-0",
@@ -125,9 +125,9 @@
   ],
   "delivery": {
     "branch": "main",
-    "commit": "1d00058",
+    "commit": "98675ca",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/11（MERGED，merge commit 21ca37a）",
-    "ci": "PR #11 head 8567759 CI run 45042229404 success；main 21ca37a CI run 45042425772 success；main 1d00058 CI run 45043514008 success",
+    "ci": "PR #11 head 8567759 CI run 45042229404 success；main 21ca37a CI run 45042425772 success；main 1d00058 CI run 45043514008 success；main 98675ca（本记录）CI run 45043780335 success",
     "merge": "21ca37a（2026-11-22T16:11:27Z）",
     "status": "merged"
   },
