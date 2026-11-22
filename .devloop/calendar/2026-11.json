@@ -1007,6 +1007,16 @@
       "notes": "第 1 轮 · approve"
     },
     {
+      "id": "cal-rev-20261121-002-r2",
+      "type": "review",
+      "title": "评审：评审：修复 P2：AppBannerWiringTests 导入异常不得降级为 skip",
+      "start": "2026-11-22T09:08:34.891Z",
+      "end": "2026-11-22T09:08:49.160Z",
+      "planItemId": "plan-20261110-002",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",
