@@ -1,0 +1,25 @@
+{
+  "id": "rev-20261120-001",
+  "title": "评审：Agent 会话 UI 冒烟脚本入库与可复现",
+  "planItemId": "plan-20261119-001",
+  "sourceDevSessionId": "session-8ce0dece-ba21-4e45-a4d1-6cb898fb3157",
+  "branch": "test/agent-ui-smoke",
+  "base": "main",
+  "files": [
+    ".github/workflows/agent-ui-smoke.yml",
+    ".gitignore",
+    "requirements-dev.txt",
+    "tests/smoke/agent_ui/README.md",
+    "tests/smoke/agent_ui/cdp.py",
+    "tests/smoke/agent_ui/fixture_app.py",
+    "tests/smoke/agent_ui/fixtures/利润表.xlsx",
+    "tests/smoke/agent_ui/fixtures/年报.pdf",
+    "tests/smoke/agent_ui/run_smoke.py",
+    "tests/smoke/agent_ui/smoke_drive.py",
+    "tests/test_agent_ui_smoke_contract.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-20T11:36:56.038Z",
+  "updatedAt": "2026-11-20T13:21:14.817Z",
+  "reviewSessionId": "session-b99c3f4d-e97d-4678-b5da-bfc2135ba69e"
+}

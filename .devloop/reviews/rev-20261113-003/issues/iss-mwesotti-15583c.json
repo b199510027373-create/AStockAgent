@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwesotti-15583c",
+  "threadId": "rev-20261113-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-isolation",
+  "file": "tests/test_agent_store.py",
+  "lines": "186-198",
+  "title": "record_artifact 拒绝非法 kind 的断言被塞进 record_step 测试函数，没有独立测试名且会被前置失败跳过",
+  "evidence": "`test_record_step_rejects_unknown_kind` 的 `finally` 在 :184-185 结束并 close 连接后，:186-188 是空行，:189 又出现 4 空格缩进的代码，直到 :198 仍然属于同一个函数（没有新的 `def`）。这段代码新建连接、ensure_run，并断言 `record_artifact(kind=\"video\")` 抛 ValueError；语法上能运行，所以 8 passed 的计数没问题，但它没有独立的测试名，pytest 报告无法区分；如果前半段 record_step 断言失败，后面的 artifact 断言就不会执行，两个契约的测试结果被耦合。当前文件没有名为 `test_record_artifact_rejects_unknown_kind` 的函数。",
+  "suggestion": "把 :189-198 抽成独立的 `def test_record_artifact_rejects_unknown_kind(tmp_path: Path) -> None:`，自己 `conn = store.connect(...)`、`try/finally: conn.close()`，不要复用前一个测试的连接或缩进块；删掉多余空行。这样 record_step 与 record_artifact 的失败互不影响，测试名也能直接对应契约。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T16:44:29.390Z"
+  },
+  "createdAt": "2026-11-13T09:49:18.966Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T16:44:29.390Z"
+    }
+  ]
+}

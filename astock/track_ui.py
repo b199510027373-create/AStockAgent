@@ -6,7 +6,7 @@ from .backfill import backfill_technical
 from .use_cases import run_tracking
 
 
-def run_backfill(progress=gr.Progress()):
+def run_backfill(progress=gr.Progress()):  # noqa: B008 - Gradio 回调惯例：Progress 默认实例由框架注入
     try:
         _, message = backfill_technical(days=30, top_n=5, progress=progress)
         return message

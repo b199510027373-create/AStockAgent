@@ -1,0 +1,21 @@
+{
+  "id": "rev-20261116-003",
+  "title": "评审：SW2014→SW2021 行业边界校准与 crosswalk",
+  "planItemId": "plan-20261103-008",
+  "sourceDevSessionId": "session-7bc34221-e10d-4cf7-8884-b65970d84206",
+  "branch": "feat/sw2014-sw2021-crosswalk",
+  "base": "main",
+  "files": [
+    "astock/sw_crosswalk.py",
+    "docs/AStockAgent_PIT_data_interfaces.md",
+    "docs/AStockAgent_research_conclusions_v1.3.md",
+    "docs/sw2014_sw2021_crosswalk.csv",
+    "docs/sw2014_sw2021_crosswalk.md",
+    "docs/sw2014_sw2021_distribution_metrics.csv",
+    "tests/test_sw_crosswalk.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-16T12:34:00.163Z",
+  "updatedAt": "2026-11-16T17:53:43.354Z",
+  "reviewSessionId": "session-8527c819-c820-471d-949c-944cfe2673fd"
+}

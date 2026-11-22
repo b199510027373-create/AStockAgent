@@ -1,0 +1,83 @@
+{
+  "id": "ho-20261113-019",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261113-003",
+  "sessionId": "",
+  "title": "评审：图表 spec 与渲染管线",
+  "summary": "第 1 轮全量评审完成：8 条问题（P0=1、P1=2、P2=5）。结论 request_changes。\n\n必须修复（阻断）：\n1) P0 adj 口径失效：chart_render.py:214-222 把 raw→none 原样传给 data.load_daily/load_minute，而 data.py:223/643 对任何非空 adj 都做前复权，导致 none/hfq 实际仍是 qfq，图注却写“不复权/后复权”；test_agent_chart_render.py:301-307 通过注入 frame 绕过了真实取数路径，只验了文案。开发需在 _load_market_frame 做 none→None 映射，并在 data.load_daily/load_minute 真正实现 qfq/hfq/none（或拒绝 hfq），补走真实取数分支的回归测试。\n2) P1 时点错位：chart_render.py:1095-1103 在 apply_transforms 前算 data_as_of/data_time，:1153 快照却取 transformed；test_agent_chart_render.py:359-371 的实际结果是图注 2024-01-04、快照只剩 2024-01-03，artifact 回放还会信任旧 meta 时点。开发需改为 transforms 后重算（显式参数仍优先），artifact 回放优先按快照时间列重算，并补断言。\n3) P1 非法日期逃逸：chart_spec.py:504-505 对 2026-13-01 这类正则可匹配但日期非法的输入抛未捕获 ValueError，check_chart_spec 只捕获 ChartSpecError，违反结构化错误契约。开发需 try/except 转成 $.data.range 字段错误，并补非法日期测试。\n\nP2（同轮修或书面延后）：latest_bar_time 的 iloc[-1] 行序依赖与午休时段漏检（data.py:731/735）；ensure_run 对 running 也写 finished_at（store.py:184-185）；test_agent_store.py:186-198 的 artifact 非法 kind 断言没有独立 def；冻结清单未记 panes/style/raw 别名（docs/AStockAgent_interface_freeze_v1.md:153-181）；模型 JSON Schema 对 transforms/layers/annotations 未封闭、range/ref 无 pattern（chart_spec.py:906-955）。\n\n完全解决判定：由 plan-20261107-005 开发在下一轮修复上述 8 条（P2 若由架构书面接受延期可例外），新增回归测试全绿，且目标 pytest 46/21/8、全量 444 passed/1 skipped、mypy、architecture gate、CI 均通过；reviewer 下一轮确认 openP0=0、openP1=0 后才可 approve 并标记完全解决。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 1,
+    "openP1": 2,
+    "issues": [
+      {
+        "severity": "P0",
+        "title": "adj=none/raw（以及 hfq）实际仍取前复权数据，图注却标注“不复权/后复权”",
+        "suggestion": "1）在 `chart_render._load_market_frame` 明确映射：`qfq`→`\"qfq\"`，`none`→`None`，`hfq`→`\"hfq\"`；2）在 `astock/data.py` 的 `load_daily`/`load_minute` 真正实现三档：none 不做价格调整，qfq 以最新因子为基准，hfq 以区间首因子（或原始因子）为基准；若本期不做 hfq，则必须在 `chart_spec` 拒绝 hfq 并给出结构化错误，不能静默返回 qfq；3）补一条走真实取数分支的回归测试：monkeypatch `astock.data.load_daily/load_minute` 返回构造的 raw+adj_factor 数据，分别断言 none 的 close 等于原始价、qfq 最新价等于原始价、hfq 按因子缩放，并断言 caption 与数据口径一致；不要用注入 frame 的测试代替取数路径。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "data_as_of/data_time 在 transforms 之前计算、快照在 transforms 之后生成，图注时点可能与实际数据不一致",
+        "suggestion": "把时点计算移到 `apply_transforms` 之后、`_caption/_build_figure/meta` 之前，用 `transformed` 重新计算；显式传入的 `data_as_of/data_time` 仍优先。`source=artifact` 时，若快照含 trade_date/trade_time/day 等时间列，应优先按快照重算，而不是无条件信任 `attrs`，避免把首次渲染的错误时点固化。回放/截断场景要保证快照包含被引用的最新点（sort desc + tail(5000) 时尤其注意）。补测试：断言 `rendered.data_as_of == \"2024-01-03\"`、`meta[\"data_as_of\"] == meta[\"data\"][\"rows\"][-1][\"day\"]`，并用 artifact 回放再断言一次。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "日期窗口匹配正则但日期非法时，date.fromisoformat 抛未捕获 ValueError，绕过 ChartSpecError 结构化错误",
+        "suggestion": "把日期解析收敛到一个 `_parse_range_date(text, path, issues)`：`try: date.fromisoformat(...) except ValueError: issues.add(f\"{path}.range\", f\"日期非法：{text!r}\")`，解析失败后不要继续做 start/end 比较。补测试至少覆盖 `2026-13-01:2026-12-01` 与 `2026-02-30:2026-12-01`，断言 `check_chart_spec` 返回 `ok=False`、`errors` 里有 `$.data.range`，并且不抛异常。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "latest_bar_time 按行序取最后一根而不是按时间最大值，且午休 11:30–13:00 被当作交易时段",
+        "suggestion": "用 `stamp = pd.Timestamp(series.max())` 取时间最大值，不依赖行序；把时段校验改成两个闭区间 `09:30–11:30` 或 `13:00–15:00`（建议用 `datetime.time` 比较，避免字符串边界歧义）。补两条测试：打乱行序后仍返回最大时间；`11:31`、`12:30` 抛 ValueError，`11:30`、`13:00` 通过。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "ensure_run 对 status=running 也把 finished_at 写成开始时间，运行中的 run 看起来已结束",
+        "suggestion": "在函数内取一次 `now = utc_now()`，`started = started_at or now`，`finished = None if status == \"running\" else now`，并把两者分别绑定到占位符；或对非终态 status 明确禁止写 finished_at。补测试：`ensure_run(conn, \"run_running\", status=\"running\")` 后 `finished_at IS NULL`，`status=\"success\"` 后 `finished_at` 非空且不早于 `started_at`。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "record_artifact 拒绝非法 kind 的断言被塞进 record_step 测试函数，没有独立测试名且会被前置失败跳过",
+        "suggestion": "把 :189-198 抽成独立的 `def test_record_artifact_rejects_unknown_kind(tmp_path: Path) -> None:`，自己 `conn = store.connect(...)`、`try/finally: conn.close()`，不要复用前一个测试的连接或缩进块；删掉多余空行。这样 record_step 与 record_artifact 的失败互不影响，测试名也能直接对应契约。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "panes/style/raw 三个兼容别名只写在代码里，冻结清单 §3 仍按 layers/theme/none 且声称未知键直接拒绝",
+        "suggestion": "在冻结清单 §3.1/§3.2 增加“兼容别名（归一化后只输出规范字段）”小节：`panes`≡`layers`、`style`≡`theme`、`adj=\"raw\"`≡`adj=\"none\"`；同时明确规范名以 `layers/theme/none` 为准，别名不得与规范名同时出现（代码已这样报错）。如果架构决定不接受别名，则反向修改 plan 验收文字和 `chart_spec`，但不要保持“代码接受、文档拒绝”的现状。补一条文档/契约测试或在 `chart_spec_json_schema` 的说明里引用该小节。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "交给模型的 JSON Schema 对 transforms/layers/annotations 未封闭，data.range/ref 也没有 pattern/enum，弱于“schema 即字段与枚举白名单”",
+        "suggestion": "让 `_JSON_SCHEMA` 与校验常量同源：对 transforms/layers/annotations 的 item 加 `additionalProperties: false`；`data.ref` 用 `oneOf` 表达 stock/index/artifact 三个 pattern；`data.range` 用 `oneOf` 枚举 + `^\\\\d{4}-\\\\d{2}-\\\\d{2}:\\\\d{4}-\\\\d{2}-\\\\d{2}$`；`metrics` 至少声明 `additionalProperties` 为白名单 metric 枚举。补一条 schema 测试：用 `jsonschema`（若已是依赖）或直接断言 `additionalProperties is False`，并断言未知 transform 键被 schema 拒绝。若不想维护两份定义，至少从 `TRANSFORM_PARAMS`/`LAYER_PARAMS` 等常量生成 properties，避免漂移。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-13T09:49:39.522Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-019.md"
+}

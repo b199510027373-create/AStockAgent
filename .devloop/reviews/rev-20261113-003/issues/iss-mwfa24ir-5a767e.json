@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfa24ir-5a767e",
+  "threadId": "rev-20261113-003",
+  "roundNo": 3,
+  "severity": "P1",
+  "category": "contract",
+  "file": "astock/agent/chart_spec.py",
+  "lines": "85,120,526-527,776-785,930-989",
+  "title": "75b5d64 将别名问题标记 fixed，但代码仍接受 panes/style/raw，新增测试还锁定别名，005 验收证据不成立",
+  "evidence": "`devloop_review get` 现在把 `iss-mwf84pz8-07ebf8` 标成 status=fixed（feedback at 2026-11-13T17:53:31），但 75b5d64 的代码没有任何删除别名的改动：`ADJ_ALIASES = {\"raw\": \"none\"}`（chart_spec.py:85）、`FIELD_ALIASES = {\"panes\": \"layers\", \"style\": \"theme\"}`（:120）、`data.adj` 的 raw 折叠（:526-527）、`_check_unknown_keys(..., extra=tuple(FIELD_ALIASES))` 放行 panes/style（:776-785）、JSON Schema 顶层仍声明 panes/style 且 adj enum 含 raw（:930-989）。`tests/test_agent_chart_spec.py:450-469` 仍断言 panes/style 被接受，:586-591 仍断言 schema 含别名和 raw。`docs/AStockAgent_interface_freeze_v1.md:183-193` 仍把别名写成正式兼容规则。developer handoff `.devloop/handoffs/ho-20261114-002.md` 也明确写“本分支只交付 v1 渲染管线，未改审计模型、未删别名”。这与 ADR-016 2026-11-14 Q4=B（删除别名，旧别名一律报错）以及 plan-20261107-005 验收第 6 条“panes/style/raw 别名已删除”直接冲突；同时 `data.load_daily(adj=\"raw\")` 已经抛 ValueError（tests/test_data_pit_events.py:433），spec 层却继续接受 raw，层间口径不一致。",
+  "suggestion": "二选一，不能维持现状：A）在 005 内按 Q4=B 真删：移除 `FIELD_ALIASES`/`ADJ_ALIASES`、别名归一化与白名单、schema 的 panes/style/raw，删除冻结清单 §3.2.1，并把 tests/test_agent_chart_spec.py:450-469/586-591 改成断言 panes/style/raw 均报 `$.panes`/`$.style`/`$.data.adj` 字段错误；B）如果架构确实把清理排到 plan-20261114-002，则不要把本问题标成 fixed，必须同步修改 plan-20261107-005 验收第 6/8 条，删掉“别名已删除/已完成”的表述，改成“005 保留兼容别名，002 删除”，并在 005 的交付结论中明确未完成项。下一轮 reviewer 只认代码删除或验收文字已改，不认“已标记 fixed”。",
+  "confidence": 0.98,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T00:38:05.263Z"
+  },
+  "createdAt": "2026-11-13T17:55:32.834Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T00:38:05.263Z"
+    }
+  ]
+}

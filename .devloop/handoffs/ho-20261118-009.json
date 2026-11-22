@@ -1,0 +1,82 @@
+{
+  "id": "ho-20261118-009",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "增量：CI 门禁修复 + indicators 转发口径说明（PR #31 全绿）",
+  "summary": "相对首份交付（ho-20261118-008）的增量：(1) 修复 CI 首次失败 —— test_ci_quality_gates 的 EXPECTED_CHECKED_MODULES 39→40（新模块 market_tools.py 必须受 mypy 检查），提交 92b4b62 后 test 与 png-export 两个 job 均通过（run 44258867189）；(2) 在 PR #31 留言本机全量证据（702 passed / mypy 40 files / ruff 全绿）；(3) 说明一处实现口径差异：indicator 工具逐函数转发 astock.indicators 而非调用 indicators.add_all，因为 add_all 只算固定指标集，无法按 indicators 参数裁剪，逐值一致性由 test_indicator_matches_astock_indicators 保证。",
+  "requirements": [],
+  "changes": [
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "相对首份交付无代码改动；此处记录实现口径差异：indicator 工具逐个调用 astock.indicators.sma/ema/rsi/macd/boll/kdj/atr/obv/cci/vr/psy 并直接转发，而非调用 indicators.add_all——add_all 只算固定指标集（ma5..ma250/ema12/26/rsi14/macd/boll/kdj/atr14/obv/cci20/vr26/psy12），无法按调用方 indicators 参数裁剪；逐值一致性由 tests/test_data_time_semantics.py::test_indicator_matches_astock_indicators 用 approx(rel=1e-9) 证明",
+      "commit": "92b4b62"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "首份交付后唯一的改动：EXPECTED_CHECKED_MODULES 39→40（CI 首次失败原因），并同步注释 49 个 .py / 41 files",
+      "commit": "92b4b62"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_ci_quality_gates.py -q",
+      "result": "14 passed",
+      "passed": true,
+      "evidence": "EXPECTED_CHECKED_MODULES 改为 40 后 14 passed"
+    },
+    {
+      "command": "pytest tests -q -p no:cacheprovider --timeout=900 --tb=line",
+      "result": "702 passed, 12 subtests passed in 102.11s",
+      "passed": true,
+      "evidence": "最终提交 92b4b62 上本机全量通过"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 40 source files",
+      "passed": true,
+      "evidence": "含新模块"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同命令"
+    },
+    {
+      "command": "gh pr checks 31",
+      "result": "test pass; png-export pass",
+      "passed": true,
+      "evidence": "run 44258867189"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "合并 PR #31 到 main",
+      "reason": "实现与测试均已完成、CI 全绿，等待评审与合并授权",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/market-tools",
+    "commit": "92b4b62",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/31",
+    "ci": "test pass / png-export pass (run 44258867189, commit 92b4b62)",
+    "merge": "not merged",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261118-008",
+  "next": "等待评审并合并 PR #31；合并后把 plan-20261107-006 置 done，并确认 plan-20261114-003 验收第 6 条（行情工具展示复权口径，metadata.adjustment/adjustment_label）已满足。",
+  "createdAt": "2026-11-18T13:28:35.932Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-009.md"
+}

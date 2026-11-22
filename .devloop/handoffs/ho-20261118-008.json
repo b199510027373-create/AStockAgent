@@ -1,0 +1,211 @@
+{
+  "id": "ho-20261118-008",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261107-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "行情/指标工具：quote / kline / indicator（ADR-018 C1/C2）",
+  "summary": "按 ADR-018 新增三个 Agent 白名单工具（quote / kline / indicator），统一用 astock.data.latest_bar_time 产出 data_as_of + data_time，metadata 固化 session/freshness 冻结键；覆盖非交易时段 eod、rt_min 陈旧/超 2 秒延迟 delayed、停牌 suspended、分钟图叠加日线指标 ffill（禁未来值）、复权口径标注、图题带新鲜度提示。runtime 默认注册表已装配三工具，超长图表 HTML 在 observation 中收成 artifact 句柄。新增/更新 5 个测试文件共 21 个用例（含 ADR-018 指定的 4 个测试名），全量 pytest 702 passed、mypy 40 files 无问题、ruff 全绿，PR #31 的 test / png-export 两个 job 均通过。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "依据 ADR-018 实现行情/指标工具：quote（最新价/涨跌幅/成交额）、kline（日/周/月 + 1/5/15/30/60 分钟，支持 MA/BOLL/成交量叠加）、indicator（MA/EMA/RSI/MACD/BOLL/KDJ/ATR）。复用 data.load_daily/load_minute 与 indicators.add_all；rt_min 走 30s 缓存；每个结果带 data_as_of + data_time；默认 qfq、涨跌停/成交用 raw；非交易时段、延迟、停牌均显式标注。",
+      "source": "plan-20261107-006 description"
+    },
+    {
+      "id": "A1",
+      "text": "工具：quote / kline / indicator 可被 Agent 调用",
+      "source": "acceptance #1"
+    },
+    {
+      "id": "A2",
+      "text": "交易时段返回带 data_time 的最新分钟 K 线",
+      "source": "acceptance #2"
+    },
+    {
+      "id": "A3",
+      "text": "非交易时段明确标注「最近交易日收盘」，不伪造实时",
+      "source": "acceptance #3"
+    },
+    {
+      "id": "A4",
+      "text": "rt_min 延迟/失败时标记 delayed 并回退，图上有提示",
+      "source": "acceptance #4"
+    },
+    {
+      "id": "A5",
+      "text": "指标值与 astock.indicators 对同一序列的计算一致",
+      "source": "acceptance #5"
+    },
+    {
+      "id": "A6",
+      "text": "（ADR-018 C1）data.py 提供唯一 bar 时点生产者 latest_bar_time(df, freq)；行情工具的 data_time 只由它生成，禁止各处自行拼时间字符串",
+      "source": "acceptance #6"
+    },
+    {
+      "id": "A7",
+      "text": "（ADR-018 C2）行情/指标工具返回值必须同时带 data_as_of（YYYY-MM-DD）与 data_time（YYYY-MM-DD HH:MM），缺一即按契约失败处理",
+      "source": "acceptance #7"
+    },
+    {
+      "id": "A8",
+      "text": "（ADR-018）非交易时段返回最近收盘 bar，data_time 取最后一根 bar 时间并在 metadata 标 freshness=eod，不得把昨日收盘当实时",
+      "source": "acceptance #8"
+    },
+    {
+      "id": "A9",
+      "text": "（ADR-018）rt_min 失败或超 2s 未返回时降级并标注 freshness=delayed，退回 stk_mins/日线",
+      "source": "acceptance #9"
+    },
+    {
+      "id": "A10",
+      "text": "（ADR-018）停牌/无成交标的显式标注；指标在复权价上计算，MA 类前向填充但 metadata 记 ffill 段",
+      "source": "acceptance #10"
+    },
+    {
+      "id": "A11",
+      "text": "（ADR-018 非目标）tick/Level-2 属 v1 非目标，接口不得预留伪实时字段",
+      "source": "acceptance #11"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "新增 1210 行：quote/kline/indicator 三个工具 + trading_session（pre/open/lunch/closed/non_trading_day）+ MarketDeps 依赖注入（daily/index_daily/minute/resample/bar_time/trade_cal/clock/minute_stale_seconds/minute_latency_seconds）+ MarketSeries（metadata 输出 session/freshness/adjustment/adjustment_label/source/period/requested_period/suspended/notes/ffill）+ _overlay_on_bars（merge_asof allow_exact_matches=False，禁未来值）+ register_market_tools/build_market_registry",
+      "commit": "6083253"
+    },
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "盘中请求日/周/月 bar 不再误判 live：degraded→delayed，否则 eod 并提示「收盘后更新，实时请用分钟周期」",
+      "commit": "ec9cdba"
+    },
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "rt_min 响应超过 2 秒延迟预算（MINUTE_LATENCY_SECONDS=2.0）同样降级 delayed 并在 note 写明耗时",
+      "commit": "220e603"
+    },
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "ruff 基线：_parse_layer_names 非序列抛 TypeError（TRY004）、去多余 int()（RUF046）、指标文本括号化隐式拼接（ISC004）",
+      "commit": "5b45368"
+    },
+    {
+      "path": "astock/agent/tools/__init__.py",
+      "summary": "导出 market_tools 的公开符号（quote/kline/indicator/register_market_tools/build_market_registry/trading_session/SESSIONS/FRESHNESS/MINUTE_STALE_SECONDS/MINUTE_LATENCY_SECONDS/MAX_LIMIT/DEFAULT_*_LIMIT）",
+      "commit": "6083253"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "_default_registry() 改为 register_market_tools(build_file_registry())；新增 MAX_FIGURE_CHARS=2000，_format_observation 对超长 figure 只输出 {chars, artifact_id, artifact_path}",
+      "commit": "6083253"
+    },
+    {
+      "path": "tests/test_data_time_semantics.py",
+      "summary": "新建 557 行/15 例：C1 唯一生产者、C2 双时点契约、非交易时段 eod、陈旧 delayed、2s 预算 delayed、停牌 suspended、分钟失败回退、盘中日线非 live、session 分桶、指标与 astock.indicators 逐值一致、@day ffill 只用已完成日线、图题带 freshness、无伪实时字段",
+      "commit": "6083253"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "新增行情段：test_market_result_requires_both_timestamps（ADR-018 指定）、权限/默认值、默认注册表含三工具、非法参数拒绝、quote 盘中 live 与 data_time",
+      "commit": "6083253"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 test_runtime_observation_keeps_chart_html_out_of_context：超长图表 HTML 只留 artifact 句柄，短 figure 原样透传",
+      "commit": "fd11d1d"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "EXPECTED_CHECKED_MODULES 39→40（新增 astock/agent/tools/market_tools.py 必须受 mypy 检查）",
+      "commit": "92b4b62"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread --tb=line",
+      "result": "702 passed, 12 subtests passed in 102.11s",
+      "passed": true,
+      "evidence": "本地全量（沙箱放开后执行；此前 workspace-write 下 pwsh 进程 os.scandir 被拒导致大片 PermissionError 与 scheduler 用例挂起，非代码缺陷）"
+    },
+    {
+      "command": "pytest tests/test_data_time_semantics.py -q",
+      "result": "15 passed",
+      "passed": true,
+      "evidence": "含 ADR-018 指定 test_latest_bar_time_is_single_source / test_non_trading_session_marks_eod / test_stale_rt_min_marks_delayed"
+    },
+    {
+      "command": "pytest tests/test_agent_tools.py -q",
+      "result": "58 passed in 1266.97s",
+      "passed": true,
+      "evidence": "含 ADR-018 指定 test_market_result_requires_both_timestamps 及权限/参数校验/quote 新鲜度用例（耗时主要来自 10 万行 Excel 用例）"
+    },
+    {
+      "command": "pytest tests/test_ci_quality_gates.py -q",
+      "result": "14 passed",
+      "passed": true,
+      "evidence": "受检非 UI 模块数随新模块 +1 后通过"
+    },
+    {
+      "command": "pytest tests/test_agent_runtime.py -q",
+      "result": "40 passed + 7 errors（PermissionError: pytest basetemp 被另一进程占用）；放开沙箱后随全量 702 passed 通过",
+      "passed": true,
+      "evidence": "错误根因为并发/沙箱目录枚举，非代码缺陷；最终全量运行包含该文件全部用例"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 40 source files",
+      "passed": true,
+      "evidence": "新模块 market_tools.py 计入受检范围"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI test job 内同命令通过"
+    },
+    {
+      "command": "gh pr checks 31",
+      "result": "test pass 1m25s; png-export pass 1m24s (run 44258867189)",
+      "passed": true,
+      "evidence": "PR #31 CI 全绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push 到 GitHub",
+      "reason": "沙箱内 gh auth setup-git 无法写 ~/.gitconfig、credential.helper 的 sh 无法建 signal pipe，改用 `git -c http.sslBackend=openssl -c http.extraHeader=\"Authorization: Basic <base64(gh auth token)>\"` 推送成功",
+      "status": "granted"
+    },
+    {
+      "name": "pytest 全量本地运行",
+      "reason": "workspace-write 沙箱拒绝 pytest tmp_path 的 os.scandir，需 danger-full-access 才能完成本地全量验证",
+      "status": "granted"
+    },
+    {
+      "name": "合并 PR #31 到 main",
+      "reason": "计划项标记 in_review，等待评审与合并授权",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/market-tools",
+    "commit": "92b4b62",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/31",
+    "ci": "test pass / png-export pass (run 44258867189)",
+    "merge": "not merged",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "等待评审：重点看 (1) quote 盘中成交额按当日分钟 bar 求和、base 取当日 pre_close 的口径；(2) 日/周/月盘中一律 eod、分钟失败回退 delayed 的新鲜度矩阵是否与 ADR-018 §1/§4 一致；(3) `@day` 叠加层 merge_asof 只取更早完成日线的 ffill 语义；(4) MAX_FIGURE_CHARS=2000 的 observation 裁剪是否满足运行时需要。评审通过后合并 PR #31，并把 plan-20261114-003 验收第 6 条（行情工具展示复权口径）对齐确认。",
+  "createdAt": "2026-11-18T13:28:20.152Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-008.md"
+}

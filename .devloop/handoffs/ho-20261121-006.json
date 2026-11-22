@@ -1,0 +1,150 @@
+{
+  "id": "ho-20261121-006",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261121-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "修复研报空 ts_code 导致收盘任务连续失败（已合并）",
+  "summary": "相对 ho-20261121-005：PR #43 CI 双绿（test 1m17s、png-export 1m21s，run 44882349342），已 squash 合并到 main，合并提交 442fbb9，本地 main 已同步；plan-20261121-001 状态 done。修复内容不变：events.fetch_reports 丢弃无 ts_code 的市场级研报行，缺列仍抛 ContractError，3 条回归测试覆盖。11-16/17/18/20 的 failed 是历史事实，不能补写；修复后的 11-23..11-27 连续 5 个交易日验收由 plan-20261114-004 执行。",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "研报归一化对 ts_code 为空的市场级行丢弃，不再使整批 EventFrame 校验失败",
+      "source": "plan-20261121-001 acceptance #1"
+    },
+    {
+      "id": "REQ-002",
+      "text": "ts_code 列缺失仍然抛 ContractError，不静默降级",
+      "source": "plan-20261121-001 acceptance #2"
+    },
+    {
+      "id": "REQ-003",
+      "text": "新增/更新测试覆盖空 code 行、全空 code 与缺列三种情况",
+      "source": "plan-20261121-001 acceptance #3"
+    },
+    {
+      "id": "REQ-004",
+      "text": "修复后由 plan-20261114-004 执行 11-23..11-27 连续 5 个交易日全 success",
+      "source": "plan-20261121-001 acceptance #4"
+    },
+    {
+      "id": "REQ-005",
+      "text": "定位并复现 11-16/17/18/20 close job 失败根因，避免只重试不修复",
+      "source": "plan-20261121-001 description"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/events.py",
+      "summary": "新增 _drop_unattributed_reports()：按 ts_code 去空白后丢弃市场级研报行并写回 code；市场级与逐股两个分支共 4 处调用；列缺失仍由 _require_source_columns 抛 ContractError。",
+      "commit": "e87ae2b"
+    },
+    {
+      "path": "tests/test_data_pit_events.py",
+      "summary": "新增 FakeReportClient 与 ReportEventContractTests：空 code 行被丢弃、全空 code 返回空表、缺 ts_code 列仍抛 ContractError。",
+      "commit": "e87ae2b"
+    },
+    {
+      "path": "astock/events.py + tests/test_data_pit_events.py",
+      "summary": "PR #43 squash 合并到 main。",
+      "commit": "442fbb9"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261121-001.json",
+      "summary": "计划状态更新为 done，补充 PR/CI 与测试证据。",
+      "commit": "待本次元数据提交"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_data_pit_events.py -q",
+      "result": "29 passed, 1 warning in 0.62s",
+      "passed": true,
+      "evidence": "目标测试全部通过；新增 3 条研报契约测试。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "837 passed, 3 skipped, 1 warning, 18 subtests passed in 234.37s",
+      "passed": true,
+      "evidence": "全量测试通过。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "类型检查通过。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同款 ruff 规则通过。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m compileall -q astock app.py",
+      "result": "exit 0",
+      "passed": true,
+      "evidence": "编译检查通过。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -c \"from astock import events; df=events.fetch_reports(days=7); print('rows', len(df)); print('blank_codes', int((df['code'].astype(str).str.strip()=='').sum()))\"",
+      "result": "rows 578; blank_codes 0",
+      "passed": true,
+      "evidence": "修复后实时拉取研究/评级研报成功，输出无空 code。"
+    },
+    {
+      "command": "gh pr checks 43 --watch",
+      "result": "test pass 1m17s; png-export pass 1m21s",
+      "passed": true,
+      "evidence": "PR #43 CI 双绿，run 44882349342。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write",
+      "reason": "修改 astock/events.py、tests/test_data_pit_events.py 与计划元数据",
+      "status": "granted"
+    },
+    {
+      "name": "local-test-run",
+      "reason": "运行 pytest、mypy、ruff、compileall",
+      "status": "granted"
+    },
+    {
+      "name": "network-fetch-tushare",
+      "reason": "修复后实时 fetch_reports(days=7) 复测",
+      "status": "granted"
+    },
+    {
+      "name": "gh-pr-create",
+      "reason": "推送 fix 分支并创建 PR #43",
+      "status": "granted"
+    },
+    {
+      "name": "gh-pr-merge",
+      "reason": "CI 双绿后 squash 合并 PR #43，确保 11-23 生产窗口使用修复",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "442fbb9",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/43",
+    "ci": "run 44882349342：test pass 1m17s，png-export pass 1m21s",
+    "merge": "squash merged 442fbb9",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261121-005",
+  "next": "11-23..11-27 由 plan-20261114-004 执行连续 5 个交易日生产验收：每天 16:45 计划任务跑 close，检查 --report 1、--heartbeat、scheduler_task.log；11-27 后确认 --report 5 退出 0、all_success=true 且 acceptance_5d.ok 生成。若再出现 EventFrame 空 code，从 scheduler_task.log 定位具体事件源并开新 issue。reviewer 仍可对已合并 PR #43 做事后评审。",
+  "createdAt": "2026-11-21T07:56:10.042Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-006.md"
+}

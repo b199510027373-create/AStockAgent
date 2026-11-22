@@ -1,0 +1,118 @@
+{
+  "id": "ho-20261118-007",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-008",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 审计表与安全限额（v2：内容/版本/引用）",
+  "summary": "相对 ho-20261118-004 的唯一变化：按用户要求合并 PR #30 到 main，merge commit a3e8f4b2f669e9da6fd02eb051f2514a1e86479c（2026-11-18T05:00:17Z）。合并前 CI run 44237609903（sha 3840e8d）test + png-export 均 success，PR mergeable=CLEAN/MERGEABLE。合并后 plan-20261107-008 置 done(100%)，links.merge 记录合并提交，并在 main 上提交 1556091 记录完成状态。代码、测试与本轮修复内容无变化（commit bfe4e65）。",
+  "requirements": [
+    {
+      "id": "R2-P1-a",
+      "text": "artifact 身份包含 include_plotlyjs，inline/CDN 不再撞 id（同 ho-20261118-004）",
+      "source": "rev-20261117-003 r2 iss-mwllmg50-a3b438"
+    },
+    {
+      "id": "R2-P1-b",
+      "text": "GC 保护 meta.data_blob，recomputed 回放仍可用（同 ho-20261118-004）",
+      "source": "rev-20261117-003 r2 iss-mwlln0hi-b4a74e"
+    },
+    {
+      "id": "R2-P2",
+      "text": ":memory: 迁移跳过备份，不回退 DEFAULT_DB_PATH（同 ho-20261118-004）",
+      "source": "rev-20261117-003 r2 iss-mwllmixh-a660e0"
+    },
+    {
+      "id": "AC-1..AC-10",
+      "text": "10 条验收标准已实现并通过目标/全量测试与 mypy；本轮仅执行合并动作",
+      "source": "plan-20261107-008 acceptance"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/store.py",
+      "summary": "无新增改动；合并内容同 bfe4e65（GC 保护 data_blob、内存库迁移不回退默认库）",
+      "commit": "bfe4e65"
+    },
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "无新增改动；合并内容同 bfe4e65（identity 含 include_plotlyjs）",
+      "commit": "bfe4e65"
+    },
+    {
+      "path": "tests/test_agent_store.py",
+      "summary": "无新增改动；test_memory_database_migration_skips_backup 随 PR 合入",
+      "commit": "bfe4e65"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "无新增改动；plotlyjs 身份与 GC data_blob 回归随 PR 合入",
+      "commit": "bfe4e65"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-008.json",
+      "summary": "plan 置 done(100%)，links.merge=PR #30 merge commit a3e8f4b，links.ci=run 44237609903 passed",
+      "commit": "1556091"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions run 44237609903 (sha 3840e8d)",
+      "result": "success (test + png-export)",
+      "passed": true,
+      "evidence": "合并前 PR #30 最终 CI；PR mergeStateStatus=CLEAN"
+    },
+    {
+      "command": ".dsh_pytest.py tests/test_agent_store.py tests/test_agent_chart_render.py -q",
+      "result": "73 passed",
+      "passed": true,
+      "evidence": "r3 本地目标测试（代码未变，沿用）"
+    },
+    {
+      "command": ".dsh_pytest.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py tests/test_architecture_gate.py -q",
+      "result": "153 passed",
+      "passed": true,
+      "evidence": "r3 本地目标测试"
+    },
+    {
+      "command": ".dsh_pytest.py tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -q",
+      "result": "676 passed, 5 deselected",
+      "passed": true,
+      "evidence": "r3 全量"
+    },
+    {
+      "command": "mypy astock; ruff check（6 文件）",
+      "result": "Success 39 files; All checks passed",
+      "passed": true,
+      "evidence": "r3 类型检查与 lint"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github-merge",
+      "reason": "用户明确要求合并 PR #30；使用本机 gh CLI 已登录凭据",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-008-v2-audit (merged, deleted? no)",
+    "commit": "bfe4e65",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
+    "ci": "passed: run 44237609903 (sha 3840e8d) test + png-export",
+    "merge": "merged to main, merge commit a3e8f4b2f669e9da6fd02eb051f2514a1e86479c; main record commit 1556091",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261118-004",
+  "next": "1) 已合并完成，plan-20261107-008=done；2) reviewer 可在 rev-20261117-003 上复核并关闭 r2 的 2 P1 + 1 P2；3) 后续新增影响 HTML 字节的渲染选项时继续纳入 identity_spec。",
+  "createdAt": "2026-11-18T05:00:49.216Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-007.md"
+}

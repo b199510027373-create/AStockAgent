@@ -28,7 +28,8 @@ __pycache__/
 .idea/
 .vscode/
 
-# Local tooling, generated reports, and nested repository
+# Historical nested clone: release/AStockAgent is NOT a release source or sync target.
+# The repository root is the single source of truth (see docs/AStockAgent_repo_source_of_truth.md).
 release/
 anaconda_projects/
 .tmp-tests/
@@ -47,3 +48,41 @@ notebooks/Untitled.ipynb
 notebooks/test.ipynb
 notebooks/app_write.ipynb
 tools/*.pkl
+
+# Gradio 在仓库根生成的 UI 编辑历史目录（测试实例化 Blocks 时产生，勿提交）
+gradio/
+
+# 手工 CDP 冒烟的历史草稿目录（完整 Edge profile / 临时截图 / 解析产物，勿提交）
+# 正式脚本在 tests/smoke/agent_ui/，工作目录与截图不落库。
+.smoke-agent-ui/
+tests/smoke/agent_ui/.workdir/
+
+# 根目录卫生（plan-20261103-013）：Gradio / 测试 / pip 在仓库根留下的临时目录。
+# 全部锚定仓库根（前导 /），不误伤 astock/ 与 tests/ 下的同名文件。
+/astock-chat-*/
+/astock-files-*/
+/astock-tools-*/
+/.dsh-office-*/
+/.pytest-*/
+/.pytest-*.log
+/pytest-of-*/
+/pytest-work*/
+/ztmp-*/
+/pip-*/
+/tmp*/
+/.tmp*/
+/.tmp-*.log
+/.chmodtest/
+/.worktrees/
+
+# 根目录生成报告与临时 PR 草稿；一次性个人文件已移入 _archive/，不再逐文件名忽略。
+/.pr-*.md
+/coverage_*.txt
+
+# 根目录清理归档：只留在本地，绝不提交。
+/_archive/
+
+# DevLoop 草稿与历史归档：正式 handoff / review 记录仍在 .devloop/{handoffs,reviews}。
+/.devloop/drafts/
+/.devloop/handoffs/archive/
+/.devloop/reviews/archive/

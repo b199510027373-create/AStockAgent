@@ -4,20 +4,18 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from .config import BASE_DIR
+from . import pit
 from .data import load_trade_cal
 from .events import stock_basic
 from .recommend import load_many, parse_universe
+from .stats import benjamini_hochberg, effective_n, student_t_p
 from .track import _forward_return
 from .universe import latest_size_map, market_cap_universe, pit_market_cap_universe
-from . import pit
-from .stats import benjamini_hochberg, effective_n, student_t_p
 
 FACTORS = {
     "momentum_20": "20日动量",
@@ -188,7 +186,7 @@ def _neutralize(sub: pd.DataFrame, factor: str) -> pd.Series:
         out = pd.Series(np.nan, index=sub.index)
         out.loc[mask] = resid
         return out
-    except Exception:
+    except (np.linalg.LinAlgError, ValueError, TypeError):  # 回归退化（共线/样本不足）时返回原始 y
         return y
 
 
@@ -210,7 +208,7 @@ def compute_ic(
     ic_series = pd.DataFrame(index=sorted(panel["date"].unique()))
     quantile_records: dict[str, list[pd.Series]] = {f: [] for f in active}
     rows = []
-    overlap = max(1, int(math.ceil(horizon / max(1, int(rebalance)))))
+    overlap = max(1, math.ceil(horizon / max(1, int(rebalance))))
 
     for factor in active:
         ics = []
@@ -226,14 +224,14 @@ def compute_ic(
             rank = values.rank(method="first")
             try:
                 buckets = pd.qcut(rank, 5, labels=False, duplicates="drop")
-            except Exception:
+            except (ValueError, TypeError):  # 分位切分退化（样本过少/重复值）时跳过该期
                 continue
             q = sub.groupby(buckets)["fwd"].mean().reindex(range(5))
             if q.notna().sum() >= 3:
                 quantile_records[factor].append(q)
 
         if ics:
-            series = pd.Series({date: ic for date, ic in ics})
+            series = pd.Series(dict(ics))
             ic_series[factor] = series
             arr = series.dropna().to_numpy(dtype=float)
             mean = float(arr.mean())
@@ -433,7 +431,7 @@ def ic_figure(result: FactorResult) -> go.Figure:
         title=f"RankIC 均值（T+{result.horizon}）",
         template="plotly_white",
         height=380,
-        margin=dict(t=50, b=30, l=100, r=30),
+        margin={"t": 50, "b": 30, "l": 100, "r": 30},
         xaxis_title="IC",
     )
     return fig

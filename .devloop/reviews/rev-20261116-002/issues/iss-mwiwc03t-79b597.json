@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwiwc03t-79b597",
+  "threadId": "rev-20261116-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/data.py",
+  "lines": "461-474",
+  "title": "qfq 缓存命中时基准仍是缓存末行因子，与「按请求 end 取最新因子」不一致，同一请求价位随缓存状态漂移",
+  "evidence": "qfq 的基准语义是\"截至请求 end 的最新因子\"（data.py:271-280 `row = factors.iloc[-1] if adj == \"qfq\" else factors.iloc[0]`，factors 的 end 由 _fetch_daily 传入）。但缓存命中时没有对齐请求 end：data.py:467 `cache_ok = fetched_today and covers and _cache_base_valid(meta, cached, adj)`，其中 covers 只要求 `cached[\"trade_date\"].max() >= end_eff`（data.py:461-464）；qfq 分支的自证是\"缓存最后一行因子 == meta.base_factor\"（data.py:318-319）。于是只要当天先取过大区间（例如 end=2025-01-06，base=2025-01-06 因子），随后请求一个更早结束的区间（end=2020-06-06，仍被 covers 满足），就会命中缓存并返回 data.py:470-473 切出的切片，而这份切片的价格是用 2025 基准算出来的（data.py:474 `adjust_meta = _adjustment_meta(adj, meta.get(\"base_factor\"), meta.get(\"adj_base\"))` 也照抄 2025 基准）；同一次调用若不命中去 _fetch_daily（data.py:476）则用 2020-06-06 的因子作基准。结果：同一请求在\"当天已缓存大区间/未缓存\"两种状态下拿到不同价位的 qfq 序列，与\"基准=请求 end 最新因子\"的口径不符，下游（plan-20261114-002 图注、跨区间对照）会看到口径漂移。这是本次新增 _cache_base_valid 时可以顺手收掉的口径缝隙。",
+  "suggestion": "把\"请求基准日\"传进校验，让 qfq 命中与 _fetch_daily 口径一致：给 _cache_base_valid 增加 end_eff 形参，qfq 分支改成\"取缓存中 trade_date <= end_eff 的最后一行因子，要求它等于 stored\"（`ordered[ordered[\"trade_date\"] <= pd.Timestamp(end_eff)].iloc[-1]`），不相等即失效重拉；或更省事——缓存 meta 已记 end，直接给 data.py:467 的 cache_ok 加一条 `meta.get(\"end\") == _fmt(end_eff)`，end 收窄/放宽都重拉一次。请补用例：先用 end=2025-01-06 建缓存，再以 end=2020-06-06 请求，断言返回的 attrs[\"adjustment\"][\"adj_base\"] 对应 2020 那次而非 2025-01-06（即缓存被判定失效并重算）。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T07:08:01.776Z"
+  },
+  "createdAt": "2026-11-16T06:42:23.753Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T07:08:01.776Z"
+    }
+  ]
+}

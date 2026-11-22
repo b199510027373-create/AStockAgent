@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbkgxnj-9b117b",
+  "threadId": "rev-20261111-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "门禁-绕过",
+  "file": "tests/test_architecture_gate.py",
+  "lines": "492-534",
+  "title": "危险符号扫描可被 `from os import system` / 别名 import / `Path.unlink()` 绕过，AGENT-01 自动化名不副实",
+  "evidence": "tests/test_architecture_gate.py:492-502 的 FORBIDDEN_IMPORTS 只有 subprocess/socket/requests/httpx/urllib.request，不含 os/shutil；:521-529 对 `from X import y` 只比较模块名，从不把导入名映射成 `X.y`；:530-533 只匹配「点号链」调用。于是三条等价写法都能全绿：`from os import system; system('ls')`（ImportFrom 模块 os 不在黑名单，Call 的函数是 Name 而非 Attribute，_dotted_name 返回 None）、`from shutil import rmtree; rmtree('data')`、`pathlib.Path('x').unlink()`（调用链根部是 Call，_dotted_name 返回 None，且 FORBIDDEN_CALLS 不含 unlink）。而 :548-552 的正例只覆盖 `import os` + `os.system(...)` 与 `import requests`，恰好是最容易被绕过的形态。这条测试是 AGENT-01「禁止 shell、文件删除」的唯一自动化（落点表 §2 已如此声明），所以它漏掉的正是它宣称守住的东西。",
+  "suggestion": "把判定从「模块名 + 点号链」升级为「符号解析」：1) 维护 import 别名表（`import os as o` → o=os），ImportFrom 时把 `from os import system` 记为符号 `os.system`、`from shutil import rmtree` 记为 `shutil.rmtree`，再用统一黑名单集合比；2) 黑名单补 `pathlib.Path.unlink`、`pathlib.Path.rmdir`、`os.rename`/`os.replace` 之外的删除类 API，并对 `.unlink()/.rmdir()` 这种接收者是表达式的调用单独校验；3) 在 :548 的正例里加三条反例：`from os import system; system('ls')`、`from shutil import rmtree; rmtree('data')`、`import os as o; o.remove('x')`，以及一条 `pathlib.Path('x').unlink()`，断言分别被标记。改完把同一套判定用于 `test_agent_tools_dir_has_no_shell_or_http_capability`。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:46:09.596Z"
+  },
+  "createdAt": "2026-11-11T03:35:55.231Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:46:09.596Z"
+    }
+  ]
+}

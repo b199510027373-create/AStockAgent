@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksj2c2-33d85b",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/runtime.py",
+  "lines": "511-545",
+  "title": "_finish_audit 把 record_step 与 finish_run 放在同一个吞异常的 try 里，任一步失败都会留下永久 running",
+  "evidence": "_finish_audit 在同一个 try 中先循环 record_step（runtime.py:512-524），再写 final step（526-533），最后 finish_run（534-541），异常统一被 `except Exception: pass` 吞掉（542-543），finally 只 close。若任一 record_step 抛错（例如 sqlite busy/磁盘满/约束错误），后面的 finish_run 根本不会执行；若 finish_run 自身抛错，也没有兜底。结果是 run 永久停在 running，直接违反 spec §7.2“禁止永久 running”和 AC5/审计真实性要求。当前测试只覆盖成功与非法参数，没有注入落库失败。",
+  "suggestion": "把 finish_run 放进独立的 finally（或至少在外层 finally 中兜底），确保无论 step 写入是否成功都执行一次终态更新；若 finish_run 也失败，用最小 UPDATE 将 status 置 failed 并写 error，或记录可重试的审计失败标记。不要用单个 `except: pass` 包住终态写入。补测试：monkeypatch record_step 抛异常，断言 run 最终不是 running；monkeypatch finish_run 抛异常，断言有失败兜底且异常不影响 Agent 返回。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:00:26.026Z"
+  },
+  "createdAt": "2026-11-17T14:31:27.122Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:00:26.026Z"
+    }
+  ]
+}

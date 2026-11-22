@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwjmhnr6-565a8f",
+  "threadId": "rev-20261117-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "dependency",
+  "file": "tests/test_ci_quality_gates.py",
+  "lines": "17",
+  "title": "新增测试直接 import yaml，但 PyYAML 未进 requirements，破坏「全部精确锁」",
+  "evidence": "tests/test_ci_quality_gates.py:17 `import yaml`，但 requirements.txt 与 requirements-dev.txt 全文都没有 pyyaml（grep `yaml|pyyaml|PyYAML` 在 *.txt 中无命中）。本机可用只是因为 gradio==6.15.2 传递依赖：`.venv/Lib/site-packages/gradio-6.15.2.dist-info/METADATA:42` 为 `Requires-Dist: pyyaml<7.0,>=5.0`，装到的是 pyyaml 6.0.3，版本不受两份清单约束。\n\nacceptance[2] 要求「requirements/requirements-dev 锁定精确版本，可复现安装」，而本交付新增的 tests/test_requirements_pins.py 只校验两份清单自身（test_every_requirement_line_is_exactly_pinned / test_runtime_dependency_present_and_pinned 的 16 项），无法发现「测试用到清单外的包」。后果：gradio 放宽或移除该依赖、或换一套安装环境时，`pytest tests` 会以 ModuleNotFoundError 直接红，报错点与门禁本身无关，且归因成本高（这正是本计划要消除的「本地绿 CI 红」类问题）。",
+  "suggestion": "二选一：① 在 requirements-dev.txt 增加 `pyyaml==6.0.3`（或本机实测通过的版本），并把 `\"pyyaml\"` 加进 tests/test_requirements_pins.py:80-83 的 test_dev_toolchain_is_pinned 参数列表；② 去掉依赖，改用 `CI_PATH.read_text()` 做子串断言（如断言 `\"pull_request:\"` 段与 `\"main\"` 同时出现），不再解析 YAML——本用例只需要判断触发器覆盖 main，不需要完整 YAML 语义。\n\n完全解决标准：仅凭 requirements-dev.txt 安装后该测试即可导入所需库（或该文件不再 import 任何清单外第三方包），且 test_requirements_pins.py 的锁校验覆盖到它。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T19:19:21.286Z"
+  },
+  "createdAt": "2026-11-16T18:54:37.698Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T19:19:21.286Z"
+    }
+  ]
+}

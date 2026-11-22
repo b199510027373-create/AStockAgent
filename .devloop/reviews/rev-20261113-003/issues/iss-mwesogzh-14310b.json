@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwesogzh-14310b",
+  "threadId": "rev-20261113-003",
+  "roundNo": 1,
+  "severity": "P0",
+  "category": "correctness/price-caliber",
+  "file": "astock/agent/chart_render.py",
+  "lines": "214-222",
+  "title": "adj=none/raw（以及 hfq）实际仍取前复权数据，图注却标注“不复权/后复权”",
+  "evidence": "`_load_market_frame` 将归一化后的 `adj`（raw 已归一为 none）原样传给 `market.load_daily/load_minute`。但 `astock/data.py:223` 的 `if adj:` 和 `astock/data.py:643` 的 `if adj and not df.empty:` 对任何非空字符串都执行前复权：日线在 `astock/data.py:243-248` 固定以最新 `adj_factor` 为基准，分钟在 `astock/data.py:540-559` 同样固定前复权，完全没有 qfq/hfq/none 分支。因此 `adj=\"none\"` 和 `adj=\"hfq\"` 都得到 qfq 数据，而 `_adj_label`（chart_render.py:456-463）分别输出“不复权（原始价格 raw…）”和“后复权（hfq）”。验收要求“K 线默认 qfq；涨跌停/成交异常标的可切 raw，并在图注注明价格口径”，当前 raw 切换是失效的。测试也没兜住：`tests/test_agent_chart_render.py:301-307` 通过 `_render(..., frame=ohlcv_frame())` 注入 DataFrame，`_resolve_frame`（chart_render.py:267-268）直接使用注入帧，根本没有走 `_load_market_frame`，只断言了 caption 文本；全文件没有对 `load_daily/load_minute` 的 monkeypatch 或 fake client。",
+  "suggestion": "1）在 `chart_render._load_market_frame` 明确映射：`qfq`→`\"qfq\"`，`none`→`None`，`hfq`→`\"hfq\"`；2）在 `astock/data.py` 的 `load_daily`/`load_minute` 真正实现三档：none 不做价格调整，qfq 以最新因子为基准，hfq 以区间首因子（或原始因子）为基准；若本期不做 hfq，则必须在 `chart_spec` 拒绝 hfq 并给出结构化错误，不能静默返回 qfq；3）补一条走真实取数分支的回归测试：monkeypatch `astock.data.load_daily/load_minute` 返回构造的 raw+adj_factor 数据，分别断言 none 的 close 等于原始价、qfq 最新价等于原始价、hfq 按因子缩放，并断言 caption 与数据口径一致；不要用注入 frame 的测试代替取数路径。",
+  "confidence": 0.97,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T16:44:05.844Z"
+  },
+  "createdAt": "2026-11-13T09:49:02.333Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T16:44:05.844Z"
+    }
+  ]
+}

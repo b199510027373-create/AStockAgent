@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwmtsmue-f7a49c",
+  "threadId": "rev-20261119-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "contract",
+  "file": "astock/agent_chat_ui.py",
+  "lines": "78-84",
+  "title": "生产入口未传 db_path：AI 对话的 run 与工具调用都不落 agent_runs/agent_steps（AGENT-02 / ADR-017）",
+  "evidence": "build_agent_chat_tab 只接收 controller/context_provider，构造 AgentChatController(context_provider=...)（astock/agent_chat_ui.py:78-84）；app.py:480 的接线同样没有 db_path。控制器把它原样透传：AgentRuntime(model, session=self.session, db_path=self._db_path)（astock/agent/chat.py:809-813），而 AgentRuntime._start_audit 在 db_path is None 时直接 return None（astock/agent/runtime.py:537-538），__init__ 注释明确「生产入口应显式传入 data/astock.db」（astock/agent/runtime.py:234-236）。grep astock/**/*.py 显示 chat.py:809 是仓库里唯一的 AgentRuntime( 构造点，所以这条 UI 是唯一生产入口，却把审计静默关掉：每次 run 都不写 agent_runs，每次工具调用都不写 agent_steps（record_step/finish_run 只在 _start_audit 返回非 None 时执行，astock/agent/runtime.py:577-579、590-611），而 store 侧能力与用例已经存在（astock/agent/store.py:431 ensure_run、1093 record_step；tests/test_agent_store.py:648 test_tool_call_writes_step_row）。tests/test_agent_chat.py 也没有任何 db_path 透传断言。",
+  "suggestion": "给 build_agent_chat_tab 增加 db_path 形参并透传到 AgentChatController(db_path=...)（astock/agent_chat_ui.py:78-84 → astock/agent/chat.py:626），app.py:480 传 astock.agent.store.DEFAULT_DB_PATH（astock/agent/store.py:106，已支持 ASTOCK_DB_PATH 覆盖）。补一条用例：用 tmp_path 下的 sqlite 跑一次 controller.ask，断言 agent_runs 恰有 1 行 status 非 running、agent_steps 行数等于 len(result.steps)+1，或退一步断言 runtime_factory 收到的 AgentRuntime.db_path 非 None。若这项工作要留给 plan-20261107-008 统一接线，必须在本轮 handoff 写明并在 astock/agent_chat_ui.py:84 加显式 TODO+计划项号，不能以默认 None 静默上线。",
+  "confidence": 0.93,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T01:35:55.982Z"
+  },
+  "createdAt": "2026-11-19T00:42:25.574Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T01:35:55.982Z"
+    }
+  ]
+}

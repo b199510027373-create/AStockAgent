@@ -7,11 +7,15 @@ JSON 落盘。
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 import unittest
 import uuid
 from pathlib import Path
 from typing import Any
+
+import pandas as pd
+import pytest
 
 from astock.agent import (
     AgentRuntime,
@@ -34,8 +38,8 @@ from astock.agent.runtime import (
     DEFAULT_TOKEN_BUDGET,
     SYSTEM_PROMPT,
 )
-from astock.agent.types import MAX_TABLE_ROWS, ToolResult as ResultAlias
-
+from astock.agent.types import MAX_TABLE_ROWS, StepRecord
+from astock.agent.types import ToolResult as ResultAlias
 
 PRICE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -225,6 +229,19 @@ class RuntimeLoopTests(unittest.TestCase):
         follow_up = runtime.run("再查一次")
         self.assertEqual(follow_up.stop_reason, StopReason.COMPLETED)
         self.assertEqual(model.call_count, 1)
+
+    def test_interrupt_if_running_does_not_leak_after_run(self) -> None:
+        model = FakeModel(["完成"])
+        runtime = AgentRuntime(model, ToolRegistry())
+
+        first = runtime.run("第一问")
+        self.assertEqual(first.stop_reason, StopReason.COMPLETED)
+        # run 已结束时请求中断应返回 False，且不留下标记给下一问。
+        self.assertFalse(runtime.request_interrupt_if_running())
+
+        follow_up = runtime.run("第二问")
+        self.assertEqual(follow_up.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(model.call_count, 2)
 
     def test_pre_set_cancel_event_stops_at_first_guard(self) -> None:
         model = FakeModel(["不应到达"])
@@ -469,6 +486,45 @@ class RuntimeLoopTests(unittest.TestCase):
         self.assertIn("不可信", SYSTEM_PROMPT)
         self.assertIn("不得执行", SYSTEM_PROMPT)
 
+    def test_on_step_observes_each_step_in_order(self) -> None:
+        registry = ToolRegistry()
+        registry.register(price_spec(ok_price))
+        model = FakeModel(
+            [
+                ToolCall("lookup_price", {"code": "600519"}),
+                ToolCall("lookup_price", {"code": "000001"}),
+                "两家公司收盘价已列出。",
+            ]
+        )
+        runtime = AgentRuntime(model, registry)
+        seen: list[StepRecord] = []
+
+        result = runtime.run("对比一下", on_step=seen.append)
+
+        self.assertEqual(result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual([step.tool for step in seen], ["lookup_price", "lookup_price"])
+        self.assertEqual(seen, result.steps)
+        self.assertEqual(
+            [step.arguments["code"] for step in seen], ["600519", "000001"]
+        )
+
+    def test_on_step_failure_does_not_break_run(self) -> None:
+        registry = ToolRegistry()
+        registry.register(price_spec(ok_price))
+        model = FakeModel(
+            [ToolCall("lookup_price", {"code": "600519"}), "贵州茅台收盘价 1680.00 元。"]
+        )
+        runtime = AgentRuntime(model, registry)
+
+        def broken_hook(step: StepRecord) -> None:
+            raise RuntimeError("界面渲染失败")
+
+        result = runtime.run("茅台现在什么价？", on_step=broken_hook)
+
+        self.assertEqual(result.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(len(result.steps), 1)
+        self.assertIn("1680.00", result.answer)
+
 
 class RegistryTests(unittest.TestCase):
     def test_permissions_and_schema_exposed(self) -> None:
@@ -672,6 +728,19 @@ class SessionTests(unittest.TestCase):
             target.unlink(missing_ok=True)
             target.with_name(target.name + ".tmp").unlink(missing_ok=True)
 
+    def test_load_rejects_non_object_payload_with_type_error(self) -> None:
+        """顶层不是 JSON object 时必须抛 TypeError（公共 API 语义，plan-20261103-012）。"""
+        target = Path(__file__).parent / f"_agent_session_bad_{uuid.uuid4().hex}.json"
+        try:
+            target.write_text('["not", "an", "object"]', encoding="utf-8")
+
+            with self.assertRaises(TypeError) as ctx:
+                AgentSession.load(target)
+
+            self.assertIn("顶层必须是 object", str(ctx.exception))
+        finally:
+            target.unlink(missing_ok=True)
+
     def test_recent_messages_limit_zero_returns_empty(self) -> None:
         session = AgentSession()
         session.add_user("问题")
@@ -708,6 +777,105 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(memory.extras, {})
 
 
+class FileCitationTests(unittest.TestCase):
+    """P1：文件工具结果进入最终回答前必须过引用收口（AGENT-04）。"""
+
+    def _runtime(
+        self, result: ToolResult, model: FakeModel, *, tool: str = "file_search"
+    ) -> AgentRuntime:
+        registry = ToolRegistry()
+        registry.register(
+            ToolSpec(
+                name=tool,
+                description="文件工具测试桩",
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string", "minLength": 1}},
+                    "additionalProperties": False,
+                },
+                handler=lambda **_: result,
+                permissions=(Permission.FILE_READ,),
+            )
+        )
+        return AgentRuntime(model, registry)
+
+    def test_file_tool_answer_without_citation_becomes_not_found(self) -> None:
+        result = ToolResult(
+            text="《年报.pdf》第 2 页\n营业收入同比增长 10%。",
+            source="file:年报.pdf",
+            metadata={"citations": ["《年报.pdf》第 2 页"]},
+        )
+        model = FakeModel(
+            [ToolCall("file_search", {"query": "营收"}), "营业收入同比增长 10%。"]
+        )
+        runtime = self._runtime(result, model)
+
+        run = runtime.run("年报里营收增长多少？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(run.answer, "未在文件中找到")
+
+    def test_file_tool_answer_with_grounded_citation_is_kept(self) -> None:
+        result = ToolResult(
+            text="《年报.pdf》第 2 页\n营业收入同比增长 10%。",
+            source="file:年报.pdf",
+            metadata={"citations": ["《年报.pdf》第 2 页"]},
+        )
+        answer = "营业收入同比增长 10%（《年报.pdf》第 2 页）。"
+        model = FakeModel([ToolCall("file_search", {"query": "营收"}), answer])
+        runtime = self._runtime(result, model)
+
+        run = runtime.run("年报里营收增长多少？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(run.answer, answer)
+
+    def test_file_list_only_answer_is_not_rewritten(self) -> None:
+        """file_list 只给清单、不产生定位引用，不能被收口成「未在文件中找到」。"""
+        result = ToolResult(
+            text="共 2 个文件：\n- 《年报.pdf》\n- 《财务.xlsx》",
+            source="files:local",
+            table=[{"name": "年报.pdf"}, {"name": "财务.xlsx"}],
+            metadata={"files": 2, "returned": 2},
+        )
+        answer = "共 2 个文件：《年报.pdf》、《财务.xlsx》。"
+        model = FakeModel([ToolCall("file_list", {}), answer])
+        runtime = self._runtime(result, model, tool="file_list")
+
+        run = runtime.run("我上传了哪些文件？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(run.answer, answer)
+
+    def test_document_body_citation_is_not_trusted(self) -> None:
+        """上传文件正文里的《…》片段是 untrusted data，不能进入引用白名单。"""
+        result = ToolResult(
+            text="《虚构.pdf》第 9 页\n营业收入同比增长 10%。",
+            source="file:公告.txt",
+            metadata={"citations": ["《公告.txt》第 1 页"]},
+        )
+        answer = "营业收入同比增长 10%（《虚构.pdf》第 9 页）。"
+        model = FakeModel([ToolCall("file_read", {"query": "营收"}), answer])
+        runtime = self._runtime(result, model, tool="file_read")
+
+        run = runtime.run("公告里营收多少？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertNotIn("虚构", run.answer)
+        self.assertEqual(run.answer, "引用：《公告.txt》第 1 页")
+
+    def test_zero_tool_citation_is_downgraded(self) -> None:
+        """没有工具结果作白名单时，回答自带的《…》引用不得原样落库。"""
+        answer = "营业收入同比增长 10%（《年报.pdf》第 2 页）。"
+        model = FakeModel([answer])
+        runtime = AgentRuntime(model, ToolRegistry())
+
+        run = runtime.run("年报里营收多少？")
+
+        self.assertEqual(run.stop_reason, StopReason.COMPLETED)
+        self.assertEqual(run.answer, "未在文件中找到")
+
+
 class TypeTests(unittest.TestCase):
     def test_dataframe_result_is_coerced_to_table(self) -> None:
         import pandas as pd
@@ -729,6 +897,356 @@ class TypeTests(unittest.TestCase):
         first = ToolCall("lookup", {"a": 1, "b": 2})
         second = ToolCall("lookup", {"b": 2, "a": 1})
         self.assertEqual(first.signature(), second.signature())
+
+
+def test_runtime_audits_run_and_steps_into_store(tmp_path: Path) -> None:
+    import json
+
+    from astock.agent import store
+
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel(
+        [ToolCall("lookup_price", {"code": "600519"}), "贵州茅台收盘价 1680.00 元。"]
+    )
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    result = runtime.run("茅台现在什么价？")
+
+    assert result.stop_reason == StopReason.COMPLETED
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        runs = conn.execute(
+            "SELECT run_kind, status, steps, completion_tokens, finished_at "
+            "FROM agent_runs"
+        ).fetchall()
+        assert len(runs) == 1
+        run_kind, status, steps, tokens, finished_at = runs[0]
+        assert run_kind == "agent"
+        assert status == "success"
+        assert steps == 2
+        assert tokens == result.tokens_used
+        assert finished_at
+
+        rows = conn.execute(
+            "SELECT step, kind, tool, args_json, result_digest, latency_ms "
+            "FROM agent_steps ORDER BY step"
+        ).fetchall()
+        assert [(row[0], row[1]) for row in rows] == [(0, "tool"), (1, "final")]
+        tool_args = json.loads(rows[0][3])
+        assert tool_args["arguments"] == {"code": "600519"}
+        assert "1680.00" in tool_args["result_preview"]
+        assert rows[0][2] == "lookup_price"
+        assert rows[0][4]
+        assert rows[0][5] is not None and rows[0][5] >= 0
+    finally:
+        conn.close()
+
+
+def test_runtime_audits_invalid_arguments_as_steps(tmp_path: Path) -> None:
+    from astock.agent import store
+
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel(
+        [ToolCall("lookup_price", {}), ToolCall("lookup_price", {}), "不应到达"]
+    )
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    result = runtime.run("查价格")
+
+    assert result.stop_reason == StopReason.INVALID_ARGUMENTS
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        rows = conn.execute(
+            "SELECT step, kind, tool, args_json FROM agent_steps ORDER BY step"
+        ).fetchall()
+        assert [(row[0], row[1]) for row in rows] == [
+            (0, "tool"),
+            (1, "tool"),
+            (2, "final"),
+        ]
+        tool_rows = [row for row in rows if row[1] == "tool"]
+        assert all(row[2] == "lookup_price" for row in tool_rows)
+        assert all(row[3] for row in tool_rows)
+        status, = conn.execute("SELECT status FROM agent_runs").fetchone()
+        assert status == "partial"
+    finally:
+        conn.close()
+
+
+def test_tool_payload_is_wrapped_as_untrusted_data(tmp_path: Path) -> None:
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel(
+        [ToolCall("lookup_price", {"code": "600519"}), "完成"]
+    )
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    runtime.run("查价格")
+
+    tool_messages = [
+        message for message in model.calls[1]["messages"] if message["role"] == "tool"
+    ]
+    assert len(tool_messages) == 1
+    content = tool_messages[0]["content"]
+    assert content.startswith("<untrusted_data>")
+    assert content.rstrip().endswith("</untrusted_data>")
+    assert "1680.00" in content
+
+
+def test_runtime_records_model_provenance_in_run(tmp_path: Path) -> None:
+    from astock.agent import store
+
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel([ToolCall("lookup_price", {"code": "600519"}), "完成"])
+    runtime = AgentRuntime(
+        model,
+        registry,
+        db_path=tmp_path / "astock.db",
+        temperature=0.2,
+        seed=11,
+        code_version="astock-test",
+    )
+
+    runtime.run("查价格")
+
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        row = conn.execute(
+            "SELECT temperature, seed, code_version, prompt_tokens, completion_tokens "
+            "FROM agent_runs"
+        ).fetchone()
+        assert abs(row["temperature"] - 0.2) < 1e-9
+        assert row["seed"] == 11
+        assert row["code_version"] == "astock-test"
+        # 整轮总 token 记 completion，prompt 保持 0（P2-4 语义）。
+        assert row["prompt_tokens"] == 0
+        assert row["completion_tokens"] >= 0
+    finally:
+        conn.close()
+
+
+def test_step_failure_still_finishes_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from astock.agent import store
+
+    def broken_step(*args: Any, **kwargs: Any) -> None:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(store, "record_step", broken_step)
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel([ToolCall("lookup_price", {"code": "600519"}), "完成"])
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    result = runtime.run("查价格")
+
+    assert result.stop_reason == StopReason.COMPLETED
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        row = conn.execute("SELECT status, finished_at, error FROM agent_runs").fetchone()
+        assert row["status"] == "failed"
+        assert row["finished_at"]
+        assert "record_step" in (row["error"] or "")
+    finally:
+        conn.close()
+
+
+def test_finish_run_failure_falls_back_to_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from astock.agent import store
+
+    def broken_finish(*args: Any, **kwargs: Any) -> str:
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(store, "finish_run", broken_finish)
+    registry = ToolRegistry()
+    registry.register(price_spec(ok_price))
+    model = FakeModel([ToolCall("lookup_price", {"code": "600519"}), "完成"])
+    runtime = AgentRuntime(model, registry, db_path=tmp_path / "astock.db")
+
+    runtime.run("查价格")
+
+    conn = store.connect(tmp_path / "astock.db")
+    try:
+        row = conn.execute("SELECT status, finished_at, error FROM agent_runs").fetchone()
+        assert row["status"] == "failed"
+        assert row["finished_at"]
+        assert "finish_run failed" in (row["error"] or "")
+    finally:
+        conn.close()
+
+
+def test_failed_run_is_not_downgraded_by_runtime_finish(tmp_path: Path) -> None:
+    from astock.agent import store
+
+    db_path = tmp_path / "astock.db"
+
+    def explode(*, code: str) -> ToolResult:
+        del code
+        conn = store.connect(db_path)
+        try:
+            run_id = conn.execute("SELECT run_id FROM agent_runs").fetchone()[0]
+            store.fail_run(conn, run_id, error="PNG 导出失败（png_mode=require）")
+        finally:
+            conn.close()
+        raise RuntimeError("PNG 导出失败（png_mode=require）")
+
+    registry = ToolRegistry()
+    registry.register(price_spec(explode))
+    model = FakeModel([ToolCall("lookup_price", {"code": "600519"}), "失败后继续"])
+    runtime = AgentRuntime(model, registry, db_path=db_path)
+
+    runtime.run("画图")
+
+    conn = store.connect(db_path)
+    try:
+        row = conn.execute("SELECT status, error FROM agent_runs").fetchone()
+        assert row["status"] == "failed"
+        assert "PNG 导出失败" in (row["error"] or "")
+    finally:
+        conn.close()
+
+
+def test_runtime_observation_keeps_chart_html_out_of_context() -> None:
+    """图表 HTML 只以 artifact 句柄进 observation，避免撑爆模型上下文。"""
+    import json
+
+    runtime = AgentRuntime(FakeModel(["ok"]), ToolRegistry())
+    big = "<html>" + "x" * 5000 + "</html>"
+    result = ToolResult(
+        text="图已生成",
+        figure=big,
+        data_as_of="2024-01-04",
+        data_time="2024-01-04 15:00",
+        metadata={
+            "chart": {
+                "artifact_id": "art_0123456789abcdef",
+                "artifact_path": "artifacts/kline.html",
+            }
+        },
+    )
+
+    observation = runtime._format_observation("kline", result)
+    payload = json.loads(observation)
+    assert payload["figure"] == {
+        "chars": len(big),
+        "artifact_id": "art_0123456789abcdef",
+        "artifact_path": "artifacts/kline.html",
+    }
+    assert big not in observation
+    assert payload["data_time"] == "2024-01-04 15:00"
+
+    # 小图（例如内联 SVG 片段）仍原样透传。
+    small = ToolResult(figure="<svg/>")
+    assert json.loads(runtime._format_observation("kline", small))["figure"] == "<svg/>"
+
+
+def test_summarize_result_keeps_chart_html_out_of_partial_answer() -> None:
+    """部分答案的图表摘要与 observation 同口径：超长 HTML 只留 artifact 句柄。"""
+    from astock.agent.runtime import _summarize_result
+
+    big = "<html>" + "x" * 5000 + "</html>"
+    result = ToolResult(
+        figure=big,
+        metadata={
+            "chart": {
+                "artifact_id": "art_0123456789abcdef",
+                "artifact_path": "artifacts/kline.html",
+            }
+        },
+    )
+    summary = _summarize_result(result)
+    assert "art_0123456789abcdef" in summary
+    assert str(len(big)) in summary
+    assert "<html>" not in summary
+
+    # 短图（内联 SVG 等）保持原样，避免把正常小图也抽象掉。
+    assert _summarize_result(ToolResult(figure="<svg/>")) == "图表 <svg/>"
+
+
+def test_runtime_passes_run_context_so_chart_artifact_links_real_run(
+    tmp_path: Path,
+) -> None:
+    """P1：runtime→tool 的 run 上下文让图表 link 挂到真实 run（source="agent"）。
+
+    ``chart_service`` 只在 ``ToolContext`` 存在时记录 ``source="agent"`` + ``run_id``；
+    旧实现里工具拿不到 run_id，图表永远落成 ``source="render"``、link.run_id=NULL。
+    """
+    from astock.agent import store
+    from astock.agent.tools import market_tools
+
+    code = "600519.SH"
+    daily = pd.DataFrame(
+        {
+            "ts_code": code,
+            "trade_date": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
+            "open": [100.0, 101.0, 102.0],
+            "high": [101.0, 102.0, 103.0],
+            "low": [99.0, 100.0, 101.0],
+            "close": [100.5, 101.5, 102.5],
+            "pre_close": [99.5, 100.5, 101.5],
+            "change": [1.0, 1.0, 1.0],
+            "pct_chg": [1.0, 1.0, 1.0],
+            "vol": [1000.0, 1000.0, 1000.0],
+            "amount": [5000.0, 5000.0, 5000.0],
+        }
+    )
+    calendar = pd.DataFrame(
+        {"cal_date": pd.bdate_range("2024-01-01", "2024-03-31"), "is_open": 1}
+    )
+    from astock import data as market
+
+    deps = market_tools.MarketDeps(
+        daily=lambda ts_code, *, start, end, adj: daily.copy(),
+        index_daily=lambda ts_code, *, start, end: daily.copy(),
+        minute=lambda ts_code, *, freq, days, adj: daily.copy(),
+        resample=market.resample_ohlcv,
+        bar_time=market.latest_bar_time,
+        trade_cal=lambda: calendar,
+        clock=lambda: pd.Timestamp("2024-01-04 16:30"),
+    )
+    db_path = str(tmp_path / "astock.db")
+    artifact_root = str(tmp_path / "agent")
+    registry = market_tools.build_market_registry(
+        deps=deps, db_path=db_path, artifact_root=artifact_root
+    )
+    model = FakeModel(
+        [
+            ToolCall("kline", {"ts_code": code, "chart": True, "limit": 3}),
+            "2024-01-04 收盘 102.50 元。",
+        ]
+    )
+    runtime = AgentRuntime(model, registry, db_path=db_path)
+
+    result = runtime.run("画个 K 线")
+
+    assert result.stop_reason == StopReason.COMPLETED
+    chart_meta = result.steps[0].result.metadata["chart"]
+    conn = store.connect(db_path)
+    try:
+        run = conn.execute(
+            "SELECT run_id, status FROM agent_runs ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        links = conn.execute(
+            "SELECT run_id, step, source FROM agent_run_artifacts "
+            "WHERE artifact_id = ?",
+            (chart_meta["artifact_id"],),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert run is not None
+    assert (run["status"], len(links)) == ("success", 1)
+    assert (links[0]["run_id"], links[0]["step"], links[0]["source"]) == (
+        run["run_id"],
+        0,
+        "agent",
+    )
 
 
 if __name__ == "__main__":

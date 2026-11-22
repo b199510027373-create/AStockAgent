@@ -1,0 +1,181 @@
+{
+  "id": "ho-20261119-011",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：第 1 轮评审修复（P1/P2 全修 + 真机证据）",
+  "summary": "按 reviewer handoff ho-20261119-010（rev-20261119-001）逐条修复第 1 轮 request_changes：P1-1 生产入口透传 db_path，AI 对话 run/工具步骤落 agent_runs/agent_steps；P1-2 补 Edge headless + CDP 真机证据，AC1–AC5 与降级横幅全部实跑通过（截图 8 张）；P2 引用渲染指纹缓存 + memo、建模型/检索阶段中断生效（self._cancelled 作 cancel_event、预检 done(interrupted)）、工作表级定位 note、三条测试缺口补齐（页码不命中退回首段、21 条截断、并发 busy）。真机还发现并修两个缺陷：Gradio 6 history 的 text block 列表被 str() 成 dict repr；stop.click 的 cancels 会杀掉生成器导致中断后内容丢失。目标测试 84 passed（+10），全量 744 passed / 覆盖率 79.04%，ruff/mypy/import app 全绿；提交 ed4e44b 已推送 PR #32，等待 CI 与第 2 轮复核。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮。复用现有 Gradio 装配模式，不新增 Tab；保持页面在无模型/无网络时的降级可用。",
+      "source": "plan-20261107-007 description"
+    },
+    {
+      "id": "ac1",
+      "text": "AI 对话 Tab 可上传 1–5 个文件并显示解析状态",
+      "source": "plan-20261107-007 acceptance #1"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示",
+      "source": "plan-20261107-007 acceptance #2"
+    },
+    {
+      "id": "ac3",
+      "text": "图表在回答中内嵌渲染，可点开看 spec/来源",
+      "source": "plan-20261107-007 acceptance #3"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表",
+      "source": "plan-20261107-007 acceptance #4"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留",
+      "source": "plan-20261107-007 acceptance #5"
+    },
+    {
+      "id": "boundary",
+      "text": "「流式」= UI 增量事件（on_step 时间线 + 回答切片），模型侧仍整轮返回（接口冻结 v1 不许加 stream 形参）。",
+      "source": "docs/AStockAgent_interface_freeze_v1.md + tests/test_architecture_gate.py"
+    },
+    {
+      "id": "degrade",
+      "text": "无模型/无网络：横幅显示降级状态（规则兜底/模型未就绪），页面可开、附件可解析、提问不白屏。",
+      "source": "plan-20261107-007 description"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent_chat_ui.py",
+      "summary": "build_agent_chat_tab 新增 db_path 并透传 controller；_content_text 兼容 Gradio 6 text block 列表；引用 HTML 按指纹 + memo 只在变化时重算；stop.click 去掉 cancels（保留已产出内容）",
+      "commit": "ed4e44b"
+    },
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "interrupt 建模型/检索阶段即生效；ask 用 self._cancelled 作 cancel_event 并在 _ensure_runtime 后预检中断；resolve_citation 增加工作表级定位 note；render_citations_html 增加 memo；新增 db_path property",
+      "commit": "ed4e44b"
+    },
+    {
+      "path": "app.py",
+      "summary": "AI Tab 透传 astock.agent.store.DEFAULT_DB_PATH 作审计库（P1-1）",
+      "commit": "ed4e44b"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 10 例：busy 拒绝/锁释放、预运行中断、审计落库 agent_runs/agent_steps、页码不命中退回首段、工作表级定位 note、21 条引用截断、memo 复用、db_path 透传、引用只渲染一次、structured history 不被 repr",
+      "commit": "ed4e44b"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "（上轮）on_step 步骤钩子，本轮未改",
+      "commit": "6011d16"
+    },
+    {
+      "path": "astock/agent/tools/citations.py",
+      "summary": "（上轮）parse_citation，本轮未改",
+      "commit": "6011d16"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "（上轮）2 个 on_step 用例，本轮未改",
+      "commit": "6011d16"
+    },
+    {
+      "path": ".smoke-agent-ui/（未跟踪，不进主仓）",
+      "summary": "真机冒烟夹具：make_assets.py 生成 PDF/XLSX，smoke_app.py（FakeModel+慢工具+假图）、degraded_app.py、cdp.py、smoke_drive.py、degraded_drive.py、visual_drive.py；截图 shots/1–8*.png 作为评审证据",
+      "commit": "n/a"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q",
+      "result": "84 passed, 1 warning",
+      "passed": true,
+      "evidence": "chat 33 + runtime 51（本轮新增 10 例）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && .venv\\Scripts\\python.exe -m coverage report -m",
+      "result": "744 passed, 5 deselected, 12 subtests; TOTAL 11375 stmts / 2384 miss = 79.04%（门槛 76.45）",
+      "passed": true,
+      "evidence": "全量通过，覆盖率高于门槛"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "与 CI lint step 一致"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 43 source files",
+      "passed": true,
+      "evidence": "与 CI type-check step 一致"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -c \"import app\"",
+      "result": "import app ok",
+      "passed": true,
+      "evidence": "装配后的 app 可导入"
+    },
+    {
+      "command": "Edge headless + CDP：python .smoke-agent-ui/smoke_drive.py（端口 7866，FakeModel）",
+      "result": "AC1 附件 2/2 成功；AC2 流式 20 帧、状态序列 3 段、3 步 read_file 时间线；AC3 3 个 iframe srcdoc 命中；AC4 点击 #cite-1 命中 details；AC5 中断保留 121 字并可立刻再问；P1-1 agent_runs=9/agent_steps=27",
+      "passed": true,
+      "evidence": "截图 .smoke-agent-ui/shots/1-figure-iframe.png、2-citation-anchor.png、3-interrupt.png、4-final-page.png"
+    },
+    {
+      "command": "Edge headless + CDP：$env:AGENT_PROVIDER='rule'; python .smoke-agent-ui/degraded_app.py + degraded_drive.py",
+      "result": "横幅「🧠 模型：rule/rule-fallback｜规则兜底模式…」；降级模式完成一轮回答 128 字、无异常堆栈",
+      "passed": true,
+      "evidence": "截图 5-degraded-banner.png、6-degraded-answer.png"
+    },
+    {
+      "command": "Edge headless + CDP：python .smoke-agent-ui/visual_drive.py（1280 宽，单轮出图）",
+      "result": "iframe 内图表实际渲染、图注双时点、引用卡片与工作表级 note 同屏可见",
+      "passed": true,
+      "evidence": "截图 7-figure-rendered-1280.png、8-citation-1280.png"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "推送分支、PR 与 CI 验证",
+      "status": "granted"
+    },
+    {
+      "name": "local-browser",
+      "reason": "Edge headless + CDP 真机冒烟（本机安装，无新增依赖）",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "仓库 .env 自带 DEEPSEEK_API_KEY；降级证据用 AGENT_PROVIDER=rule 强制规则兜底，未调用真实模型",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui",
+    "commit": "ed4e44b",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "本提交 CI 运行中（推送后触发，待确认）",
+    "merge": "未合并",
+    "status": "pr-open"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-009",
+  "next": "1) 等 PR #32 在 ed4e44b 的 CI 绿（或修复失败）。2) 第 2 轮复核请只针对 ho-20261119-010 的 2×P1 + 4×P2 逐条验证，证据见 .smoke-agent-ui/shots/ 与 links.test。3) 若通过：置 done 并合并；合并后建议在 main 用真实 key 再跑一次真机冒烟（上传 PDF/Excel、出图、点引用、中断）。4) 可选后续：会话历史持久化到 UI、引用卡片高亮原文行。",
+  "createdAt": "2026-11-19T01:20:38.800Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-011.md"
+}

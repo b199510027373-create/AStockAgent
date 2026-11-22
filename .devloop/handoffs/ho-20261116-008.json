@@ -1,0 +1,143 @@
+{
+  "id": "ho-20261116-008",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "PNG 导出基础设施：Kaleido/Chrome/字体与 CI",
+  "summary": "相对 ho-20261116-007 的更新：①补齐中文图例（K 线图例「K 线」显示 + 图例区墨迹断言），CI 复跑仍全绿；②plan 文件已标 in_review/progress=95 并写入 test 证据与 PR 链接，日历与 worklog 已记录；③最终提交 705c88c 对应 CI run 43790705465（test + png-export 双通过）。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "锁定 plotly 与 kaleido 精确版本",
+      "source": "plan-20261114-001 验收①"
+    },
+    {
+      "id": "R2",
+      "text": "Windows 开发机与 Linux CI 均能生成 PNG，spike 已记录",
+      "source": "plan-20261114-001 验收②"
+    },
+    {
+      "id": "R3",
+      "text": "中文标题/坐标轴/图例无方块，含中文 K 线 PNG",
+      "source": "plan-20261114-001 验收③"
+    },
+    {
+      "id": "R4",
+      "text": "CI 真实导出用例、超时可控、不拖垮主流水线",
+      "source": "plan-20261114-001 验收④"
+    },
+    {
+      "id": "R5",
+      "text": "PNG 失败语义：require 报错/auto 仅告警一次/off 不导出",
+      "source": "plan-20261114-001 验收⑤"
+    },
+    {
+      "id": "R6",
+      "text": "PNG 与 HTML artifact 关联，路径/尺寸/字体/版本可追溯",
+      "source": "plan-20261114-001 验收⑥"
+    },
+    {
+      "id": "R7",
+      "text": "部署与 CI 文档含 Chrome/字体/升级检查清单",
+      "source": "plan-20261114-001 验收⑦"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261114-001.json",
+      "summary": "状态 doing→in_review、progress 95、links 增 pr/test（保留 adr/module/branch）",
+      "commit": "705c88c"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "交付记录：PNG 导出基础设施（180min）",
+      "commit": "705c88c"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "plan 生命周期 todo→doing→in_review 记录",
+      "commit": "705c88c"
+    },
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "K 线图例右对齐并保留中文「K 线」条目（相对上一份交付的唯一代码变更）",
+      "commit": "1619e29"
+    },
+    {
+      "path": "tests/test_agent_chart_png_zh.py",
+      "summary": "新增图例区墨迹断言，验证中文图例字形",
+      "commit": "1619e29"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests -q",
+      "result": "全量通过（含图例改动）",
+      "passed": true,
+      "evidence": "511 passed, 1 skipped, 2 subtests in 41.39s"
+    },
+    {
+      "command": "pytest tests/test_agent_chart_png_zh.py tests/test_agent_chart_png_export.py tests/test_agent_chart_render.py -q",
+      "result": "目标用例通过",
+      "passed": true,
+      "evidence": "46 passed in 19.84s"
+    },
+    {
+      "command": "ruff check astock app.py tests --select E9,F63,F7,F82",
+      "result": "静态检查通过",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "类型检查通过",
+      "passed": true,
+      "evidence": "Success: no issues found in 35 source files"
+    },
+    {
+      "command": "CI run 43790705465（最终提交 705c88c）",
+      "result": "Linux CI 通过",
+      "passed": true,
+      "evidence": "test job pass；png-export job pass（真实导出 5 passed，artifact chart-png 已上传）"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub workflow 作用域（gh OAuth）",
+      "reason": "推送 .github/workflows/ci.yml",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub push / PR",
+      "reason": "分支推送与 PR #17",
+      "status": "granted"
+    },
+    {
+      "name": "本地 git 代理绕过",
+      "reason": "本地代理未监听，直连偶发 reset；已用 -c http.https://github.com.proxy= 绕过",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "fix/agent-chart-png-kaleido",
+    "commit": "705c88c",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/17",
+    "ci": "run 43790705465: test pass, png-export pass (final commit 705c88c)",
+    "merge": "未合并，等待评审 round 2",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261116-007",
+  "next": "评审 round 2 复核；合并后同步 main 与部署文档；若 CI 的 Chrome/Ubuptu 镜像或 kaleido 升级导致 png-export 失败，按 ops 文档检查清单复核并补充 handoff。",
+  "createdAt": "2026-11-16T02:14:47.017Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-008.md"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwnlpll3-c475bb",
+  "threadId": "rev-20261119-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "audit",
+  "file": "astock/agent/chart_service.py",
+  "lines": "114-125, 140-144",
+  "title": "传入不存在的 run_id 时 chart_service 自建 running run 且成功后永不 finish",
+  "evidence": "chart_service.py:113 注释写「只有调用方明确给了真实 run 才登记；直接渲染绝不合成 run」，但 114-125 行在 `run_id is not None` 且库中查不到时直接 `ensure_run(..., status=\"running\", session_id=session_id or \"chart\")`；随后只有 `PNGExportError` 分支会 `fail_run`（140-144），正常成功或其它异常路径都没有 finish。store.py:447 的 `ensure_run` 文档明确「v2 起 agent_runs 只服务真实 Agent（run_kind='agent'）；直接渲染不调用本函数」，v2 冻结 §5 要求 ensure_run/finish_run 成对。结果是任何调用方传入一个尚未创建的 `run_id`，都会在审计库留下永久 `status='running'` 的 run；测试 `test_png_mode_require_raises_and_marks_run_failed`（tests/test_agent_chart_render.py:581-602）恰好把这个自动建 run 的行为固化成期望，掩盖了成功路径的泄漏。",
+  "suggestion": "chart_service 不应创建 run：若 `run_id` 非空但库中不存在，直接抛 `ValueError`/`ChartSpecError`（文案说明「run_id 必须由 runtime 先 ensure_run」），让 run 生命周期只归 runtime；成功渲染不得修改 run 状态。若确实要保留自动建 run 的兼容行为，则必须在 finally 中 finish，但这会把 Agent 的 run 提前结束，故推荐 fail-fast。同步修改 tests/test_agent_chart_render.py:581-602：改为预建 run 后测试 PNG 失败置 failed，并新增「传入不存在的 run_id 抛错且不新增 agent_runs 行」「成功后既有 run 仍为 running、由 runtime finish」两个用例。",
+  "confidence": 0.94,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T15:29:22.844Z"
+  },
+  "createdAt": "2026-11-19T13:43:53.223Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T15:29:22.844Z"
+    }
+  ]
+}

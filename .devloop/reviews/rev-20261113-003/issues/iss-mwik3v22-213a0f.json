@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwik3v22-213a0f",
+  "threadId": "rev-20261113-003",
+  "roundNo": 6,
+  "severity": "P2",
+  "category": "docs/contract",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "262-263",
+  "title": "恢复 v1 时把 bbox 的两类已实现语义删成单一 [x0,y0,x1,y1]，并把它误标成 v2 草案",
+  "evidence": "当前 v1 只写 `\"bbox\": [x0,y0,x1,y1]|null`（docs/AStockAgent_interface_freeze_v1.md:262-263），删掉了原先“表格 bbox 为 [row_start,col_start,col_end,col_end]（1 基）、PDF 为 [x0,y0,x1,y1]”的区分。但 main 代码 astock/agent/files.py:17-18 明确工作表 chunk 的 bbox 是 `[row_start, col_start, row_end, col_end]`（1 基），PDF 表格才是 pdfplumber 的 `[x0,y0,x1,y1]`；files.py:803-823 也按该格式写入，tests/test_agent_files.py:373-375/426/468-469/534/585/617-645 均断言该格式。另一方面，新增的 docs/AStockAgent_interface_freeze_v2_draft.md:20-26 却把这段已在 main 实现的 bbox 语义整体标成“v2 草案”，等于把已实现契约降级为未实现草案，而 v1 正文丢失了该约束。注：v1:233 的“files.py 待建/未实现”是 07f4af7 之前就存在的陈旧状态，不计入本次。",
+  "suggestion": "在 v1 §4 恢复 bbox 两分类原文：PDF 页面坐标 `[x0,y0,x1,y1]`（points，左上原点）、Excel/CSV/DOCX 表格坐标 `[row_start,col_start,row_end,col_end]`（1 基闭区间），文本块 `bbox=null`、表格块带 `cells` 与 `sheet`；并在 `extracted.jsonl` 行结构处写成 `\"bbox\": [x0,y0,x1,y1] | [row_start,col_start,row_end,col_end] | null` 或加一句指向该说明。同时从 docs/AStockAgent_interface_freeze_v2_draft.md §4 删掉这段（它已在 v1/main 实现，不属于 v2 草案），v2 草案只保留真正未实现的 DDL/meta 变更。补一条文档回归断言（可加在现有 test_freeze_v1_doc_stays_v1_and_v2_only_lives_in_draft 旁）：v1 含 `row_start` 与 `x0` 两种 bbox 说明，v2 草案不再重复声明 bbox 为草案。",
+  "confidence": 0.92,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T01:04:22.047Z"
+  },
+  "createdAt": "2026-11-16T01:00:08.570Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T01:04:22.047Z"
+    }
+  ]
+}

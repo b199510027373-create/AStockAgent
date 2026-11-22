@@ -1,0 +1,89 @@
+{
+  "id": "ho-20261117-028",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261117-003",
+  "sessionId": "",
+  "title": "评审：Agent 审计表与安全限额（v2：内容/版本/引用）",
+  "summary": "第 1 轮全量评审结论：request_changes。共 9 条问题，0 P0 / 5 P1 / 4 P2；当前不满足 approve 条件（openP1=5）。\n\n5 条 P1 阻断点：\n1) artifact 身份错误：store.py:312-316 仍用 digest+filename 生成 id，env_fingerprint 未参与；chart_render.py:1423 固定 \"chart.html\"，环境变化但 HTML 字节相同时会在 store.py:711-719 抛 ArtifactIdentityConflict，同内容不同文件名会重复建行。违反 AC2/ADR-017 C3/spec §4.4。\n2) runtime 审计缺 temperature/seed/code_version（runtime.py:475-483）；agent_runs 有列、ADR-017 §3 有要求，ensure_run 的 ON CONFLICT DO NOTHING 使 chart_render 也无法补写（store.py:437）。\n3) _finish_audit 把 record_step 与 finish_run 放在同一个 `except Exception: pass` 里（runtime.py:511-543），record_step 失败会跳过 finish_run，run 永久 running，违反 spec §7.2。\n4) chart_render png_mode=require 失败先 fail_run（chart_render.py:1462-1469），registry 把异常转 ToolResult 后 runtime 继续，finish_run 无条件改回 success/partial（store.py:483-489），审计终态与工具失败不一致；现有测试只测即时状态。\n5) chart_render 仍把 5000 行 data 写进 meta_json 且不写 data_digest（chart_render.py:1535、1207-1234），而 load_artifact 的 recomputed 只认 data_digest（store.py:936-939），真实 artifact 的 recomputed 必然不可用，且版本表膨胀；违反 spec §3.7/§4.6/§4.7。\n\n4 条 P2：迁移备份吞 checkpoint 失败后用 copy2（store.py:1250-1259）；ensure_schema 迁移不传 db_path（store.py:391-398）；RenderedFigure.metadata 缺 artifact_version/meta_digest（chart_render.py:298-311、1537）；runtime 把总 token 全写 completion_tokens（runtime.py:534-540、store.py:486）。\n\n测试证据核对：开发者声称的 21/106/136/662 passed、mypy、ruff、PR #30 CI passed 与仓库记录一致，但这些用例没有覆盖上述 5 条 P1 的关键路径（env 变化、落库失败、runtime 收尾覆盖、真实 render→recomputed、审计 provenance 字段），因此不能作为本轮通过的依据。\n\n修复责任与完成条件：开发在下一轮（第 2 轮，diff scope）逐条修复 5 条 P1，并为每条补上可执行的回归测试（env 变化/同内容不同文件名、三列 provenance、record_step/finish_run 失败注入、PNGExportError 经 runtime 收尾、真实 render→load_artifact(recomputed)）。4 条 P2 应修复或在交付文档中给出明确延期理由与后续计划。复核时以 openP0=0 且 openP1=0、上述测试在 CI 通过为准；在此之前不标记完全解决，也不合并 PR #30。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 5,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "artifact_id 仍由 digest+文件名派生，环境变化会撞身份、同内容不同文件名会重复建行",
+        "suggestion": "把 artifact 身份改为内容+环境寻址：至少将 env_fingerprint 纳入 artifact_id 种子，并按 spec §4.4 使用 canonical_spec+data_digest+env_fingerprint；文件名只作为落盘路径的一部分，不参与逻辑身份。若同一 digest 已存在但 env 不同，应生成新 artifact（新 id/新路径），而不是抛 ArtifactIdentityConflict。补两个测试：同一 HTML 在 env1→env2 下渲染得到两个 artifact 且都可用；同 digest 不同 filename 只保留一行 artifact、link 指向同一行。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "runtime 审计未记录 temperature/seed/code_version，且 ensure_run 的 DO NOTHING 使后续无法补写",
+        "suggestion": "给 AgentRuntime/ _start_audit 增加 temperature、seed、code_version（或从 model.adapter 读取）并传入 ensure_run；若模型适配器不暴露这些值，也应显式写 None 并在交付文档说明，而不是静默遗漏。可在 ensure_run 冲突分支补充“只允许补空列”的更新（或单独 update_run_provenance），确保 chart_render 等后续调用能补写 code_version。补测试断言 agent_runs 三列等于配置值/代码版本。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "_finish_audit 把 record_step 与 finish_run 放在同一个吞异常的 try 里，任一步失败都会留下永久 running",
+        "suggestion": "把 finish_run 放进独立的 finally（或至少在外层 finally 中兜底），确保无论 step 写入是否成功都执行一次终态更新；若 finish_run 也失败，用最小 UPDATE 将 status 置 failed 并写 error，或记录可重试的审计失败标记。不要用单个 `except: pass` 包住终态写入。补测试：monkeypatch record_step 抛异常，断言 run 最终不是 running；monkeypatch finish_run 抛异常，断言有失败兜底且异常不影响 Agent 返回。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "chart_render 的 fail_run 会被 runtime 的 finish_run 以 success/partial 覆盖，审计终态与工具失败不一致",
+        "suggestion": "明确终态所有权：要么 chart_render 不再对整条 Agent run 调 fail_run（只记录工具错误/失败 artifact，由 runtime 统一判定），要么 finish_run 在 status='failed' 时拒绝降级/覆盖 error（例如 `WHERE status != 'failed'`，或用 `COALESCE` 保留首个失败原因）。补一个 runtime + 图表工具的集成测试：工具抛 PNGExportError 后，agent_runs.status 必须仍为 failed 且 error 非空。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "chart_render 仍把 5000 行 data 快照写进 meta_json 且不写 data_digest，真实 artifact 的 recomputed 回放不可用",
+        "suggestion": "渲染时计算快照的规范 digest（如 sha256(canonical_json(snapshot))），把 data_digest、data_rows、data_truncated 写进 meta，把 rows 落到独立文件（按 spec 的 data.parquet 或现有 blob 布局），并让 `_load_artifact_frame` 与 `load_artifact(mode=\"recomputed\")` 都从该文件读取。补端到端测试：真实 render 后 meta 不含完整 rows，`load_artifact(mode=\"recomputed\")` 能返回快照，回放图与首次渲染的 data_as_of 一致。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "迁移备份先 checkpoint 但吞掉失败，再用 shutil.copy2 复制主文件，WAL 未落盘时备份可能缺已提交事务",
+        "suggestion": "检查 `PRAGMA wal_checkpoint(TRUNCATE)` 的返回（busy/log/checkpointed 列），非 0 时中止迁移并提示先停写；或直接使用 sqlite3 的 `conn.backup()` / `VACUUM INTO` 生成一致性备份，不依赖主文件复制。备份完成后再校验备份的 integrity_check 和关键表行数。补一个 WAL 未 checkpoint 场景的测试（可用第二个连接持有读事务模拟 busy）。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "ensure_schema 调 migrate_v1_to_v2 时未传 db_path，自定义连接迁移会把 DEFAULT_DB_PATH 当备份源",
+        "suggestion": "从连接推导数据库路径（`PRAGMA database_list` 的 file 列）或给 ensure_schema 增加 db_path 参数并透传；`:memory:` 时跳过备份但明确记录/告警。补测试：自定义 tmp 路径建 v1 库后调 ensure_schema，断言备份文件就在该 tmp 路径旁，而不是默认库。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "RenderedFigure.metadata 缺 artifact_version/meta_digest，record_artifact 返回的版本号被丢弃",
+        "suggestion": "给 RenderedFigure 增加 artifact_version 和 meta_digest 字段，render 返回时填入 record_artifact 的实际返回值（不要丢弃 _artifact_version）；metadata() 一并输出。补测试：两次渲染同一 artifact，第二次（meta 变化）metadata 的 version=2、meta_digest 与 DB 最新版本一致。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "runtime 把总 token 作为 completion_tokens 传入 finish_run，prompt_tokens 永远为 0，成本拆分失真",
+        "suggestion": "如果模型响应/网关能提供 prompt/completion 拆分，给 finish_run 增加 prompt_tokens 参数并分别写入；如果只能拿到总数，则新增 total_tokens 列或明确把 completion_tokens 文档化为“总 token”，不要保留一个永远为 0 的 prompt_tokens 误导查询。补测试断言两列与模型 usage 一致，或明确 total 语义。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-17T14:32:11.971Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-028.md"
+}

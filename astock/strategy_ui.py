@@ -3,9 +3,8 @@ from __future__ import annotations
 import gradio as gr
 import pandas as pd
 
-from .strategy_lab import PortfolioResult, portfolio_figure, portfolio_walk_forward
 from .recommend import parse_universe
-from .utils import is_code, normalize_code
+from .strategy_lab import portfolio_figure, portfolio_walk_forward
 
 
 def _pct(value, digits: int = 2) -> str:
@@ -13,7 +12,7 @@ def _pct(value, digits: int = 2) -> str:
         if value is None or pd.isna(value):
             return "—"
         return f"{float(value) * 100:.{digits}f}%"
-    except Exception:
+    except (TypeError, ValueError):  # 非数值/不可格式化时显示占位
         return "—"
 
 
@@ -22,7 +21,7 @@ def _num(value, digits: int = 2) -> str:
         if value is None or pd.isna(value):
             return "—"
         return f"{float(value):.{digits}f}"
-    except Exception:
+    except (TypeError, ValueError):  # 非数值/不可格式化时显示占位
         return "—"
 
 
@@ -33,7 +32,7 @@ def run_lab(
     train_years: float,
     test_months: int,
     metric_label: str,
-    progress=gr.Progress(),
+    progress=gr.Progress(),  # noqa: B008 - Gradio 回调惯例：Progress 默认实例由框架注入
 ):
     metric = "sharpe" if metric_label == "夏普" else "annual"
     try:

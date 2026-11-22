@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwikd19c-20b93b",
+  "threadId": "rev-20261116-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "artifact",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1246-1249,1265-1278",
+  "title": "PNG artifact 只记路径：尺寸/字体/kaleido 与 Chrome 版本/PNG digest 全缺失，不可追溯",
+  "evidence": "chart_render.py:1246-1249 把 PNG 写入内容寻址目录时丢弃了 put_content 返回的 rel path 与 digest，只把绝对路径存进 `png_path`；chart_render.py:1265-1278 的 meta 只有 png_path/degraded/warnings，没有 PNG 的宽高、字体族、kaleido 版本、Chrome 版本，PNG 自身也没有独立 digest/行记录。tests/test_agent_chart_png_export.py:63-65 只断言 png_path 与 degraded，未覆盖这些追溯字段。验收第 6 条要求「路径/尺寸/字体/版本可追溯」，目前只有路径。",
+  "suggestion": "在 meta 中增加 png 子对象（或平铺键）：`png_path`、`png_rel_path`、`png_digest`（sha256）、`png_width`、`png_height`、`png_scale`、`font_family`、`kaleido_version`、`chrome_version`（kaleido 0.2 写 `\"bundled\"`），并把 kaleido/chrome 版本同时写进 params 以参与 artifact 复现判断。同步扩展 tests/test_agent_chart_png_export.py：断言上述键存在、png_digest == sha256(文件)、宽高与 figure.layout 一致；store.prune_artifacts 的保护集合可改用 png_digest，替代现在从路径反解 digest 的 _path_digest。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:21:21.901Z"
+  },
+  "createdAt": "2026-11-16T01:07:16.512Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:21:21.901Z"
+    }
+  ]
+}

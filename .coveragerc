@@ -9,4 +9,36 @@ omit =
 [report]
 show_missing = True
 skip_empty = True
-fail_under = 50
+precision = 2
+# 覆盖率门槛按实测重设（plan-20261103-012），旧值 50% 早已低于实际水平，形同虚设。
+#
+# 实测基线（同一 commit，`coverage run -m pytest tests -q -m "not png"`）：
+#   本 PR CI Linux（2026-11-17, run 43935079016）：9248 stmts / 2178 miss = 76.45%（门禁权威值）
+#   本地 Windows（Python 3.13.5，同一 commit，610 passed）：9248 / 2157 = 76.68%
+#   PR #21 CI Linux（2026-11-17, run 43928703294）：9247 / 2176 = 76.47%
+#   本地改造前同机（558 passed）：9247 / 2156 = 76.68%
+#   main CI Linux（2026-11-16, run 43923401645，旧代码）：9266 / 2188 = 76.39%
+# 平台差异来源：Linux 上有 1 个用例按平台跳过（610/609 passed 之差），部分分支不执行。
+# 门槛比 76.47% 低 0.02pp 的原因：astock/scheduler.py 为守住 PR #9 五日观察期回退到 92f5e47
+# 原文（评审 iss-mwjmhnq7-9a1c07），恢复的两处 try/except 分支在 Linux 上未被覆盖，
+# 使 stmts +1、miss +2；观察期结束（2026-11-21）清理该文件后应复核并只升不降。
+# 门槛取 CI 实测显示值 76.45（精确 76.449%）：coverage 的 fail-under 比对用的是按 precision
+# 四舍五入后的百分比（本地已验证：精确 76.6951% 可通过 --fail-under=76.70）。
+# 因此门槛等于实测显示值即「不低于当前实测」，且任一语句回退会显示 76.44 → 直接红。
+# 若未来 CI 实测低于该值，以 CI 日志百分比为准调整本行并在此注明，不得下调到实测值以下。
+#
+# 零余量门槛的失败处置流程（评审 iss-mwjmi7ay-97eadf）：
+# 门槛等于实测显示值，意味着「净删若干条已覆盖语句」也会让比例掉到门槛下并让 CI 变红，
+# 即使覆盖率质量并未下降。遇到这种红时按以下顺序处理，不得直接下调门槛：
+#   1. 先看 `coverage report -m` 的 Missing 列，确认是「删除已覆盖代码」而非「新增未覆盖代码」；
+#   2. 若属删除已覆盖代码导致的合法重构，在同一 PR 内补等量断言（把删掉的覆盖点迁到新实现），
+#      使比例回到 76.45% 以上；无法补测时在 PR 描述中说明理由与影响面；
+#   3. 只有确实无法补测时，才允许按 CI 新实测值显式调整 fail_under，并同步修改
+#      tests/test_ci_quality_gates.py 的 MIN_COVERAGE_FLOOR 与 CI step 注释，由评审确认。
+# 底线：fail_under 与 MIN_COVERAGE_FLOOR 必须同时改，防止门槛被静默下调。
+#
+# 分阶段目标（同时写在 .github/workflows/ci.yml 的 step 注释里）：
+#   P1（当前）：76.45% —— 等于 CI 实测显示值，任一语句回退即失败
+#   P2：80% —— 补齐 agent 层与数据管道异常分支（见 coverage report 的 Missing 列）
+#   P3：85% —— 覆盖 UI 之外的调度/推荐主流程
+fail_under = 76.45

@@ -2,14 +2,14 @@
   "id": "plan-20261107-006",
   "title": "行情/指标工具：实时 K 线与指标",
   "description": "依据 ADR-018 实现行情/指标工具：quote（最新价/涨跌幅/成交额）、kline（日/周/月 + 1/5/15/30/60 分钟，支持 MA/BOLL/成交量叠加）、indicator（MA/EMA/RSI/MACD/BOLL/KDJ/ATR）。复用 data.load_daily/load_minute 与 indicators.add_all；rt_min 走 30s 缓存；每个结果带 data_as_of + data_time；默认 qfq、涨跌停/成交用 raw；非交易时段、延迟、停牌均显式标注。",
-  "status": "todo",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-29",
   "estimateH": 20,
-  "progress": 0,
+  "progress": 100,
   "acceptance": [
     "工具：quote / kline / indicator 可被 Agent 调用",
     "交易时段返回带 data_time 的最新分钟 K 线",
@@ -30,17 +30,41 @@
     "indicators"
   ],
   "deps": [
-    "plan-20261107-005"
+    "plan-20261107-005",
+    "plan-20261114-003"
   ],
   "links": {
     "adr": [
       "ADR-016",
       "ADR-018"
     ],
+    "branch": "feat/market-tools (merged)",
+    "commit": "a855b37",
+    "mergeCommit": "a855b370a20abc1eae8328357c96d8b1d777126c",
     "mergedFrom": [
       "plan-20261110-007"
+    ],
+    "module": "agent_tools",
+    "pr": "31",
+    "review": [
+      "rev-20261118-001 (approved, r1→r4)",
+      "ho-20261119-003",
+      "ho-20261119-004",
+      "ho-20261119-006"
+    ],
+    "test": [
+      "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread -> 714 passed, 1 warning, 12 subtests passed in 85.22s（commit 74d3687，P2 修复后）",
+      "pytest tests/test_data_time_semantics.py -q -p no:cacheprovider -> 26 passed in 3.35s（ADR-018 指定 test_latest_bar_time_is_single_source / test_non_trading_session_marks_eod / test_stale_rt_min_marks_delayed，停牌缺 bar 3 例含精确缺口 12 天断言）",
+      "pytest tests/test_agent_tools.py -q -> 58 passed（含 ADR-018 指定 test_market_result_requires_both_timestamps）",
+      "mypy astock -> Success: no issues found in 40 source files；mypy tests/test_data_time_semantics.py -> Success",
+      "ruff check astock tests -> All checks passed",
+      "gh pr checks 31（commit 74d3687）-> run 44343766378 test pass 1m44s / png-export pass 1m21s（commit 266538d 的 run 44338507167 中 png-export 首跑因 apt-get 字体安装超 job timeout 失败，rerun --failed 后 pass）",
+      "main merge commit a855b37 CI run 44344659084 / 记账 9114b4e run 44345604730 / 收尾 6498ef7 run 44346188257 -> all completed success",
+      "第 4 轮评审 rev-20261118-001-r4（scope=diff，base 266538d → 74d3687）-> verdict=approve，本轮 0 条新问题，iss-mwmb8h5m 标 fixed",
+      "历史轮次：commit 3fc1ddf -> 711 passed（run 44328403133 双 job pass）；commit 92b4b62 -> 702 passed（run 44258867189 双 job pass）"
     ]
   },
   "createdAt": "2026-11-07T14:12:10.292Z",
-  "updatedAt": "2026-11-07T14:13:12.196Z"
+  "updatedAt": "2026-11-18T16:30:44.004Z",
+  "devSessionId": "session-604a4898-03c2-4f30-90ad-1559cb54410e"
 }

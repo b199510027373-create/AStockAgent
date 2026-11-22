@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwimyt7o-da451d",
+  "threadId": "rev-20261116-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "artifact",
+  "file": "astock/agent/store.py",
+  "lines": "255-288",
+  "title": "复用旧 PNG 时 meta 留下矛盾的 provenance：degraded=False + 旧 png_path，却保留本次的 png_mode/png_error",
+  "evidence": "_merge_artifact_meta（store.py:255-288）在最新一次渲染没出 PNG 时恢复旧 `png_path`、把 `degraded` 置回 False、并过滤 PNG 降级告警，但 chart_render.py:1514-1515 仍把本次的 `png_mode`/`png_error` 写进 meta，且 `png_error` 不在恢复/清理列表里。结果是：同一 HTML 先成功导出 PNG，之后 Chrome 坏掉用 `png_mode=\"auto\"` 重渲染 → meta 变成 `png_path=<旧>，png_digest=<旧>，degraded=False，png_error=\"Chrome executable not found\"`；用 `png_mode=\"off\"` 重渲染 → meta 是 `png_mode=\"off\"` 却带 `png_path`。验收第 6 条要求可追溯，这种自相矛盾的记录会让排查（ops 文档 §5 字段表）读错。tests/test_agent_store.py:436-487 只覆盖 png_path/degraded/warnings，没覆盖 png_mode/png_error。",
+  "suggestion": "复用旧 PNG 时显式标注来源：在 _merge_artifact_meta 里加 `merged[\"png_reused\"] = True`，并把 `png_error` 改名/迁移为 `png_last_attempt_error`（或直接置 None，把原因保留在一个不会与 degraded=False 冲突的键里）；同时把「产出该 PNG 的模式」写成 `png_source_mode`，不要用本次的 `png_mode` 冒充。补一条 store 级测试：先成功 PNG、再以 degraded/off 重写同一 artifact_id，断言 `png_reused=True`、`degraded=False`、`png_error` 不再表示「当前无 PNG」，且 `png_mode` 不误导。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:34:56.535Z"
+  },
+  "createdAt": "2026-11-16T02:20:11.748Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:34:56.535Z"
+    }
+  ]
+}

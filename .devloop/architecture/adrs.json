@@ -91,7 +91,7 @@
     "title": "价格口径：qfq 信号 + raw 限价 + ST/IPO",
     "status": "accepted",
     "date": "2026-11-03",
-    "summary": "信号与展示统一 qfq，成交/涨跌停只用原始价；ST 5%；缓存记录 base_factor。",
+    "summary": "信号与展示统一 qfq，成交/涨跌停只用原始价；ST 5%；缓存记录 base_factor。2026-11-14 D1：hfq 基准=该证券最早可用交易日因子并置 1.0，因子缺失/<=0/NaN/inf 硬失败，分钟线 metadata 带 adj/adj_base/adj_source=daily；2026-11-16 plan-20261114-003 已落地；同日评审 rev-20261116-002 补：盘中当日 bar 用最近已发布因子并标 partial/factor_as_of、全历史因子走 query_all 且校验首末覆盖、缓存 adj_base 可自证才命中（qfq 按请求 end）；第 3 轮复核（iss-mwixznmz-2f393e）：分钟路径的覆盖断言在缺因子硬失败之后恒为真，已删除，改由缺因子分支兜底并在用例中断言异常文案来源；覆盖校验只保留在日线 _fetch_daily；2026-11-20 plan-20261120-001：复权标注必须随派生帧传播——enrich()/resample_ohlcv()/period_frame() 显式带回 attrs['adjustment']，summary_markdown 图注按 adj 区分 qfq/hfq/none 并显示基准日与基准因子，hfq 不得标成不复权。2026-11-20 评审 P2（iss-mwoit6on-7d19f2 / iss-mwoit6pr-6c8c9f / iss-mwoit6qf-174fb1）：分钟盘中 partial/factor_as_of 由 market_tools.MarketSeries.metadata 与 chart_render/charts 图注消费（图中标注「盘中近似（因子截至 X）」，因子已发布时不标）；enrich()/resample_ohlcv() 空帧快速返回经 _empty_with_attrs() 回填 attrs；period_frame 用例覆盖 week/month/quarter。",
     "tags": [
       "复权",
       "回测",
@@ -181,7 +181,7 @@
     "title": "文件导入与检索：PDF / Excel / CSV / DOCX",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted-with-conditions] 文件导入：内容寻址布局、meta.json 13 字段、FTS5、file_id=f_<sha16> 五个字段；条件 C1–C4 分挂 plan-20261107-003（C1 布局/索引、C2 依赖与限额、C3 抽取自检）与 plan-20261107-004（C4 检索与表格查询契约）。",
+    "summary": "[accepted-with-conditions] 文件导入：内容寻址布局、meta.json 15 字段、FTS5、file_id=f_<sha16> 五个字段；bbox 分两类（PDF [x0,y0,x1,y1] points；Excel/CSV/DOCX [row_start,col_start,row_end,col_end] 1-based 闭区间），不得混用。条件 C1–C4 分挂 plan-20261107-003（C1 布局/索引、C2 依赖与限额、C3 抽取自检）与 plan-20261107-004（C4 检索与表格查询契约，已由 astock/agent/tools/file_tools.py + citations.py + sql_guard.py 落地，测试 tests/test_agent_tools.py）。",
     "tags": [
       "文件导入",
       "PDF",
@@ -195,7 +195,7 @@
     "title": "图表即工具产物：声明式 chart spec",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted] ChartSpec v1 字段级冻结（version=1、additionalProperties=false、白名单算子与图层）；任意 Python 转二期；承接 plan-20261107-005。",
+    "summary": "[accepted] ChartSpec v1 字段级冻结（version=1、additionalProperties=false、白名单算子与图层）；任意 Python 转二期；承接 plan-20261107-005；2026-11-19 plan-20261114-002 落地：Q4 删除 panes/style/raw 别名、Q5 chart_service 唯一审计入口 + chart_render 纯渲染、D10 data.time_field/time_semantics 禁止猜时间列、D11 transforms 走 stats.aggregate_groups；评审 rev-20261119-002 追加指标样本范围（分钟周期过滤连续竞价、日/周/月全量）与图注归因三态。",
     "tags": [
       "Agent",
       "图表",
@@ -208,7 +208,7 @@
     "title": "Agent 运行审计与安全边界",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted-with-conditions] 审计三表 DDL 冻结（含 temperature/seed/code_version/digest、status 枚举）、权限按实现七标签（无 write）；条件 C1–C3 挂 plan-20261107-008。",
+    "summary": "[accepted-with-conditions] 审计三表 DDL 冻结（含 temperature/seed/code_version/digest、status 枚举）、权限按实现七标签（无 write）；条件 C1–C3 挂 plan-20261107-008；2026-11-19 plan-20261114-002 落地：artifact/version 行永久保留只 GC 孤儿文件、corrections 仅维护脚本 tools/artifact_admin.py（actor+理由必填）、合成 run 退役、run 生命周期只归 runtime（chart_service fail-fast）、ToolContext 注入 run_id/step、回放校验 meta_digest（篡改抛 ArtifactReplayUnavailable）。",
     "tags": [
       "Agent",
       "审计",
@@ -221,7 +221,7 @@
     "title": "「实时」行情口径与 Agent 数据时点",
     "status": "accepted",
     "date": "2026-11-07",
-    "summary": "[accepted-with-conditions] 实时=rt_min+30s 缓存；data_as_of 已实现、data_time 无生产者（冻结 latest_bar_time 唯一入口）；条件 C1/C2 挂 plan-20261107-006。",
+    "summary": "[accepted-with-conditions] 实时=rt_min+30s 缓存；data_as_of 已实现、data_time 无生产者（冻结 latest_bar_time 唯一入口）；条件 C1/C2 挂 plan-20261107-006；2026-11-19 plan-20261114-002 落地：data_as_of/data_time 固定行情时点 + 新增 view_as_of/view_time 视图时点；09:25 集合竞价与盘后固定价 bar 接受并标 session=pre/post，strict 可选；分钟周期指标只用连续竞价 bar（日/周/月全量），回放分 as_recorded/recomputed。",
     "tags": [
       "实时行情",
       "数据时点",

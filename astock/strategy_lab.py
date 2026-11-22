@@ -9,7 +9,6 @@ import pandas as pd
 
 from .backtest import CostConfig, make_signals_params, run_backtest
 from .optimize import WalkForwardResult, load_data, oos_figure
-from .recommend import parse_universe
 
 STRATEGY_GRIDS = {
     "MA双均线": [

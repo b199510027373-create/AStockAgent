@@ -1,0 +1,145 @@
+{
+  "id": "ho-20261118-011",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "评审 rev-20261118-001 修复：3×P1 + 2×P2 全部关闭（commit 3fc1ddf，CI 全绿）",
+  "summary": "相对上一份交付（ho-20261118-009，commit 92b4b62）的增量：按评审线程 rev-20261118-001（changes_requested，openP0=0/openP1=3/openP2=2）逐条修复并补 9 个回归用例，提交 3fc1ddf 已推送，PR #31 的 test（1m26s）与 png-export（1m5s）两个 job 在 run 44328403133 上全绿。逐条：iss-mwm6tovm（P1）新增 _chart_range 把落图窗口钳到 chart_spec.MAX_RANGE_YEARS=10 并按 floor 真裁传给 renderer 的 frame（图注与图上内容一致），_render_kline 用 try/except ChartSpecError 兜底成 figure=None + metadata[\"chart\"][\"warning\"]，工具不再因跨 10 年月线整体失败；iss-mwm6towg（P1）补周/月 resample、指数 index_daily、指数分钟拒绝 4 条覆盖，_Deps.index_daily 去掉 # pragma: no cover；iss-mwm6toxk（P1）quote 日线回看从 bars=5 改为 QUOTE_LOOKBACK_BARS=60，长停牌也能取到最后一根 bar 并落 freshness=suspended；iss-mwm6tv83（P2）_chart_layers 返回 (layers, warnings)，ema/atr、无法识别层名、超 8 层上限三种情况写进 metadata[\"chart\"][\"warnings\"] 并拼进 text；iss-mwm6tv92（P2）抽 runtime._figure_handle() 供 _format_observation 与 _summarize_result 共用，>MAX_FIGURE_CHARS 的 figure 在部分答案里只留 artifact_id + 字符数。本地全量 pytest tests -q -> 711 passed, 1 warning, 12 subtests passed (151.11s)；mypy astock -> 40 files 干净；ruff check astock tests -> All checks passed。P2 两条均按建议修完，无保留例外。",
+  "requirements": [
+    {
+      "id": "iss-mwm6tovm",
+      "text": "P1 correctness：kline(period=\"month\", chart=True, limit>~120) 的 range 跨 10 年触发 ChartSpecError 导致工具整体失败；建议 range 钳到 10 年、ChartSpecError 兜底成 figure=None + metadata[\"chart\"][\"warning\"]，补真实 validate_chart_spec 与至少一次真实 chart_render.render 的回归",
+      "source": "review rev-20261118-001"
+    },
+    {
+      "id": "iss-mwm6towg",
+      "text": "P1 test-coverage：周/月 resample、指数 index_daily、指数分钟拒绝三条分支零覆盖；建议 4 个用例",
+      "source": "review rev-20261118-001"
+    },
+    {
+      "id": "iss-mwm6toxk",
+      "text": "P1 correctness：quote 只用 bars=5（≈10 天窗口），长停牌时 frame 空 → 抛 TushareError 走不到 suspended；建议窗口放宽到 ≥60 个交易日并补 test_quote_handles_long_suspension",
+      "source": "review rev-20261118-001"
+    },
+    {
+      "id": "iss-mwm6tv83",
+      "text": "P2 consistency：_chart_layers 静默丢弃 ema/atr、静默 out[:8] 截断；建议写进 metadata[\"chart\"][\"warnings\"] 并拼进 text，补 layers=[\"ema12\",\"atr14\"] 的断言",
+      "source": "review rev-20261118-001"
+    },
+    {
+      "id": "iss-mwm6tv92",
+      "text": "P2 consistency：runtime._summarize_result 仍把完整图表 HTML 拼进 _partial_answer，与 MAX_FIGURE_CHARS=2000 的 observation 裁剪不一致；建议复用句柄逻辑 + 单测（figure=5000 字符 → 不含 HTML、含 artifact_id）",
+      "source": "review rev-20261118-001"
+    },
+    {
+      "id": "A1-A11",
+      "text": "原计划项 11 条验收标准（ADR-018 C1/C2、eod/delayed/suspended、指标一致、@day ffill、无伪实时字段）保持不变且仍全部通过；本轮修复未改动这些口径，仅补齐失败路径与告警可见性",
+      "source": "plan-20261107-006 acceptance"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/tools/market_tools.py",
+      "summary": "import 增加 MAX_LAYERS/MAX_RANGE_YEARS/ChartSpecError；新增 QUOTE_LOOKBACK_BARS=60；quote 日线窗口 bars=QUOTE_LOOKBACK_BARS；_chart_layers 改为返回 (layers, warnings)（ema/atr→「仅表格展示」、未知层名、超 MAX_LAYERS 三种说明）；新增 _chart_range 钳到 MAX_RANGE_YEARS 并返回 floor；_render_kline 返回 tuple[str|None, dict]，按 floor 裁剪 plot frame，except ChartSpecError 降级为 figure=None + warning；kline 把 chart warnings 拼进 text",
+      "commit": "3fc1ddf"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "新增 _figure_handle(result) 统一 artifact 句柄口径，_format_observation 改用它；_summarize_result 对 >MAX_FIGURE_CHARS 的 figure 输出「图表（artifact_id=…，N 字符，完整 HTML 已落 agent_artifacts）」，短 figure 原样透传",
+      "commit": "3fc1ddf"
+    },
+    {
+      "path": "tests/test_data_time_semantics.py",
+      "summary": "新增 8 个用例：周线 resample+盘中 eod、月线 resample+真实 chart_render.render（spy 记录 frame，断言 10 年钳制、图上帧被裁剪、表格 144 根）、指数 index_daily、指数分钟拒绝、ChartSpecError 降级为表格、图层未上图告警、图层超限截断告警、quote 长停牌 suspended",
+      "commit": "3fc1ddf"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 test_summarize_result_keeps_chart_html_out_of_partial_answer：5000 字符 figure → 摘要含 artifact_id/字符数且不含 <html>；短 figure 仍原样透传",
+      "commit": "3fc1ddf"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests -q -p no:cacheprovider --timeout=900 --timeout-method=thread",
+      "result": "711 passed, 1 warning, 12 subtests passed in 151.11s",
+      "passed": true,
+      "evidence": "commit 3fc1ddf 上本机全量（相较上一份交付 702 增加 9 个新用例）；日志 .tmp-pytest-full-round2.log"
+    },
+    {
+      "command": "pytest tests/test_data_time_semantics.py -q -p no:cacheprovider",
+      "result": "23 passed in 5.32s",
+      "passed": true,
+      "evidence": "含 ADR-018 指定的 test_latest_bar_time_is_single_source / test_non_trading_session_marks_eod / test_stale_rt_min_marks_delayed，以及本轮新增的月线真实渲染、指数、ChartSpecError 降级、图层告警、长停牌用例"
+    },
+    {
+      "command": "pytest tests/test_agent_runtime.py::test_summarize_result_keeps_chart_html_out_of_partial_answer tests/test_agent_runtime.py::test_runtime_observation_keeps_chart_html_out_of_context tests/test_agent_tools.py::test_market_result_requires_both_timestamps tests/test_agent_tools.py::test_market_tools_are_registered_with_permissions tests/test_agent_tools.py::test_quote_via_registry_reports_price_and_freshness -q",
+      "result": "5 passed",
+      "passed": true,
+      "evidence": "iss-mwm6tv92 与既有 C2/权限/quote 用例同时通过"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 40 source files",
+      "passed": true,
+      "evidence": "market_tools.py 与 runtime.py 改动后仍干净"
+    },
+    {
+      "command": "mypy tests/test_data_time_semantics.py tests/test_agent_runtime.py",
+      "result": "Success: no issues found in 2 source files",
+      "passed": true,
+      "evidence": "新测试文件类型检查通过"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI test job 同命令"
+    },
+    {
+      "command": "gh pr checks 31",
+      "result": "test pass 1m26s; png-export pass 1m5s",
+      "passed": true,
+      "evidence": "run 44328403133，commit 3fc1ddf"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push 到 GitHub",
+      "reason": "沙箱内 gh auth setup-git / credential.helper 均不可用，改用 `git -c http.sslBackend=openssl -c http.extraHeader=\"Authorization: Basic <base64(gh auth token)>\"` 推送；本轮 92b4b62..3fc1ddf 推送成功",
+      "status": "granted"
+    },
+    {
+      "name": "pytest 全量本地运行（danger-full-access）",
+      "reason": "workspace-write 下 pytest tmp_path 的 os.scandir 被沙箱拒绝，会导致大面积 PermissionError 与 scheduler 用例挂起；放开后全量 711 passed",
+      "status": "granted"
+    },
+    {
+      "name": "合并 PR #31 到 main",
+      "reason": "5 条评审问题已修复且 CI 全绿，等待下一轮评审通过后的合并授权（openP1 归零前不得合并）",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/market-tools",
+    "commit": "3fc1ddf",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/31",
+    "ci": "test pass 1m26s / png-export pass 1m5s (run 44328403133, commit 3fc1ddf)",
+    "merge": "not merged",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261118-009",
+  "next": "等待下一轮评审（scope=diff，只复核这 5 条）；openP1 归零后合并 PR #31，再把 plan-20261107-006 置 done 并确认 plan-20261114-003 验收第 6 条（行情工具展示复权口径）已满足。若评审要求把日/周/月 range 改成 RANGES token 而非日期区间，可在 _chart_range 处替换实现（当前日期区间已满足 10 年上限）。",
+  "createdAt": "2026-11-18T14:51:04.746Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-011.md"
+}

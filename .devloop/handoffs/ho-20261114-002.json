@@ -1,0 +1,178 @@
+{
+  "id": "ho-20261114-002",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-005",
+  "threadId": null,
+  "sessionId": "",
+  "title": "图表管线：决策记录落地 + 架构裁决转交（PR #12）",
+  "summary": "按 docs/AStockAgent_chart_pipeline_decisions_v1.md 实施 Q1/Q2/Q3/Q7 与 D4/D9/D10：div_id 改由 spec+快照派生（同 spec 稳定、不同图唯一）、params 记录 plotly_version/python_version/code_version、RenderedFigure 增 time_point_scope（market/view/unknown）、latest_bar_time 增 strict 与 notes 且默认跳过集合竞价/盘后 bar、store 增 prune_artifacts 留存清理、_probe_time_frame 收口时间列白名单、chart_render 改为模块级 import 并补 chart_render→data/indicators 边。发现架构已于 2026-11-14 在 ADR-016 写入补充裁决 Q4=B（删除 panes/style/raw 别名）、Q5=C（chart_render 不写审计，新增 chart_service + ArtifactReader）、Q6=A（PNG 升 v1），落地项为 plan-20261114-002 与 plan-20261114-001；故本分支只交付 v1 渲染管线，未改审计模型、未删别名、未锁依赖，避免在无生产调用方时二次返工。测试全绿、CI 双绿。",
+  "requirements": [
+    {
+      "id": "R-23",
+      "text": "Q1 时点语义：data_as_of 跟随图表实际渲染窗口，并显式标注 time_point_scope（market 原始行情/view 变换后视图/unknown 无可用时点）",
+      "source": "docs/AStockAgent_chart_pipeline_decisions_v1.md §3 Q1 + §6"
+    },
+    {
+      "id": "R-24",
+      "text": "Q2 meta 真实性：meta_json 可修正，产物真实性以 digest 为准；artifact 回放按快照时间列重算时点",
+      "source": "docs/AStockAgent_chart_pipeline_decisions_v1.md §3 Q2"
+    },
+    {
+      "id": "R-25",
+      "text": "Q3 div id：由 spec + 数据快照派生（astock-chart-<8hex>），替代固定 div_id，保证同 spec 稳定、同页多图唯一",
+      "source": "docs/AStockAgent_chart_pipeline_decisions_v1.md §3 Q3"
+    },
+    {
+      "id": "R-26",
+      "text": "Q7 集合竞价 bar：latest_bar_time 默认跳过交易时段外分钟 bar 并在 notes 说明，strict=True 时仍抛错；全部越界仍抛错",
+      "source": "docs/AStockAgent_chart_pipeline_decisions_v1.md §3 Q7"
+    },
+    {
+      "id": "R-27",
+      "text": "D9 留存清理：agent_artifacts 提供 prune_artifacts（按时间删行、跳过 keep_digests、按引用 GC 文件，仅 unlink/rmdir）",
+      "source": "docs/AStockAgent_chart_pipeline_decisions_v1.md §2 D9 + 冻结清单 §5"
+    },
+    {
+      "id": "R-28",
+      "text": "D10 时间列探测收口：只信任列名白名单/含 date|time 且整列可解析的列，避免 code=20240102 之类被当成时间",
+      "source": "docs/AStockAgent_chart_pipeline_decisions_v1.md §2 D10"
+    },
+    {
+      "id": "R-29",
+      "text": "D6/模块图：chart_render 使用模块级 import，模块图补 chart_render→data、chart_render→indicators、chart_render→agent_store 三条边",
+      "source": "docs/AStockAgent_chart_pipeline_decisions_v1.md §2 D6 + .devloop/architecture/modules.json"
+    },
+    {
+      "id": "R-30",
+      "text": "架构补充裁决（2026-11-14）：Q4=B 删除别名、Q5=C chart_service 唯一审计入口、Q6=A PNG 升 v1，落地项为 plan-20261114-002 / plan-20261114-001；本分支保持 v1 行为并在 docs/冻结清单标注",
+      "source": "ADR-016 2026-11-14 补充裁决 + plan-20261114-001/002"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "div_id 由 spec+快照派生（figure_div_id）、RenderedFigure.time_point_scope、params 记 plotly/python 版本、CODE_VERSION 可用 ASTOCK_CODE_VERSION 覆盖、删除 4 处延迟 import 改模块级、_probe_time_frame 时间列白名单、meta 增 div_id/time_point_scope",
+      "commit": "75b5d64"
+    },
+    {
+      "path": "astock/data.py",
+      "summary": "latest_bar_time 增 strict/notes 参数，默认跳过交易时段外分钟 bar 并记录说明；新增 _is_session_time 两段闭区间判定",
+      "commit": "75b5d64"
+    },
+    {
+      "path": "astock/agent/store.py",
+      "summary": "新增 prune_artifacts（按 created_at 清理、keep_digests 保护、按引用 GC 文件、仅 Path.unlink/rmdir）",
+      "commit": "75b5d64"
+    },
+    {
+      "path": ".devloop/architecture/modules.json",
+      "summary": "补 chart_render→data（market-read）、chart_render→indicators（compute）、chart_render→agent_store（artifact-write）三条边",
+      "commit": "75b5d64"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "§3.2.1 增「新写入用规范名」、§3.3 聚合列名 <field>_<func>、§3.4 meta 追加键与复现前提及 PNG 转 plan-20261114-001、§5 prune_artifacts 与 digest 真实性、§6.2 三参签名与越界 bar 规则",
+      "commit": "75b5d64"
+    },
+    {
+      "path": "docs/AStockAgent_chart_pipeline_decisions_v1.md",
+      "summary": "新增决策记录：D1–D11 说明与风险、Q1–Q7 待裁决项、§6 实施回填表（标注架构裁决 B/C/A 与转交计划项）",
+      "commit": "75b5d64"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "新增 div_id 派生稳定性/唯一性、time_point_scope 三态、时间列白名单用例；meta 断言增至 div_id/time_point_scope 与 params 版本键",
+      "commit": "75b5d64"
+    },
+    {
+      "path": "tests/test_data_pit_events.py",
+      "summary": "latest_bar_time strict 模式用例改名，新增默认跳过越界 bar（09:25/15:01 → 09:35，notes 含 2 根）与全部越界抛错用例",
+      "commit": "75b5d64"
+    },
+    {
+      "path": "tests/test_agent_store.py",
+      "summary": "新增 prune_artifacts 清理/keep_digests/delete_files 用例",
+      "commit": "75b5d64"
+    },
+    {
+      "path": "tests/test_agent_chart_png_export.py",
+      "summary": "新增缺 kaleido 即 skip 的真实 PNG 导出用例（PNG 头、meta png_path、degraded=False），供 plan-20261114-001 接管 CI",
+      "commit": "75b5d64"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-005.json",
+      "summary": "记录 CI run 43473738669 与 121/478 测试证据、review 线程 rev-20261113-003、progress 95",
+      "commit": "43f69d7"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_spec.py tests/test_agent_chart_render.py tests/test_agent_store.py tests/test_data_pit_events.py -q",
+      "result": "121 passed",
+      "passed": true,
+      "evidence": "chart_render 33（含新增 div_id/scope/白名单）· data 26 · store 12 · spec 50"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "478 passed, 2 skipped, 2 subtests passed",
+      "passed": true,
+      "evidence": "2 skipped 为缺 kaleido 的 PNG 用例；根目录 pytest 会误收 release/AStockAgent/test_ma.py，故全量统一跑 tests"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock",
+      "result": "Success: no issues found in 34 source files",
+      "passed": true,
+      "evidence": "含新签名 latest_bar_time(*, freq, strict, notes) 与 prune_artifacts"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "32 passed, 1 skipped",
+      "passed": true,
+      "evidence": "modules.json 描述与契约落点门禁通过"
+    },
+    {
+      "command": "gh run view 43473738669 / 43473992744",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "head 75b5d64（功能提交）与 43f69d7（plan 证据）两次 CI 均通过"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub 分支与 PR 写权限",
+      "reason": "推送到 feat/agent-chart-pipeline 并更新 PR #12",
+      "status": "granted"
+    },
+    {
+      "name": "kaleido 依赖安装",
+      "reason": "本机未安装；真实 PNG 导出用例按 skip 处理，版本锁定/CI 真实导出归 plan-20261114-001",
+      "status": "blocked"
+    },
+    {
+      "name": "ASTOCK_DB_PATH / AGENT_ARTIFACT_DIR",
+      "reason": "测试与本地复现用临时目录隔离，不写生产库",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chart-pipeline",
+    "commit": "43f69d7",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/12",
+    "ci": "https://github.com/b199510027373-create/AStockAgent/actions/runs/43473738669",
+    "merge": "未合并（等待 reviewer 对 rev-20261113-003 复审；PR #12 可合并）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-020",
+  "next": "1) 复审 rev-20261113-003：8 条问题已在 75c60e3 修复，本轮再补 div_id/版本/时点语义/留存清理；2) Q4=B（删除 panes/style/raw 别名）与 Q5=C（chart_render 去审计 + 新增 chart_service/ArtifactReader）按架构裁决在 plan-20261114-002 执行，需先合并本 PR 与 plan-20261107-008；3) Q6=A PNG 基础设施（锁 plotly/kaleido 版本、Chrome/中文字体、CI 真实导出）在 plan-20261114-001；4) ADR-016 补充裁决文件由架构提交，本分支未纳入；5) 合并后把 plan-20261107-005 转 done 并补最终 update handoff。",
+  "createdAt": "2026-11-13T17:35:25.084Z",
+  "markdownPath": ".devloop/handoffs/ho-20261114-002.md"
+}

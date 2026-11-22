@@ -1,0 +1,113 @@
+{
+  "id": "ho-20261111-001",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261110-003",
+  "threadId": null,
+  "sessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7",
+  "title": "PR #7 已开启且 CI 通过（评审门禁交付）",
+  "summary": "PR 已开启且 CI 通过。gh CLI 实际位于 C:\\Program Files\\GitHub CLI\\gh.exe（未加入 PATH，且当前进程环境里没有 GH_TOKEN，但 keyring 已登录 b199510027373-create、scope 含 repo），用绝对路径调用成功创建 PR #7：main ← feat/adr-gate-freeze，标题「架构契约评审门禁：ADR-002/010/013–018 裁决与六接口冻结」，正文含 8 条裁决表、改动清单、四条测试命令结果与三处评审重点。PR mergeable=MERGEABLE，CI run 42950484195 的 test job 1m3s 通过。plan-20261110-003 的 links 已补 pr/ci，仍为 in_review / 100，等评审角色给结论后再置 done。相对上一份 handoff（ho-20261110-020）本节只新增「PR 开启 + CI 通过」这一状态变化，交付物本身未改动。",
+  "requirements": [
+    {
+      "id": "REQ-2",
+      "text": "验收 1：8 条 proposed ADR 全部结论且工作台无「已实现但 proposed」——已达成（18 条均 accepted，summary 带裁决标签）。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-4",
+      "text": "验收 3：冻结 6 接口——PR #7 内 docs/AStockAgent_interface_freeze_v1.md §1–§6。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-5",
+      "text": "验收 4：18 条规则逐条落点——contract.json v1.1 + 落点表，由门禁测试守住。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-7",
+      "text": "验收 6：ADR-012 治理附录——含 7 个自然日追认与状态变更记录表。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-8",
+      "text": "验收 7：11-12 前结束不阻塞 003/005——11-10 完成，11-11 开 PR #7 且 CI 绿，无 deferred。",
+      "source": "plan-20261110-003 acceptance"
+    }
+  ],
+  "changes": [
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "PR #7 内主交付：六接口冻结清单 v1（本次未改，仅开启 PR 与验证 CI）。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": "tests/test_architecture_gate.py",
+      "summary": "PR #7 内第二提交：21 项门禁测试（含模块图漂移检查）。",
+      "commit": "06af067"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-003.json",
+      "summary": "计划项 links 新增 pr/ci 两个链接（PR #7、CI run 42950484195 success），其余字段不变。",
+      "commit": "06af067"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr create --base main --head feat/adr-gate-freeze",
+      "result": "https://github.com/b199510027373-create/AStockAgent/pull/7",
+      "passed": true,
+      "evidence": "gh 未在 PATH，改用 C:\\Program Files\\GitHub CLI\\gh.exe 绝对路径；输出 PR 链接。"
+    },
+    {
+      "command": "gh pr checks 7",
+      "result": "test\\tpass\\t1m3s",
+      "passed": true,
+      "evidence": "首次查询 pending，约 75s 后重查为 pass；run 42950484195 / job 130293344051。"
+    },
+    {
+      "command": "gh pr view 7 --json mergeable,state,statusCheckRollup",
+      "result": "OPEN / MERGEABLE",
+      "passed": true,
+      "evidence": "state=OPEN，mergeable=MERGEABLE，statusCheckRollup 仅一项 workflow=CI job=test。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q（PR 前本地复跑）",
+      "result": "260 passed, 1 skipped, 2 subtests passed",
+      "passed": true,
+      "evidence": "提交内容未变，缓存命中；远端 CI 以独立环境复验通过。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py 与 ruff check（PR 前本地复跑）",
+      "result": "Success: no issues found in 32 source files；All checks passed!",
+      "passed": true,
+      "evidence": "与 06af067 提交时一致。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "gh CLI + GitHub token",
+      "reason": "已由用户配置（C:\\Program Files\\GitHub CLI\\gh.exe，keyring 登录，scope 含 repo）；已用于创建 PR #7 与读取 CI 状态",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze（origin 同步，head 06af067）",
+    "commit": "06af067（另含 28a0dc2）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/7",
+    "ci": "CI run 42950484195（workflow test）on PR #7 → success，1m3s；GitHub mergeable=MERGEABLE",
+    "merge": "未合并（等待评审 approve）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-020",
+  "next": "1) 请评审角色开 review（devloop_review begin，scope=full）并给出结论；我可按 issue 修复（不得代写评审反馈）；2) approve 后合入 main，并在 main 上跑 tests/test_architecture_gate.py 作为门禁基线；3) 待拍板：是否将 plan-20261110-004~007 合并进既有 07-003/005/008/006（避免同一模块两条计划线），尤其 07-008 审计表起始日期需从 11-29 提前到 11-18；4) 11-13~14 做 003/005 开工前环境准备（AGENT_* 环境变量、pdfplumber/python-docx/openpyxl/duckdb、data/agent/ 已入 .gitignore）。",
+  "createdAt": "2026-11-11T03:08:16.507Z",
+  "markdownPath": ".devloop/handoffs/ho-20261111-001.md"
+}

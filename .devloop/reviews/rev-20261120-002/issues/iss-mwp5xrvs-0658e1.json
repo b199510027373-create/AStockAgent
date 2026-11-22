@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwp5xrvs-0658e1",
+  "threadId": "rev-20261120-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "docs",
+  "file": "docs/AStockAgent_agent_live_e2e.md",
+  "lines": "20-29, 74",
+  "title": "文档 §2 漏列影响运行的环境变量，§6「网关不通退规则兜底」与实现不符",
+  "evidence": "§2 的变量表（第 20-29 行）没有列 `AGENT_LIVE_E2E_WORKDIR`（代码在 tests/test_agent_live_e2e.py:372 读取以决定报告落盘根目录）以及 `AGENT_TIMEOUT_SECONDS`/`AGENT_MAX_STEPS`/`AGENT_TOKEN_BUDGET`（tests/test_agent_live_e2e.py:153-155 会覆盖运行时上限），按文档操作的人无法知道这些开关存在。更实质的是第 74 行“无 key/网关不通：`create_agent_model` 退规则兜底并 `mark_degraded`”：astock/agent/gateway.py:1413-1425 只有缺 key 时才换成 RuleFallback 并 mark_degraded；有 key 但网关不通时 probe 只置 degraded + 降 JSON 工具协议（gateway.py:1003-1008），primary 仍是 DeepSeekAdapter，后续调用抛异常走 runtime 的 stop_reason=model_error，并不会退规则兜底。文档把两种情况混成一句，读者会预期一个不存在的兜底。",
+  "suggestion": "§2 表补 `AGENT_LIVE_E2E_WORKDIR`（默认 `.tmp-tests/live-e2e`）、`AGENT_TIMEOUT_SECONDS`、`AGENT_MAX_STEPS`、`AGENT_TOKEN_BUDGET` 四行；§6 第 74 行拆成两条：缺 key → 规则兜底 + mark_degraded（gateway.py:1413-1425）；有 key 但网关不通 → probe 置 degraded、降 JSON 协议，运行时按 model_error 追加“模型调用失败……已保留此前产出的内容”。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-21T07:31:52.833Z"
+  },
+  "createdAt": "2026-11-20T15:57:53.128Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-21T07:31:52.833Z"
+    }
+  ]
+}

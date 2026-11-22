@@ -1,0 +1,192 @@
+{
+  "id": "ho-20261120-013",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261119-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261119-001 第二轮：评审 1×P1 + 5×P2 全部关闭，nightly 在 windows-latest 实跑通过",
+  "summary": "按 rev-20261120-001 逐条修复并取证：P2-A（run_smoke 启动失败也写 run.json，带 stage=fixture/degraded/browser/driver/done）、P2-B（默认要求降级夹具，缺了就失败；驱动 report.json 记 skipped）、P2-C（契约测试比较 driver/fixture 的 CHART_MARKER、FIGURE_CAPTION 与 README 图注）、P2-D（artifact 必须 if:always()、含 run.json 与 *.log、run 带 --keep-workdir，并新增 include-hidden-files）、P2-E（--timeout 成为整轮预算，9 处硬编码 timeout 收敛到 _timeout()）。P1 已关闭：PR #38/#39/#40 合并，main 上手动 dispatch agent-ui-smoke（windows-latest、Edge 157.0.4341.60）run 44733197304 成功，artifact 中 report.json 八项全 PASS、run.json stage=done ok=true。本地 817 passed，ruff/mypy/compileall 全绿，plan-20261119-001 已置 done。本文件为重写版：上一版 requirements 为空且 summary 被畸形参数污染，现已补齐 R1-R5 与 REV-P2A…REV-P2E。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "冒烟脚本在干净检出上可运行，不依赖本机绝对路径；并有 CI 干净 runner 实跑证据",
+      "source": "plan-20261119-001 验收 1 + 评审 P1 iss-mwowqrnm-0644cf"
+    },
+    {
+      "id": "R2",
+      "text": "脚本不包含 API key、token、个人路径或大体积截图",
+      "source": "plan-20261119-001 验收 2"
+    },
+    {
+      "id": "R3",
+      "text": "README 写清依赖、启动命令、失败判据与已知限制，且与代码行为一致",
+      "source": "plan-20261119-001 验收 3 + 评审 P2-A/P2-E"
+    },
+    {
+      "id": "R4",
+      "text": "覆盖上传/流式/步骤/内嵌图/引用/中断六条主路径",
+      "source": "plan-20261119-001 验收 4"
+    },
+    {
+      "id": "R5",
+      "text": "默认不进入普通 CI；提供手动或 nightly 入口",
+      "source": "plan-20261119-001 验收 5"
+    },
+    {
+      "id": "REV-P2A",
+      "text": "启动阶段失败也要落 run.json 并标明 stage，不能只 return 1 丢掉证据",
+      "source": "评审 rev-20261120-001 iss-mwowqroi-258d92"
+    },
+    {
+      "id": "REV-P2B",
+      "text": "默认未传 --no-degraded 时，降级夹具没起来必须判失败；驱动 report.json 记 degraded skipped",
+      "source": "评审 rev-20261120-001 iss-mwowqrph-4c6382"
+    },
+    {
+      "id": "REV-P2C",
+      "text": "契约测试真正比较 driver 与 fixture 的 CHART_MARKER/FIGURE_CAPTION，并把 README 图注纳入",
+      "source": "评审 rev-20261120-001 iss-mwowqrqe-023da1"
+    },
+    {
+      "id": "REV-P2D",
+      "text": "nightly artifact 断言 if always()、path 含 report.json/run.json/*.log，run 带 --keep-workdir",
+      "source": "评审 rev-20261120-001 iss-mwowqrr8-a30cff"
+    },
+    {
+      "id": "REV-P2E",
+      "text": "--timeout 必须真正生效，并说清与 run_smoke 总超时的关系",
+      "source": "评审 rev-20261120-001 iss-mwowqrs8-a6c895"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/smoke/agent_ui/run_smoke.py",
+      "summary": "新增 _Abort 与 _write_summary：夹具/降级/浏览器/驱动任一阶段失败都写 run.json，summary 带 stage（fixture/degraded/browser/driver/done）、degraded_expected、degraded_ran；ok = driver_exit==0 and not error；降级夹具 180s 未就绪默认判失败（P2-A/P2-B）",
+      "commit": "250e4cd"
+    },
+    {
+      "path": "tests/smoke/agent_ui/smoke_drive.py",
+      "summary": "新增 _DEADLINE 与 _timeout()，main 里 _DEADLINE=started+args.timeout，9 处硬编码 timeout 收敛到剩余预算；未传 --degraded-url 时 report.json 写 degraded ok=false / skipped=no --degraded-url；SMOKE OK 只统计真正 ok 的项（P2-B/P2-E）",
+      "commit": "250e4cd"
+    },
+    {
+      "path": "tests/smoke/agent_ui/README.md",
+      "summary": "补：默认要求降级断言、--timeout 是驱动总预算（硬兜底 +120s）、run.json 每条失败路径都写且 stage 含 fixture/degraded/browser/driver、截图清单改为图表/引用/中断三张（P2-A/P2-B/P2-E）",
+      "commit": "250e4cd"
+    },
+    {
+      "path": "tests/test_agent_ui_smoke_contract.py",
+      "summary": "新增 _module_literal（AST 读顶层常量，支持 f-string）与 4 个回归测试：常量对齐 + README 图注、_write_summary 落盘 + stage 标记、降级不静默跳过、无硬编码 timeout；强化 nightly 断言（if always()/run.json/*.log/--keep-workdir），测试数 15→19",
+      "commit": "250e4cd"
+    },
+    {
+      "path": ".github/workflows/agent-ui-smoke.yml",
+      "summary": "upload-artifact 增加 include-hidden-files: true —— v4 默认排除点开头目录，首次 nightly（run 44731816898）断言全过但 .workdir 证据上传为空；契约测试同步断言该字段",
+      "commit": "79b450b"
+    },
+    {
+      "path": ".github/workflows/agent-ui-smoke.yml",
+      "summary": "Show browser version 改为读 msedge.exe 的 VersionInfo.ProductVersion（原命令在 Windows 不打印版本还会拉起浏览器进程），为交付提供 windows-latest 上的 Edge 版本 157.0.4341.60",
+      "commit": "2364ccf"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe tests/smoke/agent_ui/run_smoke.py --workdir tests/smoke/agent_ui/.workdir --keep-workdir",
+      "result": "SMOKE OK :: 8 项断言全部通过，用时 15.54s；EXIT=0",
+      "passed": true,
+      "evidence": "PASS upload/stream/steps/figure/citations/interrupt/audit/degraded；run.json: stage=done, degraded_expected=true, degraded_ran=true, driver_exit=0, ok=true"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe tests/smoke/agent_ui/run_smoke.py --workdir tests/smoke/agent_ui/.workdir/failcheck --keep-workdir --browser C:\\no-such-browser.exe",
+      "result": "FAIL FileNotFoundError: 指定的浏览器不存在；EXIT=1",
+      "passed": true,
+      "evidence": "run.json: stage=browser, driver_exit=1, ok=false, error=FileNotFoundError —— 负向用例，期望非零退出，证明 P2-A 失败路径也留证据"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_ui_smoke_contract.py -q -p no:cacheprovider",
+      "result": "19 passed, 1 warning in 2.21s",
+      "passed": true,
+      "evidence": "含 test_driver_and_fixture_agree_on_chart_marker_and_caption / test_runner_writes_run_json_on_every_startup_stage / test_expected_degraded_fixture_is_not_skipped_silently / test_driver_timeout_budget_is_wired_not_ignored"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "817 passed, 5 deselected, 18 subtests passed in 91.55s",
+      "passed": true,
+      "evidence": "全量非 png 用例，较上一轮 813 增加 4 个契约回归用例"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同口径，新增/修改文件均无 noqa 例外"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "CI 同口径"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m compileall -q astock app.py tests/smoke/agent_ui",
+      "result": "ok",
+      "passed": true,
+      "evidence": "语法/编译通过"
+    },
+    {
+      "command": "gh workflow run agent-ui-smoke.yml --ref main（GitHub Actions windows-latest，run 44733197304）",
+      "result": "success；Edge product version 157.0.4341.60",
+      "passed": true,
+      "evidence": "artifact agent-ui-smoke-evidence：report.json ok=true、duration 13.31s、八项 checks 全 true；run.json stage=done ok=true driver_exit=0；含 app/browser/degraded/driver.log。URL: https://github.com/b199510027373-create/AStockAgent/actions/runs/44733197304"
+    },
+    {
+      "command": "gh pr checks 38/39/40 --watch",
+      "result": "PR #38 run 44731529679、PR #39 run 44732213321、PR #40 run 44732923369 全部 test+png-export success",
+      "passed": true,
+      "evidence": "三次 PR 均在 CI 全绿后 squash 合并：598fc15 / 79b450b / 2364ccf"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "merge PR #38/#39/#40",
+      "reason": "评审 verdict=approve 且要求合并后在 main 触发 nightly；用户指示按交付文档执行",
+      "status": "granted"
+    },
+    {
+      "name": "gh workflow run agent-ui-smoke.yml --ref main",
+      "reason": "P1 要求在 windows-latest 上取得一次成功运行与 artifact 证据",
+      "status": "granted"
+    },
+    {
+      "name": "danger-full-access（浏览器 profile 写权限）",
+      "reason": "受限沙箱下 Edge 无法在 --user-data-dir 建锁文件会 abort；本地真机冒烟需要真实 profile 写权限",
+      "status": "granted"
+    },
+    {
+      "name": "关闭评审线程 / 标记 issue resolved",
+      "reason": "按协议开发不代替评审写结论；请评审在 rev-20261120-001 复核后 finish（openP1=0、5 个 P2 均 fixed）",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "main（test/agent-ui-smoke、fix/agent-ui-smoke-artifact、fix/agent-ui-smoke-version 均已合并并删除远端分支）",
+    "commit": "598fc15（PR #38 主体）→ 79b450b（PR #39）→ 2364ccf（PR #40，origin/main HEAD）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/38（已合并）；/pull/39（已合并）；/pull/40（已合并）",
+    "ci": "PR #38 run 44731529679、PR #39 run 44732213321、PR #40 run 44732923369 全部 test/png-export success",
+    "merge": "squash merged；main 上手动 dispatch nightly run 44733197304 success（windows-latest + Edge 157.0.4341.60），artifact 证据齐全",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261120-010",
+  "next": "1) 请评审复核 rev-20261120-001：确认 P2-A/B/C/D/E 均 fixed、P1 有 windows-latest 成功运行（run 44733197304 + artifact），然后 finish 并关闭评审线程；plan-20261119-001 已由开发置 done，如流程要求可回退再置。2) 后续若升级 Gradio 或改 UI 文案，按 README「已知限制」同步 smoke_drive.py / fixture_app.py，契约测试会先挡住常量漂移。3) nightly 每天 UTC 18:17 自动跑，失败时从 artifact 的 run.json（stage 字段）+ report.json（失败 check）+ driver.log 定位。",
+  "createdAt": "2026-11-20T12:11:18.182Z",
+  "markdownPath": ".devloop/handoffs/ho-20261120-013.md"
+}

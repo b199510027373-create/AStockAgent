@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwoit6pr-6c8c9f",
+  "threadId": "rev-20261116-002",
+  "roundNo": 5,
+  "severity": "P2",
+  "category": "健壮性",
+  "file": "astock/data.py",
+  "lines": "841-842, 871-872",
+  "title": "enrich / resample_ohlcv 空帧快速返回绕过了 attrs 回填，空帧仍丢复权标注",
+  "evidence": "resample_ohlcv 在 :841-842 `if df.empty: return pd.DataFrame()`，enrich 在 :871-872 同样直接 `return pd.DataFrame()`，两处都早于本轮新增的 `out.attrs.update(df.attrs)`（:862-865、:876-877）。本轮测试只断言非空帧（tests/test_data_adj_caliber.py:542-557 全用 _daily_frame() 且断言 assertFalse(out.empty)），所以遗漏未被发现。影响：选到停牌区间/无数据区间时，回测返回帧与图表图注退回调用方 adj 参数、丢失 adj_base/base_factor，标注在空数据场景下失效；charts.summary_markdown 的空帧分支直接返回「⚠️ 无数据」，也无口径可显示。",
+  "suggestion": "两个空帧分支改为保留 attrs，例如 `empty = pd.DataFrame(); empty.attrs.update(df.attrs); return empty`（enrich 保持现有空返回列语义则不复制 df 列，只带 attrs）；在 AdjustmentMetadataPropagationTests 增加 `test_empty_frame_keeps_adjustment_attrs`，用 `df.iloc[0:0].copy()`（attrs 已设）分别过 enrich 与 resample_ohlcv 并断言 attrs 仍在。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T11:10:18.592Z"
+  },
+  "createdAt": "2026-11-20T05:10:27.903Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T11:10:18.592Z"
+    }
+  ]
+}

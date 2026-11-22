@@ -1,0 +1,128 @@
+{
+  "id": "ho-20261119-013",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：PR #32 CI 最终全绿（等待第 2 轮复核）",
+  "summary": "相对 ho-20261119-012 的变化：PR #32 head 推进到 163dec4（plan/worklog/handoff 记账提交，无源码改动），CI run 44436480771 全绿（test SUCCESS、png-export SUCCESS），此前 ed4e44b/24b2190 的 CI 也全绿。源码与测试结论不变：ed4e44b 修复 P1-1/P1-2 与 4 个 P2，目标 84 passed、全量 744 passed / 覆盖率 79.04%、ruff/mypy/import app 全绿，真机 AC1–AC5 + 降级证据在 .smoke-agent-ui/shots。计划项 in_review / progress 92，等待第 2 轮复核。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮。复用现有 Gradio 装配模式，不新增 Tab；保持页面在无模型/无网络时的降级可用。",
+      "source": "plan-20261107-007 description"
+    },
+    {
+      "id": "ac1",
+      "text": "AI 对话 Tab 可上传 1–5 个文件并显示解析状态",
+      "source": "plan-20261107-007 acceptance #1"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示",
+      "source": "plan-20261107-007 acceptance #2"
+    },
+    {
+      "id": "ac3",
+      "text": "图表在回答中内嵌渲染，可点开看 spec/来源",
+      "source": "plan-20261107-007 acceptance #3"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表",
+      "source": "plan-20261107-007 acceptance #4"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留",
+      "source": "plan-20261107-007 acceptance #5"
+    },
+    {
+      "id": "boundary",
+      "text": "「流式」= UI 增量事件（on_step 时间线 + 回答切片），模型侧仍整轮返回（接口冻结 v1）。",
+      "source": "docs/AStockAgent_interface_freeze_v1.md"
+    },
+    {
+      "id": "degrade",
+      "text": "无模型/无网络：横幅降级提示，页面可开、附件可解析、提问不白屏。",
+      "source": "plan-20261107-007 description"
+    }
+  ],
+  "changes": [],
+  "tests": [
+    {
+      "command": "gh run view 44436480771 --json status,conclusion",
+      "result": "conclusion=success",
+      "passed": true,
+      "evidence": "head 163dec4；https://github.com/b199510027373-create/AStockAgent/actions/runs/44436480771"
+    },
+    {
+      "command": "gh run view 44436201023 --json conclusion,jobs",
+      "result": "success；test、png-export 均 SUCCESS",
+      "passed": true,
+      "evidence": "代码 head 24b2190（含 ed4e44b 全部修复）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q",
+      "result": "84 passed",
+      "passed": true,
+      "evidence": "chat 33 + runtime 51"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && coverage report -m",
+      "result": "744 passed, 5 deselected；TOTAL 79.04%",
+      "passed": true,
+      "evidence": "高于 fail_under=76.45"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests; .venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "ruff clean；mypy Success 43 files",
+      "passed": true,
+      "evidence": "CI 同款步骤均 SUCCESS"
+    },
+    {
+      "command": "Edge headless + CDP smoke_drive.py / degraded_drive.py / visual_drive.py",
+      "result": "AC1–AC5、P1-1 落库、降级横幅、1280 宽图表/引用截图均通过",
+      "passed": true,
+      "evidence": ".smoke-agent-ui/shots/1–8*.png"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "推送与 CI 验证",
+      "status": "granted"
+    },
+    {
+      "name": "local-browser",
+      "reason": "Edge headless + CDP 真机冒烟",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "仓库 .env 提供 DEEPSEEK_API_KEY；降级证据用 AGENT_PROVIDER=rule 强制规则兜底",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui",
+    "commit": "163dec4",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "passed（head 163dec4，run 44436480771：test SUCCESS、png-export SUCCESS；前一 head 24b2190 run 44436201023 亦全绿）",
+    "merge": "未合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-012",
+  "next": "第 2 轮复核只验 ho-20261119-010 的 2×P1 + 4×P2：P1-1 看 agent_runs/agent_steps 落库（真机与单测）、P1-2 看 .smoke-agent-ui/shots + smoke_drive.py 断言输出；P2 看缺口测试与实现。通过后置 done 并合并 PR #32；合并后在 main 用真实 key 复跑一次真机冒烟。",
+  "createdAt": "2026-11-19T01:25:16.612Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-013.md"
+}

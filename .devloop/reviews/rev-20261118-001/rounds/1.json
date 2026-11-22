@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261118-001-r1",
+  "threadId": "rev-20261118-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮（scope=full）结论：request_changes。openP0=0 / openP1=3 / openP2=2。\n\n已核对（无问题，可作为本轮已确认部分）：ADR-018 C1 唯一生产者落地正确——market_tools.load_series:485 只调用 deps.bar_time（即 data.latest_bar_time），quote/kline/indicator 的 data_as_of+data_time 均来自 MarketSeries，未自行拼时间字符串；C2 冻结键 session/freshness/adjustment/source/period/requested_period/suspended/notes 齐全，freshness 取值在 FRESHNESS 枚举内，非交易时段 eod 且带「最近交易日收盘数据，不是实时价」、rt_min 陈旧 >120s 与 >2s 响应预算均降级 delayed、vol<=0 且 amount<=0 判 suspended 并写「停牌/无成交」；盘中请求日/周/月不再误判 live（496-503）；@day 叠加层用 merge_asof allow_exact_matches=False 只用更早已完成日线，metadata 记 ffill fields/days/bars/rule；指标逐函数转发 astock.indicators 并与 add_all 同序列逐值一致；三工具权限标签（MARKET_READ / +CHART_RENDER / +INDICATOR_COMPUTE）落在 Permission 白名单内，默认注册表已装配；tools/__init__.py 仅 re-export；runtime 新增 MAX_FIGURE_CHARS=2000 且 _format_observation 对超长 figure 输出 artifact 句柄；test_ci_quality_gates 的 EXPECTED_CHECKED_MODULES 39→40 与 links.test 的 mypy 40 files 自洽；开发者 ho-20261118-008/009 的证据（702 passed、mypy 40、ruff、PR #31 CI 绿）与代码现状一致，未发现伪造。\n\n必须修（P1，由开发在本轮修复后再提评审）：\n1) iss-mwm6tovm（market_tools.py:953-968）：kline(period=\"month\", chart=True, limit>~120) 拼出的 range 超过 chart_spec MAX_RANGE_YEARS=10（chart_spec.py:512-513），validate_chart_spec 抛 ChartSpecError 且 renderer 调用无兜底，合法参数组合直接变成 ok=False 错误。\n2) iss-mwm6towg（tests/test_data_time_semantics.py:135-137）：周/月 resample 分支（market_tools.py:472-475）与指数 index_daily 分支（467-469）、指数分钟拒绝路径（441）零测试覆盖，index_daily 假实现从未被调用却标了 pragma: no cover，验收第 1/6/7/8 条在这些口径上没有证据。\n3) iss-mwm6toxk（market_tools.py:684）：quote 日线只用 10 天窗口，停牌超过约 5 个交易日即 raise「无 day 行情数据」，拿不到最后一根 bar、走不到 suspended，违反验收第 10 条与 ADR-018 §4 的停牌口径。\n\n建议修（P2，可与 P1 同批处理）：\n4) iss-mwm6tv83（market_tools.py:919-931）：ema/atr 图层被 _chart_layers 静默丢弃、out[:8] 静默截断，图上缺线无任何提示。\n5) iss-mwm6tv92（runtime.py:746-756）：_summarize_result 仍把完整 figure HTML 拼进 _partial_answer，与新增 MAX_FIGURE_CHARS 的裁剪意图不一致。\n\n完全解决判定：开发修复上述 3 条 P1、补上对应回归用例（月线 chart 走真实 validate/render、周/月与指数分支、长停牌 quote），并重跑 pytest tests -q / mypy astock / ruff check astock tests、更新 planItem.links.test 与 PR #31 后，由评审在下一轮（scope=diff，只复核这 5 条）确认全部关闭；P2 未修需在交付文档中写明理由。在 openP1 归零前 PR #31 不应合并。",
+  "startedAt": "2026-11-18T13:54:59.120Z",
+  "finishedAt": "2026-11-18T13:59:39.412Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 3,
+    "P2": 2,
+    "total": 5
+  }
+}

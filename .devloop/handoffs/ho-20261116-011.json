@@ -1,0 +1,109 @@
+{
+  "id": "ho-20261116-011",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "PNG 导出基础设施：Kaleido/Chrome/字体与 CI",
+  "summary": "相对 ho-20261116-010 的状态更新（无代码变更）：e59961d 已通过 CI run 43792183392；随后提交 334c7fa 只包含 .devloop 元数据（plan in_review/progress=95 与 links.test、日历、worklog），对应 CI run 43792463423 双 job 仍绿。PR #17 body 已补充 round 2 修复对照与两次 run 证据。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "锁定 plotly/kaleido 精确版本",
+      "source": "plan-20261114-001 验收①"
+    },
+    {
+      "id": "R2",
+      "text": "Windows + Linux CI 均能出 PNG，spike 已记录",
+      "source": "plan-20261114-001 验收②"
+    },
+    {
+      "id": "R3",
+      "text": "中文标题/坐标轴/图例无方块，含中文 K 线 PNG",
+      "source": "plan-20261114-001 验收③"
+    },
+    {
+      "id": "R4",
+      "text": "CI 真实导出隔离：主 job -m \"not png\"\\u30015 deselected\\u3001\\u4e0d\\u88c5\\u5b57\\u4f53\\uff1bpng-export -m png --timeout=180",
+      "source": "plan-20261114-001 验收④ + 评审 P1 iss-mwimyt4m-96c199"
+    },
+    {
+      "id": "R5",
+      "text": "require 失败显式 failed（含预建 running run）",
+      "source": "plan-20261114-001 验收⑤ + 评审 P2 iss-mwimyt6m-970024"
+    },
+    {
+      "id": "R6",
+      "text": "复用旧 PNG provenance 不矛盾",
+      "source": "plan-20261114-001 验收⑥ + 评审 P2 iss-mwimyt7o-da451d"
+    },
+    {
+      "id": "R7",
+      "text": "部署/CI 文档含 Chrome/字体/升级清单",
+      "source": "plan-20261114-001 验收⑦"
+    },
+    {
+      "id": "R8",
+      "text": "round 2 三条 issue 全部修复并有测试/CI 证据",
+      "source": "评审 rev-20261116-001 round 2"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261114-001.json",
+      "summary": "status=in_review、progress=95、links.test 写入 round 2 六条命令与 CI run 43792183392",
+      "commit": "334c7fa"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "记录评审 round 2 事件与 developer 修复工作日历",
+      "commit": "334c7fa"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "记录 changes_requested → in_review 与修复工作单元（60min）",
+      "commit": "334c7fa"
+    }
+  ],
+  "tests": [
+    {
+      "command": "CI run 43792463423 (334c7fa, metadata only)",
+      "result": "元数据提交不影响流水线",
+      "passed": true,
+      "evidence": "test: success; png-export: success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub push / PR",
+      "reason": "e59961d/334c7fa 推送与 PR #17 更新",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub workflow 作用域",
+      "reason": "ci.yml 改动推送需要 workflow scope，已补授权",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "fix/agent-chart-png-kaleido",
+    "commit": "334c7fa",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/17",
+    "ci": "run 43792183392 (e59961d): test pass, png-export pass; run 43792463423 (334c7fa metadata): test pass, png-export pass",
+    "merge": "未合并，等待评审 round 3",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261116-010",
+  "next": "评审 round 3 复核三条 issue；通过并合并后把 plan-20261114-001 置 done 并写 merge 记录。",
+  "createdAt": "2026-11-16T02:31:02.883Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-011.md"
+}

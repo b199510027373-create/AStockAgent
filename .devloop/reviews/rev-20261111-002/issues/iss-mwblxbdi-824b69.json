@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwblxbdi-824b69",
+  "threadId": "rev-20261111-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "prompt",
+  "file": "astock/recommend.py",
+  "lines": "362",
+  "title": "`_llm_rank` 提示词声称技术面由「综合分与池内分位」决定，实际规则只用综合分",
+  "evidence": "astock/recommend.py:362 的新 prompt 写「技术面强弱由规则按综合分与池内分位给出」，但决定技术面的唯一规则是 astock/recommend.py:263-269 的 `_action(score)`，只看综合分；分位（recommend.py:798-800）只写入展示字段，不参与 action 计算（tests/test_contracts.py:660-703 也断言 `技术面 == _action(综合分)`）。这句提示会让模型以为分位参与强弱判定，与 ADR-010 决策 1「分位是综合分的横截面展示」不符。",
+  "suggestion": "开发在 astock/recommend.py:362 把措辞改为「技术面强弱由规则按综合分给出（池内分位仅作横截面展示），你只负责解释证据」；若确实希望分位参与强弱判定，则属于规则变更，需先改 ADR-010 决策 1 并补 `_action` 的测试，不能只改 prompt。完全解决标准：prompt 描述与 `_action` 的实际输入一致，或规则同步升级并有 ADR 记录。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:32:24.851Z"
+  },
+  "createdAt": "2026-11-11T04:16:39.126Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:32:24.851Z"
+    }
+  ]
+}

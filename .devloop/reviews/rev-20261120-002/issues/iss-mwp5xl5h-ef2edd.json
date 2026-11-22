@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwp5xl5h-ef2edd",
+  "threadId": "rev-20261120-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_agent_live_e2e.py",
+  "lines": "609-618",
+  "title": "R2 的“工具正文可见”断言可被参数回显满足，未真正锚定 step-output",
+  "evidence": "第 618 行 `assert \"Revenue\" in record.steps_html`，但 astock/agent/chat.py:268 仍把 arguments JSON 渲进 `.step-args`，模型只要以 `{\"query\": \"Revenue\", ...}` 调用 file_search，这条断言在修复前（1c5bb47 之前，工具正文完全不可见）同样成立，失败信息“file_search 的结果正文没有出现在时间线里”与实际校验对象不符。真正锚定修复的是第 582 行 `\"最新价\" in record.steps_html`（quote 的参数只有 ts_code，正文来自 astock/agent/tools/market_tools.py:812），因此 AC2 的回归保护仍成立，本条只针对断言强度。",
+  "suggestion": "改为抽 `<div class=\"step-output\">([^<]*)</div>` 的全部命中，断言至少一条命中正文含 “Revenue”，并额外断言 `record.steps_html.count('class=\"step-output\"') >= 1`（R1 或 R2 均可）。这样断言只认工具结果区，不再被 `.step-args` 的回显满足，失败时也指向真正的回归点。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-21T07:31:42.714Z"
+  },
+  "createdAt": "2026-11-20T15:57:44.405Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-21T07:31:42.714Z"
+    }
+  ]
+}

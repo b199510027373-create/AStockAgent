@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfa2hib-1f519f",
+  "threadId": "rev-20261113-003",
+  "roundNo": 3,
+  "severity": "P1",
+  "category": "architecture/audit-boundary",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1241-1275",
+  "title": "Q5=C 要求 chart_service 为唯一审计入口，但仓库没有 chart_service，chart_render 仍直接写 agent_artifacts",
+  "evidence": "ADR-016 2026-11-14 补充裁决 Q5=C 明确：`chart_render` 只负责校验/取数/指标/HTML/PNG，不写审计表；新增 `chart_service` 作为唯一审计入口，artifact 数据源通过 `ArtifactReader` 只读协议注入。plan-20261107-005 验收第 9 条也写“artifact 记录由 chart_service 统一写入”。但实际 `render` 在 chart_render.py:1241-1250 调 `ensure_run`，:1267-1275 直接调 `record_artifact`；全仓库 grep `chart_service|ArtifactReader` 无任何匹配，说明 `chart_service` 根本不存在，审计写入仍耦合在渲染模块。developer handoff `.devloop/handoffs/ho-20261114-002.md` 也承认“未改审计模型”，把 Q5=C 拆到 plan-20261114-002。若 005 以“v1 渲染管线”收口，则验收第 9 条与代码不一致；若 005 要按第 9 条收口，则当前实现不满足 ADR。",
+  "suggestion": "二选一：A）在 005 内抽出 `astock/agent/chart_service.py`（或等价模块），由它调用 `chart_render.render` 并以 `ArtifactReader` 只读接口读取 artifact 源，再统一 `ensure_run/record_artifact`；`chart_render` 不再直接写库，补一条“chart_render 不 import store / 不写 agent_artifacts”的架构测试。B）如果 Q5=C 已明确排到 plan-20261114-002，则把 005 验收第 9 条改成“005 暂由 chart_render 写审计，002 迁移到 chart_service”，并在 005 的交付结论里列为未完成项，不能同时宣称第 9 条已满足。下一轮以“chart_service 存在且 chart_render 无直写”或“005 验收文字已改”为准。",
+  "confidence": 0.92,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T19:16:43.892Z"
+  },
+  "createdAt": "2026-11-13T17:55:49.667Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T19:16:43.892Z"
+    }
+  ]
+}

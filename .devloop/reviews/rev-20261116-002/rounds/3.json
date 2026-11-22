@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261116-002-r3",
+  "threadId": "rev-20261116-002",
+  "roundNo": 3,
+  "scope": "full",
+  "scopeReason": "第 3 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 3 轮（scope=full，roundNo=3，基于 head 643e381/实现提交 ac23253）：新增 1 条 P1 iss-mwixznmz-2f393e，counts P0=0/P1=1/P2=0，verdict=request_changes，线程不标 resolved。\n\n一、上一轮唯一遗留 iss-mwixbcyf-8383d6 的核对：部分达成，不能标 resolved。\n- 达成部分：ADR-008 第 8 条（.devloop/architecture/adr/ADR-008-price-adjustment-limits.md:37）新增\"可观测边界\"段落，如实写明\"截断边界恰好早于窗口起点、且窗口内每天都有因子时，hfq 基准仍可能退化，只能靠 query_all 分页完整性\"，这正是本项可接受的边界；落地清单第 8 条也补了分钟说明。\n- 未达成部分（见 iss-mwixznmz-2f393e）：astock/data.py:812-815 新增的 `covered = merged[~intraday]` + `_check_factor_coverage(fct, covered, adj, ...)` 不可达——astock/data.py:795-811 的 `unexpected = missing & ~intraday` 已在前面把非盘中缺行全部抛掉，intraday 行又被 `fct[\"adj_factor\"].iloc[-1]` 填满，于是 covered 内每个 trade_date 必在 fct 中，`first_fct > first_raw` / `last_fct < last_raw` 恒 False；删掉这 4 行测试照样全绿。两个新用例（tests/test_data_adj_caliber.py:345-372）实际走的是缺因子分支——异常消息是\"分钟线以下交易日缺少 adj_factor\"，而两个分支共用 contract 名 AdjFactor，`assertEqual(ctx.exception.contract, \"AdjFactor\")` 无法区分来源，docstring 说\"分钟路径与日线路径同一把尺子\"与代码不符；ADR-008:37 首句\"日线与分钟线…并用 _check_factor_coverage 校验覆盖\"又和紧随其后的边界段落自相矛盾。\n\n二、已复核为无问题的部分（不再重复记问题）：\n- 第 1 轮 5 条（分钟盘中 partial、因子分页 _query_adj_history、hfq 缓存 row.empty→False、qfq end_eff、分钟 spy 用例）与配额移交的\"旧 qfq meta 无 adj_base\"在 5b10af8 已全部落实，本轮 ac23253 未回退：分钟盘中分支 astock/data.py:783-800 仍只对\"缺行全是今天且因子表末行早于今天\"生效，非当日照样硬失败。\n- 数据契约语义（DataContractError 硬失败、禁止 1.0 填充/回退 qfq）保持；日线覆盖断言唯一调用点 astock/data.py:416 未动，hfq 首日/qfq 末日截断用例仍在。\n- 测试证据（dev 记录 + handoff ho-20261116-020/021）：单文件 25 例、目标 4 文件 99 passed、全量 538 passed 1 skipped（较上轮 536 增 2，无倒退）、架构门禁 32 passed 1 skipped、ruff E9/F63/F7/F82 通过、mypy 35 files success；CI run 43822962615（ac23253）、43823253779（643e381）success，PR #15 OPEN CLEAN。本轮环境无 shell/gh，无法独立复跑，CI 结论以 handoff + planItem.links.test 记录为准。\n\n三、验收标准：①-⑤ 仍满足（分页+覆盖校验、盘中 partial/factor_as_of、缓存基准可自证、raw_* 口径、ADR 与落地清单同步）；⑥（行情工具与图表图注展示 partial/factor_as_of 与复权口径）不属本项，仍由 plan-20261107-006 / plan-20261114-002 承担，本项达 done 时需在交付里显式标注该依赖未收口。\n\n四、谁在什么条件下修、何时算完全解决：\n1) 责任人：开发（鱼鱼）。条件：两处小清扫——(a) 删掉或明确标注 astock/data.py:812-815 的死调用；(b) 两个分钟用例改为如实描述并断言消息来自缺因子分支；(c) ADR-008:37 首句改成\"日线路径用 _check_factor_coverage；分钟路径由缺因子硬失败兜底（盘中当日例外）\"并与\"可观测边界\"段合并。三处完成后本轮 P1 即可关，届时我复核下一轮即可 approve。\n2) 之后把 iss-mwixbcyf-8383d6 一并标 resolved（现在标属名不副实）。\n3) 合并 PR #15 后复跑 main CI 并把 run 号回填 plan-20261114-003，才算数据层交付完全解决；验收⑥按第三部分由后续计划项收口。\n4) 全仓 ruff 312 条既有风格告警按 handoff 声明单独立项，不计入本项。",
+  "startedAt": "2026-11-16T07:27:56.600Z",
+  "finishedAt": "2026-11-16T07:29:06.570Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 0,
+    "total": 1
+  }
+}

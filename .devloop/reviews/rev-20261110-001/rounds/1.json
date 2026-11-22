@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261110-001-r1",
+  "threadId": "rev-20261110-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮（scope=full）评审结论：request_changes。共 4 条：P0 0 / P1 1 / P2 3。\n\n一、验收标准逐条核对\n1) 统一 RunResult —— 达成。recommend 三个入口（generate/latest/run）都由 use_cases.run_recommendation 返回 RunResult（use_cases.py:344-412），track 由 run_tracking 返回（449-536）；status 只允许 success/stale/failed，且 __post_init__ 强制 stale/failed 必须有可读 message（73-88），tests/test_use_cases.py:88-104 覆盖。\n2) 生成与历史读取共用同一用例函数 —— 达成。两条路径共用 _render_recommendation（169-219），tests/test_use_cases.py:282-301 用 wraps 断言 render 被调用两次；test_core_paths.py 的真实生成路径也改走 use_cases（tests/test_core_paths.py:83-99），不是纯 mock。\n3) 页面不再拼装 payload / 计算统计 —— 达成。recommend_ui.py 只剩 _outputs 映射（10-19）与按钮装配；track_ui.py 只消费 payload（17-28），净值/显著性/图表全在用例层编排，符合 ARCH-01。\n4) stale/failed 有明确可读诊断 —— 部分达成，见 P1：15:00 前的历史读取窗口会把落后数据报成 success，与生成侧 recommend.py:760 的口径相反。\n\n二、语义与调度兼容性（开发重点关注项）\n- 生成侧 stale_data → stale：正确，且不写\"伪造\"的台账报告（_render_recommendation 只在有 run_id 时补台账摘要，183-188）。\n- 跟踪无 T+1 → stale：status 判定可接受，但诊断措辞有误（P2）。\n- 历史读取 now.hour>=15：判定有误（P1）。\n- scheduler failed → RuntimeError：与旧 StaleDataError 分支行为等价（stale 不记成功、不写 last_run_date，失败累加 attempts），tests/test_hardening.py:121-175 已覆盖 stale/failed/success/skip/force 五条路径，OPS-01 幂等键与补偿窗口未被破坏。\n\n三、测试充分性\n开发提交证据（pytest tests -q 214 passed；mypy 0 error）与用例内容一致，我抽查了 test_use_cases.py、test_hardening.py、test_core_paths.py、test_track_nav.py 的改动，没有因重命名而弱化断言，UI 侧改为 mock run_tracking 后真实行为仍由用例层测试兜底。唯一实质缺口是 _ledger_view 的 15:00 前分支无覆盖，已并入 P1 的改法要求。不另记测试类 P1。\n\n四、修复责任与完成判定\n- 归属：本计划项开发，在 feat/plan-20261103-002-runresult 分支上修复 P1（iss-mwaawcwh-19d384）后重跑 pytest tests -q 与 mypy astock，并把结果写进交接文档。\n- P1 修复条件：去掉 use_cases.py:327-330 的 `now.hour >= 15` 门限（与 recommend.py:760 同口径），并新增 now=datetime(2026,11,6,10,0) 的晨间落后用例断言 status==\"stale\"。\n- P2（iss-mwaawfsb-8d9628 fail-open 新鲜度、iss-mwaawn5a-ab2c60 跟踪误诊、iss-mwaawyq9-5a53f9 生成侧 now 形参无效）：同轮修掉最好；若坚持不改，须在本线程逐条给出\"接受现状\"的理由，否则仍按未决处理。\n- 完全解决判定：openP0=0、openP1=0、P2 全部 fixed 或书面接受，下一轮（diff 复核）只核对这 4 处改动与其新增用例，通过后即可 approve。\n\n五、未单独建 issue 的提示（受同一文件 P2 上限 2 条限制）\n- use_cases.py:298-301 的 status_line 固定带 \"✅ 已从 SQLite 读取 …\"，stale 时与顶部 \"⚠️ …\" 同现（tests/test_use_cases.py:236-237 正断言了这个组合）。建议把 status_line 改成纯事实描述，对勾/警告只由 _render_recommendation 按 status 统一加。\n- 架构侧：契约模块图里没有 use_cases 节点（planItem.links.module=use_cases），ARCH-02 的依赖方向（UI/调度 → 用例 → 领域）目前只能靠人工保证。这不是开发在本分支能改的，建议由架构师补 modules/edges，我不据此计级。\n\n无 P0：本轮改动未触及 ledger 写入、latest.json 原子写、AI-01 排序约束与鉴权路径，diff 未发现数据破坏或安全面回归。",
+  "startedAt": "2026-11-10T06:16:46.476Z",
+  "finishedAt": "2026-11-10T06:20:51.296Z",
+  "rulesVersion": "v1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 3,
+    "total": 4
+  }
+}

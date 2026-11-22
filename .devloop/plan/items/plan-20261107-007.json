@@ -2,14 +2,14 @@
   "id": "plan-20261107-007",
   "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
   "description": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传（gr.File，多文件）、流式回答、工具调用步骤时间线、内嵌图表（gr.HTML）、引用列表（文件名/页码/工作表）、中断按钮。复用现有 Gradio 装配模式，不新增 Tab；保持页面在无模型/无网络时的降级可用。",
-  "status": "todo",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-11-24",
   "due": "2026-12-02",
   "estimateH": 14,
-  "progress": 0,
+  "progress": 100,
   "acceptance": [
     "AI 对话 Tab 可上传 1–5 个文件并显示解析状态",
     "回答流式输出，工具步骤以时间线展示",
@@ -32,8 +32,24 @@
     "adr": [
       "ADR-013",
       "ADR-016"
+    ],
+    "branch": "feat/agent-chat-ui",
+    "commit": "552780d",
+    "module": "agent_chat_ui",
+    "test": [
+      "PR #32 已合并至 main（merge commit 552780d）；main push CI run 44505026186 success；第 4 轮评审 approve（rounds/4，openP0=0/openP1=0）",
+      "TOCTOU 残存风险后续项：PR #33 已合并（merge commit 4524e92，35b6806 引入 request_interrupt_if_running 原子化）；main push CI run 44506067007",
+      "提交 fb185dc + CI run 44482153964 success；记录提交 cb2931e + CI run 44495904965 success（test + png-export）",
+      "P2 轮：pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q -> 89 passed（新增 stopped 断言、UI 保留分片、done 提前放锁 3 处）",
+      "P2 轮：coverage run -m pytest tests -q -m \"not png\" -> 749 passed, 5 deselected, 12 subtests; TOTAL 11399 stmts / 2384 miss = 79.09%",
+      "P2 轮：ruff All checks passed; mypy Success 43 files; import app ok",
+      "P2 轮真机 CDP (.smoke-agent-ui/round4_drive.py) -> 流式阶段点中断后界面保留 48 字 / 完整 2040 字，状态「⏹ 已停止输出：已生成的回答保留。」（shots/12）",
+      "第 3 轮：pytest 87 passed（新增 3 条中断回归）；coverage 747 passed / 79.07%；ruff+mypy+import ok",
+      "第 3 轮真机 CDP (.smoke-agent-ui/round3_drive.py) -> 空闲中断提示「当前没有正在生成的回答。」、第二问 3 步/408 字未被污染、生成中中断保留 121 字（shots/9,10,11）",
+      "首轮：coverage run -m pytest tests -q -m \"not png\" -> 744 passed, 12 subtests; TOTAL 79.04%"
     ]
   },
   "createdAt": "2026-11-07T14:12:13.272Z",
-  "updatedAt": "2026-11-10T08:34:48.546Z"
+  "updatedAt": "2026-11-19T10:30:14.887Z",
+  "devSessionId": "session-b2a69179-5e60-4872-91f0-f30a7d3402d1"
 }

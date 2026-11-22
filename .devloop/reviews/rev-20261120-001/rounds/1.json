@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261120-001-r1",
+  "threadId": "rev-20261120-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "第 1 轮（full，11 个文件）结论：代码可合入，但 plan-20261119-001 还不能置 done——追加 1×P1 + 5×P2，openP1=1 故本轮不判「完全解决」。\n\n一、验收逐条核对\n1) 干净检出可运行：部分满足。run_smoke.py:228 全部走 `Path(...).resolve()` + REPO_ROOT 由 `__file__` 推导（契约测试 :219-221 守着），fixture_app.py:214 也 resolve，无本机绝对路径；但真机证据只有开发本机（脏工作区 + danger-full-access），见 P1。\n2) 无密钥/个人路径/大截图：满足。tests/test_agent_ui_smoke_contract.py 的 _PERSONAL_OR_SECRET_PATTERNS 覆盖 `[A-Za-z]:\\Users\\`、b1995、sk-/gh[pousr]_/AKIA/Bearer，夹具 ≤64KiB、包 ≤512KiB、默认不写截图（smoke_drive 仅在 --shots-dir 时截图）。\n3) README 依赖/命令/失败判据/已知限制：主体满足，但「失败保留 run.json/report.json」与代码不符（P2-A），「驱动超时 300s」对 smoke_drive 不成立（P2-E）。\n4) 六条主路径：满足。CHECKS 与断言绑定真实产品文案/DOM：astock/agent/chat.py:265 `ol.astock-steps`、:388 `iframe.astock-figure-frame`、:589/593-596 `cite-{position}` + `文件：`/`｜定位：`、:860 `⏹ 已停止输出：已生成的回答保留。`，astock/agent_chat_ui.py:126/127 发送/中断按钮、:203-204 `正在输出回答…`；audit 断言对齐 AGENT-02（agent_runs/agent_steps）。\n5) 不进普通 CI + 手动/nightly 入口：结构满足（ci.yml 无 smoke，workflow schedule+dispatch，契约测试守），但目标 runner 上零运行记录（P1）。\n\n二、本轮问题（均为只读核对，未改任何文件）\n- P1 iss-mwowqrnm-0644cf（.github/workflows/agent-ui-smoke.yml:8-11）：nightly 只在 schedule/workflow_dispatch 触发，PR #38 的 check 里没有它，handoff.next 自述「合并后手动触发确认」，目标 windows-latest 上尚无运行证据 → 验收 1/5 缺关键证据。\n- P2-A iss-mwowqroi-258d92（run_smoke.py:282-285,335-338,399-401）：启动失败两处 `return 1` 跳过 run.json，与 README.md:102-103 及 workflow:6/51-52 承诺冲突。\n- P2-B iss-mwowqrph-4c6382（run_smoke.py:306-313,396-398）：降级夹具没起只 WARN，仍 SMOKE OK/ok=true，与 --no-degraded 不可区分。\n- P2-C iss-mwowqrqe-023da1（smoke_drive.py:39-41）：注释称契约测试会校验图注/marker 对齐，实际没有该断言。\n- P2-D iss-mwowqrr8-a30cff（test_agent_ui_smoke_contract.py:199-204）：未断言 `if: always()` 与运行步骤的 --keep-workdir，证据上传可被静默破坏。\n- P2-E iss-mwowqrs8-a6c895（smoke_drive.py:335）：--timeout 解析后未使用，各步超时硬编码（最坏约 765s）。\n\n三、谁在什么条件下修、何时算完全解决\n- 开发（本分支或后续 PR 均可）修 P2-A/B/C/D/E；其中 A 与 B 直接决定夜里失败时能不能看懂现场，建议与合并同批或紧随其后。若选择 defer，需在 developer handoff 里逐条写理由，rejected/deferred 由评审在下轮确认。\n- P1 只能在合并后由开发触发一次 `gh workflow run agent-ui-smoke.yml --ref main` 并回填证据（run URL + report.json 八项 PASS + run.json ok=true + Edge/Chrome 版本）到 developer handoff 与 planItem.links.test；若失败则修脚本重跑。\n- 完全解决判据：openP0=0 且 openP1=0（即 P1 有了成功的 windows-latest 运行证据）+ P2 各自 fixed 或经评审接受的 deferred；届时 plan-20261119-001 才可从 in_review 置 done 并关闭 PR #38。\n\n四、未单列的低权重观察（不影响结论，不必单独回）\nsmoke_drive.check_steps 统计全页 `ol.astock-steps li` 而非本轮流（smoke_drive.py:184-191）；check_interrupt 末轮等待用全局「✅ 已完成」（:280）；run_smoke.py:326 无条件 --no-sandbox（CI 一次性容器可接受）。\n\n五、说明\n本会话无 shell 工具，未能执行 `gh auth status` / `gh run list`；GitHub 侧状态取自 ho-20261120-010（delivery.ci 仅 ci.yml 两个 job）与 planItem.links，若 nightly 已有成功 run，请附 run URL，P1 可直接判 fixed。",
+  "startedAt": "2026-11-20T11:36:56.141Z",
+  "finishedAt": "2026-11-20T11:40:38.282Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 5,
+    "total": 6
+  }
+}

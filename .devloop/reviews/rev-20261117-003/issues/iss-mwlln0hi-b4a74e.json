@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwlln0hi-b4a74e",
+  "threadId": "rev-20261117-003",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "data-loss",
+  "file": "astock/agent/store.py",
+  "lines": "1204-1220, 1270-1287",
+  "title": "GC 的 protected 集合漏掉 data_blob，90 天后会删掉仍被 artifact 引用的数据快照",
+  "evidence": "chart_render 现在把快照写到独立 blob，并把相对路径放进 meta[\"data_blob\"]（chart_render.py:1572-1577，record_artifact 在 1579 起写入版本）。但 _protected_paths 只收集 agent_artifacts.path 和版本 meta 的 png_rel_path/png_path（store.py:1204-1220），没有 data_blob；prune_artifacts 用这个集合跳过受保护文件（store.py:1270-1280），prune_orphan_blobs 也复用同一集合（store.py:1307 起）。因此 data.json 在 mtime 超过 90 天后会被当作无引用 blob 删除，而 artifact/version 行仍在；之后 load_artifact(mode=\"recomputed\")/回放会因 blob 缺失失败。现有 GC 测试只覆盖 png/path（tests/test_agent_store.py:598-624、627-646），新增的 snapshot 测试只断言 blob 存在（tests/test_agent_chart_render.py 的 meta/blob 用例），没有跑 prune 后回放。",
+  "suggestion": "在 _protected_paths 的 meta 遍历中加入 data_blob（同样做相对路径规范化与 is_relative_to 校验），并让 prune_artifacts/prune_orphan_blobs 都使用它；补回归测试：真实 render 生成 data.json 后，把 mtime 改到 90 天前，调用 prune_artifacts/prune_orphan_blobs，断言 data.json 仍在且 load_artifact(recomputed) 仍可回放；同时断言无引用的 blob 仍会被删。另建议把 data_blob 与 png_rel_path 的键名统一成白名单常量，避免以后新增 blob 再漏。",
+  "confidence": 0.92,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:01:39.032Z"
+  },
+  "createdAt": "2026-11-18T04:06:20.214Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:01:39.032Z"
+    }
+  ]
+}

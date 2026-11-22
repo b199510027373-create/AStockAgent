@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import time
-from datetime import timedelta
 
 import pandas as pd
 
-from .config import CACHE_DIR
 from .data import load_trade_cal
 from .events import stock_basic
 from .tushare_client import get_client

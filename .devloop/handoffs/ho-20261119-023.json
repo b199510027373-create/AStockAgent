@@ -1,0 +1,94 @@
+{
+  "id": "ho-20261119-023",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+  "summary": "PR #32（功能交付）与 PR #35（合并后记录）均已合并至 main，main 当前 head b87dbaa；main push CI run 44518826554 success（test + png-export）。plan-20261107-007 为 done / progress 100，第 4 轮评审 approve（openP0=0/openP1=0），5 条验收均有代码、单测与真机 CDP 证据；无代码变更待合入。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传、流式回答、步骤时间线、内嵌图表、引用列表、中断按钮；不新增 Tab；无模型/无网络时降级可用。",
+      "source": "plan-20261107-007 描述"
+    },
+    {
+      "id": "ac1",
+      "text": "可上传 1–5 个文件并显示解析状态。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac3",
+      "text": "图表内嵌渲染，可点开看 spec/来源。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留。",
+      "source": "验收标准"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/reviews/rev-20261119-001/rounds/4.json",
+      "summary": "第 4 轮评审 approve 记录（含 P2 闭环判定）",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261119-021.json",
+      "summary": "评审第 4 轮 handoff（reviewer）",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261119-022.json",
+      "summary": "developer 最终交付记录（PR #32 merged）",
+      "commit": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 44518826554 --json headSha,status,conclusion,jobs",
+      "result": "success",
+      "passed": true,
+      "evidence": "sha b87dbaa8eebbe6e9892d5f138efbb99935386f5a；jobs: test success、png-export success"
+    },
+    {
+      "command": "gh pr view 35 --json state,mergedAt,mergeCommit",
+      "result": "MERGED",
+      "passed": true,
+      "evidence": "state MERGED，mergedAt 2026-11-19T11:53:24Z，mergeCommit b87dbaa8eebbe6e9892d5f138efbb99935386f5a"
+    }
+  ],
+  "permissions": [],
+  "delivery": {
+    "branch": "main",
+    "commit": "b87dbaa",
+    "pr": "#32 已合并；#35 https://github.com/b199510027373-create/AStockAgent/pull/35 已合并",
+    "ci": "main push run 44518826554（b87dbaa）success（test + png-export）；此前 44506537442（7427cdc）success",
+    "merge": "PR #32 → 552780d；PR #35（记录）→ b87dbaa，均已合并至 main",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-022",
+  "next": "交付闭环，无剩余开发动作；后续如改动 ask()/interrupt() 的 _busy/_cancelled/_stop_output/_running 时序，按 rounds/4 要求补同形态回归用例。",
+  "createdAt": "2026-11-19T11:55:33.973Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-023.md"
+}

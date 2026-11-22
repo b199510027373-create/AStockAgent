@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwabsgfv-2b4276",
+  "threadId": "rev-20261110-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "diagnostics",
+  "file": "astock/recommend.py",
+  "lines": "814-821",
+  "title": "生成侧 stale 时 status_text 同时出现 ✅ 与两个 ⚠️，与「图标由渲染器按 status 统一添加」不一致",
+  "evidence": "recommend.py:814-821 里 `stale_note = \\\" · ⚠️ 数据未更新\\\" if stale_data else \\\"\\\"`，status 固定以 `f\\\"✅ 股票池 {len(codes)} 只 · …{stale_note} · run_id {run_id}\\\"` 开头，所以 stale 批次自带 \\\"✅ … ⚠️ 数据未更新\\\"。use_cases.py:198-201 的 stale 分支是 `status_text = f\\\"⚠️ {message}\\\"` 再把整个 `base`（= rec.status，见 use_cases.py:256）追加在后面，最终页面显示「⚠️ 数据未更新：…\\n\\n✅ 股票池 42 只 · … · ⚠️ 数据未更新 · run_id …」——一次 stale 里出现一个 ✅ 和两个 ⚠️。台账路径已在 ef32515 把 status_line 改成纯事实描述（use_cases.py:301-304），生成路径没有同步，与交接文档「✅/⚠️/❌ 统一由渲染器按 status 添加」的说法不符；tests/test_use_cases.py:142 只断言 `startswith(\\\"⚠️\\\")`，未覆盖混排。",
+  "suggestion": "二选一并补测试：(1) 在 recommend.py:815 把 status 改成不以图标开头（例如 `f\\\"股票池 {len(codes)} 只 · …\\\"`），并删掉 814 行的 `\\\" · ⚠️ 数据未更新\\\"`（stale 与否由 _generate_view 的 status 表达，渲染器已加 ⚠️ 前缀）；(2) 若要保持 recommend.py 的输出不变，则在 use_cases.py:198-201 追加 base 前先剥离开头的 ✅/⚠️（如 `base = base.lstrip(\\\"✅⚠️❌ \\\")`）。同时在 GenerateRecommendationTests.test_stale_data_is_reported_as_stale（tests/test_use_cases.py:129-142）补 `self.assertNotIn(\\\"✅\\\", result.payload[\\\"status_text\\\"])` 与 `assertEqual(result.payload[\\\"status_text\\\"].count(\\\"⚠️\\\"), 1)`。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-10T06:56:38.501Z"
+  },
+  "createdAt": "2026-11-10T06:45:10.075Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-10T06:56:38.501Z"
+    }
+  ]
+}

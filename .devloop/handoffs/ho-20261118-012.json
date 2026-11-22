@@ -1,0 +1,63 @@
+{
+  "id": "ho-20261118-012",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-006",
+  "threadId": null,
+  "sessionId": "",
+  "title": "交付状态补充：a0c8ecd（devloop 记账）CI 全绿",
+  "summary": "交付状态补充（非代码改动）：把计划项/日历/worklog 的更新以 a0c8ecd 提交并推送到 feat/market-tools（相对 3fc1ddf 仅 .devloop JSON 三文件），PR #31 在该 commit 上 CI 再次全绿（run 44328914609：test pass 1m43s / png-export pass 1m34s）。代码与测试交付内容与 ho-20261118-011 一致，无功能改动。",
+  "requirements": [],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-006.json",
+      "summary": "计划项更新：status in_review、progress 100、links.test 记录本轮 8 条命令与结果、commit 改 3fc1ddf",
+      "commit": "a0c8ecd"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "development worklog：评审第 1 轮 5 条修复与验证记录（120 min）",
+      "commit": "a0c8ecd"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "工作流记录同步",
+      "commit": "a0c8ecd"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 31",
+      "result": "test pass 1m43s; png-export pass 1m34s",
+      "passed": true,
+      "evidence": "run 44328914609，commit a0c8ecd（仅 .devloop JSON 改动）"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "合并 PR #31 到 main",
+      "reason": "5 条评审问题已修复、本地全量 711 passed、CI 两个 job 均通过；按评审要求 openP1 归零后仍需评审通过 + 合并授权",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/market-tools",
+    "commit": "a0c8ecd",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/31",
+    "ci": "test pass 1m43s / png-export pass 1m34s (run 44328914609, commit a0c8ecd)；上一轮 3fc1ddf 为 run 44328403133 全绿",
+    "merge": "not merged",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261118-011",
+  "next": "等待下一轮评审（scope=diff，只复核 5 条）；openP1 归零后合并 PR #31 并把 plan-20261107-006 置 done，同时确认 plan-20261114-003 验收第 6 条。合并后若需在 main 上补一条 chore(devloop) 记录，按既往做法在 main 提交。",
+  "createdAt": "2026-11-18T14:53:49.114Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-012.md"
+}

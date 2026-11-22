@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261117-003-r1",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮全量评审结论：request_changes。共 9 条问题，0 P0 / 5 P1 / 4 P2；当前不满足 approve 条件（openP1=5）。\n\n5 条 P1 阻断点：\n1) artifact 身份错误：store.py:312-316 仍用 digest+filename 生成 id，env_fingerprint 未参与；chart_render.py:1423 固定 \"chart.html\"，环境变化但 HTML 字节相同时会在 store.py:711-719 抛 ArtifactIdentityConflict，同内容不同文件名会重复建行。违反 AC2/ADR-017 C3/spec §4.4。\n2) runtime 审计缺 temperature/seed/code_version（runtime.py:475-483）；agent_runs 有列、ADR-017 §3 有要求，ensure_run 的 ON CONFLICT DO NOTHING 使 chart_render 也无法补写（store.py:437）。\n3) _finish_audit 把 record_step 与 finish_run 放在同一个 `except Exception: pass` 里（runtime.py:511-543），record_step 失败会跳过 finish_run，run 永久 running，违反 spec §7.2。\n4) chart_render png_mode=require 失败先 fail_run（chart_render.py:1462-1469），registry 把异常转 ToolResult 后 runtime 继续，finish_run 无条件改回 success/partial（store.py:483-489），审计终态与工具失败不一致；现有测试只测即时状态。\n5) chart_render 仍把 5000 行 data 写进 meta_json 且不写 data_digest（chart_render.py:1535、1207-1234），而 load_artifact 的 recomputed 只认 data_digest（store.py:936-939），真实 artifact 的 recomputed 必然不可用，且版本表膨胀；违反 spec §3.7/§4.6/§4.7。\n\n4 条 P2：迁移备份吞 checkpoint 失败后用 copy2（store.py:1250-1259）；ensure_schema 迁移不传 db_path（store.py:391-398）；RenderedFigure.metadata 缺 artifact_version/meta_digest（chart_render.py:298-311、1537）；runtime 把总 token 全写 completion_tokens（runtime.py:534-540、store.py:486）。\n\n测试证据核对：开发者声称的 21/106/136/662 passed、mypy、ruff、PR #30 CI passed 与仓库记录一致，但这些用例没有覆盖上述 5 条 P1 的关键路径（env 变化、落库失败、runtime 收尾覆盖、真实 render→recomputed、审计 provenance 字段），因此不能作为本轮通过的依据。\n\n修复责任与完成条件：开发在下一轮（第 2 轮，diff scope）逐条修复 5 条 P1，并为每条补上可执行的回归测试（env 变化/同内容不同文件名、三列 provenance、record_step/finish_run 失败注入、PNGExportError 经 runtime 收尾、真实 render→load_artifact(recomputed)）。4 条 P2 应修复或在交付文档中给出明确延期理由与后续计划。复核时以 openP0=0 且 openP1=0、上述测试在 CI 通过为准；在此之前不标记完全解决，也不合并 PR #30。",
+  "startedAt": "2026-11-17T14:25:27.497Z",
+  "finishedAt": "2026-11-17T14:32:11.850Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 5,
+    "P2": 4,
+    "total": 9
+  }
+}

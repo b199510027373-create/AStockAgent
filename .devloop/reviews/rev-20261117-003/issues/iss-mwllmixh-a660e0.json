@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwllmixh-a660e0",
+  "threadId": "rev-20261117-003",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "migration",
+  "file": "astock/agent/store.py",
+  "lines": "402-412, 1421-1422",
+  "title": "内存库 v1 迁移仍把 DEFAULT_DB_PATH 当备份目标（P2-G 仅部分修复）",
+  "evidence": "_connection_db_path 对 :memory: 连接返回 None（store.py:402-412，docstring 也写明“内存库返回 None”）；ensure_schema 把 None 传给 migrate_v1_to_v2（store.py:419）；migrate 在 L1421 用 `path = Path(db_path) if db_path is not None else DEFAULT_DB_PATH`，于是 None 又回退到默认库路径；_backup_database 只在 `not db_path.exists()` 或路径字面量等于 \":memory:\" 时跳过（L1367），默认库存在时会对内存连接执行 conn.backup，把内存库快照写到 DEFAULT_DB_PATH.bak-*。handoff 声称“内存库跳过备份”，实际没有；当前新增测试只覆盖自定义文件路径（tests/test_agent_store.py:841 起），没有 :memory: 用例。它不会直接破坏默认库，但会生成与默认库同名的错误备份，后续人工恢复有误用风险。",
+  "suggestion": "把“内存库/不需要备份”与“未提供路径”区分开：可让 migrate_v1_to_v2 接受 `db_path=None` 表示不备份（内存库直接跳过），另设显式默认参数或由 connect 传入真实路径；或在 _backup_database 开头检查 `conn.execute(\"PRAGMA database_list\")` 的 main file 为空时直接 return None，不要回退 DEFAULT_DB_PATH。补测试：`:memory:` 上建 v1 三表后调 ensure_schema，断言迁移成功且没有在 DEFAULT_DB_PATH 旁产生 .bak 文件。",
+  "confidence": 0.82,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:02:06.706Z"
+  },
+  "createdAt": "2026-11-18T04:05:57.461Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:02:06.706Z"
+    }
+  ]
+}

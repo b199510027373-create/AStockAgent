@@ -5,6 +5,11 @@
 > 必须先提新 ADR 并把版本号推进到 v2，不允许在实现里「顺手改」。
 > 关联文件：`docs/AStockAgent_contract_rule_map_v1.md`（18 条 contract 规则落点）、
 > `.devloop/architecture/contract.json`（v1.1）、`tests/test_architecture_gate.py`（防漂移门禁）。
+>
+> **版本边界（2026-11-16 复审澄清，2026-11-19 更新）**：本文件 v1 正文对未涉及条目继续有效，
+> 不得用 v2 口径读 v1 条目。图表与审计链路的 v2 口径见
+> `docs/AStockAgent_interface_freeze_v2.md`（2026-11-19 生效，plan-20261114-002）；
+> 历史草案 `docs/AStockAgent_interface_freeze_v2_draft.md` 已并入该文件，只作留档。
 
 ## 0. 评审记录
 
@@ -148,7 +153,7 @@ class ChatModel(Protocol):
 
 ## 3. 冻结接口三：`ChartSpec` v1
 
-代码锚点：待建 `astock/agent/chart_spec.py`（plan-20261107-005）。状态：**冻结草案，未实现**。
+代码锚点：`astock/agent/chart_spec.py`（plan-20261107-005）。状态：**已实现（v1）**。
 
 ### 3.1 字段表（`additionalProperties: false`，未知键直接拒绝）
 
@@ -175,10 +180,22 @@ class ChatModel(Protocol):
 | `fields` | `list[str]` | `source=inline` 必填，1–20 项，`^[a-z_][a-z0-9_]{0,31}$` |
 | `period` | `str` | `day`（默认）/`week`/`month`/`1min`/`5min`/`15min`/`30min`/`60min`；分钟周期仅允许 `source=market` |
 | `range` | `str` | `1mo`/`3mo`/`6mo`/`1y`（默认）/`3y`/`5y`/`ytd`/`max`，或 `YYYY-MM-DD:YYYY-MM-DD`（跨度 ≤ 10 年） |
+| `adj` | `str` | `qfq`（默认）/`hfq`/`none`；涨跌停与成交判断固定 `none`（ADR-008） |
 
 **消歧（2026-11-11 评审）**：`period` 的分钟档一律带 `min` 后缀（`1min`…`60min`），`range` 的月档一律带 `mo` 后缀（`1mo`/`3mo`/`6mo`）。
 两者**不共用 `1m`**：前者是「每根 bar 的粒度」，后者是「窗口长度」。schema 用例见 plan-20261107-005（`period=1min` 取 1 分钟 bar、`range=1mo` 取 1 个月窗口）。
-| `adj` | `str` | `qfq`（默认）/`hfq`/`none`；涨跌停与成交判断固定 `none`（ADR-008） |
+
+### 3.2.1 兼容别名已删除（ADR-016 Q4=B，2026-11-14 裁决）
+
+早期验收文字出现过 `panes`/`style`，`adj` 也出现过 `raw`；ADR-016 的 2026-11-14 补充裁决定为 **Q4=B：删除别名**。自本版起：
+
+| 旧别名 | 现行行为 |
+| --- | --- |
+| `panes` | 未知字段，报 `$.panes` 字段级错误 |
+| `style` | 未知字段（含 `{"theme": ...}` 对象形式），报 `$.style` |
+| `data.adj="raw"` | 枚举外取值，报 `$.data.adj`；不复权请写 `adj="none"` |
+
+规范字段只有 `layers`/`theme`/`adj∈{qfq,hfq,none}`；`chart_spec_json_schema()` 不再声明任何别名，`additionalProperties: false` 对未知键一律拒绝。删除别名的落地随 plan-20261107-005 完成，plan-20261114-002 继续处理渲染/审计边界（Q5=C）。
 
 ### 3.3 算子与图层参数（白名单，越界拒绝并返回字段级错误）
 
@@ -197,17 +214,23 @@ kdj       {n: 5..90, k: 3, m: 3}
 hline     {y: number, label?: str ≤ 60}   vline {x: str|number, label?}   text {x, y, label ≤ 60}
 ```
 
+`groupby`/`agg` 的输出列名为 `<field>_<func>`（如 `amount_sum`），回答与后端断言都按该规则取列。
+
 ### 3.4 渲染契约
 
 - `render(spec) -> RenderedFigure{html: str, png_path: str|None, artifact_id: str, warnings: list[str]}`；
 - 图题与角标同时展示 `data_as_of` 与 `data_time`；缺任一时点必须显式写 `时点未知`，不得留空；
-- 产物落 `agent_artifacts`，`meta_json` 记录 `{data_as_of, data_time, source, params, spec, code_version}`；
-- 无 `kaleido` 时只出 HTML（`png_path=None`），不抛异常；
+- 产物落 `agent_artifacts`，`meta_json` 记录 `{data_as_of, data_time, source, params, spec, code_version}`，并追加 `{time_point_scope, div_id, degraded, warnings, png_path, data}`；
+- `time_point_scope` ∈ `market`（未被 `transforms` 裁剪的行情时点）/`view`（图上前端视图时点）/`unknown`（取不到时点）；
+- 复现前提：同一 `spec`、同一份数据快照、**同一 plotly 版本与 `include_plotlyjs` 设置**。`params` 里记录 `plotly_version`/`python_version`/`include_plotlyjs`，HTML 的 div id 由 `spec + 数据快照` 派生（`astock-chart-<8 hex>`），因此同输入字节稳定、不同图不共享 id；
+- 同一 `artifact_id` 重复渲染时 `meta_json` 以**最新一次写入为准**（例如先降级出 HTML、后补齐 PNG，`degraded`/`png_path` 必须升级），行数仍为 1；
+- 无 `kaleido` 时只出 HTML（`png_path=None`），不抛异常，并在 `ToolResult.metadata` 标 `degraded=true`；PNG 在 ADR-016 补充裁决（2026-11-14 Q6=A）后升为 v1 支持功能，版本锁定/Chrome/字体/CI 真实导出由 plan-20261114-001 落地，见 [docs/AStockAgent_png_export_ops.md](AStockAgent_png_export_ops.md)；`render(..., png_mode=...)` 三态：`off` 不尝试、`auto`（默认）失败降级并缓存环境探测、`require` 失败抛 `PNGExportError`；
 - 渲染器**不得**执行 spec 之外的任何代码；`transforms` 只走白名单算子。
+- 审计边界（Q5=C）：目标形态是 `chart_service` 作为唯一审计入口、artifact 数据源走 `ArtifactReader` 只读协议；v1 暂由 `chart_render.render()` 直接写 `agent_artifacts`，迁移与拆分见 plan-20261114-002。
 
 ## 4. 冻结接口四：文件存储布局 v1
 
-代码锚点：待建 `astock/agent/files.py`（plan-20261107-003）。状态：**冻结草案，未实现**。
+代码锚点：`astock/agent/files.py`（plan-20261107-003，已实现）与 `astock/agent/tools/file_tools.py`（plan-20261107-004，已实现）。状态：**已实现，测试见 `tests/test_agent_files.py`、`tests/test_agent_tools.py`**。
 
 ```text
 data/agent/files/<sha256>/            # sha256 为原文 64 位小写十六进制；内容寻址，不可变
@@ -237,7 +260,9 @@ data/agent/files/<sha256>/            # sha256 为原文 64 位小写十六进�
 | `warnings` | `list[str]` | 可读提示，直接回显给用户 |
 
 `extracted.jsonl` 单行结构：
-`{"file_id", "page": int|null, "sheet": str|null, "block": int, "kind": "text"|"table", "text": str, "bbox": [x0,y0,x1,y1]|null, "cells": int|null}`。
+`{"file_id", "page": int|null, "sheet": str|null, "block": int, "kind": "text"|"table", "text": str, "bbox": [x0,y0,x1,y1] | [row_start,col_start,row_end,col_end] | null, "cells": int|null}`。
+
+`bbox` 分两类，不得混用：PDF 页面坐标 `[x0,y0,x1,y1]`（points，左上原点，文本块 `bbox=null`，PDF 表格取 pdfplumber 的表格框）；Excel/CSV/DOCX 表格坐标 `[row_start,col_start,row_end,col_end]`（1 基闭区间，行号即源表格行号）。表格块必须带 `cells`（行×列），Excel 表格块带 `sheet`；这两类语义与 `astock/agent/files.py` 的落盘实现一致。
 
 表格落盘规则：`sheet_slug` = 工作表名转小写、非 `[a-z0-9]` 替换为 `_`、截断 40 字符、重名后缀 `_2`；
 parquet 列名取原始表头（去首尾空白），无表头时 `col_1..col_n`；数值列尽力转 `float`，转换失败**保留字符串**，
@@ -250,16 +275,35 @@ CREATE TABLE IF NOT EXISTS file_chunks(
   chunk_id INTEGER PRIMARY KEY, file_id TEXT NOT NULL, page INTEGER,
   sheet TEXT, block INTEGER NOT NULL, text TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS file_chunks_fts USING fts5(
-  text, content='file_chunks', content_rowid='chunk_id', tokenize='unicode61');
+  tokens, content='', contentless_delete=1, tokenize='unicode61');
 CREATE INDEX IF NOT EXISTS idx_file_chunks_file ON file_chunks(file_id, page);
 ```
 
-`file_chunks_fts` 的 `ai`/`ad`/`au` 触发器与 `file_chunks` 同步（ADR-015 §5）。
+`file_chunks_fts.tokens` 由写入侧 `astock/agent/files.py::fts_tokens()` 生成：英文/数字按词、CJK 连续片段按 bigram，`index_chunks()` 与 `extracted.jsonl` 同批写入，重导入时按 `file_id` 先删后插。不再使用 `ai`/`ad`/`au` 触发器（tokens 无法由 SQL 生成）；旧 `content='file_chunks'`/`unicode61` 库在 `ensure_index_schema()` 打开时自动 DROP 重建并回填 tokens（ADR-015 §5）。
 
 约束（与 ADR-015 一致，此处只复述落点）：单文件 ≤ 20 MiB、单轮 ≤ 5 个文件、PDF ≤ 200 页；
 仅允许 `data/agent/files/` 下的读取，拒绝路径穿越与符号链接；DuckDB 以 `read_only=True` 打开 parquet，
 只允许单条 `SELECT`，强制 `LIMIT` 并 5s 超时；文件与索引 90 天留存（`AGENT_FILE_RETENTION_DAYS`），
 GC 只删目录与索引行，不删 `agent_steps`/`agent_artifacts`。
+
+### 4.1 文件检索与表格查询工具 v1
+
+代码锚点：`astock/agent/tools/file_tools.py`、`astock/agent/tools/citations.py`、`astock/agent/tools/sql_guard.py`（plan-20261107-004，已实现）。状态：**已实现，测试见 `tests/test_agent_tools.py`**。
+
+五个只读工具，权限标签统一 `file:read`：
+
+| 工具 | 输入 | 返回 |
+| --- | --- | --- |
+| `file_list` | `limit` | 文件清单（15 键 meta 摘要） |
+| `file_search` | `query`、`file_id?`、`limit` | FTS5 命中块：`file_id` + 页码/工作表 + 引用 + 原文片段 |
+| `file_read` | `file_id`、`page?`、`block?`、`max_chars` | 按页码/块号回读的原文与引用 |
+| `table_schema` | `file_id`、`sheet?` | 工作表名、行列数、列名、单元格范围引用 |
+| `table_query` | `file_id`、`sheet`、`sql`、`limit` | 查询结果行与整表引用 |
+
+- `file_search` 检索 `file_chunks_fts`（`tokens` 列，CJK bigram + 英文词），命中通过 `block` 回查 `file_chunks` 与 `extracted.jsonl`，因此每条命中都能回到 `file_id` + 页码（PDF/DOCX）或工作表 + 单元格范围（表格）；返回 `metadata.backend="fts5"` 表示走 FTS，索引缺失/旧库未迁移或 FTS 无命中时回退 `extracted.jsonl` 全文 LIKE 扫描（`backend="like"`）。
+- 引用格式固定为：`《文件名》第 N 页`、`《文件名》工作表「名」A2:D10`、`《文件名》第 P 页 表格「table_1」第 R 行`（DOCX 第 R 行为源表格行号）。回答里没有任何文件引用时必须直接回答「未在文件中找到」，不得凭记忆补写文件内容（契约 AGENT-04）。
+- `table_query` 只把该表 parquet 装入内存临时表 `t`，SQL 必须是单条 `SELECT`/`WITH`，拒绝写语句、DDL、`COPY`/`ATTACH`、`read_parquet`/`glob` 等表函数与路径字面量；外层强制 `LIMIT`，DuckDB 连接 `temp_directory=''`、`enable_external_access=false`，装载完成后才对查询启动计时，超过 5s 用 `interrupt()` 打断（装载不计入查询预算）。10 万行 Excel 表格的查询响应目标 < 3s（`tests/test_agent_tools.py::test_table_query_100k_rows_under_three_seconds`）。
+- 运行时装配（plan-20261107-004）：`AgentRuntime` 未显式传入 `registry` 时默认调用 `build_file_registry()` 装配五个文件工具。最终回答收口：本轮调用过 `file_search`/`file_read`/`table_schema`/`table_query`（`file_list` 只给清单、不产生定位引用，豁免），或回答自带《…》引用时，`COMPLETED` 前经 `finalize_file_answer()` 处理；引用白名单只取工具结果的 `metadata.citations`、`metadata.citation` 与 table 行 `citation`，工具结果正文属不可信数据、其中出现的《…》片段不计入白名单；无引用或引用不在白名单时回答「未在文件中找到」/仅保留可信引用（`tests/test_agent_runtime.py::test_file_tool_answer_without_citation_becomes_not_found`、`tests/test_agent_runtime.py::test_zero_tool_citation_is_downgraded`、`tests/test_agent_runtime.py::test_file_list_only_answer_is_not_rewritten`、`tests/test_agent_tools.py::test_agent_runtime_default_registry_wires_file_tools`）。
 
 ## 5. 冻结接口五：`agent_*` 三表
 
@@ -324,10 +368,14 @@ CREATE INDEX IF NOT EXISTS idx_agent_artifacts_digest ON agent_artifacts(digest)
 artifact 路径与去重：`data/agent/artifacts/<digest[:2]>/<digest>/<filename>`；同 digest 复用目录、只插一行，
 `digest` 索引保持非唯一（同一张图可被两个 run 引用）。删除 artifact 文件后 run/step 记录仍可查（审计不断链）。
 
+留存清理：`astock/agent/store.py::prune_artifacts(conn, *, before, keep_digests=(), root=None, delete_files=True)`
+删除 `created_at < before` 的行并按需清理不再被引用的文件与空目录（只用 `Path.unlink`/`Path.rmdir`）；
+调度与默认保留期由 plan-20261107-008 决定。`meta_json` 可修正（回放按快照重算），**产物真实性以 `digest`（文件 sha256）为准**（决策记录 Q2）。
+
 ## 6. 冻结接口六：`data_as_of` / `data_time`
 
-代码锚点：`astock/agent/types.py:90-91`（已实现字段）、`astock/data.py`（缺生产者）。
-状态：**字段已实现；生产者冻结，待 plan-20261107-006 落地**。
+代码锚点：`astock/agent/types.py:90-91`（已实现字段）、`astock/data.py`（`latest_bar_time` 已落地）。
+状态：**字段与唯一生产者均已实现**（生产者随 plan-20261107-005 图表管线先行落地，plan-20261107-006 只消费、不另写时点逻辑）。
 
 ### 6.1 语义
 
@@ -347,13 +395,20 @@ artifact 路径与去重：`data/agent/artifacts/<digest[:2]>/<digest>/<filename
 
 ```python
 # astock/data.py
-def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
+def latest_bar_time(
+    df: pd.DataFrame,
+    *,
+    freq: str = "D",
+    strict: bool = False,
+    notes: list[str] | None = None,
+) -> tuple[str, str]:
     """返回 (data_as_of, data_time)，是全局唯一的时点格式化入口。"""
 ```
 
 - 工具与渲染器**不得**自行 `strftime` 拼时点；所有 `ToolResult.data_as_of/data_time` 必须由它产出；
 - `freq` ∈ `D`/`W`/`M`/`1min`/`5min`/`15min`/`30min`/`60min`，与 `ChartSpec.data.period` 同构（分钟档带 `min`，月档带 `mo`，不共用 `1m`）；
-- 空 DataFrame 抛 `ValueError`（不允许返回空字符串骗过必填校验）。
+- 空 DataFrame 抛 `ValueError`（不允许返回空字符串骗过必填校验）；
+- 分钟档越界 bar（集合竞价 `09:25`、盘后 `15:01` 等）：默认**跳过**并取时段内最后一根（`strict=False`），`strict=True` 时抛 `ValueError`；时段内一根都没有则两种模式都抛错（2026-11-16 决策记录 Q7）。
 
 ### 6.3 降级标注（元数据键冻结）
 

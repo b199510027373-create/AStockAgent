@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwikcwd4-32c846",
+  "threadId": "rev-20261116-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "dependency",
+  "file": "requirements.txt",
+  "lines": "4",
+  "title": "plotly 仍是无上限 >=，kaleido 根本不在依赖里，PNG 真实路径默认永远 skip",
+  "evidence": "requirements.txt:4 仍是 `plotly>=5.0`（无上限），全文 16 行没有 kaleido；requirements-dev.txt 同样没有。后果是 tests/test_agent_chart_png_export.py:18-21 的 `pytestmark = pytest.mark.skipif(importlib.util.find_spec(\"kaleido\") is None, ...)` 在任何按 requirements.txt 装出来的环境（含 .github/workflows/ci.yml:29-33）都会成立，真实导出用例从未执行过。验收第 1 条「锁定 plotly 与 kaleido 精确版本，requirements 不再用无上限的 >= 漂移」完全未落实。",
+  "suggestion": "先用 spike 选定版本组合（kaleido 0.2.x 自带 chromium、1.x 需外部 Chrome，二者 API/部署差异大，不能随便挑），然后在 requirements.txt 写死 `plotly==<spike 版本>` 与 `kaleido==<spike 版本>`，并在 requirements-dev.txt 或注释中说明配套的 chromedriver/chrome 需求；新增 tests/test_requirements_pins.py（纯文本解析，不需要安装）断言 plotly/kaleido 两行形如 `==\\d+\\.\\d+\\.\\d+`，CI 再加 `pip check`。升级任一版本时必须同时改这个断言与下方 ops 文档的检查清单。",
+  "confidence": 0.97,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:21:05.551Z"
+  },
+  "createdAt": "2026-11-16T01:07:10.168Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:21:05.551Z"
+    }
+  ]
+}

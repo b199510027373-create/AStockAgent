@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwkq6sfo-5ffa17",
+  "threadId": "rev-20261117-002",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "documentation",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "306",
+  "title": "r2 的两处收口语义未同步到冻结清单与契约规则映射，且规则映射内部自相矛盾",
+  "evidence": "r2 改了两条收口语义，但文档仍写成「本轮用过文件工具时」不加区分，且契约规则映射里 AGENT-04 的证据行与实现不符。\\n\\n- docs/AStockAgent_interface_freeze_v1.md:306：「本轮用过文件工具时，最终回答在 COMPLETED 前经 finalize_file_answer() 收口——正文没有引用或引用不在工具结果中时回答「未在文件中找到」/仅保留可信引用」。但实现已把 file_list 排除（astock/agent/runtime.py:58 `_CITING_FILE_TOOLS = FILE_TOOL_NAMES - {\"file_list\"}`，:75 按它判断），且白名单只取结构化字段（runtime.py:82-109，正文 `extract_citations(result.text)` 分支已删）。按现文档，读者会认为「问有哪些文件」的回答也会被改写成「未在文件中找到」，与 tests/test_agent_runtime.py:777 `test_file_list_only_answer_is_not_rewritten` 相反。\\n- docs/AStockAgent_contract_rule_map_v1.md:41（AGENT-04 行）：「现阶段：tests/test_agent_runtime.py::test_tool_result_trim_and_signature（字段透传）；工具级必填校验待 plan-20261107-005 / -006 补测试」——与本 PR 自己改过的同文档 :103「文件侧 tests/test_agent_tools.py::test_file_result_requires_source（已落地）」矛盾，也没提已落地的 tests/test_agent_runtime.py::FileCitationTests 两例与 test_document_body_citation_is_not_trusted。\\n\\n验收 A10 要求「冻结清单与 ADR-015 同步更新」，本轮 r2 改了实现与测试但没回写这两处表述，属同步遗漏；不影响代码行为，故记 P2。",
+  "suggestion": "在同一提交里补两处：① docs/AStockAgent_interface_freeze_v1.md:306 改为「本轮调用过 file_search/file_read/table_schema/table_query（file_list 等清单类工具除外）时…；引用白名单只取工具返回的 metadata.citations / metadata.citation / table 行 citation，工具结果正文属不可信数据不参与白名单（AGENT-05）」，并补测试锚点 `tests/test_agent_runtime.py::test_document_body_citation_is_not_trusted`；② docs/AStockAgent_contract_rule_map_v1.md:41 的 AGENT-04 行证据更新为「tests/test_agent_tools.py::test_file_result_requires_source（工具层 source 必填）+ tests/test_agent_runtime.py::FileCitationTests（回答装配：无引用→未在文件中找到、白名单外引用→重建）」，并把「部分覆盖」限定为只剩行情侧 data_as_of/data_time（plan-20261107-005/-006）。改完在 PR #28 里追加一条 CI run 即可，无需改代码。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:39:53.296Z"
+  },
+  "createdAt": "2026-11-17T13:25:55.188Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:39:53.296Z"
+    }
+  ]
+}

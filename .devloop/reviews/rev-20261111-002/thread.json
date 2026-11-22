@@ -1,0 +1,31 @@
+{
+  "id": "rev-20261111-002",
+  "title": "评审：动作词与分位口径全站一致性核查",
+  "planItemId": "plan-20261103-006",
+  "sourceDevSessionId": "session-220c8f42-b3a7-4832-9fd9-c539d019a00c",
+  "branch": "feat/adr-gate-freeze",
+  "base": "main",
+  "files": [
+    "app.py",
+    "astock/agent/fake.py",
+    "astock/backfill.py",
+    "astock/contracts.py",
+    "astock/ledger.py",
+    "astock/recommend.py",
+    "astock/recommend_ui.py",
+    "astock/track.py",
+    "astock/use_cases.py",
+    "docs/AStockAgent_contract_rule_map_v1.md",
+    "docs/AStockAgent_interface_freeze_v1.md",
+    "tests/test_alpha_banner.py",
+    "tests/test_architecture_gate.py",
+    "tests/test_contracts.py",
+    "tests/test_hardening.py",
+    "tests/test_research_semantics.py",
+    "tests/test_use_cases.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-11T04:08:04.540Z",
+  "updatedAt": "2026-11-11T05:07:55.501Z",
+  "reviewSessionId": "session-bb552b6b-fded-42b8-91ce-156f0a26787a"
+}

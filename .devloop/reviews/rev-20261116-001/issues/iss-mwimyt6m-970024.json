@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwimyt6m-970024",
+  "threadId": "rev-20261116-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "semantics",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1437-1450",
+  "title": "require 失败时「run 记 failed」只对新建 run 生效：已有 run_id 因 ON CONFLICT DO NOTHING 不会被改成 failed",
+  "evidence": "chart_render.py:1437-1450 在 png_mode=\"require\" 失败时调用 `ensure_run(..., status=\"failed\")` 后抛 PNGExportError，但 store.ensure_run（astock/agent/store.py:175-181）是 `INSERT ... ON CONFLICT(run_id) DO NOTHING`：若该 run_id 已存在（Agent 循环预建 run、或同一 run 下第二次渲染），status 保持原值（running/success），与 docs/AStockAgent_png_export_ops.md:84 写的「agent_runs.status=failed」不一致。现有用例 tests/test_agent_chart_render.py:395-420 只覆盖新 run_id，所以没暴露。",
+  "suggestion": "require 失败分支在 ensure_run 之后显式落状态，例如新增 `store.fail_run(conn, run_key, reason=...)`（`UPDATE agent_runs SET status='failed', finished_at=? WHERE run_id=?`），或给 ensure_run 增加 `force_status: bool = False` 参数；补一条测试：先 `ensure_run(conn, \"run_require\", status=\"running\")` 预建 run，再触发 require 失败，断言 status 变为 failed 且 artifact 行仍为 0。若产品上不希望把预建 run 置 failed，则改 ops 文档与 docstring，不要宣称「run 记 failed」。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:34:50.977Z"
+  },
+  "createdAt": "2026-11-16T02:20:11.710Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:34:50.977Z"
+    }
+  ]
+}

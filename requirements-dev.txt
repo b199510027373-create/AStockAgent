@@ -1,7 +1,23 @@
 -r requirements.txt
 
-# Development / CI only
-ruff>=0.17
-mypy>=2.4
-coverage>=7.17
-pytest>=8
+# 开发 / CI 专用依赖：同样锁精确版本（plan-20261103-012）。
+#
+# 工具版本必须与 CI 实际使用的版本一致，否则「本地绿、CI 红」无法归因：
+# ruff 的规则集、mypy 的检查项、coverage 的统计口径都会随版本变化。
+# CI 只从本文件安装（不再 `pip install ruff mypy` 裸装最新版）。
+#
+# 版本来源：ruff/mypy/coverage/pytest 取本地 .venv 实测并通过全量测试的版本；
+# pytest-timeout 本机已实测安装（2.4.0，`pytest --trace-config` 确认插件注册，png 门的
+# `--timeout=180` 依赖它），与 main CI run 43923401645 日志中的版本一致。
+# pyyaml 由 tests/test_ci_quality_gates.py 直接 import 解析 ci.yml；虽然 gradio 会传递
+# 依赖它（Requires-Dist: pyyaml<7.0,>=5.0），但传递依赖的版本不受本文件约束，
+# 因此显式锁定（评审 iss-mwjmhnr6-565a8f）。
+ruff==0.17.3
+mypy==2.4.1
+coverage==7.17.0
+pytest==9.2.0
+pytest-timeout==2.4.0
+pyyaml==6.0.3
+# UI 冒烟驱动（tests/smoke/agent_ui/cdp.py）用 websocket-client 直连 CDP；
+# 只在 nightly / 手动冒烟里使用，主测试 job 装了不影响行为。
+websocket-client==1.9.0

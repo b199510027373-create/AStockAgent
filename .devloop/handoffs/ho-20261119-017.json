@@ -1,0 +1,138 @@
+{
+  "id": "ho-20261119-017",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+  "summary": "交付收尾：分支 feat/agent-chat-ui 已推送至 a1e15d1（5cceb3c 为第 2 轮 P1 修复，948107d/df3d84e/a1e15d1 为 devloop 记录），CI run 44440100842 与 44439808455 均 success（test + png-export）。计划项已回置 in_review / progress 95，links.test 保留 10 条真实命令结果；PR #32 已评论本轮修复。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "AI 对话 Tab：附件、流式、步骤时间线、内嵌图、引用、中断；不新增 Tab；降级可用。",
+      "source": "plan-20261107-007 描述"
+    },
+    {
+      "id": "ac1",
+      "text": "可上传 1–5 个文件并显示解析状态。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac2",
+      "text": "流式输出 + 工具步骤时间线。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac3",
+      "text": "图表内嵌渲染并可看 spec/来源。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位文件名+页码/工作表。",
+      "source": "验收标准"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断且保留已产出内容。",
+      "source": "验收标准"
+    },
+    {
+      "id": "p1-round2",
+      "text": "interrupt 仅在 run 在途时转发，不污染下一问。",
+      "source": "iss-mwmvlhso-cd6199"
+    },
+    {
+      "id": "residual-risk",
+      "text": "queue_.get() 阻塞取舍：生产为有界阻塞（httpx read timeout + runtime 检查点），接受不轮询。",
+      "source": "rev-20261119-001 round 2"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "_running/_stop_output 双事件：仅在 run 在途时转发 request_interrupt，流式阶段停止输出保留文本。",
+      "commit": "5cceb3c"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "3 条中断回归（run 结束后 / 流式阶段 / 预运行阶段）验证下一问仍 COMPLETED。",
+      "commit": "5cceb3c"
+    },
+    {
+      "path": ".devloop",
+      "summary": "计划项 links.test、日历、handoff 015/016 记录。",
+      "commit": "948107d"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-007.json",
+      "summary": "计划项回置 in_review、progress 95，等待第 3 轮复核。",
+      "commit": "a1e15d1"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q",
+      "result": "87 passed",
+      "passed": true,
+      "evidence": "87 passed"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && coverage report -m",
+      "result": "747 passed",
+      "passed": true,
+      "evidence": "747 passed；79.07%"
+    },
+    {
+      "command": "ruff check astock tests; mypy astock app.py; python -c \"import app\"",
+      "result": "pass",
+      "passed": true,
+      "evidence": "全通过（43 files）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe .smoke-agent-ui\\round3_drive.py",
+      "result": "PASS 4/4",
+      "passed": true,
+      "evidence": "空闲中断提示、第二问 3 步/408 字、生成中中断保留 121 字（shots/9,10,11）"
+    },
+    {
+      "command": "gh run view 44440100842 / 44439808455",
+      "result": "CI success",
+      "passed": true,
+      "evidence": "两次 run conclusion success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "gh 推送与 CI 查询",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "真实模型端到端未验证，FakeModel 冒烟已覆盖 UI 链路",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui",
+    "commit": "a1e15d1",
+    "pr": "#32 https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "gh run view 44440100842 -> success（head a1e15d1，test + png-export 均完成）；44439808455（5cceb3c）同样 success",
+    "merge": "未合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-016",
+  "next": "等待第 3 轮评审（仅 iss-mwmvlhso-cd6199 + 残存风险说明）。若 approve：把 plan-20261107-007 置 done / progress 100，归档 handoff（keep 3），并按需处理 PR #32 合并。",
+  "createdAt": "2026-11-19T02:23:40.732Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-017.md"
+}

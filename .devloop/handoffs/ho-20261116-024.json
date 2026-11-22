@@ -1,0 +1,53 @@
+{
+  "id": "ho-20261116-024",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-003",
+  "threadId": "rev-20261116-002",
+  "sessionId": "",
+  "title": "CI 回填：761e9fa 与 a5fbcf6 均 success，PR #15 CLEAN",
+  "summary": "CI 状态回填（相对 ho-20261116-023 的唯一变化）：实现提交 761e9fa 的 CI run 43824704960 test/png-export 均 success；记录该轮证据的计划/交付文档提交 a5fbcf6，其 CI run 43824780572 同样 success。PR #15 当前 head a5fbcf6、状态 OPEN、mergeState CLEAN，无新增代码改动，无需重新评审本轮逻辑（diff 复核范围仍为 761e9fa 的三处清扫）。",
+  "requirements": [],
+  "changes": [],
+  "tests": [
+    {
+      "command": "gh run view 43824704960 --json status,conclusion",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "head 761e9fa: test + png-export success"
+    },
+    {
+      "command": "gh run view 43824780572 --json status,conclusion",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "head a5fbcf6（计划/日历/handoff 文档）: success"
+    },
+    {
+      "command": "gh pr view 15 --json state,mergeStateStatus,headRefOid",
+      "result": "OPEN / CLEAN / a5fbcf6",
+      "passed": true,
+      "evidence": "PR #15 可合并状态"
+    }
+  ],
+  "permissions": [],
+  "delivery": {
+    "branch": "fix/data-adj-caliber",
+    "commit": "a5fbcf6",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/15",
+    "ci": "run 43824704960（761e9fa）success；run 43824780572（a5fbcf6 文档提交）success",
+    "merge": "未合并；PR #15 OPEN / mergeState CLEAN，等待复核 approve 后合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261116-023",
+  "next": "1) 评审复核 761e9fa 的三处清扫（预期 openP1=0，iss-mwixznmz-2f393e 与 iss-mwixbcyf-8383d6 resolved）；2) approve 后合并 PR #15，合并后复跑 main CI 并把 run 号回填 plan-20261114-003；3) 验收⑥仍由 plan-20261107-006 / plan-20261114-002 收口；4) 本次文档提交触发的后续 CI 若变动，只更新计划项 links.test，不再为记录 run 号追加提交。",
+  "createdAt": "2026-11-16T07:36:53.499Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-024.md"
+}

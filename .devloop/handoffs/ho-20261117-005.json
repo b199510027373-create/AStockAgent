@@ -1,0 +1,100 @@
+{
+  "id": "ho-20261117-005",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-008",
+  "threadId": null,
+  "sessionId": "",
+  "title": "SW2014→SW2021 行业边界校准与 crosswalk",
+  "summary": "按用户指示已合并 PR #20：以 merge commit 9b71fb5 fast-forward 合入 main，删除特性分支；随后提交 92f5e47 将 plan-20261103-008 置 done/100，并在 links 记录 merge 提交。main 两次 push CI（43923350408@9b71fb5、43923401645@92f5e47）test 与 png-export 均通过。交付内容与 ho-20261117-003 一致：crosswalk 映射表、6+6 分布量化、Parquet 缓存、研究文档 §4.1 与审计 CSV，无新增代码改动。",
+  "requirements": [
+    {
+      "id": "AC-1",
+      "text": "产出一张 SW2014 L1 ↔ SW2021 L1 的可审计映射表（含未匹配清单）",
+      "source": "plan-20261103-008 acceptance"
+    },
+    {
+      "id": "AC-2",
+      "text": "2021-12-13 前后各 6 个快照的行业分布差异有量化说明",
+      "source": "plan-20261103-008 acceptance"
+    },
+    {
+      "id": "AC-3",
+      "text": "映射表落缓存/Parquet，PIT 快照可复现",
+      "source": "plan-20261103-008 acceptance"
+    },
+    {
+      "id": "AC-4",
+      "text": "研究结论文档补充「跨版本行业不可比」的具体影响范围",
+      "source": "plan-20261103-008 acceptance"
+    },
+    {
+      "id": "R2-P1",
+      "text": "按实测重写 §2.6 的 10%/40% 敏感性结论，并补固定 fixture 测试锁住该切点",
+      "source": "review rev-20261116-003 r2 / iss-mwjjtisr-009abf"
+    },
+    {
+      "id": "R2-P2",
+      "text": "补分布缓存测试：同窗口 refresh=False 命中与阈值变化使 meta 失效",
+      "source": "review rev-20261116-003 r2 / iss-mwjjtiu2-739bf2"
+    },
+    {
+      "id": "MERGE",
+      "text": "用户明确指示「请合并」，将 PR #20 合入 main 并把计划置 done",
+      "source": "用户 m01071"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261103-008.json",
+      "summary": "PR #20 以 merge commit 9b71fb5 合入 main（fast-forward，8 files / +2127 -5），特性分支 feat/sw2014-sw2021-crosswalk 已删除。",
+      "commit": "9b71fb5"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-008.json",
+      "summary": "合并后置 status=done、progress=100；links 增加 merge=9b71fb5、merge CI 证据。",
+      "commit": "92f5e47"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions main run 43923350408 (head 9b71fb5, merge commit)",
+      "result": "both jobs success",
+      "passed": true,
+      "evidence": "test pass 1m12s; png-export pass 1m53s；main 分支合并后双 job SUCCESS。"
+    },
+    {
+      "command": "GitHub Actions main run 43923401645 (head 92f5e47, plan done commit)",
+      "result": "success",
+      "passed": true,
+      "evidence": "CI completed success；最终 main head 双 job 通过。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI repo write/merge",
+      "reason": "gh auth status 已登录 b199510027373-create，token 含 repo/workflow；用于合并 PR #20、删除远程分支及推送 main 计划状态提交。",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "9b71fb5, 92f5e47",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/20",
+    "ci": "main run 43923350408 (9b71fb5) 与 43923401645 (92f5e47) test+png-export 均 pass",
+    "merge": "PR #20 merged fast-forward at 9b71fb5; branch feat/sw2014-sw2021-crosswalk deleted",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-003",
+  "next": "任务已完成并合入 main，无需继续开发。评审线程 rev-20261116-003 在平台上仍显示 changes_requested（reviewer 未手动点通过），但用户已明确指示合并；若后续评审仍要求补正，另开修复项处理。",
+  "createdAt": "2026-11-16T17:57:23.654Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-005.md"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwm6toxk-8c49ae",
+  "threadId": "rev-20261118-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/tools/market_tools.py",
+  "lines": "684",
+  "title": "quote 取日线只用 10 天窗口，停牌超过约 5 个交易日就报「无 day 行情数据」而不是标 suspended",
+  "evidence": "quote 第一步 `daily = load_series(code, \"day\", adj=adj, bars=5, now=stamp, deps=deps)`（market_tools.py:684）；_series_window_start 对 day 周期取 `now - pd.Timedelta(days=max(7, bars * LOOKBACK_FACTOR[\"day\"]))`（305-312，bars=5、factor=2 → 10 天），deps.daily 只返回这 10 个自然日内的行。停牌超过约 5 个交易日（含停牌核查、重组停牌）时 frame 为空，load_series:477-478 直接 `raise TushareError(f\"{code} 无 {requested_period} 行情数据\")`，quote 整体失败并变成 ok=False 的错误结果：既拿不到最后一根 bar，也走不到 _is_suspended / freshness=\"suspended\"（486-490），与验收第 10 条「停牌/无成交标的显式标注」和 ADR-018 §4「停牌返回最后一根 bar 并标 suspended」冲突；错误文案还会让模型对用户说「没有行情数据」而不是「停牌」。tests/test_data_time_semantics.py::test_suspended_marks_freshness_and_note 只覆盖「最后一根 bar 的 vol/amount 为 0」的当日停牌形态，没有覆盖停牌期间取数窗口为空的情况。",
+  "suggestion": "让 quote 在停牌时仍能取到最后一根 bar：把日线请求窗口放宽到至少 60 个交易日（例如 bars=INDICATOR_WARMUP_BARS 或新增 SUSPENDED_LOOKBACK_BARS），或在空帧时按 60→250 天逐级重取后再判定；只有确实没有任何历史数据时才抛错，并把文案区分为「无历史数据」与「停牌/无成交」。改动后补 test_quote_handles_long_suspension：daily 假实现按 start/end 过滤，10 天窗口返回空、60/250 天窗口返回 20 天前的 bar 且 vol/amount 全 0，断言 result.ok、metadata[\"freshness\"]==\"suspended\"、text 含「停牌/无成交」且仍带 data_as_of+data_time。完成后重跑 pytest tests/test_data_time_semantics.py -q 与 pytest tests -q。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T15:37:49.730Z"
+  },
+  "createdAt": "2026-11-18T13:59:23.768Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T15:37:49.730Z"
+    }
+  ]
+}

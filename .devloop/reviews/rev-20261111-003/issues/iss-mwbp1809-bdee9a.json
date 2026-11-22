@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbp1809-bdee9a",
+  "threadId": "rev-20261111-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "功能回退/显示降级",
+  "file": "astock/use_cases.py",
+  "lines": "56-67, 350-366",
+  "title": "生成页表格丢失 收盘/20日%/RSI 三列（ledger items 未持久化，页面不可见但归档可下载）",
+  "evidence": "RECOMMEND_COLUMNS（use_cases.py:56-67）只有 10 列，`_ledger_view` 的 rows（350-366）只映射 rank/code/name/industry/composite/percentile/technical/event/action/reason；ledger items 表（ledger.py:34-47）与 save_run 的 INSERT（175-194）也没有收盘/20日%/RSI，读回后无法还原。base main 的 `_generate_view` 曾直接渲染 rec.table，而 recommend.py:914-933 生成的是含 收盘/20日%/RSI 的 13 列表，因此生成页表格比改动前少三列；数据仍写入 CSV/JSON 归档（recommend.py:594-596），可下载查看，故不升 P1。当前 tests/test_core_paths.py:91-92 只断言 len(table)==1，未断言列集合。",
+  "suggestion": "开发者二选一并留痕：(a) 在 items 表增列 close/ret20/rsi（与报告字段同批 schema 迁移），save_run/get_run/_ledger_view 读写并在页面展示；(b) 在计划/ADR 中明确接受生成页只显示统一 10 列，并在批次信息里提示「完整行情列见 CSV/JSON 下载」。无论哪种，补一条断言生成结果列集合的测试（至少在 tests/test_core_paths.py 的集成用例中断言列名），避免后续再次静默变更。",
+  "confidence": 0.72,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T06:05:48.266Z"
+  },
+  "createdAt": "2026-11-11T05:43:40.233Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T06:05:48.266Z"
+    }
+  ]
+}

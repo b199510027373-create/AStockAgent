@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwikd6g8-8f9fd4",
+  "threadId": "rev-20261116-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "process",
+  "file": ".devloop/plan/items/plan-20261114-001.json",
+  "lines": "5,12",
+  "title": "本线程无任何交付物：分支已删除、无 handoff、无 spike 记录，验收 7 条均无证据",
+  "evidence": "devloop_git files base=main head=feat/agent-chart-pipeline 返回「head 不是合法 revision」；当前分支是 fix/data-adj-caliber，feat/agent-chart-pipeline 已在 PR #14 合并后删除（.devloop/handoffs/ho-20261114-007.json 第 9 行「分支 feat/agent-chart-pipeline 已删除」）。git log 40 条无任何 kaleido/PNG 基础设施提交；devloop_handoff list planItemId=plan-20261114-001 返回 count 0；plan-20261114-001.json:5 status=doing、:12 progress=5。测试证据方面：本机 kaleido 仍未安装（ho-20261116-003 的 permissions 段「kaleido 安装…blocked」），也没有任何 Windows/Linux 真实导出日志或 spike 记录，验收第 2 条的「先完成目标环境 spike 并记录 Chrome/字体/版本组合」没有任何证据。",
+  "suggestion": "本线程无法评审「实现」是因为没有交付物，请开发按以下顺序补齐再复审：1) 从 main（当前 06fb118）新开 fix/agent-chart-png-kaleido；2) 先写 spike 记录（建议 docs/AStockAgent_png_export_ops.md 的「环境矩阵」一节）：Windows 本机与 ubuntu-latest 各自的 OS 版本、kaleido 0.2.x vs 1.x 选择、Chrome/Chromium 来源与版本、CJK 字体包与族名、导出耗时、中文字符实测截图/PNG；3) 落地依赖锁定、CI job、字体、meta 字段；4) 提 developer initial handoff，附 pytest 输出、CI run 链接、生成的 PNG 路径与尺寸；5) 再回到本线程第 2 轮。若本计划项暂不排期，请把状态改回 backlog/todo 并关闭本线程，不要让一个无分支的线程保持 open。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:21:27.302Z"
+  },
+  "createdAt": "2026-11-16T01:07:23.240Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:21:27.302Z"
+    }
+  ]
+}

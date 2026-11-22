@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwksje5e-16b238",
+  "threadId": "rev-20261117-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "migration",
+  "file": "astock/agent/store.py",
+  "lines": "1250-1259",
+  "title": "迁移备份先 checkpoint 但吞掉失败，再用 shutil.copy2 复制主文件，WAL 未落盘时备份可能缺已提交事务",
+  "evidence": "_backup_database 先执行 `PRAGMA wal_checkpoint(TRUNCATE)`，但用 `contextlib.suppress(sqlite3.DatabaseError)` 吞掉失败，然后直接 `shutil.copy2(db_path, backup)`（store.py:1250-1259）。WAL 模式下如果 checkpoint 因其他连接/忙而失败，主文件不包含最新已提交事务，备份就是旧快照；迁移后又 DROP 旧表，若之后需要回滚/人工恢复，备份缺少最近数据。spec §8.1 要求先 checkpoint 再备份，但没有说可以忽略 checkpoint 失败。",
+  "suggestion": "检查 `PRAGMA wal_checkpoint(TRUNCATE)` 的返回（busy/log/checkpointed 列），非 0 时中止迁移并提示先停写；或直接使用 sqlite3 的 `conn.backup()` / `VACUUM INTO` 生成一致性备份，不依赖主文件复制。备份完成后再校验备份的 integrity_check 和关键表行数。补一个 WAL 未 checkpoint 场景的测试（可用第二个连接持有读事务模拟 busy）。",
+  "confidence": 0.78,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:01:48.541Z"
+  },
+  "createdAt": "2026-11-17T14:31:42.434Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:01:48.541Z"
+    }
+  ]
+}

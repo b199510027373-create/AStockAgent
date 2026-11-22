@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwjmi7bw-9b664c",
+  "threadId": "rev-20261117-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-gap",
+  "file": "tests/test_ci_quality_gates.py",
+  "lines": "24-26, 106-114",
+  "title": "覆盖率守护用例的下限 76.0 弱于 docstring 声称意图：门槛降到 76.0 仍绿",
+  "evidence": "tests/test_ci_quality_gates.py:26 `MIN_COVERAGE_FLOOR = 76.0`，第 113 行断言 `assert fail_under >= MIN_COVERAGE_FLOOR`。而该用例的 docstring 声称要防止「门槛被下调到实测值以下」——实测基线是 76.47。\n\n实际强度：把 .coveragerc 的 fail_under 从 76.47 改成 76.0，这个测试仍然全绿，门禁静默下降 0.47pp 无人拦截。这与 tests/test_ci_quality_gates.py 整个文件「配置一旦退化就变红」的设计目的相反。",
+  "suggestion": "把常量改成实测基线本身：`MIN_COVERAGE_FLOOR = 76.47`，断言 `fail_under >= 76.47`；若希望下调必须显式过评审，就断言 `fail_under == 76.47` 并在注释写明「调整门槛必须同步修改本断言」。\n\n完全解决标准：把 .coveragerc 的 fail_under 改成 76.0 时该用例变红。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T19:19:30.541Z"
+  },
+  "createdAt": "2026-11-16T18:55:03.068Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T19:19:30.541Z"
+    }
+  ]
+}

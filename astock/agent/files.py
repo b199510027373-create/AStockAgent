@@ -35,10 +35,11 @@ import re
 import sqlite3
 import uuid
 import zipfile
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import pandas as pd
@@ -49,31 +50,36 @@ __all__ = [
     "BLOCK_FIELDS",
     "DEFAULT_FILES_DIR",
     "EXTRACTION_WARNING_PREFIX",
-    "ExtractedDoc",
     "FILE_CHUNKS_DDL",
+    "FILE_CHUNKS_FTS_DDL",
     "FILE_CHUNKS_TRIGGER_DDL",
-    "IngestResult",
     "MAX_CHUNK_CHARS",
     "MAX_FILES_PER_BATCH",
     "MAX_FILE_BYTES",
     "MAX_PDF_PAGES",
     "META_FIELDS",
+    "STATUSES",
     "STATUS_EMPTY_TEXT",
     "STATUS_ENCRYPTED",
     "STATUS_OK",
     "STATUS_SUSPECTED_SCAN",
     "STATUS_UNSUPPORTED",
-    "STATUSES",
     "SUPPORTED_EXTS",
+    "ExtractedDoc",
+    "IngestResult",
     "describe_limits",
     "ensure_index_schema",
     "file_dir",
+    "files_root",
+    "fts_tokens",
     "index_chunks",
+    "index_db_path",
     "ingest_file",
     "ingest_files",
     "iter_chunks",
     "load_meta",
     "load_table",
+    "table_path",
 ]
 
 # ---------------------------------------------------------------------------
@@ -160,26 +166,27 @@ DEFAULT_FILES_DIR = Path(
 )
 
 #: 冻结的 FTS5 建表语句（与《接口冻结清单》§4 字符级一致）。
+#:
+#: ``tokens`` 列由写入侧 :func:`fts_tokens` 生成：英文/数字按词、CJK 按 bigram。
+#: 这样 ``unicode61`` 也能命中中文子串（不依赖 trigram，2 字中文查询同样可检索），
+#: 原文仍完整保存在 ``file_chunks.text``。
+FILE_CHUNKS_FTS_DDL = """CREATE VIRTUAL TABLE IF NOT EXISTS file_chunks_fts USING fts5(
+  tokens, content='', contentless_delete=1, tokenize='unicode61');"""
+
 FILE_CHUNKS_DDL = """CREATE TABLE IF NOT EXISTS file_chunks(
   chunk_id INTEGER PRIMARY KEY, file_id TEXT NOT NULL, page INTEGER,
   sheet TEXT, block INTEGER NOT NULL, text TEXT NOT NULL);
-CREATE VIRTUAL TABLE IF NOT EXISTS file_chunks_fts USING fts5(
-  text, content='file_chunks', content_rowid='chunk_id', tokenize='unicode61');
+""" + FILE_CHUNKS_FTS_DDL + """
 CREATE INDEX IF NOT EXISTS idx_file_chunks_file ON file_chunks(file_id, page);"""
 
-#: ``file_chunks_fts`` 与 ``file_chunks`` 的同步触发器（ADR-015 §5）。
-FILE_CHUNKS_TRIGGER_DDL = """CREATE TRIGGER IF NOT EXISTS file_chunks_ai AFTER INSERT ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(rowid, text) VALUES (new.chunk_id, new.text);
-END;
-CREATE TRIGGER IF NOT EXISTS file_chunks_ad AFTER DELETE ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(file_chunks_fts, rowid, text)
-  VALUES ('delete', old.chunk_id, old.text);
-END;
-CREATE TRIGGER IF NOT EXISTS file_chunks_au AFTER UPDATE ON file_chunks BEGIN
-  INSERT INTO file_chunks_fts(file_chunks_fts, rowid, text)
-  VALUES ('delete', old.chunk_id, old.text);
-  INSERT INTO file_chunks_fts(rowid, text) VALUES (new.chunk_id, new.text);
-END;"""
+#: 旧库（``content='file_chunks'`` + unicode61）迁移时需要先摘掉的触发器。
+FILE_CHUNKS_LEGACY_TRIGGERS_DDL = """DROP TRIGGER IF EXISTS file_chunks_ai;
+DROP TRIGGER IF EXISTS file_chunks_ad;
+DROP TRIGGER IF EXISTS file_chunks_au;"""
+
+#: 兼容旧导入；contentless ``tokens`` 布局不再使用 SQL 触发器同步 FTS
+#: （tokens 必须由 Python 侧 :func:`fts_tokens` 计算），保留空串避免旧调用点回退。
+FILE_CHUNKS_TRIGGER_DDL = ""
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
@@ -187,6 +194,9 @@ _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _LEADING_ZERO_RE = re.compile(r"^0\d")
 # sheet_slug 白名单（冻结布局：tables/<sheet_slug>.parquet，见 §4）。
 _SHEET_SLUG_RE = re.compile(r"[a-z0-9_]{1,48}")
+# FTS tokens 切分：CJK 连续片段（bigram）与英文/数字词。
+_CJK_RUN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
+_WORD_RE = re.compile(r"[0-9a-z_]+")
 
 
 def describe_limits() -> str:
@@ -278,7 +288,7 @@ def ingest_file(
         return _ingest(source, root=root, db_path=db_path, uploaded_at=upload, index=index)
     except _Rejected as exc:
         return IngestResult(name=source.name, status=exc.status, warnings=exc.warnings)
-    except Exception as exc:  # 兜底：解析器内部异常也不让工具层崩（C2）
+    except Exception as exc:  # noqa: BLE001 - 兜底：第三方解析器异常类型不稳定，工具层不能崩（C2）
         return IngestResult(
             name=source.name,
             status=STATUS_UNSUPPORTED,
@@ -305,8 +315,8 @@ def ingest_files(
                     name=source.name,
                     status=STATUS_UNSUPPORTED,
                     warnings=[
-                        f"单轮最多导入 {MAX_FILES_PER_BATCH} 个文件，第 {position} 个"
-                        f"（{source.name}）未处理；请分批导入。"
+                        (f"单轮最多导入 {MAX_FILES_PER_BATCH} 个文件，第 {position} 个"
+                        f"（{source.name}）未处理；请分批导入。")
                     ],
                 )
             )
@@ -338,8 +348,8 @@ def _ingest(
         raise _Rejected(
             STATUS_UNSUPPORTED,
             [
-                f"暂不支持 .{ext or '(无扩展名)'} 格式；"
-                f"当前支持 {', '.join('.' + e for e in SUPPORTED_EXTS)}。"
+                (f"暂不支持 .{ext or '(无扩展名)'} 格式；"
+                f"当前支持 {', '.join('.' + e for e in SUPPORTED_EXTS)}。")
             ],
         )
 
@@ -348,8 +358,8 @@ def _ingest(
         raise _Rejected(
             STATUS_UNSUPPORTED,
             [
-                f"文件大小 {size / (1024 * 1024):.2f} MiB 超过单文件上限 "
-                f"{MAX_FILE_BYTES // (1024 * 1024)} MiB，未解析。{describe_limits()}"
+                (f"文件大小 {size / (1024 * 1024):.2f} MiB 超过单文件上限 "
+                f"{MAX_FILE_BYTES // (1024 * 1024)} MiB，未解析。{describe_limits()}")
             ],
         )
     if size == 0:
@@ -361,8 +371,8 @@ def _ingest(
         raise _Rejected(
             STATUS_ENCRYPTED,
             [
-                f".{ext} 是加密的 OLE 复合文档（文件头 D0 CF 11 E0），v1 不支持解密；"
-                "请另存为未加密副本后重试。"
+                (f".{ext} 是加密的 OLE 复合文档（文件头 D0 CF 11 E0），v1 不支持解密；"
+                "请另存为未加密副本后重试。")
             ],
         )
     digest = hashlib.sha256(payload).hexdigest()
@@ -402,7 +412,7 @@ def _ingest(
     if index and chunk_rows:
         try:
             index_chunks(file_id, chunk_rows, db_path=db_path)
-        except Exception as exc:  # 索引失败不应丢掉已落盘的抽取结果
+        except Exception as exc:  # noqa: BLE001 - duckdb/sqlite 异常类型不一，索引失败不应丢掉已落盘结果
             meta["warnings"].append(
                 f"{EXTRACTION_WARNING_PREFIX} FTS 索引写入失败（{type(exc).__name__}: {exc}），"
                 "文本检索将查不到该文件。"
@@ -436,7 +446,10 @@ def _ingest(
 
 
 def _files_root(root: str | Path | None) -> Path:
-    return Path(root) if root is not None else DEFAULT_FILES_DIR
+    if root is not None:
+        return Path(root)
+    env_root = os.getenv("AGENT_FILES_DIR")
+    return Path(env_root) if env_root else DEFAULT_FILES_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -462,7 +475,7 @@ def _load_pdfplumber() -> Any | None:
     """惰性导入 pdfplumber；缺失时返回 ``None`` 由调用方降级（不抛 ImportError）。"""
     try:
         import pdfplumber  # type: ignore[import-not-found]
-    except Exception:
+    except ImportError:
         return None
     return pdfplumber
 
@@ -495,8 +508,8 @@ def _parse_pdf(source: Path) -> _Parsed:
         raise _Rejected(
             STATUS_UNSUPPORTED,
             [
-                "解析 PDF 需要 pdfplumber（requirements.txt 中 pdfplumber>=0.11），"
-                "当前环境未安装，无法抽取文本层；请安装后重试。"
+                ("解析 PDF 需要 pdfplumber（requirements.txt 中 pdfplumber>=0.11），"
+                "当前环境未安装，无法抽取文本层；请安装后重试。")
             ],
         )
     version = str(getattr(plumber, "__version__", "unknown"))
@@ -520,8 +533,8 @@ def _parse_pdf(source: Path) -> _Parsed:
             raise _Rejected(
                 STATUS_UNSUPPORTED,
                 [
-                    f"PDF 共 {len(pages)} 页，超过上限 {MAX_PDF_PAGES} 页，未解析；"
-                    "请拆分后重试。"
+                    (f"PDF 共 {len(pages)} 页，超过上限 {MAX_PDF_PAGES} 页，未解析；"
+                    "请拆分后重试。")
                 ],
             )
         parsed.pages = len(pages)
@@ -564,7 +577,7 @@ def _parse_pdf(source: Path) -> _Parsed:
 def _safe_extract_text(page: Any) -> str:
     try:
         text = page.extract_text()
-    except Exception:
+    except Exception:  # noqa: BLE001 - pdfminer 抛出的异常类型不稳定（PSException 等），单页失败返回空串
         return ""
     return text if isinstance(text, str) else ""
 
@@ -576,12 +589,12 @@ def _page_tables(page: Any) -> list[tuple[list[list[Any]], list[float] | None]]:
     if callable(finder):
         try:
             tables = finder()
-        except Exception:
+        except Exception:  # noqa: BLE001 - pdfplumber 表格探测是可选增强，失败按无表处理
             tables = []
         for table in tables:
             try:
                 grid = table.extract()
-            except Exception:
+            except Exception:  # noqa: BLE001, S112 - 单张表抽取失败跳过，其余表继续
                 continue
             bbox = getattr(table, "bbox", None)
             box = [float(v) for v in bbox] if bbox else None
@@ -593,7 +606,7 @@ def _page_tables(page: Any) -> list[tuple[list[list[Any]], list[float] | None]]:
     if callable(extractor):
         try:
             raw = extractor()
-        except Exception:
+        except Exception:  # noqa: BLE001 - 旧版 extract_tables 失败按无表处理
             raw = []
         for grid in raw or []:
             if isinstance(grid, list):
@@ -643,7 +656,7 @@ def _parse_excel(source: Path, ext: str) -> _Parsed:
 
 def _parse_csv(source: Path) -> _Parsed:
     data = source.read_bytes()
-    text, encoding, decode_warnings = _decode_bytes(data)
+    text, _encoding, decode_warnings = _decode_bytes(data)
     delimiter = _detect_delimiter(text[:8192])
     rows: list[list[Any]] = []
     try:
@@ -711,7 +724,7 @@ def _docx_body(source: Path) -> tuple[Any, str, str]:
     DocxDocument: Any
     try:
         from docx import Document as _DocxDocument
-    except Exception:
+    except ImportError:
         DocxDocument = None
     else:
         DocxDocument = _DocxDocument
@@ -848,7 +861,9 @@ def _add_sheet(
                 sheet=name,
                 kind="table",
                 text=text,
-                bbox=[row_number, 1, row_number, len(columns)],
+                # PDF 表格只有整表页面坐标 [x0,y0,x1,y1]（points）；Excel/CSV/DOCX
+                # 才能精确定位到源表格行，写成 [row,1,row,cols]（1 基闭区间）。
+                bbox=bbox if bbox is not None else [row_number, 1, row_number, len(columns)],
                 cells=sum(1 for value in row if value is not None and str(value).strip()),
             )
         )
@@ -1027,8 +1042,8 @@ def _write_original(directory: Path, ext: str, payload: bytes, digest: str) -> N
         raise _Rejected(
             STATUS_UNSUPPORTED,
             [
-                f"同一内容的文件已按 {others[0]} 导入过；内容寻址目录 "
-                f"{directory.name[:12]}… 只保留一份原始文件，请勿用不同扩展名重复导入。"
+                (f"同一内容的文件已按 {others[0]} 导入过；内容寻址目录 "
+                f"{directory.name[:12]}… 只保留一份原始文件，请勿用不同扩展名重复导入。")
             ],
         )
     if target.exists():
@@ -1037,8 +1052,8 @@ def _write_original(directory: Path, ext: str, payload: bytes, digest: str) -> N
             raise _Rejected(
                 STATUS_UNSUPPORTED,
                 [
-                    f"内容寻址目录 {directory.name} 内的 original.{ext} 与 sha256 不一致，"
-                    "拒绝覆盖；请人工检查该目录。"
+                    (f"内容寻址目录 {directory.name} 内的 original.{ext} 与 sha256 不一致，"
+                    "拒绝覆盖；请人工检查该目录。")
                 ],
             )
         return
@@ -1154,7 +1169,7 @@ def _self_check(
         path = directory / "tables" / f"{sheet['slug']}.parquet"
         try:
             frame = pd.read_parquet(path)
-        except Exception as exc:
+        except (OSError, ValueError) as exc:  # pyarrow.ArrowInvalid 是 ValueError 子类
             warnings.append(f"{prefix} 工作表 {sheet['name']} 的 parquet 回读失败：{exc}")
             continue
         if list(frame.shape) != [sheet["rows"], sheet["cols"]]:
@@ -1222,8 +1237,8 @@ def _decode_bytes(data: bytes) -> tuple[str, str, list[str]]:
         data.decode("latin-1"),
         "latin-1",
         [
-            f"{EXTRACTION_WARNING_PREFIX} 无法判定编码（尝试 utf-8/gb18030/gbk 均失败），"
-            "已按 latin-1 解码，中文可能乱码。"
+            (f"{EXTRACTION_WARNING_PREFIX} 无法判定编码（尝试 utf-8/gb18030/gbk 均失败），"
+            "已按 latin-1 解码，中文可能乱码。")
         ],
     )
 
@@ -1248,7 +1263,7 @@ def _package_version(name: str) -> str:
         from importlib.metadata import version
 
         return version(name)
-    except Exception:  # pragma: no cover - 元数据缺失时降级
+    except ImportError:  # pragma: no cover - 元数据缺失时降级
         return "unknown"
 
 
@@ -1272,10 +1287,55 @@ def _atomic_write_text(target: Path, text: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def fts_tokens(text: str) -> list[str]:
+    """把文本切成 FTS ``tokens`` 列使用的检索词。
+
+    - 英文/数字按词（小写，支持下划线）；
+    - CJK 连续片段按 bigram 切分，单字片段保留单字；
+    - 去重且保持出现顺序。
+
+    中文 bigram 让 ``unicode61`` 分词器也能命中 2 字及以上的中文子串。
+    """
+    lowered = (text or "").lower()
+    tokens: list[str] = []
+    for run in _CJK_RUN_RE.findall(lowered):
+        if len(run) == 1:
+            tokens.append(run)
+        else:
+            tokens.extend(run[index : index + 2] for index in range(len(run) - 1))
+    tokens.extend(_WORD_RE.findall(lowered))
+    return list(dict.fromkeys(tokens))
+
+
+def _fts_tokens_text(text: str) -> str:
+    return " ".join(fts_tokens(text))
+
+
+def _rebuild_fts_table(conn: sqlite3.Connection) -> None:
+    """把旧 unicode61/content 表重建为 tokens(contentless) 布局并回填。"""
+    conn.executescript(FILE_CHUNKS_LEGACY_TRIGGERS_DDL)
+    conn.execute("DROP TABLE IF EXISTS file_chunks_fts")
+    conn.execute(FILE_CHUNKS_FTS_DDL)
+    rows = conn.execute("SELECT chunk_id, text FROM file_chunks").fetchall()
+    for chunk_id, text in rows:
+        tokens = _fts_tokens_text(text)
+        if tokens:
+            conn.execute(
+                "INSERT INTO file_chunks_fts(rowid, tokens) VALUES (?, ?)",
+                (chunk_id, tokens),
+            )
+
+
 def ensure_index_schema(conn: sqlite3.Connection) -> None:
-    """建 ``file_chunks`` / ``file_chunks_fts`` 与同步触发器（幂等）。"""
+    """建 ``file_chunks`` / ``file_chunks_fts``（幂等，并迁移旧 unicode61 表）。"""
     conn.executescript(FILE_CHUNKS_DDL)
-    conn.executescript(FILE_CHUNKS_TRIGGER_DDL)
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='file_chunks_fts'"
+    ).fetchone()
+    existing = (row[0] or "") if row else ""
+    if existing and "contentless_delete" not in existing:
+        _rebuild_fts_table(conn)
+    conn.commit()
 
 
 def index_chunks(
@@ -1292,31 +1352,58 @@ def index_chunks(
     conn = sqlite3.connect(path, timeout=10)
     try:
         ensure_index_schema(conn)
+        old_ids = [
+            item[0]
+            for item in conn.execute(
+                "SELECT chunk_id FROM file_chunks WHERE file_id = ?", (file_id,)
+            )
+        ]
+        for chunk_id in old_ids:
+            conn.execute("DELETE FROM file_chunks_fts WHERE rowid = ?", (chunk_id,))
         conn.execute("DELETE FROM file_chunks WHERE file_id = ?", (file_id,))
-        conn.executemany(
-            "INSERT INTO file_chunks(file_id, page, sheet, block, text) VALUES (?, ?, ?, ?, ?)",
-            [
+        count = 0
+        for row in rows:
+            text = row.get("text") or ""
+            if not text.strip():
+                continue
+            cursor = conn.execute(
+                "INSERT INTO file_chunks(file_id, page, sheet, block, text) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (
                     file_id,
                     row.get("page"),
                     row.get("sheet"),
                     int(row.get("block", 0)),
-                    row.get("text") or "",
+                    text,
+                ),
+            )
+            tokens = _fts_tokens_text(text)
+            if tokens:
+                conn.execute(
+                    "INSERT INTO file_chunks_fts(rowid, tokens) VALUES (?, ?)",
+                    (cursor.lastrowid, tokens),
                 )
-                for row in rows
-                if (row.get("text") or "").strip()
-            ],
-        )
+            count += 1
         conn.commit()
     finally:
         conn.close()
-    return len([row for row in rows if (row.get("text") or "").strip()])
+    return count
 
 
 def _default_db_path() -> Path:
     from .. import ledger  # 延迟导入：避免模块级耦合
 
     return Path(ledger.DB_PATH)
+
+
+def index_db_path() -> Path:
+    """检索索引所在库路径（与 ledger 同库 ``data/astock.db``）。"""
+    return _default_db_path()
+
+
+def files_root(root: str | Path | None = None) -> Path:
+    """文件存储根目录（``AGENT_FILES_DIR`` 可覆盖；工具层与测试复用）。"""
+    return _files_root(root)
 
 
 # ---------------------------------------------------------------------------
@@ -1365,6 +1452,17 @@ def iter_chunks(file_id: str, *, root: str | Path | None = None) -> Iterator[dic
                 yield json.loads(line)
 
 
+def table_path(file_id: str, sheet_slug: str, *, root: str | Path | None = None) -> Path:
+    """定位某张表的 parquet，并拒绝越出 ``tables/`` 的 ``sheet_slug``（AGENT-05）。"""
+    if not isinstance(sheet_slug, str) or not _SHEET_SLUG_RE.fullmatch(sheet_slug):
+        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
+    tables_dir = (file_dir(file_id, root=root) / "tables").resolve()
+    path = (tables_dir / f"{sheet_slug}.parquet").resolve()
+    if not path.is_relative_to(tables_dir):
+        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
+    return path
+
+
 def load_table(
     file_id: str, sheet_slug: str, *, root: str | Path | None = None
 ) -> pd.DataFrame:
@@ -1374,10 +1472,4 @@ def load_table(
     路径仍在 ``tables/`` 内，否则 ``../`` 或绝对路径会越出内容寻址目录
     （AGENT-05）。
     """
-    if not isinstance(sheet_slug, str) or not _SHEET_SLUG_RE.fullmatch(sheet_slug):
-        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
-    tables_dir = (file_dir(file_id, root=root) / "tables").resolve()
-    path = (tables_dir / f"{sheet_slug}.parquet").resolve()
-    if not path.is_relative_to(tables_dir):
-        raise ValueError(f"非法 sheet_slug：{sheet_slug!r}")
-    return pd.read_parquet(path)
+    return pd.read_parquet(table_path(file_id, sheet_slug, root=root))

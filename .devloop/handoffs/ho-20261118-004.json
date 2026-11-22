@@ -1,0 +1,129 @@
+{
+  "id": "ho-20261118-004",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-008",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 审计表与安全限额（v2：内容/版本/引用）",
+  "summary": "相对 ho-20261118-002 的修改：逐条修复 rev-20261117-003 第 2 轮新增的 2 条 P1 + 1 条 P2，并各补回归测试。(1) chart_render 的 artifact 身份种子加入 include_plotlyjs（canonical spec 对象内含 render option），同一 spec/data/env 下 inline 与 CDN 生成两个 artifact，不再抛 ArtifactIdentityConflict；(2) store._protected_paths 的 meta 键白名单加入 data_blob，prune_artifacts/prune_orphan_blobs 不再把仍被版本引用的 data.json 当孤儿删除，recomputed 回放保持可用；(3) migrate_v1_to_v2 在 db_path=None 时从连接推导实际库路径，:memory: 无可备份文件则跳过，不再回退 DEFAULT_DB_PATH 生成错误 .bak。新增 test_plotlyjs_mode_is_part_of_artifact_identity、test_gc_keeps_data_blob_referenced_by_versions、test_memory_database_migration_skips_backup。本地目标 153 passed、全量 676 passed、mypy 39 files、ruff 通过；PR #30 在代码提交 81ecb81 的 CI run 44236085726 已 success。plan 置 in_review(98%)，等待 reviewer 复核。",
+  "requirements": [
+    {
+      "id": "R2-P1-a",
+      "text": "artifact 身份必须包含 include_plotlyjs（及其他影响 HTML 字节的渲染选项），同 spec/data/env 下 inline 与 cdn 不得撞同一 id 后抛 ArtifactIdentityConflict",
+      "source": "rev-20261117-003 r2 iss-mwllmg50-a3b438"
+    },
+    {
+      "id": "R2-P1-b",
+      "text": "GC 的受保护路径必须包含 meta.data_blob；90 天 prune 后仍被版本引用的 data.json 不得删除，recomputed 回放仍可用",
+      "source": "rev-20261117-003 r2 iss-mwlln0hi-b4a74e"
+    },
+    {
+      "id": "R2-P2",
+      "text": ":memory: 迁移不得回退 DEFAULT_DB_PATH 生成错误 .bak；无文件可备份时跳过",
+      "source": "rev-20261117-003 r2 iss-mwllmixh-a660e0"
+    },
+    {
+      "id": "AC-1..AC-10",
+      "text": "首轮交付 10 条验收标准不变；本轮未改变范围，仅修复 r2 评审问题并补 3 条回归测试",
+      "source": "plan-20261107-008 acceptance"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "render 的 artifact 身份种子改为 canonical_json({\"spec\": normalized, \"include_plotlyjs\": include_plotlyjs})，再与 data_digest+env 组合生成 id；inline/CDN 生成两个 artifact，不再 content_digest 冲突",
+      "commit": "bfe4e65"
+    },
+    {
+      "path": "astock/agent/store.py",
+      "summary": "_protected_paths 的 meta 键白名单加入 data_blob；_backup_database 接受 Path|None，None 直接跳过；migrate_v1_to_v2 在 db_path=None 时用 _connection_db_path(conn) 推导，不再回退 DEFAULT_DB_PATH",
+      "commit": "bfe4e65"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "新增 test_plotlyjs_mode_is_part_of_artifact_identity（inline vs cdn 两 artifact、均 load_artifact 可读且含 plotly、inline HTML 更长）与 test_gc_keeps_data_blob_referenced_by_versions（data.json mtime 改 100 天前 + orphan 同老，prune_orphan_blobs 后 data_blob 保留、orphan 删除、recomputed row_count==3）",
+      "commit": "bfe4e65"
+    },
+    {
+      "path": "tests/test_agent_store.py",
+      "summary": "新增 test_memory_database_migration_skips_backup：:memory: 建 v1 后 ensure_schema 迁移成功，且 DEFAULT_DB_PATH 旁不产生 .bak",
+      "commit": "bfe4e65"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-008.json",
+      "summary": "plan 置 in_review(98%)，links 记录 r3 测试结果、commit bfe4e65、CI run 44236085726",
+      "commit": "3840e8d"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".dsh_pytest.py tests/test_agent_store.py tests/test_agent_chart_render.py -q",
+      "result": "73 passed, 1 warning in 12.26s",
+      "passed": true,
+      "evidence": "r3 目标测试（含 3 条新增回归）"
+    },
+    {
+      "command": ".dsh_pytest.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py tests/test_architecture_gate.py -q",
+      "result": "153 passed, 1 warning in 16.20s",
+      "passed": true,
+      "evidence": "r3 agent + 架构门禁目标测试"
+    },
+    {
+      "command": ".dsh_pytest.py tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -q",
+      "result": "676 passed, 5 deselected, 1 warning, 12 subtests passed in 58.13s",
+      "passed": true,
+      "evidence": "全量（排除既有 4 个 png 标记与既有 scheduler stop.wait(600) 挂起用例）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock",
+      "result": "Success: no issues found in 39 source files",
+      "passed": true,
+      "evidence": "类型检查"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock/agent/store.py astock/agent/runtime.py astock/agent/chart_render.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "lint"
+    },
+    {
+      "command": "GitHub Actions run 44236085726 (sha 81ecb81)",
+      "result": "success, 1m52s",
+      "passed": true,
+      "evidence": "PR #30 CI：test + png-export 通过；其后 3840e8d 仅 .devloop 记录变更"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github-push",
+      "reason": "使用本机 gh CLI token + openssl backend 推送分支",
+      "status": "granted"
+    },
+    {
+      "name": "pytest-temp-dir",
+      "reason": "本机 mkdir(mode=0o700) 目录不可访问，使用未跟踪 .dsh_pytest.py 将 mode 改为 0o777",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-008-v2-audit",
+    "commit": "bfe4e65",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
+    "ci": "passed: run 44236085726 (sha 81ecb81) test + png-export success; 记录提交 3840e8d 仅 .devloop",
+    "merge": "open, mergeable（等待 reviewer 复核 r2 的 2 P1 + 1 P2）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261118-002",
+  "next": "1) reviewer 复核 rev-20261117-003 r2：2 条 P1 与 1 条 P2 已修复并有回归测试，CI passed，openP0=0/openP1=0 后可合并 PR #30；2) 合并后把 plan-20261107-008 置 done；3) 后续若新增影响 HTML 字节的渲染选项（如 config/plotlyjs 版本），继续纳入 identity_spec，避免身份冲突。",
+  "createdAt": "2026-11-18T04:29:09.577Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-004.md"
+}

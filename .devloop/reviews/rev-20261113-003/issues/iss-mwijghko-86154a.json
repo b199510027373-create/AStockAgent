@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwijghko-86154a",
+  "threadId": "rev-20261113-003",
+  "roundNo": 5,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/store.py",
+  "lines": "432-452",
+  "title": "r4 两条 store.py 问题被标 fixed，但代码零改动且 PR 已带 open P1 合并，prune_artifacts 仍会删除活跃 artifact 引用的 PNG",
+  "evidence": "iss-mwfciv9a-8ce571（P1）与 iss-mwfciyhq-d889ce（P2）在 2026-11-16T00:38Z 被标 fixed，但 `devloop_git diff base=b8736a8 head=07f4af7` 的文件清单不含 astock/agent/store.py，main 上 store.py:432-434 仍只用 `SELECT DISTINCT digest FROM agent_artifacts` 构造 referenced，:436-452 对 referenced 之外的 digest 目录 unlink+rmdir，不读 meta[\"png_path\"]、keep_digests 也只过滤行；:256-264 仍是 `ON CONFLICT(artifact_id) DO UPDATE SET meta_json = excluded.meta_json`，后一次 degraded 写入仍会覆盖带 png_path 的 success meta。chart_render.py:1243-1246 的 PNG 落在独立 digest 目录、只把 HTML digest 写进 agent_artifacts，因此删除 HTML 行后 PNG 目录必然成为孤儿被清理。tests/test_agent_store.py 无 png_path/degraded 用例（:240/:280/:318 只测孤儿目录）。handoff ho-20261114-007 声称 plan-005 完成、491 passed，而 PR #12 在 openP1=1 时即 squash 合并（351c66b）。",
+  "suggestion": "新开 fix 分支（不要复用已删的 feat 分支）：1) prune_artifacts 构造保护集合时同时收集 agent_artifacts.digest、meta_json 里的 png_path 所在目录，以及 keep_digests 命中的 digest，再执行 unlink/rmdir；2) record_artifact 的 upsert 改为不把 success 降级（例如 CASE WHEN excluded 为 success 时保留 png_path/degraded=0，或仅在 excluded 提供 png_path 时更新）；3) 在 tests/test_agent_store.py 增加回归：写入带 png_path 的 HTML artifact 后调用 prune（含 keep_digests 分支），断言 PNG 文件仍存在；再补一条\"先 success 后 degraded 写入不丢 png_path\"。修完在新 PR 里贴 commit + 测试名 + pytest 输出，再在评审线程把这两条从 fixed 改为 reopened→fixed。在代码与回归测试进入 main 之前，plan-005 不能视为完全解决。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T01:04:04.752Z"
+  },
+  "createdAt": "2026-11-16T00:41:58.008Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T01:04:04.752Z"
+    }
+  ]
+}

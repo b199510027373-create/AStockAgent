@@ -1,0 +1,27 @@
+{
+  "id": "rev-20261121-001",
+  "title": "评审：根目录卫生与仓库单一真源校验",
+  "planItemId": "plan-20261103-013",
+  "sourceDevSessionId": "session-4106a9e9-99f3-4ef0-b0b5-fdc3b93c25db",
+  "branch": "",
+  "base": "main",
+  "files": [
+    ".github/workflows/ci.yml",
+    ".gitignore",
+    "README.md",
+    "docs/AStockAgent_CI_work_calendar.md",
+    "docs/AStockAgent_chart_pipeline_decisions_v1.md",
+    "docs/AStockAgent_contracts_PR_handoff_2026-11-09.md",
+    "docs/AStockAgent_contracts_delivery_2026-11-09.md",
+    "docs/AStockAgent_development_status_2026-11-08.md",
+    "docs/AStockAgent_repo_source_of_truth.md",
+    "tests/conftest.py",
+    "tests/test_repo_source_check.py",
+    "tests/test_sw_crosswalk.py",
+    "tools/check_repo_source.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-21T09:04:23.921Z",
+  "updatedAt": "2026-11-21T09:24:45.967Z",
+  "reviewSessionId": "session-91c176ab-e96e-4dcb-bab8-17b030d784f4"
+}

@@ -1,0 +1,133 @@
+{
+  "id": "ho-20261119-016",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",
+  "summary": "第 2 轮评审 P1 修复已提交并 CI 全绿：interrupt() 用 self._running 只在 run 在途时转发请求，流式阶段用 self._stop_output 停止输出并保留文本；3 条回归覆盖空闲/流式/预运行中断后下一问仍 COMPLETED。目标测试 87 passed、全量 747 passed（79.07%）、ruff/mypy/import app 通过；Edge headless CDP 真机验证「空闲点中断不污染下一问、第二问 3 步/408 字、生成中中断保留 121 字」。CI run 44439808455（head 948107d）test + png-export 均 success；PR #32 已评论本轮修复。",
+  "requirements": [
+    {
+      "id": "task",
+      "text": "依据 ADR-013/016 重做「AI 对话」Tab：文件上传、流式回答、步骤时间线、内嵌图表、引用列表、中断按钮；不新增 Tab；降级可用。",
+      "source": "plan-20261107-007 描述"
+    },
+    {
+      "id": "ac1",
+      "text": "AI 对话 Tab 可上传 1–5 个文件并显示解析状态。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac2",
+      "text": "回答流式输出，工具步骤以时间线展示。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac3",
+      "text": "图表在回答中内嵌渲染，可点开看 spec/来源。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac4",
+      "text": "引用可点击定位到文件名+页码/工作表。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "ac5",
+      "text": "支持中断生成，已产出的内容保留。",
+      "source": "plan-20261107-007 验收标准"
+    },
+    {
+      "id": "p1-round2",
+      "text": "interrupt() 不得在 run 已结束/未运行时给缓存 runtime 留中断标记；补 run 结束后 interrupt 的回归。",
+      "source": "iss-mwmvlhso-cd6199"
+    },
+    {
+      "id": "residual-risk",
+      "text": "说明 respond() 中 queue_.get() 无超时阻塞的取舍。",
+      "source": "rev-20261119-001 round 2 第三节"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "_running/_stop_output 双事件：只在 run 在途时转发 request_interrupt；流式阶段停止输出且保留已生成文本。",
+      "commit": "5cceb3c"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "3 条中断回归（run 结束后、流式阶段、预运行阶段）均验证下一问仍 COMPLETED。",
+      "commit": "5cceb3c"
+    },
+    {
+      "path": ".devloop",
+      "summary": "计划项 links.test/progress、日历与 handoff ho-20261119-015 记录。",
+      "commit": "948107d"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_runtime.py -q",
+      "result": "87 passed",
+      "passed": true,
+      "evidence": "87 passed in 11.86s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && coverage report -m",
+      "result": "747 passed",
+      "passed": true,
+      "evidence": "747 passed/5 deselected/12 subtests；TOTAL 79.07%"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests && .venv\\Scripts\\python.exe -m mypy astock app.py && .venv\\Scripts\\python.exe -c \"import app\"",
+      "result": "pass",
+      "passed": true,
+      "evidence": "ruff All checks passed；mypy Success 43 files；import ok"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe .smoke-agent-ui\\round3_drive.py（Edge headless+CDP，7866）",
+      "result": "PASS 4/4",
+      "passed": true,
+      "evidence": "基线 3 步/408 字；空闲中断提示「当前没有正在生成的回答。」；第二问 3 步/408 字；生成中中断保留 121 字（shots/9,10,11）"
+    },
+    {
+      "command": "gh run view 44439808455 --json ...",
+      "result": "CI success",
+      "passed": true,
+      "evidence": "head=948107d status=completed conclusion=success；png-export success / test success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network",
+      "reason": "gh CLI 推送分支、查 CI 与 PR 评论",
+      "status": "granted"
+    },
+    {
+      "name": "agent-api-key",
+      "reason": "真实模型端到端未验证，使用 FakeModel 冒烟；可选人工复核",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/agent-chat-ui",
+    "commit": "948107d",
+    "pr": "#32 https://github.com/b199510027373-create/AStockAgent/pull/32",
+    "ci": "gh run view 44439808455 -> conclusion success；test SUCCESS / png-export SUCCESS（head 948107d）",
+    "merge": "未合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261119-015",
+  "next": "第 3 轮评审：只需复核 iss-mwmvlhso-cd6199（interrupt 三态 + 3 条回归 + CDP 证据）与残存风险结论；若 openP0=0/openP1=0，approve 后把计划项置 done（progress 100）并归档 handoff。PR #32 未合并，等待合并决定。",
+  "createdAt": "2026-11-19T01:51:47.838Z",
+  "markdownPath": ".devloop/handoffs/ho-20261119-016.md"
+}

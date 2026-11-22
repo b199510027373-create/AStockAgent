@@ -1,0 +1,25 @@
+{
+  "id": "rev-20261117-002",
+  "title": "评审：文件检索 / 表格查询 + 强制引用",
+  "planItemId": "plan-20261107-004",
+  "sourceDevSessionId": "session-846420cf-30ed-483d-a5e4-5928a779f575",
+  "branch": "feat/plan-20261107-004-file-tools",
+  "base": "main",
+  "files": [
+    "astock/agent/files.py",
+    "astock/agent/runtime.py",
+    "astock/agent/tools/__init__.py",
+    "astock/agent/tools/citations.py",
+    "astock/agent/tools/file_tools.py",
+    "astock/agent/tools/sql_guard.py",
+    "docs/AStockAgent_contract_rule_map_v1.md",
+    "docs/AStockAgent_interface_freeze_v1.md",
+    "tests/test_agent_runtime.py",
+    "tests/test_agent_tools.py",
+    "tests/test_ci_quality_gates.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-17T01:48:40.686Z",
+  "updatedAt": "2026-11-17T13:39:53.296Z",
+  "reviewSessionId": "session-6b4515dd-300d-48d9-9132-e5dd14e2f85e"
+}

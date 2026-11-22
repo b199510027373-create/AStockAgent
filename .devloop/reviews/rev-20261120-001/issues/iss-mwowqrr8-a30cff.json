@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwowqrr8-a30cff",
+  "threadId": "rev-20261120-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-coverage",
+  "file": "tests/test_agent_ui_smoke_contract.py",
+  "lines": "199-204",
+  "title": "契约测试只查「有 upload-artifact 且路径含 report.json」，没守住 `if: always()` 与 --keep-workdir，证据上传可被静默破坏",
+  "evidence": "test_nightly_workflow_is_scheduled_and_manual_only 里只做：`uploads = [step for step in steps if \"upload-artifact\" in str(step.get(\"uses\", \"\"))]`、`assert uploads`、`assert \"report.json\" in str(uploads[0].get(\"with\", {}).get(\"path\", \"\"))`（tests/test_agent_ui_smoke_contract.py:202-204）。workflow 里真正决定「失败也能拿到证据」的两处约束都没被断言：(1) `.github/workflows/agent-ui-smoke.yml:46` 的 `if: always()`；(2) 运行步骤 :43 的 `--keep-workdir`（run_smoke.py:403-405 在成功且未带该参数时会 `shutil.rmtree(workdir)`，删掉的就是要被上传的目录）。删掉其中任意一个，nightly 失败时证据消失，而契约测试仍全绿——这条测试的用途正是防这类回归。",
+  "suggestion": "把断言补成：`assert str(uploads[0].get(\"if\", \"\")).strip().lower() == \"always()\"`；`path = str(uploads[0].get(\"with\", {}).get(\"path\", \"\"))` 后 `assert \"run.json\" in path and \"*.log\" in path`；再 `assert any(\"--keep-workdir\" in run for run in runs)`（runs 已在 :200 建好）。这样 upload 语义的四个关键点（存在、always、run.json+日志、保留目录）才都被守住。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T13:01:20.164Z"
+  },
+  "createdAt": "2026-11-20T11:40:29.828Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T13:01:20.164Z"
+    }
+  ]
+}

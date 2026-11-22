@@ -1,0 +1,128 @@
+{
+  "id": "ho-20261121-015",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-013",
+  "threadId": null,
+  "sessionId": "session-4106a9e9-99f3-4ef0-b0b5-fdc3b93c25db",
+  "title": "PR #44 已合并，main CI 双绿，计划完成",
+  "summary": "评审 rev-20261121-001 第 2 轮已 approve 并确认 4 项 P2 全部修复；PR #44 以 merge commit ff737a4 合并。评审产物与最终 handoff 提交为 b299ad0，main 上严格模式 python tools/check_repo_source.py exit 0，main CI run 44889535900 的 test 与 png-export 均 SUCCESS。plan-20261103-013 已置为 done、进度 100。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "清理根目录临时产物，根目录只保留源码/配置/文档",
+      "source": "plan-20261103-013 描述 + 验收 1"
+    },
+    {
+      "id": "R2",
+      "text": "脚本校验 git toplevel 指向工作区根且 remote 为 b199510027373-create/AStockAgent",
+      "source": "验收 2"
+    },
+    {
+      "id": "R3",
+      "text": "release/AStockAgent 标记为历史旧仓库，删除双目录同步要求",
+      "source": "验收 3"
+    },
+    {
+      "id": "R4",
+      "text": "handoff/review 草稿有归档/忽略规则，不污染 git status",
+      "source": "验收 4"
+    },
+    {
+      "id": "R5",
+      "text": "全量 pytest 与 mypy 通过，CI/发布文档同步更新",
+      "source": "验收 5"
+    },
+    {
+      "id": "R6",
+      "text": "rev-20261121-001 全部 4 项 P2 修复并获评审确认",
+      "source": "review rev-20261121-001 第 2 轮"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tools/check_repo_source.py",
+      "summary": "仓库根/remote/pushurl/分支校验，历史 release 克隆阻断",
+      "commit": "256de94"
+    },
+    {
+      "path": "tests/test_repo_source_check.py",
+      "summary": "23 个测试覆盖归一化、pushurl、分支、历史克隆与 git check-ignore 行为",
+      "commit": "256de94"
+    },
+    {
+      "path": ".gitignore",
+      "summary": "收紧根目录卫生规则，移除一次性个人文件名与重复项",
+      "commit": "256de94"
+    },
+    {
+      "path": "docs/AStockAgent_repo_source_of_truth.md",
+      "summary": "单一真源权威说明，含 pushurl 排查与记录提交口径",
+      "commit": "256de94"
+    },
+    {
+      "path": ".devloop/",
+      "summary": "提交评审第 2 轮产物、ho-20261121-014 与最终 handoff，恢复干净工作树",
+      "commit": "b299ad0"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_repo_source_check.py -q -p no:cacheprovider",
+      "result": "23 passed, 1 warning in 6.63s",
+      "passed": true,
+      "evidence": "含 pushurl 与 git check-ignore 行为测试"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "855 passed, 3 skipped, 5 deselected, 18 subtests passed in 69.40s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests tools/check_repo_source.py",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe tools\\check_repo_source.py",
+      "result": "main 严格模式 exit 0；仅历史 release/AStockAgent 告警",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "GitHub Actions main CI run 44889535900",
+      "result": "test SUCCESS 1m49s; png-export SUCCESS 1m21s",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/44889535900"
+    }
+  ],
+  "permissions": [],
+  "delivery": {
+    "branch": "main",
+    "commit": "b299ad0",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/44",
+    "ci": "SUCCESS run 44889535900 (test, png-export)",
+    "merge": "MERGED via merge commit ff737a4",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261121-013",
+  "next": "无待办；保留 release/AStockAgent 仅作历史参考，不再作为发布源。后续发布前在仓库根运行 python tools/check_repo_source.py。",
+  "createdAt": "2026-11-21T09:27:56.432Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-015.md"
+}

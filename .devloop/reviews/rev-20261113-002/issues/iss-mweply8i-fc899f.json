@@ -1,0 +1,33 @@
+{
+  "id": "iss-mweply8i-fc899f",
+  "threadId": "rev-20261113-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/files.py",
+  "lines": "936-944",
+  "title": "前导零保护分支返回未归一化的 object 列，混合类型列落 parquet 时类型不稳定",
+  "evidence": "files.py:936-944 命中 leading_zero 后直接 `return series, warning`，series 仍为 `pd.Series(list(values), dtype=object)`；而 _normalize_cell（files.py:841-855）对 Excel 数值单元格返回 int、对文本单元格返回 str，因此「代码」列若同时含文本 \"000001\" 与数值 600000，该列就是 object 混合类型列。_write_tables 用 `frame.to_parquet(...)` 落盘，pyarrow 对 int/str 混合的 object 列无法推断统一类型（ArrowInvalid），异常会被 _ingest 的兜底捕获成 status=unsupported——即修正前能导入（虽被 float 篡改）、修正后整份文件导入失败；即使 stub/未来版本能写出，列 dtype 也会随首行类型变化，与同批文本列的 schema 不一致。当前测试只覆盖全文本列（CSV 用例 frame[\"代码\"] 全为字符串；test_legacy_xls_is_parsed_with_coordinates 的 xls 夹具两行都是文本），没有混合单元格用例暴露该路径。",
+  "suggestion": "在 leading_zero 分支显式归一化为文本列，例如 `return series.map(lambda v: \"\" if v is None else str(v)), warning`（或 `series.astype(\"string\")`，注意 None/NaN 语义），使 parquet 列 dtype 恒为 string、与 extracted.jsonl 文本块一致；同时在 tests/test_agent_files.py 用 openpyxl 造一份「代码」列同时含 \"000001\"（文本）与 600000（数值）的 xlsx，断言 status==ok、load_table 该列 == [\"000001\", \"600000\"]、warnings 含前导零提示。该条为 P2，不阻断本轮 approve，但请随 plan-20261107-004 表格查询开工前处理。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T08:37:41.158Z"
+  },
+  "createdAt": "2026-11-13T08:23:05.874Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T08:37:41.158Z"
+    }
+  ]
+}

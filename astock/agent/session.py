@@ -7,24 +7,25 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import os
 import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-__all__ = ["AgentSession", "WorkingMemory", "DEFAULT_MAX_TURNS"]
+__all__ = ["DEFAULT_MAX_TURNS", "AgentSession", "WorkingMemory"]
 
 DEFAULT_MAX_TURNS = 20
 _MESSAGE_ROLES = {"system", "user", "assistant", "tool"}
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _as_list(value: Any) -> list[str]:
@@ -179,10 +180,8 @@ class AgentSession:
             os.replace(tmp, target)
         finally:
             if tmp.exists():
-                try:
+                with contextlib.suppress(OSError):
                     tmp.unlink()
-                except OSError:
-                    pass
         self.path = target
         return target
 
@@ -196,7 +195,7 @@ class AgentSession:
         target = Path(path)
         data = json.loads(target.read_text(encoding="utf-8"))
         if not isinstance(data, Mapping):
-            raise ValueError(f"会话文件 {target} 格式错误：顶层必须是 object")
+            raise TypeError(f"会话文件 {target} 格式错误：顶层必须是 object")
         stored_turns = data.get("max_turns")
         if max_turns is None:
             max_turns = stored_turns if isinstance(stored_turns, int) else DEFAULT_MAX_TURNS

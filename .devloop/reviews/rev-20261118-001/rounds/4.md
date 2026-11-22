@@ -1,0 +1,62 @@
+# PR 评审：评审：行情/指标工具：实时 K 线与指标
+
+> 自动生成于 2026-11-18T16:27:59.204Z；可直接转交开发会话。
+
+## 概览
+
+- 线程：`rev-20261118-001`
+- 计划项：`plan-20261107-006`
+- 分支：`feat/market-tools` → `main`
+- 轮次：第 4 轮（diff）
+- 结论：通过（approve）
+- 开发会话：`session-604a4898-03c2-4f30-90ad-1559cb54410e`
+- 本轮问题：0（P0 0 / P1 0 / P2 0）
+- 线程未闭环：P0 0 / P1 0 / P2 1
+
+## 本轮结论
+
+第 4 轮（scope=diff，base 266538d → 74d3687，合并后状态）结论：approve，本轮 0 条新问题，iss-mwmb8h5m（第 3 轮唯一 P2）经代码级核对已真正修复；线程可判完全解决。
+
+一、P2 iss-mwmb8h5m 复核通过（74d3687）
+- 改动仅 tests/test_data_time_semantics.py（+25/−3，git show 确认无产品代码变化：market_tools.py 仍是 266538d 的版本，已 approve 的实现未被触碰）。
+- 新增 `_SUSPENDED_CALENDAR_START = "2023-11-01"`、`_SUSPENDED_MISSING_DAYS = 12`、`_suspended_calendar()`（tests/test_data_time_semantics.py:744-753），注意这里对缺口的算术有明确注释（12-18..12-29 十个 + 01-01、01-02 两个）。
+- test_quote_marks_suspended_when_bars_are_missing 改为 `_Deps(daily=_missing_bar_frame(), clock="2024-01-03 16:30", calendar=_suspended_calendar())`，并把子串断言换成精确子句 `assert any(f"最后一根 bar 为 2023-12-15，其后 {_SUSPENDED_MISSING_DAYS} 个交易日无行情" in note for note in notes), notes`（:756-775），与 market_tools.py:566-570 生成的 note 文案逐字对齐。
+- test_suspended_missing_bars_intraday_is_not_just_delayed 同改 calendar，并新增 `其后 12 个交易日无行情` 断言（:779-791），收盘后与盘中两条路径验到同一数字；原有 volatile 断言（freshness=suspended、session=open、text 不含「盘中实时」、table vol>0）全部保留。
+- 断言用的数字与实现一致：`_missing_open_days`（market_tools.py:407-432）按 `last_bar < day < today` 且 `is_open == 1` 计数，这套 fixture 日历（bdate_range，全周 is_open=1）下正好 12 天，断言成立；此前「只数到 2 天」的失真已消除。
+
+二、交付状态核验（本机可验证的部分）
+- `git branch` 当前在 main；`git log` 顶端为 6498ef7 / 9114b4e（DevLoop 记账）→ a855b37（Merge PR #31）→ 74d3687（本 P2 修复）。
+- `git show a855b37` 确认是 `Merge pull request #31 from b199510027373-create/feat/market-tools`，合并内容含 astock/agent/tools/market_tools.py（1318 行）、tests/test_data_time_semantics.py（821 行）等 10 个文件，与评审范围一致；合并后主线未再改产品代码。
+- CI（run 44343766378 / main run 44344659084 / 44345604730 全 success）来自开发者 ho-20261119-003/004 的证据与 links.test 记录；本轮为只读评审、无 shell，未重跑 gh，故按「开发证据 + 本机 git 状态自洽」采信，未发现矛盾。
+
+三、接受的测试简化（记录备查，不计级别、不再开新问题）
+- 测试日历用 bdate_range 造开市日，把 2024-01-01 当作开市日（真实 A 股该日为休市），因此断言里的 12 天是这套 fixture 的自洽值；`_missing_open_days` 对 `is_open == 0` 的过滤分支本次没有专门用例。该分支逻辑只有一行（market_tools.py:429），且交易日历来源由 astock/data.py load_trade_cal 保证，风险低，后续如调整停牌判据建议顺手补一个含休市日的日历用例。
+
+四、完全解决判定
+- 结论：验收 11 条与 ADR-018 C1/C2、契约 AGENT-01/02/04 均已满足；第 1-3 轮 7 条问题（3 P1 + 2 P2 + 1 P1 + 1 P2）全部关闭，本轮无新增问题，openP0=0 / openP1=0。
+- 待开发顺手完成的一件记账动作（不影响结论）：iss-mwmb8h5m 在 tracker 里仍是 status=open——代码已在 74d3687 修复并由本轮复核确认，请开发者用反馈把它标成 fixed；否则 finish 自动生成的 delivery 文档可能继续把这条 open 的 P2 记成 openP1（第 3 轮 ho-20261119-002 即出现该字段失真）。
+- 之后无需再开评审轮次；PR #31 已合并、plan-20261107-006 已 done/100%。若后续要把「盘中临时停牌 + 分钟取数失败」的细分语义或含休市日的交易日历用例做细，按开发者 ho-20261119-003 的建议另立计划项即可。
+
+## 本轮问题
+
+本轮未记录问题。
+
+## 历史未闭环问题
+
+- P2 · 缺 bar 停牌用例的日历没覆盖真实缺口，审计句「其后 N 个交易日」的数字无人校验 · `tests/test_data_time_semantics.py:46-48, 735-760`（第 3 轮）
+
+## 变更文件
+
+- `astock/agent/runtime.py`
+- `astock/agent/tools/__init__.py`
+- `astock/agent/tools/market_tools.py`
+- `tests/test_agent_runtime.py`
+- `tests/test_agent_tools.py`
+- `tests/test_ci_quality_gates.py`
+- `tests/test_data_time_semantics.py`
+
+## 交给开发会话
+
+1. 在分支 `feat/market-tools` 上处理上面的未闭环问题；只改相关文件。
+2. 修复后回到评审线程，逐条填写真实反馈（已修复 / 换方案 / 延后 / 不采纳 / 重复）。
+3. 只有 P0 全部闭环后才可请求 approve；有 P1/P2 未闭环时在结论中说明取舍。

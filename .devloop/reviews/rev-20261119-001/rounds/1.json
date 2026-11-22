@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261119-001-r1",
+  "threadId": "rev-20261119-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮（full）结论：request_changes，openP0=0 / openP1=2 / openP2=4（共 6 条），本轮不通过。\n\n已确认做对且不需要改的部分：\n- ARCH-01/ARCH-02：app.py 只做装配（app.py:480 接线），AI 对话逻辑抽到 astock/agent/chat.py，UI 组件层 astock/agent_chat_ui.py 不直接调模型/数据库；依赖方向正确。\n- XSS 与不可信输入：步骤/参数/结果/附件信息全部 html.escape（astock/agent/chat.py:208-209、227-265），图表 iframe 走 sandbox=\"allow-scripts\" 且不带 allow-same-origin、srcdoc 已转义（astock/agent/chat.py:351-379）；上传落地仍受 data/agent/files 约束（AGENT-05）。\n- 审计链路本身已在 runtime/store 侧打通（astock/agent/runtime.py:567-641 落 agent_steps + finish_run，astock/agent/store.py:431/512/1093，tests/test_agent_store.py:648），on_step 回调有隔离（astock/agent/runtime.py:42-59）且有用例（tests/test_agent_runtime.py 两条）。\n- 质量门禁：tests/test_ci_quality_gates.py 的 MYPY_UI_WHITELIST 未把新模块放进豁免，mypy 43 files、ruff clean、734 passed / 78.97%，AGENT-01 白名单与工具层未被改动。\n\n必须修的两条 P1（开发在本分支 PR #32 上修，修完仍由我做第 2 轮复核）：\n1. iss-mwmtsmue-f7a49c：生产入口从不传 db_path，AI 对话的 run 与每次工具调用都不落 agent_runs/agent_steps，ADR-017/AGENT-02 在这条唯一生产路径上实际失效（astock/agent_chat_ui.py:78-84 → astock/agent/chat.py:809-813 → astock/agent/runtime.py:537-538）。修法：build_agent_chat_tab 增加 db_path 透传，app.py:480 传 store.DEFAULT_DB_PATH，并补一条断言 agent_runs/agent_steps 落库的用例；若要延期到 plan-20261107-008，必须在 handoff 写明并留显式 TODO。\n2. iss-mwmtsmv4-4f6d7f：AC2–AC5 没有真机 UI 证据。当前测试只在 gr.Blocks() 里直接调 respond()/handle_uploads()（tests/test_agent_chat.py:436-474），从未启动 Gradio、从未点过「⏹ 中断」。必须在 handoff tests 里补一次浏览器冒烟证据（上传 PDF+Excel、流式追加、iframe 内真实出图、点引用跳 cite-N、生成中点中断后内容保留且能立刻再问一句、无 key 时横幅+降级提示）。\n\n建议同批修掉的 4 条 P2（不阻断，但请一并处理或书面确认延期理由）：\n- iss-mwmtt39d-d8e449：每帧重算引用并同步 glob/读盘（astock/agent_chat_ui.py:184-185 → astock/agent/chat.py:551-552/501-504/468-479），加缓存。\n- iss-mwmtt3ab-775ed6：新闻检索/建模型阶段「中断」失效且提示误导（astock/agent/chat.py:676-683、707-729），另 chat.py:728 的局部 cancel Event 是从不 set 的死参数。\n- iss-mwmtta2g-c95a18：只匹配到工作表却显示「定位：…第 N 行/单元格」（astock/agent/chat.py:515-525、559），需补「工作表级定位」note。\n- iss-mwmtta3c-cfdaaa：引用未命中退回首段、>20 条截断、并发发送 busy 三条分支无测试（tests/test_agent_chat.py:283-340）。\n\n完全解决的判定条件（第 2 轮，scope=diff，只复核上述修复）：\n(a) 两条 P1 关闭——审计落库有测试或真机证据；真机冒烟记录进入 handoff tests 且 CI 仍绿；(b) 4 条 P2 逐条 either 修复有测试/证据 or 明确 deferred 并在计划项里登记（我会把 deferred 标为 deferred，不重复计级）；(c) 第 2 轮不改动本轮以外的范围、不引入新 P0/P1。上述满足后我会给 approve，plan-20261107-007 才标记为完全解决并置 done。",
+  "startedAt": "2026-11-18T16:59:15.870Z",
+  "finishedAt": "2026-11-19T00:43:03.997Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 4,
+    "total": 6
+  }
+}

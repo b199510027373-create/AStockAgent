@@ -1,0 +1,25 @@
+{
+  "id": "rev-20261110-001",
+  "title": "评审：用例层 RunResult：统一推荐/跟踪入口",
+  "planItemId": "plan-20261103-002",
+  "sourceDevSessionId": "session-5e97dfd9-c0e2-4889-8c05-15bdc17fa798",
+  "branch": "feat/plan-20261103-002-runresult",
+  "base": "main",
+  "files": [
+    "astock/recommend.py",
+    "astock/recommend_ui.py",
+    "astock/scheduler.py",
+    "astock/track.py",
+    "astock/track_ui.py",
+    "astock/use_cases.py",
+    "tests/test_contracts.py",
+    "tests/test_core_paths.py",
+    "tests/test_hardening.py",
+    "tests/test_track_nav.py",
+    "tests/test_use_cases.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-10T06:16:46.369Z",
+  "updatedAt": "2026-11-10T06:56:38.501Z",
+  "reviewSessionId": "session-56aa5367-8af8-4b2f-ae89-efb67dd1fd3d"
+}

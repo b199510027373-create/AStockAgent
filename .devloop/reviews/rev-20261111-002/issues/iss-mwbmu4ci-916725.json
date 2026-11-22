@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbmu4ci-916725",
+  "threadId": "rev-20261111-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "文档与代码注释",
+  "file": "astock/contracts.py",
+  "lines": "505,518",
+  "title": "contracts/use_cases 注释仍把旧批次兼容映射标成 ADR-010 C2，与 ADR/计划项的 C1 归属冲突",
+  "evidence": "ADR-010 与计划项已把「旧批次字段兼容映射」归到 C1、把 C2 改为横幅文案去重（`.devloop/architecture/adr/ADR-010-research-semantics.md` 条件段；`.devloop/plan/items/plan-20261103-006.json:17-18`），但代码注释仍写 C2：`astock/contracts.py:505`「ADR-010 C2：旧批次…用『建议』存动作标签」、`contracts.py:518`「（ADR-010 C2 兼容映射）」、`astock/use_cases.py:192`「ADR-010 C2：旧批次的『建议』/旧动作词在此统一映射」。这正是上一轮 P1 的同一处归属错误，只是从计划项挪到了注释。",
+  "suggestion": "把这三处改成「ADR-010 C1（兼容映射）」，C2 只保留横幅五状态去重；use_cases.py:192 同步。建议在 gate 里加一条轻量断言：ADR 条件段中 C1 的标题含「动作词/分位/兼容」，C2 含「横幅/去重」，防止再次串号（可选）。修复责任：开发，随 P1 一并提交。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:57:09.291Z"
+  },
+  "createdAt": "2026-11-11T04:42:09.666Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:57:09.291Z"
+    }
+  ]
+}

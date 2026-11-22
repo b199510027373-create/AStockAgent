@@ -1,0 +1,69 @@
+{
+  "id": "plan-20261119-001",
+  "title": "Agent 会话 UI 冒烟脚本入库与可复现",
+  "description": "把 `.smoke-agent-ui/` 中仍可用的 CDP 冒烟脚本整理进仓库（建议 `tests/smoke/agent_ui/`），去掉本机绝对路径/临时截图/密钥，补 README 与固定启动方式；至少覆盖上传、流式、步骤、内嵌图、引用、中断六条路径。截图可只保留关键几张或改为断言输出，避免仓库膨胀。",
+  "status": "done",
+  "priority": "P2",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-11-20",
+  "due": "2026-11-24",
+  "estimateH": 3,
+  "progress": 100,
+  "acceptance": [
+    "冒烟脚本在干净检出上可运行，不依赖本机绝对路径",
+    "脚本不包含 API key、token、个人路径或大体积截图",
+    "README 写清依赖、启动命令、失败判据与已知限制",
+    "覆盖上传/流式/步骤/内嵌图/引用/中断六条主路径",
+    "默认不进入普通 CI；提供手动或 nightly 入口"
+  ],
+  "tags": [
+    "agent",
+    "ui",
+    "smoke",
+    "cdp"
+  ],
+  "deps": [
+    "plan-20261107-007"
+  ],
+  "links": {
+    "branch": "main（fix/agent-ui-smoke-round3 已合并删除）",
+    "docs": [
+      "docs/AStockAgent_interface_freeze_v1.md"
+    ],
+    "handoff": [
+      "ho-20261120-010（初版）",
+      "ho-20261120-013（评审 r1 修复）",
+      "ho-20261120-015（评审 r2 修复）",
+      "ho-20261120-016（评审 r3/r4 通过、置 done 收尾）"
+    ],
+    "merges": [
+      "PR #38 -> 598fc15",
+      "PR #39（nightly 证据 include-hidden-files）-> 79b450b",
+      "PR #40（nightly 打印 Edge 版本）-> 2364ccf",
+      "PR #41（评审 r2：增量完成判据 + 强杀 driver.log）-> 368f684"
+    ],
+    "module": [
+      "agent_chat_ui"
+    ],
+    "nightly": "https://github.com/b199510027373-create/AStockAgent/actions/runs/44741630551（main 368f684，windows-latest，八项 PASS）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/41（已合并）",
+    "review": [
+      "rev-20261120-001 r1 approve(1P1+5P2) -> r2 request_changes(1P1+1P2) -> r3 approve -> r4 diff approve：8/8 fixed，openP0=0/openP1=0，判定完全解决（2026-11-20T13:21:14Z）"
+    ],
+    "test": [
+      "python tests/smoke/agent_ui/run_smoke.py --workdir tests/smoke/agent_ui/.workdir --keep-workdir -> SMOKE OK :: 8 项断言全部通过，16.49s；interrupt detail=“中断保留 32 字，随后再问一轮新增完成标记（0→1）”；run.json stage=done ok=true driver_log=driver.log",
+      "python tests/smoke/agent_ui/run_smoke.py --workdir tests/smoke/agent_ui/.workdir-timeout --keep-workdir --timeout 0.01 -> 退出码 1；run.json {stage:driver, error:driver timeout, driver_log:driver.log, ok:false}；driver.log 570B；report.json error=AssertionError: driver timeout（--timeout 预算已用尽）",
+      "python -m pytest tests/test_agent_ui_smoke_contract.py -q -p no:cacheprovider -> 21 passed in 2.24s（新增 test_interrupt_recheck_requires_a_new_completion_marker、test_driver_timeout_keeps_driver_log）",
+      "python -m pytest tests -q -m \"not png\" -p no:cacheprovider -> 819 passed, 5 deselected, 18 subtests passed in 98.29s",
+      "python -m ruff check astock tests -> All checks passed!",
+      "python -m mypy astock app.py -> Success: no issues found in 44 source files",
+      "python -m compileall -q astock app.py tests/smoke/agent_ui -> ok",
+      "PR #41 CI run 44741314205 -> test success 1m30s / png-export success 1m7s",
+      "GitHub Actions nightly（main 368f684, windows-latest）run 44741630551 -> success；artifact report.json 八项 PASS，interrupt detail=“中断保留 56 字，随后再问一轮新增完成标记（0→1）”；run.json stage=done ok=true driver_exit=0 duration_s=22.08"
+    ]
+  },
+  "createdAt": "2026-11-19T10:26:23.525Z",
+  "updatedAt": "2026-11-20T13:23:31.144Z",
+  "devSessionId": "session-8ce0dece-ba21-4e45-a4d1-6cb898fb3157"
+}

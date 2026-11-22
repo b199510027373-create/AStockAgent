@@ -38,7 +38,7 @@
 | AGENT-01 白名单工具、禁 shell/HTTP/删文件/写推荐 | review | RC-05；已部分自动化：`tests/test_agent_runtime.py::test_allowed_permissions_enforced`；`astock/agent/tools/` 的危险符号静态扫描（`os.system`/`shutil.rmtree`/`subprocess.*`/`requests.*` 等）待 plan-20261107-005/006 落地 tools 后才生效，在此之前靠 RC-05 人工核查 | 已覆盖 |
 | AGENT-02 工具调用落 agent_steps | test | 现阶段：`tests/test_agent_runtime.py::test_long_table_is_trimmed_and_archived`、`tests/test_agent_runtime.py::test_artifact_writer_failure_still_returns_trimmed_table`；缺三表落库测试，挂 plan-20261107-008 | 部分覆盖 |
 | AGENT-03 Agent 对推荐/跟踪只读 | review | RC-06；已部分自动化：`tests/test_agent_runtime.py::test_permissions_and_schema_exposed` | 已覆盖 |
-| AGENT-04 引用与时点强制 | test | 现阶段：`tests/test_agent_runtime.py::test_tool_result_trim_and_signature`（字段透传）；工具级必填校验待 plan-20261107-005 / -006 补测试 | 部分覆盖 |
+| AGENT-04 引用与时点强制 | test | 文件侧已落地：运行时 `finalize_file_answer()` 收口与引用白名单（`tests/test_agent_runtime.py::test_file_tool_answer_without_citation_becomes_not_found`、`tests/test_agent_runtime.py::test_document_body_citation_is_not_trusted`、`tests/test_agent_runtime.py::test_zero_tool_citation_is_downgraded`）；行情侧 `data_as_of`/`data_time` 必填校验待 plan-20261107-006 | 部分覆盖 |
 | AGENT-05 文件内容视为不可信数据 | review | RC-07；已部分自动化：`tests/test_agent_runtime.py::test_system_prompt_marks_tool_content_untrusted` | 已覆盖 |
 | AGENT-06 不直接 import 供应商 SDK | review | RC-08；已自动化：`tests/test_architecture_gate.py::test_no_vendor_sdk_import_outside_gateway` | 已覆盖 |
 
@@ -99,8 +99,8 @@
 
 | 规则 | 缺什么 | 承接项 | 承诺的测试 |
 | --- | --- | --- | --- |
-| AGENT-02 | 三表落库、artifact digest 去重 | plan-20261107-008 | `tests/test_agent_store.py::test_tool_call_writes_step_row`、`tests/test_agent_store.py::test_artifact_digest_dedupes` |
-| AGENT-04 | 行情工具的 `data_as_of`/`data_time` 必填校验、文件结论 `source` 必填校验 | plan-20261107-005、plan-20261107-006 | `tests/test_agent_tools.py::test_market_result_requires_both_timestamps`、`tests/test_agent_tools.py::test_file_result_requires_source` |
+| AGENT-02 | `agent_steps` 完整写入语义与留存清理（三表最小落库、artifact digest 去重已随 plan-20261107-005 落地） | plan-20261107-008 | `tests/test_agent_store.py::test_tool_call_writes_step_row`、`tests/test_agent_store.py::test_artifact_digest_dedupes` |
+| AGENT-04 | 行情工具的 `data_as_of`/`data_time` 必填校验、文件结论 `source` 必填校验 | plan-20261107-006 | 文件侧已落地：`tests/test_agent_tools.py::test_file_result_requires_source`、运行时收口 `tests/test_agent_runtime.py::test_file_list_only_answer_is_not_rewritten`（file_list 豁免）与 `tests/test_agent_runtime.py::test_document_body_citation_is_not_trusted`（正文不进白名单）；行情侧同名测试随 plan-20261107-006 落地 |
 | 全量 | 规则与落点漂移、文档里的测试引用失效 | 本任务 | `tests/test_architecture_gate.py::test_doc_test_references_exist`（扫描本文件与冻结清单的 `tests/…py::test_x` 引用：已存在的文件必须真有该函数；尚未存在的测试文件只允许出现在 §4 承诺表） |
 
 ## 5. 维护规则

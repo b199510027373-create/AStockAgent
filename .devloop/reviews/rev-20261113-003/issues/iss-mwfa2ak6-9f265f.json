@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfa2ak6-9f265f",
+  "threadId": "rev-20261113-003",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "reproducibility",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1116-1133,1252-1266",
+  "title": "artifact params 未记录 include_plotlyjs，冻结清单要求的复现前提无法从 artifact 还原",
+  "evidence": "冻结清单 §3.4（docs/AStockAgent_interface_freeze_v1.md:222）明确写“复现前提：同一 spec、同一份数据快照、同一 plotly 版本与 `include_plotlyjs` 设置”，但 `_params`（chart_render.py:1116-1133）只记录 kind/source/ref/period/range/adj/encode/transforms/layers/annotations/theme/plotly_version/python_version/code_version，没有 `include_plotlyjs`；`meta`（:1253-1266）也没有。`render` 的 `include_plotlyjs` 是可变参数（:1164，默认 \"inline\"），同一 spec/数据用 \"cdn\" 与 \"inline\" 渲染会得到不同 HTML 字节和不同 artifact_id，但两个 artifact 的 `params` 完全相同，无法仅凭 artifact 记录判断该用哪种设置重放。`_try_png`/degraded 也不影响。",
+  "suggestion": "在 `_params` 增加 `\"include_plotlyjs\": include_plotlyjs`（需要把该值传进 `_params`，或在 render 里补），并同步在冻结清单 §3.4 的 params 列表点名；补一条测试：分别用 `include_plotlyjs=\"cdn\"` 和 `\"inline\"` 渲染同 spec，断言两个 artifact 的 `meta[\"params\"][\"include_plotlyjs\"]` 分别等于对应值，且 HTML/artifact_id 不同。若决定只支持一种设置，则把 `render` 参数去掉并写死，避免“可配置但不可追溯”。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T00:38:27.845Z"
+  },
+  "createdAt": "2026-11-13T17:55:40.662Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T00:38:27.845Z"
+    }
+  ]
+}

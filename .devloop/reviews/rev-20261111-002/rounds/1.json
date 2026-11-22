@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261111-002-r1",
+  "threadId": "rev-20261111-002",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮 full 评审完成。C1 主体已达成：动作词全站改为研究语义（app.py 三处提示词 + 最新批次摘要、recommend/backfill/track/use_cases/contracts 渲染路径），contracts.py 提供 LEGACY_ACTION_WORDS/normalize_action 兼容映射，推荐表与报告同时展示技术面与技术分位，ledger 增加 percentile 列并有旧库 ALTER 迁移，CSV 表头已切到「技术面/技术分位」；tests/test_research_semantics.py 15 个测试覆盖词表、分位函数、normalize_table、报告、ledger 兼容、渲染兼容与全站词表扫描，test_contracts/test_use_cases/test_hardening 同步更新，测试证据（全量 287 passed 1 skipped、ruff、mypy 31 files）与 planItem.links.test 一致，未发现未测试的关键正确性/安全风险。但有两项 P1 未关闭：①ADR-010 条件 C2（横幅四状态文案去重、同屏只出现一处「未验证」提示）被改写成「旧批次字段兼容映射」，C2 本身无人承接、recommend_ui.py:57-58 与横幅重复表述仍在，且 tests/test_architecture_gate.py:155-171 只按「C2」token 匹配，无法发现语义错配；②「技术分位」写入基准不一致——live 在 candidate_n=15 的候选池内排名（recommend.py:798-800），backfill 在全池排名（backfill.py:103-106），却写入同一 items.percentile 列并同屏展示，且「池内分位」文案与文档都未定义基准。另有 3 条 P2：技术面前缀重复（app.py:345、recommend.py:471）、ADR-010 实现回写符号/行号/状态数漂移、_llm_rank 提示词误称分位参与强弱判定。修复责任：P1①由开发补 C2 实现与测试并回写 plan-20261103-006 验收 + 收紧门禁；P1②由开发统一分位口径并写入文档；P2 由开发与 ADR 维护者随同修正。完全解决条件：openP0=0 且上述 P1 全部关闭（含对应测试与文档更新），P2 至少在下一轮前给出处理结论，届时 verdict 才能为 approve。",
+  "startedAt": "2026-11-11T04:08:04.635Z",
+  "finishedAt": "2026-11-11T04:16:44.261Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 3,
+    "total": 5
+  }
+}

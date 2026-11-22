@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfa38a2-e20f69",
+  "threadId": "rev-20261113-003",
+  "roundNo": 3,
+  "severity": "P1",
+  "category": "correctness/artifact-meta",
+  "file": "astock/agent/store.py",
+  "lines": "256-266",
+  "title": "同 HTML 二次渲染不更新 artifact meta：先降级后补 PNG（或反之）时 agent_artifacts 仍保留旧 degraded/png_path",
+  "evidence": "`record_artifact` 用 `artifact_id_for(digest, filename)` 生成 id，然后 `INSERT ... ON CONFLICT(artifact_id) DO NOTHING`（store.py:253-263），不比较也不更新已有行的 meta。`chart_render.render` 的 artifact_id 只由 HTML digest 派生（chart_render.py:1219-1224），PNG 是否成功、`degraded` 与 warnings 都不改变 HTML 字节：PNG 在 `:1228-1239` 单独 `put_content`，meta 在 `:1253-1275` 才写。于是同一 spec/数据第一次在无 kaleido 环境渲染（`degraded=True`、`png_path=None`），第二次在装了 kaleido 的环境渲染（`degraded=False`、`png_path=/...png`）会复用同一 HTML digest/artifact_id，第二次 `record_artifact` 直接 DO NOTHING，DB 里的 `meta_json` 仍是第一次的 `degraded=True`/`png_path=None`；反过来先成功后失败也会保留旧 png_path。`RenderedFigure` 返回值与 DB 记录不一致，artifact 回放/审计会看到错误的降级状态。现有测试没有覆盖同 digest 不同 PNG/degraded 的二次渲染。",
+  "suggestion": "二选一：1）`record_artifact` 对同 artifact_id 且同 digest 的重复写入做 `ON CONFLICT(artifact_id) DO UPDATE SET meta_json=excluded.meta_json, step=excluded.step`（保留原 created_at/run_id 或明确更新策略），让 PNG/degraded 等渲染态随最新一次写入；2）把 PNG 作为独立 artifact 行/独立 id，不复用 HTML 行的 meta。补测试：用 monkeypatch `chart_render._try_png` 先返回 `(None, \"missing\")` 再返回固定 PNG 字节，对同一 spec 渲染两次，断言第二次 `store.get_artifact(...).meta[\"png_path\"]` 非空、`degraded` 为 False；再加一个先成功后失败的对称用例。",
+  "confidence": 0.93,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T19:16:48.703Z"
+  },
+  "createdAt": "2026-11-13T17:56:24.362Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T19:16:48.703Z"
+    }
+  ]
+}

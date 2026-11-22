@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwaawyq9-5a53f9",
+  "threadId": "rev-20261110-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "maintainability",
+  "file": "astock/scheduler.py",
+  "lines": "211-221",
+  "title": "scheduler 向生成分支传 now 但生成侧不使用，形成\"可注入时钟\"的假象",
+  "evidence": "run_once 用 run_recommendation(mode=\"generate\", …, now=now)（scheduler.py:212-220）传入了调度时间，但 generate 分支根本不消费 now：use_cases.py:397 `return _generate_view(rec, now=now)`，而 _generate_view（use_cases.py:230-261）的 now 形参从未被读取；生成侧的新鲜度由 recommend.py:603 的 `now = datetime.now()` 与 759-760 的 expected/stale_data 决定。结果：传参看起来像\"可注入时钟\"，实际只影响调度侧的 trade_date/late_by，测试里 `now=datetime(2026,11,2,16,40)` 对生成侧判定毫无作用。tests/test_hardening.py:102-190 全部 mock 掉 run_recommendation，因此也没有任何测试暴露这一点。",
+  "suggestion": "二选一并在 docstring 写清：(1) 删掉 scheduler.py:219 的 `now=now` 以及 use_cases._generate_view 的 now 形参（run_recommendation 的 now 文档已写明\"仅历史读取\"），让\"生成侧不可注入时钟\"成为显式事实；(2) 若希望可注入，给 recommend.generate_recommendation 增加 now 参数并用它计算 expected/generated_at/tradable_from，再由 use_cases 透传，同时在 test_hardening 里用假时钟断言 stale 分支。建议选 (1)，改动最小且不会改变生产行为。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-10T06:47:55.741Z"
+  },
+  "createdAt": "2026-11-10T06:20:40.785Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-10T06:47:55.741Z"
+    }
+  ]
+}

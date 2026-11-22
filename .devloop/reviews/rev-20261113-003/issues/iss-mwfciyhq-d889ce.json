@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfciyhq-d889ce",
+  "threadId": "rev-20261113-003",
+  "roundNo": 4,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/store.py",
+  "lines": "261",
+  "title": "record_artifact 的最新写入 upsert 会把 success 降级回 degraded 并丢掉有效 png_path",
+  "evidence": "store.py:261 现在无条件 `DO UPDATE SET meta_json = excluded.meta_json`。同一 HTML digest 二次渲染时，若本次 `_try_png` 失败，chart_render.py:1239-1246 会令 `degraded=True`、`png_path=None`，随后 chart_render.py:1271-1273 把这些值写入 meta；于是第一次成功导出的 PNG 引用被覆盖，artifact 行变成 degraded，尽管同一 HTML 的旧 PNG 仍然有效。冻结清单 docs/AStockAgent_interface_freeze_v1.md:221 写的是“同一 artifact_id 重复渲染时 meta 最新，degraded/png_path 必须升级”，但 tests/test_agent_chart_render.py:186-212 只覆盖 degraded→success，没有覆盖 success→degraded。",
+  "suggestion": "把 `degraded`/`png_path` 做成单调升级：若已有 meta 为 `degraded=False` 且 `png_path` 非空，本次 PNG 失败时保留旧 PNG 引用（可把本次失败写入 warnings），只有成功导出才覆盖；若确定采用“最新写入为准”，则同步修改冻结清单第 221 行的“必须升级”表述并补 success→degraded 用例，明确旧 PNG 的清理策略。新增回归：先成功导出，再让 `_try_png` 返回 None，断言行仍是 degraded=False 且 png_path 指向仍存在的文件（或按文档明确断言降级行为）。",
+  "confidence": 0.84,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T00:38:44.279Z"
+  },
+  "createdAt": "2026-11-13T19:04:37.406Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T00:38:44.279Z"
+    }
+  ]
+}

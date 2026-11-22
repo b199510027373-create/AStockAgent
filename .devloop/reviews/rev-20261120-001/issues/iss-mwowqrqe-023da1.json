@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwowqrqe-023da1",
+  "threadId": "rev-20261120-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-coverage",
+  "file": "tests/smoke/agent_ui/smoke_drive.py",
+  "lines": "39-41",
+  "title": "注释声称「契约测试会看」图注/marker 对齐，但契约测试根本没有这条断言",
+  "evidence": "smoke_drive.py:39-41 的注释写「与 fixture_app.py 的夹具常量对齐：改了夹具必须同步改这里（契约测试会看）」，并硬编码 `CHART_MARKER = \"smoke-chart\"`、`FIGURE_CAPTION = \"营收趋势｜数据截至 2025-12-31｜数据时间 2026-03-20\"`；对应真值在 fixture_app.py:48 `FIGURE_CAPTION = f\"{CHART_TITLE}｜数据截至 {DATA_AS_OF}｜数据时间 {DATA_TIME}\"`。但 tests/test_agent_ui_smoke_contract.py 里 DRIVER 只出现在 :26（路径常量）与 :83（`ast.parse(DRIVER.read_text(...))` 取 CHECKS），全文没有任何 FIGURE_CAPTION / CHART_MARKER / \"smoke-chart\" 断言（grep 该文件 FIGURE|CHART|MARKER|CAPTION 无命中）。改 fixture_app.py:44（CHART_MARKER）或 :48（图注）后契约测试仍 15 passed，只有 nightly 跑到 check_figure 才红——等于把「夹具与驱动同步」的责任留给了运行时。",
+  "suggestion": "在 tests/test_agent_ui_smoke_contract.py 补一条断言：用 `_load(FIXTURE_APP, \"agent_smoke_fixture\")` 取 `FIGURE_CAPTION`/`CHART_MARKER`，再用 AST 读取 smoke_drive 模块级同名赋值（或直接用 `_load(DRIVER, \"agent_smoke_drive\")`，注意它 import 了 cdp 需先注入路径），assert 两者相等，并把 README.md:91 的图注字符串一起纳入比较。这样注释描述的事实才成立。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T13:01:15.819Z"
+  },
+  "createdAt": "2026-11-20T11:40:29.798Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T13:01:15.819Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwikd183-1fc8af",
+  "threadId": "rev-20261116-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "i18n",
+  "file": "astock/agent/chart_render.py",
+  "lines": "550,1213-1218",
+  "title": "中文无方块无落地：渲染器不设 CJK 字体族，也没有一张中文 K 线 PNG 的证据",
+  "evidence": "astock/agent/chart_render.py:550 只设 `\"font\": {\"size\": 15}`，全仓库 astock/ 下没有任何 font.family / CJK 字体声明；CI 与 Windows 开发机都没有字体安装/校验步骤。tests/ 下 PNG 用例只有 tests/test_agent_chart_png_export.py 的英文 line 图（title \"PNG 导出\" 但不断言渲染结果），没有中文标题/坐标轴/图例的 K 线 PNG 断言，也没有像素级检查。docs/AStockAgent_chart_pipeline_decisions_v1.md:154 已指出「无头环境缺中文字体时 PNG 中文变方块，只有真跑一次才暴露」。验收第 3 条（中文标题、坐标轴、图例无方块，至少一张带中文 K 线 PNG）无任何实现或证据。",
+  "suggestion": "在 spike 中实测并记录可用组合（Windows：Microsoft YaHei/SimHei；Linux：fonts-noto-cjk 的 Noto Sans CJK SC），然后在 _build_figure 的 layout 统一设置 `font.family`（形如 `\"Noto Sans CJK SC, Microsoft YaHei, SimHei, sans-serif\"`，允许通过配置覆盖），不要把字体留成宿主机默认。新增 tests/test_agent_chart_png_zh.py：用 candlestick + 中文 title/axis/legend 的 spec 导出 PNG，断言 PNG 头、尺寸、文件非空；再加一个轻量像素检查（例如统计与背景色不同的像素比例 > 阈值，或用 PIL 比对 tofu 区域），避免「文件存在但字全是方块」也能过。该用例归入上面的独立 CI job，并在 PR 里附 PNG 附件供人工目视。",
+  "confidence": 0.93,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T02:21:16.852Z"
+  },
+  "createdAt": "2026-11-16T01:07:16.467Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T02:21:16.852Z"
+    }
+  ]
+}

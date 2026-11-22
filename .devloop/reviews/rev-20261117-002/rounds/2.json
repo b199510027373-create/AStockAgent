@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261117-002-r2",
+  "threadId": "rev-20261117-002",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "第 2 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 2 轮复审（scope=full，提交 f22057c）：上一轮 6 条全部核实已修并带测试证据，但本轮新增的回答收口逻辑引入 2 条 P1，另有 1 条 P2，暂不通过。\n\n一、上一轮问题核实（6/6 已修，建议结案）\n- iss-mwk1e76b-235fe7（P1 运行时强制引用）：已修。astock/agent/runtime.py:236-239 在 COMPLETED 分支调 finalize_file_answer(answer, _collect_file_citations(steps))；证据测试 tests/test_agent_runtime.py:745-774（FileCitationTests 有引用保留 / 无引用变「未在文件中找到」）。\n- iss-mwk1e77l-f00b8a（P1 FTS5 中文）：已修。files.py:173-174 改 contentless tokens 表，files.py:1274-1291 fts_tokens 做 CJK bigram，index_chunks 显式写 tokens（:1364-1369），ensure_index_schema 迁移旧 unicode61 库（:1313-1322），file_tools.py:123-128 改 AND 词项；证据测试 tests/test_agent_tools.py:225 断言 backend==\"fts5\"、:228-237 两字中文命中走 FTS、:240-270 旧库迁移回填。\n- iss-mwk1e78k-81f44e（P1 无生产装配）：已修。runtime.py:59-67 _default_registry() + :161 默认装配；证据测试 tests/test_agent_tools.py:703-730（默认 AgentRuntime 五工具端到端）。\n- iss-mwk1edh5-77d236（P2 白名单校验）：已修（但见本轮 iss-mwkoyzlk-7502ab 的白名单来源问题）。citations.py:187-211 做规范化比对，编造引用丢弃正文并用可信引用重建；证据测试 tests/test_agent_tools.py:375-381。\n- iss-mwk1edie-9a8ad8（P2 计时器/竞态）：已修。file_tools.py:499-516 计时器移到 CREATE TEMP TABLE 之后，state 由 Lock 保护、cancel+join 后再 close，文案注明「表格装载不计入」；证据测试 tests/test_agent_tools.py:520-541（spy 断言计时器启动时 t 已在 SHOW TABLES 中）。\n- iss-mwk1edj4-cc0172（P2 BOM/注释）：已修。tests/test_ci_quality_gates.py:1 无 BOM，:48-49 注释与常量同步为 48 个 .py / 39 受检 / 40 files。\n文档同步（验收 A10）已核对：docs/AStockAgent_interface_freeze_v1.md:278-282、303 与新的 tokens/contentless 布局一致，冻结清单与 ADR-015 同步断言仍在 tests/test_agent_tools.py:654-676。\n\n二、本轮新增问题（3 条）\n- iss-mwkoyzkc-cf9ddb（P1 correctness，runtime.py:236-239）：收口条件用了 FILE_TOOL_NAMES（含 file_list），而 list_files 的 ToolResult 不含任何引用（file_tools.py:218-223），于是「我上传了哪些文件？」这类合法回答会被 finalize 改写成「未在文件中找到」。修法见 issue：收窄为 _CITING_FILE_TOOLS（排除 file_list），或给 file_list 补文件级引用；并补 file_list-only 运行时用例。\n- iss-mwkoyzlk-7502ab（P1 security，runtime.py:90-105）：白名单把 extract_citations(result.text) 也算作可信来源，而 file_read 的 text 就是文档正文（file_tools.py:330-338），上传文件里出现的「《X》第 N 页」会进入白名单，使 citations.py:196 的「只保留工具结果里真实存在的引用」被绕过（AGENT-05 不可信数据）。修法：白名单只用 metadata[\"citations\"]/metadata[\"citation\"]/table 行 citation，删掉对正文的抽取；并补「正文含编造引用」的运行时用例。\n- iss-mwkoz2re-30598e（P2 maintainability，files.py:186-202）：FILE_CHUNKS_TRIGGER_DDL 先被赋 \"\"（:188）又被赋成旧 ai/ad/au 触发器脚本（:191-202），后者写 file_chunks_fts(rowid, text)，与新 contentless 表（只有 tokens 列）冲突，且仍在 __all__ 导出。修法：删掉重复赋值、同步 __all__ 或加断言钉住 \"\"。\n\n三、测试充分性\n39 例 + 652 passed + coverage 77.51% ≥ 76.45 + ruff/mypy 全绿 + PR #28 CI 全绿，覆盖新增的 FTS 迁移、默认装配、白名单拒绝、计时器顺序；缺口正好是本轮两条 P1 的路径：file_list-only 回答、文档正文污染白名单，均无对应用例。测试执行由开发负责，本轮未复跑，结论基于代码与测试静态证据。\n\n四、结论与完全解决条件\n由开发（plan-20261107-004 owner）在 feat/plan-20261107-004-file-tools 上修完上述 3 条并各自补测试；两条 P1 修复后需重跑 pytest tests/test_agent_tools.py + tests/test_agent_runtime.py、全量 coverage、ruff、mypy，并让 PR #28 CI 全绿；developer handoff 需逐条回应 iss-mwkoyzkc-cf9ddb / iss-mwkoyzlk-7502ab / iss-mwkoz2re-30598e 与本轮 6 条历史问题的结案说明。复审时若 3 条全部闭环、P0=0、P1=0，即可 approve 并把 plan-20261107-004 标 done、合并 PR #28；在此之前保持 in_review。",
+  "startedAt": "2026-11-17T12:49:18.030Z",
+  "finishedAt": "2026-11-17T12:52:04.192Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 1,
+    "total": 3
+  }
+}

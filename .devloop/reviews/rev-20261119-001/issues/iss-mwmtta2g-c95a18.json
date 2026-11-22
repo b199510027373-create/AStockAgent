@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwmtta2g-c95a18",
+  "threadId": "rev-20261119-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/chat.py",
+  "lines": "515-525",
+  "title": "引用只匹配到工作表却显示「定位：…第 N 行/单元格」，精度被夸大且 note 为空",
+  "evidence": "resolve_citation 的匹配只比较 page 与 sheet（astock/agent/chat.py:515-521），但 parse_citation 会解析出 row/cell 并保留在 citation.label 里（astock/agent/tools/citations.py 的 _PARSE_RE 含 row/cell 组），引用卡片把整条 label 原样显示为「定位：{label}」（astock/agent/chat.py:559）。于是《x.xlsx》工作表「Sheet1」第 5 行 A1:B2 会命中 Sheet1 的第一个 chunk、note 为空（chat.py:522-525），卡片写着「定位：…工作表「Sheet1」第 5 行 A1:B2」，下方的「解析产物/摘要」却只是该表首段文本——属于夸大精度的误导性定位，与 AGENT-04「结论带页码/工作表」的可核对性要求相冲突（引用声称能定位到行/单元格，实际只到工作表）。",
+  "suggestion": "当 citation.row 或 citation.cell 存在而匹配只到工作表时，把 note 设为「工作表级定位：未精确到第 N 行/单元格，先展示该工作表首段内容。」（复用 chat.py:525 的文案风格），或给 CitationDetail 增加 precise: bool 让 UI 在「定位：」后加「（工作表级）」小字。若行级定位留到后续计划项，本轮至少补齐这个 note，并在 tests/test_agent_chat.py 的 CitationTests 里加一条「row/cell 存在但只匹配到工作表 → note 含工作表面」的用例。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T01:36:55.978Z"
+  },
+  "createdAt": "2026-11-19T00:42:55.672Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T01:36:55.978Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwnlpnd5-4be737",
+  "threadId": "rev-20261119-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "maintainability",
+  "file": "astock/agent/chart_render.py",
+  "lines": "509-514",
+  "title": "apply_transforms 末尾 return 后残留重复不可达代码",
+  "evidence": "astock/agent/chart_render.py:509-511 已执行 `out.attrs = dict(frame.attrs)` 并 `return out`；紧接着 512-514 又重复同一段代码，位于 `return` 之后永远不可达。该重复是本分支新增/改写 `apply_transforms` 时留下的，ruff 不会报（语法合法），但会误导后续修改 attrs 传播逻辑，也让覆盖统计出现不可达行。",
+  "suggestion": "删除 512-514 三行，只保留 509-511 的 attrs 赋值与 return；行为不变，无需新增测试，跑现有 `tests/test_agent_chart_render.py` 即可回归。",
+  "confidence": 0.99,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T15:29:29.604Z"
+  },
+  "createdAt": "2026-11-19T13:43:55.529Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T15:29:29.604Z"
+    }
+  ]
+}

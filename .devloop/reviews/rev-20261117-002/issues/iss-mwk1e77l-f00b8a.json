@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwk1e77l-f00b8a",
+  "threadId": "rev-20261117-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "test-coverage",
+  "file": "astock/agent/files.py",
+  "lines": "170-171",
+  "title": "FTS5 中文检索无任何测试证据：unicode61 不切分 CJK，命中实际全靠 LIKE 回退",
+  "evidence": "files.py:170-171 冻结 DDL 为 `CREATE VIRTUAL TABLE IF NOT EXISTS file_chunks_fts USING fts5(text, content='file_chunks', content_rowid='chunk_id', tokenize='unicode61')`；files.py:1273-1286 index_chunks 把块原文整段写入 text，写入侧不做任何分词；触发器 files.py:175-186 也把 new.text 原样喂给 FTS。查询侧 file_tools.py:125-129 `_fts_query` 生成 `\"token\"*` 前缀查询（`return \" OR \".join(f'\"{token}\"*' for token in dict.fromkeys(tokens[:8]))`）。unicode61 不切分 CJK，连续汉字是一个 token，因此 `\"营业收入\"*` 匹配不到块文本「第二页提到营业收入同比增长。」，中文检索基本必然落到 file_tools.py:245-254 的 `_like_hits` 回退，即对每个文件逐块读 extracted.jsonl 做子串匹配（file_tools.py:136-146），检索成本随文件数×块数线性增长。证据侧：grep tests/ 只有 tests/test_agent_tools.py:259 `assert result.metadata[\"backend\"] == \"like\"` 断言 backend，:205-223 的中文查询用例走索引却不校验 metadata[\"backend\"]，因此「FTS5 命中」路径从未被任何测试证明可用——CI 绿是因为 LIKE 兜底接住了。验收 A6（file_chunks 用 FTS5 建立全文索引、命中可回查 file_id+页码/行号）在测试证据上不成立；docs/AStockAgent_interface_freeze_v1.md:303 把它描述为「索引缺失或 FTS 无命中时回退」，实际回退是中文检索的主路径。",
+  "suggestion": "二选一修复并补测试：① 保持冻结 DDL 不变，在写入侧把 CJK 切成 bigram（或对接分词）写入 FTS（contentless `fts5(tokens)` 表 + 显式写入，原文仍存 file_chunks.text，检索结果仍按 block 回查原文）；② 把 tokenize 改为 `trigram`（SQLite ≥3.34，支持中文子串），但需按验收 A10 同步 ADR-015 §5 与 docs/AStockAgent_interface_freeze_v1.md §4 的 DDL 文本，并处理存量库：`CREATE ... IF NOT EXISTS`（files.py:1252-1255）不会替换旧表，需按 schema 版本判断后 DROP 重建 FTS 或 `INSERT INTO file_chunks_fts(file_chunks_fts) VALUES('rebuild')`。测试：在 tests/test_agent_tools.py:205-223 增加 `assert found.metadata[\"backend\"] == \"fts5\"`（建议再补一例只在 FTS 索引里出现的词，确保不是 LIKE 命中），并把 freeze §4.1:303 的措辞改成如实描述（当前中文命中率与回退触发条件）。修复后 A6 才算有证据。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:15:42.816Z"
+  },
+  "createdAt": "2026-11-17T01:51:50.529Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:15:42.816Z"
+    }
+  ]
+}

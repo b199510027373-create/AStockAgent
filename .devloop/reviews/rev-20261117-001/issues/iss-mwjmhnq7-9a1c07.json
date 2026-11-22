@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwjmhnq7-9a1c07",
+  "threadId": "rev-20261117-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "acceptance",
+  "file": "astock/scheduler.py",
+  "lines": "3, 166, 358, 423-438, 500-503, 528, 535,",
+  "title": "观察期内改动了 astock/scheduler.py，违反 A7，且交付文档写成「未改动」",
+  "evidence": "`git diff 92f5e47..9d68a47 -- astock/scheduler.py`（92f5e47 是 PR #21 合并前的 main）显示本交付的 9d68a47「ci(quality): add repo-wide ruff baseline」改了这个文件 13 处：新增 `import contextlib`；`_release_lock()` 由 try/except 改成 `with contextlib.suppress(Exception): _LOCK_HANDLE.close()`（scheduler.py:502-503，属逻辑改写而非仅注释）；并逐条删掉 12 处 `# noqa: BLE001 - <理由>`，例如 scheduler.py:166 变成裸 `except Exception:`（原为「单条脏数据不阻断整体迁移」），scheduler.py:423/428/433/438 四条启动自检兜底全部失去理由注释，scheduler.py:555/613/625/639/668 同理。jobs.py 的 diff 为空，scheduler.py 不是。\n\nplan-20261103-012 acceptance[6] 写死「PR #9 五日观察结束前，Ruff 改动排除 astock/scheduler.py 与 astock/jobs.py」（观察期至 2026-11-21），而 handoff ho-20261117-006 的 changes 里写的是「scheduler.py/jobs.py 仅按观察期豁免未改动」。两处事实相反。",
+  "suggestion": "由开发在下一轮前二选一并写进 handoff：① 若删冗余 noqa 确有必要，把 12 处 BLE001 的审计理由集中写进 ruff.toml 的 per-file-ignores 注释块（这样不必再动 scheduler.py），并在 handoff 更正「未改动」的表述；② 若确认观察期内不该动，把 scheduler.py 回退到 92f5e47 的版本——per-file-ignores 已在 ruff.toml 里，回退后 ruff 仍为 0，观察样本恢复可比。同时 acceptance[4] 要求「边界兜底加注释+noqa」，回退或集中记录都要保证这 12 处理由可查。\n\n完全解决标准：`git diff 92f5e47 -- astock/scheduler.py` 为空，或 ruff.toml/handoff 里有与 A7 逐条对应的书面例外说明（含改动理由与对 PR #9 观察结论的影响评估）。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T19:19:16.374Z"
+  },
+  "createdAt": "2026-11-16T18:54:37.663Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T19:19:16.374Z"
+    }
+  ]
+}

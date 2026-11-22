@@ -1,28 +1,79 @@
 {
   "id": "plan-20261103-012",
-  "title": "CI 深化：全库 mypy + 覆盖率 65% + 依赖锁定",
-  "description": "当前 CI 已含 ruff 基础规则、mypy（22 个源文件，含 app.py）、覆盖率 57% / 门槛 50%、57 个测试。下一步：把 mypy 扩到全部非 UI 模块；覆盖率门槛提到 65%；依赖锁版本（当前全是 >=）；保证 PR 与 main 都跑。这也是评审 PR#15 的延伸。",
-  "status": "todo",
+  "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
+  "description": "旧基线（22 源文件 / 57 tests / coverage 57% / 门槛 50%）已过时。以执行时最新 main 实测为准（当前 pytest 513 passed + 1 skipped，mypy 35 files Success），不写死未测量的数字。目标：mypy 扩到全部非 UI 模块并全库通过；用最新实测覆盖率重设门槛（不得低于当前实测，分阶段提升）；requirements/requirements-dev 全部锁精确版本（含 ruff/mypy/plotly/kaleido）；CI 在 PR 与 main 都跑并连续两次通过。新增全仓 Ruff 基线：当前 `ruff check astock tests` 320 条（astock 264、tests 56；96 条可安全 --fix），先固定配置与工具版本，再分阶段清理，最终全仓 0 并纳入 CI blocking。PR #9 五日观察结束（11/21）前，Ruff 清理排除 astock/scheduler.py 与 astock/jobs.py，避免改动调度运行时代码使观察样本失效。第 3 轮评审 approve：前两轮 6 条问题全 fixed，本轮无 P0/P1（openP0=0、openP1=0），完全解决条件成立；2 条 P2 属守护测试强度问题，不构成 done 前置条件，转 plan-20261117-001 在观察期后处理。",
+  "status": "done",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-27",
-  "estimateH": 8,
-  "progress": 0,
+  "estimateH": 12,
+  "progress": 100,
   "acceptance": [
-    "mypy 覆盖扩展到全部非 UI 模块（当前 22 个源文件）",
-    "覆盖率门槛从 50% 提升到 65% 并稳定通过",
-    "requirements/requirements-dev 锁定版本（可复现安装）",
-    "CI 在 main 上连续两次通过"
+    "mypy 覆盖全部非 UI 模块，最新 main 全库通过（当前 35 files Success，以执行时实测为准）",
+    "记录最新 coverage 实测值，门槛按实测重设且不低于当前；分阶段提升目标写入 CI 注释",
+    "requirements/requirements-dev 锁定精确版本，可复现安装；含 ruff/mypy/plotly/kaleido 等工具与图表依赖",
+    "新增显式 Ruff 配置（select/ignore），不依赖 Ruff 默认规则集；CI 从 requirements-dev 安装固定版本，不再裸 pip install",
+    "Ruff 分阶段清理：先安全自动修复 96 条；C408/ISC004 手工；BLE001 逐条审计，能收窄则收窄、边界兜底加注释+noqa，禁止全文件级 noqa；S110/S112 按静默异常补日志或显式理由",
+    "最终 `ruff check astock tests` 为 0，CI 全仓 blocking；PR 与 main 均跑 pytest+mypy+ruff，连续两次通过",
+    "PR #9 五日观察结束前，Ruff 改动排除 astock/scheduler.py 与 astock/jobs.py；清理旧文档中的 22 文件/57 tests/50% 门槛表述"
   ],
   "tags": [
     "ci",
     "mypy",
     "coverage",
-    "pinning"
+    "pinning",
+    "ruff",
+    "style"
   ],
-  "links": {},
+  "links": {
+    "module": [
+      "ci"
+    ],
+    "docs": [
+      "docs/AStockAgent_CI_work_calendar.md"
+    ],
+    "branch": "feat/ci-quality-gates-plan-20261103-012 (merged) / feat/ci-gate-align-measured (merged) / fix/ci-review-r1 (merged) / fix/docs-baseline-numbers",
+    "pr": [
+      "https://github.com/b199510027373-create/AStockAgent/pull/21",
+      "https://github.com/b199510027373-create/AStockAgent/pull/22",
+      "https://github.com/b199510027373-create/AStockAgent/pull/24",
+      "https://github.com/b199510027373-create/AStockAgent/pull/26",
+      "https://github.com/b199510027373-create/AStockAgent/pull/27"
+    ],
+    "review": [
+      "rev-20261117-001"
+    ],
+    "handoff": [
+      "ho-20261117-014"
+    ],
+    "followup": [
+      "plan-20261117-001"
+    ],
+    "test": [
+      "pytest tests -q -m \"not png\" -> 606 passed, 1 skipped, 5 deselected, 12 subtests passed (commit e4102eb)",
+      "ruff check astock tests --no-cache -> All checks passed!；ruff.toml 已固定 known-third-party=[gradio]，本地与干净检出 CI 的 isort 判定一致，不再需要手动移走 gradio/ 目录",
+      "mypy astock app.py -> Success: no issues found in 36 source files",
+      "coverage run -m pytest tests -q -m \"not png\" + coverage report -> TOTAL 9248 stmts / 2157 miss = 76.68%（本地 Windows，门槛 76.45）",
+      "pip check -> No broken requirements found.",
+      "GitHub CI PR #21 run 43929440949: attempt1 test pass 1m20s / png-export pass 1m2s；attempt2 test pass 1m10s / png-export pass 51s（连续两次）",
+      "GitHub CI main run 43930042354 (47645c3): success",
+      "GitHub CI PR #22 run 43930603107: 两次 test/png-export 全 pass；coverage TOTAL 9247/2176 = 76.47% 恰好过门槛；ruff All checks passed；mypy 36 files Success",
+      "GitHub CI main run 43931162007 (e284a50): success",
+      "评审 r1 修复后本地：pytest -> 608 passed, 1 skipped, 5 deselected, 12 subtests；ruff All checks passed；mypy 36 files Success；coverage TOTAL 9248/2157 = 76.68% (门槛 76.45%)",
+      "变异验证：fail_under 临时改 76.0 -> test_coverage_threshold_not_below_measured_baseline 变红；mypy exclude 临时加 types -> test_mypy_exclude_matches_frozen_ui_whitelist 变红（均已恢复）",
+      "git diff 92f5e47 HEAD -- astock/scheduler.py astock/jobs.py -> 空（PR #9 观察期代码零改动）",
+      "GitHub CI PR #24 run 43935766464: attempt1 test pass / png-export pass；attempt2 test pass / png-export pass（连续两次绿）；coverage TOTAL 9248/2178 = 76.45%、ruff All checks passed、mypy 36 files Success、607 passed / 2 skipped",
+      "GitHub CI main run 43936420043 (merge 4122d30): success",
+      "评审 r2 修复后本地全量：pytest -> 610 passed, 1 skipped, 5 deselected, 12 subtests；ruff All checks passed；mypy 36 files Success；coverage 9248/2157 = 76.68%",
+      "文档守护变异验证：把 development_status 的基线行改回 9247 statements / 2155 miss -> test_docs_baseline_matches_measured_numbers 变红（已恢复）",
+      "GitHub CI PR #26 run 43939394936: attempt1 test pass / png-export pass；attempt2 test pass / png-export pass（连续两次绿）；CI 日志 609 passed / 2 skipped / TOTAL 9248 2178 76.45% / ruff All checks passed / mypy 36 files Success",
+      "GitHub CI main run 43939999492 (merge 3078048): success",
+      "GitHub CI PR #27 run 43940445367: 两次 test/png-export 全 pass；main run 43941051281: success（第 3 轮评审证据）"
+    ]
+  },
   "createdAt": "2026-11-03T12:10:57.134Z",
-  "updatedAt": "2026-11-03T12:10:57.134Z"
+  "updatedAt": "2026-11-16T19:45:38.546Z",
+  "devSessionId": "session-73d90b4d-a2d4-4a72-a16d-9ad17246fe67"
 }

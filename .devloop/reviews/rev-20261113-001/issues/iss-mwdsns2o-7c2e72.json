@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwdsns2o-7c2e72",
+  "threadId": "rev-20261113-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "reliability",
+  "file": "astock/scheduler.py",
+  "lines": "33, 260-277, 330-336",
+  "title": "心跳告警去重只在进程内生效，重启后同一签名重复落盘",
+  "evidence": "`_LAST_ALERT_SIGNATURE` 是模块级全局（scheduler.py:33），签名只在同一进程内比较（260-262）；而 startup_maintenance（330-336）在每次进程启动都会调用 heartbeat_check(alert=True)。ADR-004 §10 要求「同一签名去重」，但服务重启后同一 (reference_trade_date, streak, threshold) 会再向 data/recommendations/scheduler_alerts.jsonl 追加一行，崩溃重启循环会把同一条告警刷成多行，下游按行读取告警时会重复处理。tests/test_scheduler_ledger.py:280-289 只覆盖同进程重复调用，无法发现该路径。",
+  "suggestion": "把去重签名持久化：写盘前读取 scheduler_alerts.jsonl 最后一行（或维护独立的 name→last_at 表），若与当前 signature 相同且未超过告警间隔则跳过写盘；不在进程内维护可变全局。补一条测试：写行后手动重置 `scheduler._LAST_ALERT_SIGNATURE = None` 模拟重启，再调 heartbeat_check，断言文件仍只有一行。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T07:41:54.087Z"
+  },
+  "createdAt": "2026-11-12T17:00:43.872Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T07:41:54.087Z"
+    }
+  ]
+}

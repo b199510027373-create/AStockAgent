@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwm6tv83-3465bf",
+  "threadId": "rev-20261118-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "consistency",
+  "file": "astock/agent/tools/market_tools.py",
+  "lines": "919-931",
+  "title": "ema/atr 图层被 _chart_layers 静默丢弃，chart=True 时图上缺线却无任何提示",
+  "evidence": "_chart_layers 的正则 `^(ma|ema|rsi|boll|atr|macd|kdj|volume)(\\d{1,3})?$`（market_tools.py:919）接受 ema12/atr14，_parse_layer_names 与 KLINE_SCHEMA 的 layers 描述也放行（schema 文案里明确写了 ema12/atr14），但 923-930 只映射 volume/ma/boll/rsi/macd/kdj，ema 与 atr 没有分支，落到循环末尾被静默丢弃；astock/agent/chart_spec.py:83 `LAYER_TYPES = (\"ma\", \"boll\", \"volume\", \"macd\", \"rsi\", \"kdj\")` 确实没有 ema/atr。于是 kline(chart=True, layers=[\"ema12\"]) 时表格有 ema12 列、图上没有该线，而文本只在 `skipped` 里提示（market_tools.py:864），skipped 只可能来自 volume（_indicator_columns 把 volume 记入 skipped），所以调用方拿不到任何「ema/atr 未上图」的信号；`return out[:8]`（931）同样静默截断超过 8 个图层。",
+  "suggestion": "在 _chart_layers 之外记下无法上图的层（ema/atr）与被截断的层，写进 metadata[\"chart\"][\"warnings\"] 并拼进 ToolResult.text，例如「ema/atr 仅表格展示，ChartSpec 暂不支持该图层」；或者把 ema 映射成 {\"type\":\"ma\",\"window\":n}（ChartSpec ma 图层只接受整数窗口，语义最接近）并在文档里说明。补断言：kline(layers=[\"ema12\",\"atr14\"], chart=True) 时 warnings 明确出现未上图说明，且 table 仍含 ema12/atr14 列。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T15:37:58.366Z"
+  },
+  "createdAt": "2026-11-18T13:59:31.923Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T15:37:58.366Z"
+    }
+  ]
+}

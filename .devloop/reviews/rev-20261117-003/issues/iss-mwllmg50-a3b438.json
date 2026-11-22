@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwllmg50-a3b438",
+  "threadId": "rev-20261117-003",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1368, 1443-1461",
+  "title": "artifact 身份未包含 include_plotlyjs，同一 spec/data/env 切换内联/CDN 会撞身份并硬失败",
+  "evidence": "render 的 include_plotlyjs 是独立参数（chart_render.py:1368），直接决定 figure.to_html 的输出（1443-1448）；但 artifact_id 只用 data_digest+env_fingerprint+canonical_json(normalized)（1457-1461），normalized 来自 validate_chart_spec(spec)（1389），不包含这个独立参数（astock/agent/chart_spec.py 中无 include_plotlyjs）。因此同一 spec/同一份数据/同一环境先以 include_plotlyjs=\"inline\" 渲染、再以 \"cdn\" 渲染，会得到同一个 artifact_id，但 HTML 字节不同；store.record_artifact 发现已存在行的 content_digest 不同会抛 ArtifactIdentityConflict（store.py:790-799）。这是正常 API 用法（测试 tests/test_agent_chart_render.py:111 默认 cdn、132 用 inline），却会硬失败。现有回归只测了 code_version 变化（env 变）和文件名变化，没有测同一 spec 的 include_plotlyjs 变化。",
+  "suggestion": "把会影响 HTML 字节的渲染选项纳入身份：在 canonical_spec 中加入 render_options.include_plotlyjs（以及未来任何输出影响参数），或把 HTML content_digest 一并纳入 artifact_id 种子；record_artifact 的 content_digest 校验应只用于同一身份的内容一致性。补回归测试：同一 spec/data/env 下 include_plotlyjs=\"inline\" 与 \"cdn\" 各渲染一次，断言生成两个 artifact（或明确后者复用前者的策略），且不抛 ArtifactIdentityConflict；再断言两次的 HTML 均可读。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T05:01:33.707Z"
+  },
+  "createdAt": "2026-11-18T04:05:53.844Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T05:01:33.707Z"
+    }
+  ]
+}

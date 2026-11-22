@@ -1,0 +1,18 @@
+{
+  "id": "rev-20261116-002",
+  "title": "评审：复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
+  "planItemId": "plan-20261114-003",
+  "sourceDevSessionId": null,
+  "branch": "fix/data-adj-caliber",
+  "base": "main",
+  "files": [
+    "astock/contracts.py",
+    "astock/data.py",
+    "tests/test_data_adj_caliber.py",
+    "tests/test_data_pit_events.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-16T06:38:33.258Z",
+  "updatedAt": "2026-11-20T11:10:26.558Z",
+  "reviewSessionId": "session-083ef9b0-3fd3-4ecc-b568-3b6ea1db0094"
+}

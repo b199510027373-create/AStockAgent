@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwk1edie-9a8ad8",
+  "threadId": "rev-20261117-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/tools/file_tools.py",
+  "lines": "477-497",
+  "title": "table_query 超时计时器覆盖表格装载阶段，且 done/close 与计时器线程无同步",
+  "evidence": "file_tools.py:477-487：`conn = duckdb.connect(\":memory:\")` 后 :479 立刻 `timer = _interrupt_on_timeout(conn, timeout_seconds, state)`，而 :485 才执行 `CREATE TEMP TABLE t AS SELECT * FROM read_parquet('...')`。装载耗时计入 5s 预算，超时后抛出的文案仍是「table_query 超过 {timeout_seconds}s 超时，请缩小查询范围或先聚合」（:490-493），把「装载慢」误报成「SQL 该缩小范围」，会把模型引向错误的纠错动作；tests/test_agent_tools.py:463 的 10 万行用例整例约 35s（handoff 自述主要是生成并导入），说明装载耗时远大于查询耗时。此外 :494-497 finally 先置 `state[\"done\"]=True` 再 `timer.cancel()`/`conn.close()`，而计时器线程读 `state[\"done\"]` 与调用 `conn.interrupt()` 之间无同步，存在对已关闭连接 interrupt 的窗口（DuckDB 关闭后 interrupt 行为未定义，可能抛异常或静默）。",
+  "suggestion": "把 `_interrupt_on_timeout` 挪到 `CREATE TEMP TABLE` 之后（装载阶段单独给预算或不限时，超时文案区分为「表格装载超时」而非「请缩小查询范围」）；`_interrupt_on_timeout` 内用 `threading.Lock` 保护 `state[\"done\"]` 检查与 `conn.interrupt()`，并在 `conn.close()` 之前 cancel，必要时 join 计时器线程。补一条测试：把 timeout_seconds 设很小但允许装载完成，断言报错文案是查询超时而非装载超时。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:16:05.120Z"
+  },
+  "createdAt": "2026-11-17T01:51:58.694Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:16:05.120Z"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "id": "ho-20261116-025",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261116-002",
+  "sessionId": "",
+  "title": "评审：复权口径收口：标准后复权基准 1.0 + 因子缺失硬失败 + 分钟复权标注",
+  "summary": "第 4 轮（scope=diff，roundNo=4，diff 范围 643e381..0012fed，实现提交 761e9fa）：**approve**，本轮 0 条新问题（P0=0/P1=0/P2=0），openP1 清零，线程标记完全解决。\n\n一、上一轮唯一 P1 iss-mwixznmz-2f393e 三处清扫逐条核对，全部如实完成：\n(a) 死调用已删——astock/data.py:812-815 的 `covered = merged[~intraday]` + `_check_factor_coverage(...)` 整段移除；删除的是不可达代码而非有效覆盖，故单文件用例数保持 25（23+2）、目标 99、全量 538/1 skipped 与第 3 轮完全一致，可作为\"删的是死代码\"的旁证。删除后 `_check_factor_coverage` 仅剩日线调用点 astock/data.py:416，`_query_adj_history` 保留日线 data.py:412 与分钟 data.py:744 两处，无未使用符号（mypy 35 files success）。\n(b) docstring 改为如实描述——astock/data.py:768-773 明确写\"分钟路径不另设覆盖断言：因子历史由 _query_adj_history 分页拉取，截断若落在行情窗口之内会表现为窗口内某些交易日缺因子，由缺因子硬失败（盘中当日例外）直接拦下——此时首末覆盖比较恒为真，属不可达代码\"，并指明边界见 ADR-008 第 8 条；与 astock/data.py:795-813 的实际控制流（`unexpected = missing & ~intraday` 先 raise、intraday 行用 `fct[\"adj_factor\"].iloc[-1]` 填充并置 partial/factor_as_of）一致，没有留下与实现不符的承诺。\n(c) 两个用例名与断言都对齐——tests/test_data_adj_caliber.py:345 改名 test_minute_hfq_truncated_history_surfaces_as_missing_factor、:360 改名 test_minute_qfq_truncated_history_surfaces_as_missing_factor，均新增 `assertIn(\"分钟线以下交易日缺少 adj_factor\", message)` 钉死异常来自缺因子分支（不再只靠共享的 contract 名 AdjFactor 冒充来源），并保留具体交易日（2025-01-02 / 2025-01-06）与 contract=AdjFactor 断言；qfq 用例补了 contract 断言。这两个用例现在测的是真实存在的行为（分钟截断落在窗口内 → 缺因子硬失败），不是不存在的覆盖断言。\n(d) ADR 同步——.devloop/architecture/adr/ADR-008-price-adjustment-limits.md:37 第 8 条已改为\"覆盖校验落在日线路径\"，明确\"分钟路径不设覆盖断言，由缺因子硬失败兜底（盘中当日 bar 按第 7 条例外）\"，并把\"可观测边界\"（截断恰好早于窗口起点、且窗口内每天都有因子时只能靠 query_all 分页完整性）写成同一段；落地第 8 条（同文件:49）记录了\"第 2 轮加、第 3 轮删\"的时点与原因。全文已无\"日线与分钟线都用 _check_factor_coverage\"这类超卖表述。\n\n二、iss-mwixbcyf-8383d6 至此真正收口：ADR 的承诺（日线覆盖校验 + 分钟缺因子兜底 + 边界声明）与代码、测试三者一致，可随本轮标 resolved；iss-mwixznmz-2f393e 同样可标 resolved。\n\n三、diff 范围核对：643e381..0012fed 仅 astock/data.py 与 tests/test_data_adj_caliber.py 两个文件变动（其余为 .devloop 计划/handoff 文档），astock/contracts.py、tests/test_data_pit_events.py 未动，第 1-2 轮已确认的修复（分页 _query_adj_history、日线覆盖断言、hfq row.empty→失效、qfq end_eff、旧 qfq meta 无 adj_base 失效、盘中 partial）均未回退。\n\n四、证据（dev 记录 + handoff ho-20261116-023/024；本轮环境无 shell/gh，无法独立复跑）：单文件 25 passed、目标 4 文件 99 passed、全量 538 passed 1 skipped 12 subtests、架构门禁 32 passed 1 skipped、ruff E9/F63/F7/F82 通过、mypy 35 files success；CI run 43824704960（head 761e9fa）test+png-export success、43824780572（a5fbcf6）success，PR #15 状态 CLEAN。\n\n五、验收：①-⑤ 满足；⑥（行情工具与图表图注消费 attrs[\"adjustment\"]，含分钟 partial/factor_as_of 的\"盘中近似\"标注）仍归 plan-20261107-006 与 plan-20261114-002，plan-20261114-003 达 done 时须显式标注该依赖未收口。\n\n六、谁在什么条件下收尾（不改变本轮 approve 结论）：\n1) 用户/开发：合并 PR #15。注意分支 HEAD 现为 0012fed（\"回填 CI 结果 ho-20261116-024\"，纯文档提交），ho-20261116-024 记录的 CI 结论对应 a5fbcf6；合并前请确认 0012fed 的 CI 结论，或直接合并后复跑 main CI。\n2) 开发：合并后复跑 main CI 并把 run 号回填 plan-20261114-003 的 links.test，本项数据层交付才算完全解决。\n3) 验收⑥ 由 plan-20261107-006 / plan-20261114-002 接入时按 ADR-008 第 7、8、9 条消费 attrs 完成。\n4) 全仓 ruff 312 条既有风格告警按 handoff 声明单独立项，不在本项范围。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 4,
+    "verdict": "approve",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 1,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261116-024",
+  "next": "",
+  "createdAt": "2026-11-16T07:39:50.417Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-025.md"
+}

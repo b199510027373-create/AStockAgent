@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwowqrph-4c6382",
+  "threadId": "rev-20261120-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-coverage",
+  "file": "tests/smoke/agent_ui/run_smoke.py",
+  "lines": "306-313,396-398",
+  "title": "降级夹具起不来时只 WARN 跳过，仍输出 SMOKE OK/ok=true，与显式 --no-degraded 无法区分",
+  "evidence": "`if wait_for_log(degraded_log, \"READY url=\", timeout=180): ... else: print(f\"WARN 降级夹具没有就绪，跳过该断言...\")`（run_smoke.py:306-313）只告警不置失败；summary[\"degraded\"] 仍取 `not args.no_degraded`=True（:260），最终 `summary[\"ok\"] = driver_exit == 0`（:396-398）。驱动侧 `if args.degraded_url:` 才追加 check_degraded（smoke_drive.py:394-395），所以降级夹具崩掉时输出变成「SMOKE OK :: 7 项断言全部通过」、退出码 0、run.json ok=true —— 与用户主动 `--no-degraded` 的运行结果完全一致，而 README.md:95 把 degraded 列为判据之一（ho-20261120-010 也宣称「8 项断言全过」）。这说明「降级横幅」这条断言一旦真坏（Gradio 启动异常、端口冲突、模型工厂行为变化），冒烟仍为绿。",
+  "suggestion": "默认（未传 --no-degraded）时把「降级夹具未就绪」当作失败：记录 `summary[\"degraded_expected\"]=True`、`summary[\"degraded_ran\"]=False` 并以非零退出码结束（或至少让 driver_exit 非 0），只有显式 --no-degraded 才允许跳过；同时让驱动在 skipped 时也往 report.json 写一条 `{\"degraded\": {\"ok\": false, \"skipped\": \"no --degraded-url\"}}`，避免「8 项」与「7 项」在证据里无法分辨。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T13:01:11.351Z"
+  },
+  "createdAt": "2026-11-20T11:40:29.765Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T13:01:11.351Z"
+    }
+  ]
+}

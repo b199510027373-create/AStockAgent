@@ -25,13 +25,13 @@ def _rangebreaks(start, end, intraday: bool = False) -> list[dict]:
     if intraday:
         # 隐藏隔夜与午休：保留 15:00、11:30、13:00 三根边界 K 线
         return [
-            dict(bounds=["sat", "mon"]),
-            dict(bounds=[15.01, 9.5], pattern="hour"),
-            dict(bounds=[11.51, 13], pattern="hour"),
+            {"bounds": ["sat", "mon"]},
+            {"bounds": [15.01, 9.5], "pattern": "hour"},
+            {"bounds": [11.51, 13], "pattern": "hour"},
         ]
     return [
-        dict(bounds=["sat", "mon"]),
-        dict(values=non_trading_days(start, end)),
+        {"bounds": ["sat", "mon"]},
+        {"values": non_trading_days(start, end)},
     ]
 
 
@@ -54,14 +54,14 @@ def empty_figure(text: str = "切换模式后显示") -> go.Figure:
         xref="paper",
         yref="paper",
         showarrow=False,
-        font=dict(size=13, color="#999"),
+        font={"size": 13, "color": "#999"},
     )
     fig.update_layout(
         template="plotly_white",
         height=300,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        margin=dict(t=20, b=20, l=20, r=20),
+        xaxis={"visible": False},
+        yaxis={"visible": False},
+        margin={"t": 20, "b": 20, "l": 20, "r": 20},
     )
     return fig
 
@@ -128,7 +128,7 @@ def candlestick_figure(
                 y=df[col],
                 mode="lines",
                 name=label,
-                line=dict(color=color, width=width),
+                line={"color": color, "width": width},
             ),
             row=1,
             col=1,
@@ -141,7 +141,7 @@ def candlestick_figure(
                 y=df["boll_upper"],
                 mode="lines",
                 name="布林上轨",
-                line=dict(color="rgba(120,120,120,0.55)", width=1, dash="dash"),
+                line={"color": "rgba(120,120,120,0.55)", "width": 1, "dash": "dash"},
             ),
             row=1,
             col=1,
@@ -152,7 +152,7 @@ def candlestick_figure(
                 y=df["boll_lower"],
                 mode="lines",
                 name="布林下轨",
-                line=dict(color="rgba(120,120,120,0.55)", width=1, dash="dash"),
+                line={"color": "rgba(120,120,120,0.55)", "width": 1, "dash": "dash"},
                 fill="tonexty",
                 fillcolor="rgba(120,120,120,0.06)",
             ),
@@ -168,7 +168,7 @@ def candlestick_figure(
                 y=wma,
                 mode="lines",
                 name="周线MA20",
-                line=dict(color="#FF6F00", width=2.4),
+                line={"color": "#FF6F00", "width": 2.4},
             ),
             row=1,
             col=1,
@@ -184,7 +184,7 @@ def candlestick_figure(
                 y=mma,
                 mode="lines",
                 name="月线MA12",
-                line=dict(color="#6A1B9A", width=2.4, dash="dot"),
+                line={"color": "#6A1B9A", "width": 2.4, "dash": "dot"},
             ),
             row=1,
             col=1,
@@ -211,24 +211,24 @@ def candlestick_figure(
                     y=df["vol_ma20"],
                     mode="lines",
                     name="量MA20",
-                    line=dict(color="#FFA726", width=1.4, dash="dot"),
+                    line={"color": "#FFA726", "width": 1.4, "dash": "dot"},
                 ),
                 row=2,
                 col=1,
             )
 
     rb = _rangebreaks(x.min(), x.max(), intraday=intraday)
-    xaxis_kwargs: dict = dict(
-        rangebreaks=rb,
-        showspikes=True,
-        spikemode="across",
-        spikesnap="cursor",
-        spikethickness=1,
-        spikecolor="#999999",
-        spikedash="dot",
-        showgrid=True,
-        gridcolor=GRID,
-    )
+    xaxis_kwargs: dict = {
+        "rangebreaks": rb,
+        "showspikes": True,
+        "spikemode": "across",
+        "spikesnap": "cursor",
+        "spikethickness": 1,
+        "spikecolor": "#999999",
+        "spikedash": "dot",
+        "showgrid": True,
+        "gridcolor": GRID,
+    }
     if intraday:
         n_days = int(pd.Series(x).dt.normalize().nunique())
         if n_days > 1:
@@ -251,73 +251,73 @@ def candlestick_figure(
             n_days = int(pd.Series(x).dt.normalize().nunique())
             if n_days > 1:
                 buttons = [
-                    dict(count=1, label="1D", step="day", stepmode="backward"),
-                    dict(count=3, label="3D", step="day", stepmode="backward"),
-                    dict(count=5, label="5D", step="day", stepmode="backward"),
-                    dict(step="all", label="ALL"),
+                    {"count": 1, "label": "1D", "step": "day", "stepmode": "backward"},
+                    {"count": 3, "label": "3D", "step": "day", "stepmode": "backward"},
+                    {"count": 5, "label": "5D", "step": "day", "stepmode": "backward"},
+                    {"step": "all", "label": "ALL"},
                 ]
             else:
                 buttons = [
-                    dict(count=1, label="1H", step="hour", stepmode="backward"),
-                    dict(count=2, label="2H", step="hour", stepmode="backward"),
-                    dict(count=4, label="4H", step="hour", stepmode="backward"),
-                    dict(step="all", label="ALL"),
+                    {"count": 1, "label": "1H", "step": "hour", "stepmode": "backward"},
+                    {"count": 2, "label": "2H", "step": "hour", "stepmode": "backward"},
+                    {"count": 4, "label": "4H", "step": "hour", "stepmode": "backward"},
+                    {"step": "all", "label": "ALL"},
                 ]
         else:
             buttons = [
-                dict(count=1, label="1M", step="month", stepmode="backward"),
-                dict(count=3, label="3M", step="month", stepmode="backward"),
-                dict(count=6, label="6M", step="month", stepmode="backward"),
-                dict(count=1, label="1Y", step="year", stepmode="backward"),
-                dict(count=3, label="3Y", step="year", stepmode="backward"),
-                dict(count=5, label="5Y", step="year", stepmode="backward"),
-                dict(step="all", label="ALL"),
+                {"count": 1, "label": "1M", "step": "month", "stepmode": "backward"},
+                {"count": 3, "label": "3M", "step": "month", "stepmode": "backward"},
+                {"count": 6, "label": "6M", "step": "month", "stepmode": "backward"},
+                {"count": 1, "label": "1Y", "step": "year", "stepmode": "backward"},
+                {"count": 3, "label": "3Y", "step": "year", "stepmode": "backward"},
+                {"count": 5, "label": "5Y", "step": "year", "stepmode": "backward"},
+                {"step": "all", "label": "ALL"},
             ]
         fig.update_xaxes(
-            rangeselector=dict(
-                buttons=buttons,
-                x=1,
-                xanchor="right",
-                y=1.16,
-                yanchor="top",
-                bgcolor="rgba(250,250,250,0.9)",
-                activecolor="#E3F2FD",
-                font=dict(size=10),
-            ),
+            rangeselector={
+                "buttons": buttons,
+                "x": 1,
+                "xanchor": "right",
+                "y": 1.16,
+                "yanchor": "top",
+                "bgcolor": "rgba(250,250,250,0.9)",
+                "activecolor": "#E3F2FD",
+                "font": {"size": 10},
+            },
             row=1,
             col=1,
         )
 
     fig.update_layout(
-        title=dict(
-            text=title,
-            x=0.005,
-            xanchor="left",
-            y=0.985,
-            yanchor="top",
-            font=dict(size=13 if height < 500 else 15),
-        ),
+        title={
+            "text": title,
+            "x": 0.005,
+            "xanchor": "left",
+            "y": 0.985,
+            "yanchor": "top",
+            "font": {"size": 13 if height < 500 else 15},
+        },
         height=height,
         template="plotly_white",
         hovermode="x unified",
         dragmode="pan",
         showlegend=True,
-        legend=dict(
-            orientation="v",
-            y=1.0,
-            x=1.005,
-            xanchor="left",
-            yanchor="top",
-            font=dict(size=10),
-            bgcolor="rgba(255,255,255,0.65)",
-            borderwidth=0,
-        ),
-        margin=dict(
-            t=58 if show_range_selector else 42,
-            b=26,
-            l=62,
-            r=96 if height < 500 else 104,
-        ),
+        legend={
+            "orientation": "v",
+            "y": 1.0,
+            "x": 1.005,
+            "xanchor": "left",
+            "yanchor": "top",
+            "font": {"size": 10},
+            "bgcolor": "rgba(255,255,255,0.65)",
+            "borderwidth": 0,
+        },
+        margin={
+            "t": 58 if show_range_selector else 42,
+            "b": 26,
+            "l": 62,
+            "r": 96 if height < 500 else 104,
+        },
         xaxis_rangeslider_visible=False,
         bargap=0.15,
     )
@@ -354,7 +354,7 @@ def normalized_compare_figure(
                 y=nav,
                 mode="lines",
                 name=f"{label}（{len(sub)}日）",
-                line=dict(color=colors[i % len(colors)], width=1.8),
+                line={"color": colors[i % len(colors)], "width": 1.8},
                 customdata=sub["trade_date"].dt.strftime("%Y-%m-%d"),
                 hovertemplate=(
                     "进度 %{x:.0f}%<br>%{customdata}"
@@ -366,26 +366,26 @@ def normalized_compare_figure(
         return empty_figure("历史数据不足以做区间对比")
     fig.add_hline(y=100, line_dash="dot", line_color="#999999", line_width=1)
     fig.update_layout(
-        title=dict(
-            text=f"{code} 多区间归一化对比（起点=100，按区间长度对齐）",
-            x=0.005,
-            xanchor="left",
-            y=0.985,
-            yanchor="top",
-            font=dict(size=15),
-        ),
+        title={
+            "text": f"{code} 多区间归一化对比（起点=100，按区间长度对齐）",
+            "x": 0.005,
+            "xanchor": "left",
+            "y": 0.985,
+            "yanchor": "top",
+            "font": {"size": 15},
+        },
         height=height,
         template="plotly_white",
         hovermode="x unified",
-        legend=dict(
-            orientation="h",
-            y=1.06,
-            x=0,
-            xanchor="left",
-            font=dict(size=10),
-            bgcolor="rgba(255,255,255,0.7)",
-        ),
-        margin=dict(t=78, b=30, l=20, r=20),
+        legend={
+            "orientation": "h",
+            "y": 1.06,
+            "x": 0,
+            "xanchor": "left",
+            "font": {"size": 10},
+            "bgcolor": "rgba(255,255,255,0.7)",
+        },
+        margin={"t": 78, "b": 30, "l": 20, "r": 20},
     )
     fig.update_xaxes(
         title_text="区间进度（%），各区间按自身长度展开",
@@ -399,6 +399,42 @@ def normalized_compare_figure(
         gridcolor=GRID,
     )
     return fig
+
+
+def _adj_caption(adj: str, daily: pd.DataFrame) -> str:
+    """复权口径图注（ADR-008 D1）：口径名 + 基准日 + 基准因子，绝不把 hfq 当不复权。
+
+    优先读 ``daily.attrs["adjustment"]``（由 :func:`astock.data.load_daily` 写入），
+    缺失时退回调用方传入的 ``adj`` 参数。
+    """
+    meta = dict(daily.attrs.get("adjustment") or {}) if hasattr(daily, "attrs") else {}
+    key = str(meta.get("adj") or adj or "none").lower()
+    label = {
+        "qfq": "前复权（qfq）",
+        "hfq": "后复权（hfq）",
+        "none": "不复权（原始成交价）",
+    }.get(key, f"口径未知（{key}）")
+    parts = [label]
+    base = meta.get("adj_base")
+    factor = meta.get("base_factor")
+    if base:
+        if key == "hfq":
+            parts.append(f"基准 {base} 起 1.0")
+        elif key == "qfq":
+            text = f"基准 {base}"
+            value = float(factor) if isinstance(factor, (int, float)) else float("nan")
+            if np.isfinite(value) and value > 0:
+                text += f"，因子 {value:.4f}"
+            parts.append(text)
+    source = meta.get("adj_source")
+    if source:
+        parts.append(f"因子来源 {source}")
+    # 分钟盘中当日 bar 用的是最近已发布因子（ADR-008 补充裁决第 7 条）：
+    # 图注必须把"盘中近似"说出来，否则读者会以为当天因子已发布。
+    if meta.get("partial"):
+        as_of = meta.get("factor_as_of") or "最近已发布交易日"
+        parts.append(f"盘中近似（因子截至 {as_of}）")
+    return "，".join(parts)
 
 
 def summary_markdown(
@@ -419,7 +455,7 @@ def summary_markdown(
         try:
             x = float(x)
             return "—" if np.isnan(x) else f"{x:.{digits}f}"
-        except Exception:
+        except (TypeError, ValueError):  # 非数值显示占位
             return "—"
 
     chg = (last["close"] / prev["close"] - 1) * 100 if prev["close"] else np.nan
@@ -458,5 +494,5 @@ def summary_markdown(
         f"### {code} 多周期概览\n\n"
         f"| 指标 | 数值 |\n|---|---|\n{body}\n\n"
         f"<sub>区间 {pd.Timestamp(start):%Y-%m-%d} ~ {pd.Timestamp(end):%Y-%m-%d}，"
-        f"{'前复权' if adj == 'qfq' else '不复权'}，共 {len(daily)} 根日线</sub>"
+        f"{_adj_caption(adj, daily)}，共 {len(daily)} 根日线</sub>"
     )

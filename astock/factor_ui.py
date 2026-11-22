@@ -13,7 +13,7 @@ def run_factor(
     horizon: int,
     rebalance: int,
     neutralize: bool,
-    progress=gr.Progress(),
+    progress=gr.Progress(),  # noqa: B008 - Gradio 回调惯例：Progress 默认实例由框架注入
 ):
     try:
         result = run_factor_ic(

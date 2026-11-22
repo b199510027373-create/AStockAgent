@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwdsn7s3-6954f5",
+  "threadId": "rev-20261113-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/scheduler.py",
+  "lines": "229-239, 298-303",
+  "title": "心跳/验收报表在 15:00–16:40 把当天未到期的 close 任务计为漏跑",
+  "evidence": "heartbeat_check 用 `reference = last_completed_trade_date(now)`（229）与 `_recent_trading_days(now, HEARTBEAT_LOOKBACK_DAYS)`（233）；acceptance_report 走同一路径（302）。而 astock/data.py:90-94 的 last_completed_trade_date 在 `now.hour >= 15` 时直接返回当天，close 任务的到期时间却是 run_time=16:40（scheduler.py:45-51）。结果是交易日 15:00–16:40 之间：heartbeat 把尚未到期的当天记进 missed（streak 多 1，昨天 failed 时会提前告警并退出码 2），acceptance_report 的 5 天窗口也包含当天 → 前 4 天全 success 时 `python -m astock.jobs --report 5` 仍 all_success=False、return 2。该误判每个交易日稳定复现约 100 分钟，且直接影响 plan-20261103-007 验收项 4 的取证工具。",
+  "suggestion": "增加 `_due_reference(now)`：当 `(now.hour, now.minute) < _run_time()` 时用 `datetime.combine(now.date(), time(0, 0))` 作为参考时刻再调 last_completed_trade_date（盘前与周末行为不变，只修正 15:00–16:40），并让 heartbeat_check、acceptance_report、_recent_trading_days 内部统一使用该参考值。补两条测试：15:30 且前 4 天 success 时 `--report 5` 仍 all_success=True；15:30 且昨天 failed 时 streak=1、alerted=False、退出码 0。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T07:41:42.596Z"
+  },
+  "createdAt": "2026-11-12T17:00:17.571Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T07:41:42.596Z"
+    }
+  ]
+}

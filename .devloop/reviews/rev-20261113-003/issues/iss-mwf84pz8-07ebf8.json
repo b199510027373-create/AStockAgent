@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwf84pz8-07ebf8",
+  "threadId": "rev-20261113-003",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "contract",
+  "file": "astock/agent/chart_spec.py",
+  "lines": "85,120,526-527,776-785,930-989",
+  "title": "2026-11-14 Q4=B 后仍接受 panes/style/raw 别名，plan-005 验收的“别名已删除”未满足",
+  "evidence": "ADR-016 2026-11-14 补充裁决 Q4=B（第 88-91 行）明确要求删除 panes/style/raw 兼容别名，规范字段只保留 layers/theme/adj=none，旧别名一律报错；plan-20261107-005 验收也写着“panes/style/raw 别名已删除”。但代码仍保留：ADJ_ALIASES={\"raw\":\"none\"}（chart_spec.py:85）、FIELD_ALIASES={\"panes\":\"layers\",\"style\":\"theme\"}（:120）、data.adj 折叠（:526-527）、未知键检查把别名加入白名单（:776-785）、JSON Schema 顶层仍声明 panes/style 且 adj enum 含 raw（:930-989）。冻结清单 §3.2.1 还把别名写成正式兼容规则（docs/AStockAgent_interface_freeze_v1.md:183-193）；tests/test_agent_chart_spec.py:450-469、586-591 锁定这些别名。另 data.load_daily(adj=\"raw\") 已改为抛 ValueError（tests/test_data_pit_events.py:433），与 spec 层仍接受 raw 形成层间不一致。",
+  "suggestion": "按 Q4=B 删除 FIELD_ALIASES/ADJ_ALIASES 及所有别名分支，移除 schema 的 panes/style/raw，删除冻结清单 §3.2.1，并把测试改为断言 panes/style/raw 均返回 $.panes/$.style/$.data.adj 字段级错误。若本轮确实把清理留给 plan-20261114-002，则必须同步修改 plan-20261107-005 验收，删除“别名已删除”的已完成表述，不能在 005 中宣称满足；下一轮以 ADR-016 和修改后的验收为准复核。",
+  "confidence": 0.96,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T17:53:31.566Z"
+  },
+  "createdAt": "2026-11-13T17:01:34.724Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T17:53:31.566Z"
+    }
+  ]
+}

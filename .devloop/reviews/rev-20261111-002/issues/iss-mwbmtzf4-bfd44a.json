@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbmtzf4-bfd44a",
+  "threadId": "rev-20261111-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "口径披露",
+  "file": "astock/backfill.py",
+  "lines": "105,130-133",
+  "title": "backfill 的分位标签写死 N=candidate_n，候选行不足时与真实池大小不符",
+  "evidence": "`astock/backfill.py:105` 的池是 `assign_percentiles(rows, candidate_n)`，实际大小 `min(candidate_n, len(rows))`；但 `backfill.py:130-133` 的 market 文案写死 `f\"分位基准=候选池（N={candidate_n}）。\"`。当某日满足条件的股票不足 15 只（`len(rows) < candidate_n`）时，标签仍写 N=15，而池实际是 N=len(rows)，与冻结文档 §6.4「展示…N=候选池大小」（docs:376）不符；`tests/test_research_semantics.py:47-56` 只覆盖 40 行→15 的正常情形，没有小于 candidate_n 的用例。",
+  "suggestion": "用 `len(pool)` 生成 N（如 `n = len(pool)` 后再 f-string），并把实际池大小写进 backfill JSON 的 params/diagnostics；补一个用例：8 行 + candidate_n=15 时断言标签为 N=8 且分位是按 8 行算的。修复责任：开发，可与 P1 的池快照改动合并。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:56:57.272Z"
+  },
+  "createdAt": "2026-11-11T04:42:03.280Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:56:57.272Z"
+    }
+  ]
+}

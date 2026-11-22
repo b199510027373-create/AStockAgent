@@ -1,0 +1,143 @@
+{
+  "id": "ho-20261110-020",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261110-003",
+  "threadId": null,
+  "sessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7",
+  "title": "更新交付：分支已推送 + 模块图漂移修正与门禁补丁",
+  "summary": "相对 initial 交付（ho-20261110-019）的更新：分支已推送 origin，并补了一处仪表盘漂移——modules.json 里 contracts 模块仍写「计划新增：…」，与 ADR-002 裁决相反，已改为「已实现（ADR-002）：…」并在门禁新增 test_module_graph_descriptions_are_not_stale。门禁测试从 20 项增至 21 项通过（1 项因 astock/agent/tools 未实现而跳过），全量回归 260 passed / 1 skipped，mypy 32 文件无问题，ruff 通过。当前两个提交 28a0dc2（主交付）+ 06af067（模块图与门禁补丁），plan-20261110-003 状态 in_review、progress 100。PR 未能代开：环境无 gh CLI、无 GITHUB_TOKEN，已给出 GitHub compare 一键创建链接。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "接口级限时评审，不重写已过评审代码，结论直接更新 ADR 状态——以 8 条 ADR 裁决 + 实现回写完成，改动仅文档/门禁/契约元数据，未触碰业务代码。",
+      "source": "plan-20261110-003 description"
+    },
+    {
+      "id": "REQ-2",
+      "text": "验收 1：8 条 proposed ADR 全部结论且工作台无「已实现但 proposed」——devloop_architecture list 复核 18 条均 accepted，summary 带 [accepted]/[accepted-with-conditions] 裁决标签。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-3",
+      "text": "验收 2：偏差写回「实现回写」——ADR-002/010/013/014 四段完成，门禁 test_implemented_adrs_have_implementation_feedback_section 守住。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-4",
+      "text": "验收 3：冻结 6 接口——docs/AStockAgent_interface_freeze_v1.md §1–§6，门禁校验字段/签名/默认值/文档要素四类断言。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-5",
+      "text": "验收 4：18 条规则逐条落点——contract.json v1.1 每条 rationale 以「落点：」开头，落点表 18 行 + RC-01~RC-08，门禁解析 tests/xxx.py::test_name 并核对 AST。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-6",
+      "text": "验收 5：未决问题转非目标/二期——ADR-014 流式、ADR-015 OCR/加密/宏、ADR-016 任意 Python 与 join/pivot、ADR-018 tick/Level-2 均已写入「非目标」。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-7",
+      "text": "验收 6：ADR-012 治理附录——状态语义表、7 个自然日追认、实现回写义务、接口冻结顺序、门禁、状态变更记录表；门禁 test_adr_012_carries_governance_appendix 守住。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-8",
+      "text": "验收 7：11-12 前结束不阻塞 003/005——2026-11-10 完成，无 deferred，003/005 可按 11-15 开工。",
+      "source": "plan-20261110-003 acceptance"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/architecture/modules.json",
+      "summary": "相对 initial 交付新增：contracts 模块描述由「计划新增：BarFrame/…」改为「已实现（ADR-002）：…」，消除模块图与 ADR 裁决相反的过期标记；文件版本记 v1.1 / updatedAt 2026-11-10。",
+      "commit": "06af067"
+    },
+    {
+      "path": "tests/test_architecture_gate.py",
+      "summary": "相对 initial 交付新增 test_module_graph_descriptions_are_not_stale（禁止模块描述残留「计划新增」），门禁由 20 项增至 21 项通过 / 1 项跳过。",
+      "commit": "06af067"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "同 initial：六接口冻结清单 v1（本次未改）。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/",
+      "summary": "同 initial：8 条 ADR 裁决 + 实现回写 + ADR-012 治理附录（本次未改）。",
+      "commit": "28a0dc2"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "21 passed, 1 skipped, 1 warning in 1.87s",
+      "passed": true,
+      "evidence": "含新增 test_module_graph_descriptions_are_not_stale；跳过项仍为 tools 目录未实现。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "260 passed, 1 skipped, 2 subtests passed in 13.79s",
+      "passed": true,
+      "evidence": "全量回归在模块图/测试文件变更后重跑，无新增失败。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py",
+      "result": "Success: no issues found in 32 source files",
+      "passed": true,
+      "evidence": "追加测试后类型检查仍干净。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock tests/test_architecture_gate.py --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "静态检查通过。"
+    },
+    {
+      "command": "git push origin feat/adr-gate-freeze",
+      "result": "new branch feat/adr-gate-freeze -> feat/adr-gate-freeze",
+      "passed": true,
+      "evidence": "remote 新建分支并给出 PR 创建链接；PowerShell 将 remote: 提示记为 exit 1，实际推送成功（origin/feat/adr-gate-freeze 与本地同步）。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write / git commit on feature branch",
+      "reason": "两个提交均落在 feat/adr-gate-freeze，未动 main",
+      "status": "granted"
+    },
+    {
+      "name": "git push origin feat/adr-gate-freeze",
+      "reason": "推送评审分支（已成功，远端新建分支）",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub PR 创建（需 token 或 gh CLI）",
+      "reason": "环境无 gh CLI、无 GITHUB_TOKEN，无法代开 PR；已给出 compare 链接由人工一键创建",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze（已推送 origin，跟踪 origin/feat/adr-gate-freeze）",
+    "commit": "06af067（前一个 28a0dc2）",
+    "pr": "未创建：环境无 gh CLI 且无 GITHUB_TOKEN，无法代开 PR；可一键创建 https://github.com/b199510027373-create/AStockAgent/pull/new/feat/adr-gate-freeze （compare: main...feat/adr-gate-freeze）",
+    "ci": "本地：pytest 260 passed / 1 skipped，mypy 32 文件无问题，ruff 通过；仓库未配置远端 CI",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261110-019",
+  "next": "1) 建 PR：https://github.com/b199510027373-create/AStockAgent/pull/new/feat/adr-gate-freeze（两个提交：28a0dc2 主交付、06af067 模块图与门禁补丁）；2) 评审重点：ADR-017 七标签替代 read/compute/write、ADR-014 无 stream 形参、ADR-018 data_time 尚无生产者三处「实现回写」是否接受；3) 合入后 main 跑 tests/test_architecture_gate.py 作为门禁基线；4) 承接项 plan-20261110-004~007 需在 11-25 前落地，其中 006 的 DDL 与 007 的 latest_bar_time 必须在 003/005 实现期间就对齐冻结签名；5) calendar/worklog/handoffs 等共享 .devloop 文件仍未入库（工作区有他人未提交改动），需要时单独提交。",
+  "createdAt": "2026-11-10T08:51:55.372Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-020.md"
+}

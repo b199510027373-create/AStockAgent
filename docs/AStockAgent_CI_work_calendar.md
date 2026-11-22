@@ -8,23 +8,16 @@
 
 - CI 已配置、已提交、已推送。
 - GitHub Actions 对应提交已运行完成，结果为 `success`。
-- 本地 29 个单元测试全部通过（提交 e8cd9af 时；当前代码已增至 57 个）。
+- 质量门禁已深化（plan-20261103-012，2026-11-17）：`ruff check astock tests` 全仓 0 条并 blocking、`mypy astock app.py` 覆盖全部非 UI 模块（36 个源文件 Success）、覆盖率门槛按实测重设为 76.45%（=CI Linux 实测显示值，本地 76.68%），依赖全部精确锁定。
 - 当前 `main` 与 `origin/main` 一致。
-- 发布仓库工作区干净。
 - 没有提交 `.env`、密钥、虚拟环境、缓存、推荐产物或 Python 字节码。
 
 ## 2. 仓库位置
 
-主项目目录：
+**唯一 Git 仓库与发布源**（2026-11-17 起 `.git` 已在本目录，2026-11-21 明确为单一真源）：
 
 ```text
 C:\Users\b1995\Documents\AStockAgent
-```
-
-真正关联 GitHub 的 Git 仓库是：
-
-```text
-C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
 ```
 
 远程仓库：
@@ -39,25 +32,23 @@ https://github.com/b199510027373-create/AStockAgent.git
 main
 ```
 
-本次提交：
+历史副本（仅保留查阅旧提交，**不再同步、不作为发布源**）：
 
 ```text
-e8cd9afe94e7d7ff97b191be6876a3fac30e623f
+C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
 ```
 
-提交信息：
+根目录的 `release/` 已在 `.gitignore` 中排除。提交、推送、发布和 CI 都只在仓库根执行；
+详细约定与校验命令见 `docs/AStockAgent_repo_source_of_truth.md`。
 
-```text
-Add CI and sync v1.1 application code
-```
-
-注意：主项目根目录本身没有 `.git`。后续如需提交或推送代码，应进入 `release\AStockAgent`，并先核对两个目录中的代码是否一致。
+> 本节旧版本中的「同步到发布仓库」「检查两个目录是否一致」均已废弃。2026-11-17 之前的
+> 提交哈希只用于历史追溯，不再作为当前操作入口。
 
 ## 3. 完成事项
 
-### 3.1 同步发布源码
+### 3.1 根目录直接开发（不再同步副本）
 
-已将当前 AStockAgent v1.1 代码同步到发布仓库，包括：
+AStockAgent v1.1 及之后的代码全部在仓库根目录开发和提交，包括：
 
 - `app.py`
 - `astock/`
@@ -68,6 +59,8 @@ Add CI and sync v1.1 application code
 - `start_scheduler.bat`
 - `ts_init.py`
 - 其他运行所需文件
+
+`release/AStockAgent` 是历史独立仓库，不再接收同步。不要从该目录提交、推送或发布。
 
 ### 3.2 新增 GitHub Actions
 
@@ -83,22 +76,24 @@ Add CI and sync v1.1 application code
 - 针对 `main` 的 Pull Request
 - 手动触发 `workflow_dispatch`
 
-执行内容：
+执行内容（plan-20261103-012 之后的当前形态）：
 
 1. 检出仓库。
-2. 安装 Python 3.13。
-3. 安装 `requirements.txt` 中的依赖。
-4. 检查 Git 是否跟踪了密钥或运行产物。
-5. `compileall` 语法编译。
-6. `ruff` 基础规则检查。
-7. `mypy astock app.py`（核心模块 + 旧入口；见 `mypy.ini`）。
-8. 覆盖率运行与报告（门槛 50%）。
+2. 校验仓库单一真源：`python tools/check_repo_source.py`（push 到 `main` 严格校验 `main`；PR 用 `--any-branch --allow-detached`）。
+3. 安装 Python 3.13。
+4. 从 `requirements-dev.txt` 一次装齐运行时与工具链（全部精确锁定，CI 不再裸装 ruff/mypy）。
+5. 检查 Git 是否跟踪了密钥或运行产物。
+6. `compileall` 语法编译。
+7. `ruff check astock tests`（全仓 blocking；规则集固定在 `ruff.toml` 的显式 select/ignore）。
+8. `mypy astock app.py`（全部非 UI 模块；UI 文件在 `mypy.ini` 中排除）。
+9. `coverage run -m pytest tests -q -m "not png"` + `coverage report -m`（门槛在 `.coveragerc`，当前 76.45%，分阶段目标 80% / 85%）。
 
 ```text
-ruff check astock app.py tests --select E9,F63,F7,F82
+python tools/check_repo_source.py
+ruff check astock tests
 mypy astock app.py
-coverage run -m unittest discover -s tests -v
-coverage report -m --fail-under=50
+coverage run -m pytest tests -q -m "not png"
+coverage report -m
 ```
 
 ### 3.3 强化忽略规则
@@ -127,25 +122,28 @@ __pycache__/
 
 ## 4. 验证记录
 
-### 4.1 本地测试
+### 4.1 本地测试（2026-11-17 更新）
 
-执行目录：
+执行目录（仓库根，不再进 `release/AStockAgent`）：
 
 ```text
-C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
+C:\Users\b1995\Documents\AStockAgent
 ```
 
 执行命令：
 
 ```powershell
-& 'C:\Users\b1995\Documents\AStockAgent\.venv\Scripts\python.exe' -m unittest discover -s tests -v
+.venv\Scripts\python.exe -m pytest tests -q -m "not png"
+.venv\Scripts\ruff.exe check astock tests
+.venv\Scripts\mypy.exe astock app.py
 ```
 
 结果：
 
 ```text
-Ran 29 tests
-OK
+610 passed, 1 skipped, 5 deselected, 12 subtests passed
+All checks passed!
+Success: no issues found in 36 source files
 ```
 
 ### 4.2 暂存区审计
@@ -182,10 +180,11 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 - 本地 `HEAD`、`origin/main`、远端 `refs/heads/main` 均为 `e8cd9af`；该提交时 `git status --short` 为空。
 - **当前工作区已有 v1.2 未提交改动**（SQLite ledger、PIT 快照、原始价/ST、研究语义等）；推送后需要重新跑 GitHub Actions，不能沿用 `e8cd9af` 的 CI 结果。
 - GitHub Actions API 核验：run `41402554097` 为 `completed / success`，`head_sha=e8cd9af`。
-- 本地 57 个 unittest 通过；根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希一致。
+- 历史基线（2026-11-02）：当时曾比对根项目与 `release/AStockAgent` 的 `app.py`、`astock/*.py`、`tests/*.py`、`requirements.txt` 哈希；该「双目录同步」做法已于 2026-11-21 废弃。现在只以仓库根为唯一真源，`release/AStockAgent` 仅保留旧提交供查阅，不再比较或同步。
 - `git ls-files` 未发现 `.env`、`env.env`、`.venv/`、`cache/`、`data/recommendations/`、`__pycache__/`、`*.pyc`；`.env.example` 已跟踪。
-- CI 当前覆盖「依赖安装 + 敏感文件检查 + 语法编译 + ruff 基础规则 + 核心模块 mypy + 覆盖率门槛（50%）+ 单元测试」；UI/图表模块在 `.coveragerc` 中排除。
-- 2026-11-03 基线：`mypy astock app.py` 通过 22 个源文件；覆盖率（排除 UI/图表）**57%**（3492 statements / 1493 miss）。
+- CI 覆盖「依赖安装（精确锁定）+ 敏感文件检查 + 语法编译 + 全仓 `ruff check astock tests` + `mypy astock app.py` + pytest + 覆盖率门槛（`.coveragerc`，当前 76.45%）」；UI/图表模块在 `.coveragerc` 中排除。
+- 历史基线（2026-11-03，已被取代）：`mypy` 覆盖 22 个源文件；覆盖率 57%（3492 statements / 1493 miss）。
+- 当前基线（2026-11-17 实测，plan-20261103-012，评审第 1 轮后 PR #24 / CI run 43935079016）：`mypy astock app.py` = 36 个源文件 Success；`pytest tests -q -m "not png"` 本地 610 passed / 1 skipped / 5 deselected（CI Linux 609 passed / 2 skipped）；覆盖率 CI Linux 76.45%（9248/2178，门禁权威值）、本地 76.68%（9248/2157）。比 PR #21 的 76.47% 低 0.02pp：`astock/scheduler.py` 为守住 PR #9 观察期回退到 92f5e47 原文，恢复的 try/except 分支在 Linux 未被覆盖。
 
 ## 5. 安全红线
 
@@ -201,24 +200,25 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 
 ## 6. 推荐操作流程
 
-后续修改后，在发布仓库执行：
+所有操作都在仓库根执行，不再进入 `release/AStockAgent`：
 
 ```powershell
-Set-Location 'C:\Users\b1995\Documents\AStockAgent\release\AStockAgent'
+Set-Location 'C:\Users\b1995\Documents\AStockAgent'
 
+python tools\check_repo_source.py
 git status --short
 git diff --name-only
 git ls-files
 git diff --cached --name-only
 ```
 
-确认没有敏感文件后，再显式暂存需要的路径：
+确认当前是根仓库、remote 正确且没有敏感文件后，再显式暂存需要的路径：
 
 ```powershell
 git add -- app.py astock tests README.md requirements.txt
 ```
 
-推送前检查：
+提交前检查：
 
 ```powershell
 git status --short
@@ -236,22 +236,33 @@ cache/
 data/recommendations/
 __pycache__/
 *.pyc
+release/
 ```
 
-推送：
+提交并推送：
 
 ```powershell
+git commit -m "描述本次改动"
 git push origin main
 ```
+
+功能分支开发时，把最后一行换成 `git push -u origin <branch>` 并开 PR；CI 会用
+`python tools/check_repo_source.py --any-branch --allow-detached` 校验 PR checkout。
 
 ## 7. 后续待办
 
 当前没有阻塞项，CI 已能作为基础质量门禁。
 
+已完成（plan-20261103-012，2026-11-17）：
+
+- ~~增加静态检查，例如 `ruff`。~~ 已全仓归零并纳入 CI blocking（`ruff check astock tests`）。
+- ~~为关键模块补充覆盖率报告。~~ 已覆盖全部非 UI 模块，门槛按实测重设为 76.45%，分阶段目标 80% / 85%。
+
 可选的后续改进：
 
-- 增加静态检查，例如 `ruff`。
-- 为关键模块补充覆盖率报告。
+- PR #9 五日观察（2026-11-21）结束后，删除 `ruff.toml` 中 `astock/scheduler.py`、`astock/jobs.py` 的 per-file-ignores，清理存量 22 条问题。
+- 清理仓库根历史原型脚本 `app.py`（113 条 Ruff 问题），目前已在 `ruff.toml` 里显式 exclude。
+- 逐族开启 `RUF001/RUF002/RUF003`（中文全角标点）与 `B905`（zip strict），先评估再决定。
 - 增加依赖漏洞扫描。
 - 增加 GitHub Actions 运行结果徽章到 README。
 - 如果后续需要发布文档，单独建立 `docs/` 内容策略，不要把运行数据或产品构建产物混入源码仓库。
@@ -262,15 +273,13 @@ git push origin main
 
 ```text
 请继续维护 AStockAgent。
-主项目目录：C:\Users\b1995\Documents\AStockAgent
-Git 仓库：C:\Users\b1995\Documents\AStockAgent\release\AStockAgent
+仓库根（唯一真源）：C:\Users\b1995\Documents\AStockAgent
 GitHub：https://github.com/b199510027373-create/AStockAgent.git
 分支：main
 已有 CI：.github/workflows/ci.yml
-最近成功提交：e8cd9af
-CI 状态：GitHub Actions 已通过
+历史副本：release/AStockAgent 仅保留旧提交，不再同步、不作为发布源。
 
-继续修改前先检查两个目录是否一致。
+开工前先运行：python tools\check_repo_source.py
 绝对不要提交 .env、env.env 或任何密钥。
 绝不提交 cache/、data/recommendations/、.venv/、__pycache__/、*.pyc。
 提交前必须审计暂存区，推送后检查 GitHub Actions 结果。

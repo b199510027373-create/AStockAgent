@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261116-002-r2",
+  "threadId": "rev-20261116-002",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "第 2 轮：全量代码",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "评审对象：rev-20261116-002 / plan-20261114-003 / fix/data-adj-caliber 第 2 轮（scope=full，复核 5b10af8 及其后的计划/交付文档提交；HEAD 72fc312，astock/data.py 相对 5b10af8 无改动）。\n\n结论：**approve**（openP0=0，openP1=0，新增 1 条 P2 不阻断合并）。第 1 轮 5 条问题逐条核对属实：\n\n1. P1 分钟线盘中硬失败 → 已按方案 (a) 修复。astock/data.py:781-800 只在\"缺行全部是今天且因子表末行早于今天\"时用 fct.iloc[-1] 近似并置 partial/factor_as_of，其它缺行仍走原 DataContractError；ADR-008:36 第 7 条落字；用例 test_minute_intraday_bar_uses_latest_published_factor（qfq 当日 bar 不缩放、attrs 标 partial/factor_as_of）与 test_minute_missing_non_intraday_factor_still_raises（_today 推到 2025-01-10 时仍报错）覆盖了两个方向。\n2. P1 全历史因子截断 → 已修。新增 astock/data.py:271 _query_adj_history（优先 query_all，回退 query）与 astock/data.py:290 _check_factor_coverage（hfq 要求 fct.min<=raw.min，qfq 要求 fct.max>=raw.max，违规抛 DataContractError(code=\"AdjFactor\")），两处日线/分钟调用点都改走分页助手；handoff 记录 000001.SZ 实测 query 6000 行/最早 20020304 vs query_all 8692 行/最早 19910403，正好印证了截断真实存在；用例 test_hfq_factor_history_truncated_at_start_raises / test_qfq_factor_history_truncated_at_end_raises 各钉一端。\n3. P2 hfq 缓存不可自证 → 已修，astock/data.py:372-376 `row.empty` 改为 return False（失效重拉），ADR-008:39 与落地第 5 条同步；用例 test_hfq_cache_without_base_day_in_window_is_invalidated 构造了\"基准日 01-02 不在缓存窗口 01-03..01-06\"的生产形态。\n4. P2 qfq 基准随缓存漂移 → 已修，_cache_base_valid 增 end_eff（astock/data.py:381-385 取 `trade_date <= end_eff` 最后一行因子比较），load_daily 传入 end_eff；用例 test_qfq_cache_base_follows_requested_end 断言更早 end 会失效重拉且 adj_base=2025-01-03。\n5. P2 测试噪声/缺口 → 已修，重复断言删除并替换为 query_all 断言，test_load_minute_requests_factor_history_from_listing 的 spy 断言 start_date=ADJ_HISTORY_START、end_date=_fmt(_today())；配额说明里的\"旧 qfq meta 无 adj_base\"也已一并修掉（astock/data.py:370 前置校验）并有 test_legacy_qfq_cache_without_adj_base_is_invalidated。\n\n证据核对：astock/data.py 在 5b10af8 之后无任何代码改动（devloop_git diff 5b10af8..72fc312 为空），故 handoff 记录的 97 passed / 23 passed（单文件 15→23）/ 536 passed 1 skipped / 门禁 32 passed / ruff E9,F63,F7,F82 / mypy 35 files 与 10 个 CI run 对应的就是当前代码状态；本轮环境无 shell 无法直接跑 gh 复核 PR 检查，CI 结论以 handoff ho-20261116-016/017/018 与 planItem.links.test 记录为准，二者一致。验收①-⑤全部满足；验收⑥（行情工具与图表图注展示复权口径）仍归 plan-20261107-006 / plan-20261114-002，本项只提供 attrs[\"adjustment\"]（分钟盘中额外 partial/factor_as_of）。\n\n遗留（P2，iss-mwixbcyf-8383d6，不阻断合并）：ADR-008 第 8 条写\"日线与分钟线的因子历史一律走 query_all 并校验覆盖\"，但 _check_factor_coverage 只有 astock/data.py:416 一个调用点，分钟路径（astock/data.py:744）无覆盖断言，回退单次 query 时会静默降级。责任人：开发（鱼鱼）。修法二选一：改 ADR 措辞如实描述，或让回退分支直接拒绝（推荐，3 行改动）。\n\n判定完全解决的条件（本轮已满足 approve 门槛，标记 resolved；下列为合并与收尾条件，不改变本轮结论）：\n- 合并 PR #15 后复跑 main CI 并回填 run 号到 plan-20261114-003；合并前把 iss-mwixbcyf-8383d6 处理掉或在 handoff 写明\"改 ADR 措辞\"的落点；\n- plan-20261107-006 / plan-20261114-002 接入时按 ADR-008 第 7、9 条消费 partial/factor_as_of（盘中近似需在图注标注），完成验收⑥；\n- 全仓 ruff 312 条既有风格告警按 handoff 声明单独立项，不在本项范围。",
+  "startedAt": "2026-11-16T07:08:25.726Z",
+  "finishedAt": "2026-11-16T07:10:02.787Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 1,
+    "total": 1
+  }
+}

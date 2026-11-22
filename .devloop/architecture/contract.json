@@ -154,7 +154,7 @@
       "scope": [
         "astock/agent/tools/"
       ],
-      "rationale": "落点：现阶段 tests/test_agent_runtime.py::test_tool_result_trim_and_signature（字段透传）；工具级必填校验待 plan-20261107-005 / plan-20261107-006（tests/test_agent_tools.py::test_market_result_requires_both_timestamps、tests/test_agent_tools.py::test_file_result_requires_source）。"
+      "rationale": "落点：现阶段 tests/test_agent_runtime.py::test_tool_result_trim_and_signature（字段透传）；文件侧必填校验已落地 tests/test_agent_tools.py::test_file_result_requires_source，行情侧必填校验测试随 plan-20261107-005 落地。"
     },
     {
       "id": "AGENT-05",

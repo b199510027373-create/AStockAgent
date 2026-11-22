@@ -1,0 +1,169 @@
+{
+  "id": "ho-20261117-027",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-008",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 审计表与安全限额（v2：内容/版本/引用）",
+  "summary": "相对 ho-20261117-026 的唯一变化：PR #30 的 CI 已由 in_progress 变为 passed（test 1m19s、png-export 1m11s，run 44101298624），plan links.ci 同步为 passed、progress 95%。代码、测试与提交均未变化（commit 仍是 2273f34）。",
+  "requirements": [
+    {
+      "id": "AC1",
+      "text": "agent_runs 只记录真实 Agent；直接渲染不创建 run，link.source=render 且 run_id 可空",
+      "source": "plan-20261107-008 acceptance[0]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC2",
+      "text": "agent_artifacts 无 run_id；内容寻址、digest 去重；同内容多来源通过 link 保留归属",
+      "source": "plan-20261107-008 acceptance[1]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC3",
+      "text": "agent_artifact_versions 保存 meta_json/meta_digest/env_version，meta 不可变；correction 追加且 actor/理由/时间必填",
+      "source": "plan-20261107-008 acceptance[2]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC4",
+      "text": "（ADR-017 C3）agent_run_artifacts 支持 run 删除后 artifact 保留；删 run 只删 link，GC 只删无引用文件",
+      "source": "plan-20261107-008 acceptance[3]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC5",
+      "text": "旧 agent_* 三表迁移：新表→拷贝→重建→改名，备份+PRAGMA foreign_keys 处理，旧合成 run 标 run_kind=render 且指标排除",
+      "source": "plan-20261107-008 acceptance[4]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC6",
+      "text": "指标查询默认排除 render；成功后 token/步数统计不受每图合成 run 污染",
+      "source": "plan-20261107-008 acceptance[5]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC7",
+      "text": "路径白名单与上传类型/大小校验、文件内容按不可信数据包裹、禁止 shell/HTTP/文件删除/推荐写入",
+      "source": "plan-20261107-008 acceptance[6]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC8",
+      "text": "工具调用参数/结果摘要/耗时完整记录；失败与非法参数也落 agent_steps",
+      "source": "plan-20261107-008 acceptance[7]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC9",
+      "text": "（ADR-017 C2）权限只用七个只读/计算标签，越权标签注册期拒绝；AST 扫描双保险",
+      "source": "plan-20261107-008 acceptance[8]；实现与证据同 ho-20261117-026"
+    },
+    {
+      "id": "AC10",
+      "text": "（ADR-017 C1）DDL 与冻结清单 v2 一致；迁移脚本在旧库 fixture 跑通，全量测试与 mypy 通过",
+      "source": "plan-20261107-008 acceptance[9]；实现与证据同 ho-20261117-026"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/store.py",
+      "summary": "相对上一份交付无变化（commit 2273f34）",
+      "commit": "2273f34"
+    },
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "相对上一份交付无变化（commit 2273f34）",
+      "commit": "2273f34"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "相对上一份交付无变化（commit 2273f34）",
+      "commit": "2273f34"
+    },
+    {
+      "path": "tests/test_agent_store.py",
+      "summary": "相对上一份交付无变化（commit 2273f34）",
+      "commit": "2273f34"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "相对上一份交付无变化（commit 2273f34）",
+      "commit": "2273f34"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "相对上一份交付无变化（commit 2273f34）",
+      "commit": "2273f34"
+    },
+    {
+      "path": "docs/AStockAgent_chart_audit_v2_change_spec.md",
+      "summary": "相对上一份交付无变化（commit 2273f34）",
+      "commit": "2273f34"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions PR #30: test",
+      "result": "pass 1m19s",
+      "passed": true,
+      "evidence": "run 44101298624 job 134101683230"
+    },
+    {
+      "command": "GitHub Actions PR #30: png-export",
+      "result": "pass 1m11s",
+      "passed": true,
+      "evidence": "run 44101298624 job 134101682913"
+    },
+    {
+      "command": "pytest tests/test_agent_store.py",
+      "result": "21 passed",
+      "passed": true,
+      "evidence": "同 ho-20261117-026"
+    },
+    {
+      "command": "pytest tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py",
+      "result": "106 passed",
+      "passed": true,
+      "evidence": "同 ho-20261117-026"
+    },
+    {
+      "command": "pytest tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success",
+      "result": "662 passed, 5 deselected, 12 subtests passed",
+      "passed": true,
+      "evidence": "同 ho-20261117-026"
+    },
+    {
+      "command": "mypy astock",
+      "result": "Success: no issues found in 39 source files",
+      "passed": true,
+      "evidence": "同 ho-20261117-026"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "network: github push / PR create",
+      "reason": "分支与 PR #30 已就绪，CI 已拉取",
+      "status": "granted"
+    },
+    {
+      "name": ".dsh_pytest.py 本地未跟踪启动器",
+      "reason": "本机 pytest 临时目录 workaround，不提交",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-008-v2-audit",
+    "commit": "2273f34",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
+    "ci": "passed (test, png-export)",
+    "merge": "未合并，等待 reviewer",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-026",
+  "next": "请求 reviewer 评审 PR #30；重点检查 v1→v2 迁移对真实 data/astock.db 的备份与幂等、GC 只删无引用文件、runtime 审计默认关闭不污染既有调用。评审通过后合并。",
+  "createdAt": "2026-11-17T14:18:18.737Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-027.md"
+}

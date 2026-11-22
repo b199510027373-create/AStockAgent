@@ -17,10 +17,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-import astock.data as data
-import astock.events as events
-import astock.ledger as ledger
-import astock.recommend as recommend
+from astock import data, events, ledger, recommend
 from astock.contracts import (
     BAR_SCHEMA,
     EVENT_SCHEMA,
@@ -565,9 +562,9 @@ class CitationBlockTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         try:
-            import app  # noqa: PLC0415 - UI 模块导入较重，按需加载
-        except Exception as exc:  # pragma: no cover - 缺 UI 依赖时跳过
-            raise unittest.SkipTest(f"app 无法导入（{type(exc).__name__}: {exc}）")
+            import app
+        except Exception as exc:
+            raise unittest.SkipTest(f"app 无法导入（{type(exc).__name__}: {exc}）") from exc
         cls.app = app
 
     def _citations(self, item: dict) -> list[dict]:

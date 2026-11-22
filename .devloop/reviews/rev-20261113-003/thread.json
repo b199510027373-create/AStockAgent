@@ -1,0 +1,26 @@
+{
+  "id": "rev-20261113-003",
+  "title": "评审：图表 spec 与渲染管线",
+  "planItemId": "plan-20261107-005",
+  "sourceDevSessionId": "session-45206c8b-ff3f-4343-8869-4ba95568b063",
+  "branch": "feat/agent-chart-pipeline",
+  "base": "main",
+  "files": [
+    "astock/agent/chart_render.py",
+    "astock/agent/chart_spec.py",
+    "astock/agent/store.py",
+    "astock/data.py",
+    "docs/AStockAgent_chart_pipeline_decisions_v1.md",
+    "docs/AStockAgent_contract_rule_map_v1.md",
+    "docs/AStockAgent_interface_freeze_v1.md",
+    "tests/test_agent_chart_png_export.py",
+    "tests/test_agent_chart_render.py",
+    "tests/test_agent_chart_spec.py",
+    "tests/test_agent_store.py",
+    "tests/test_data_pit_events.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-13T09:42:02.553Z",
+  "updatedAt": "2026-11-16T01:04:22.047Z",
+  "reviewSessionId": "session-32902a16-75af-499f-8923-d4ab8c5818a1"
+}

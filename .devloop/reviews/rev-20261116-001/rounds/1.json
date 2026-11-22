@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261116-001-r1",
+  "threadId": "rev-20261116-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮（scope=full）结论：request_changes，openP0=0 / openP1=6 / openP2=1。\n\n评审范围说明（重要）：线程登记的分支 feat/agent-chart-pipeline 已不存在（devloop_git files base=main head=feat/agent-chart-pipeline 返回「head 不是合法 revision」；ho-20261114-007 记载该分支在 PR #14 合并后已删除），当前工作树在 fix/data-adj-caliber（属 plan-20261114-003）。git log 40 条无任何 kaleido/PNG 基础设施提交，devloop_handoff list(plan-20261114-001)=0，计划项仍 doing/progress=5。因此本轮没有「实现 diff」可逐行审，评审按 main head 06fb118 + 计划项 7 条验收标准核对现状，结论是无交付物、验收全部未达标。\n\n验收与问题的对应（由 chart/PNG 基础设施开发在 fix/agent-chart-png-kaleido 上修复）：\n- 验收①依赖锁定 → iss-mwikcwd4-32c846（P1）：requirements.txt:4 仍 `plotly>=5.0`，kaleido 完全缺席，PNG 用例永远 skip。\n- 验收②Linux CI 能出 PNG + 验收④CI 真实导出 → iss-mwikcwe4-3cff7b（P1）：ci.yml:29-33/51-56 不装 kaleido/Chrome/字体，test_agent_chart_png_export.py:18-21 恒 skip。\n- 验收③中文无方块 → iss-mwikd183-1fc8af（P1）：chart_render.py:550 只设字号不设字体族，无中文 K 线 PNG 用例。\n- 验收⑥路径/尺寸/字体/版本可追溯 → iss-mwikd19c-20b93b（P1）：chart_render.py:1246-1249/1265-1278 只记 png_path。\n- 验收⑦部署与 CI 文档 → iss-mwikd6hu-0f35bc（P1）：无任何 Chrome/字体/升级清单文档。\n- 验收②的 spike 记录与交付证据 → iss-mwikd6g8-8f9fd4（P1）：无分支、无 handoff、无 spike、无真实导出日志。\n- 验收⑤降级语义（不阻断）→ iss-mwikda23-310d32（P2）：export_png 布尔默认 True，显式请求与默认路径不可区分。\n\n已确认没有问题的部分（不重复开单）：现有降级契约本身是自洽的——_try_png 捕获 ValueError/RuntimeError/ImportError/ModuleNotFoundError 后返回 (None, reason)，render 置 degraded=True、warning 用统一 PNG_DEGRADED_WARNING_PREFIX、ensure_run 记 partial，store.prune_artifacts 已能保护 meta.png_path 引用的 PNG；这些属于 plan-20261107-005 的既有成果，本轮不推翻，只需在其上补齐「装得上、跑得通、可追溯、有文档」。\n\n完全解决条件（缺一不可）：\na) 开发从 main 新开 fix/agent-chart-png-kaleido，补齐 6 条 P1：精确锁定 plotly/kaleido 并加解析断言；ci.yml 新增独立 png-export job（装 fonts-noto-cjk、必要时 Chrome，timeout，上传 PNG artifact，失败可观测且不拖主 job）；渲染器设置 CJK font.family 并新增中文 K 线 PNG 用例；meta 增 png_digest/宽高/字体/kaleido/chrome 版本；新增 docs/AStockAgent_png_export_ops.md（Windows/Linux + 升级清单）；提交 spike 记录与 developer initial handoff。\nb) P2 由开发在同一分支或紧随的后续项决定是否采纳三态 png_mode；若不采纳，需在 handoff 中写明理由并由评审确认，不接受静默忽略。\nc) 开发提 handoff 附：目标测试与全量 pytest 输出、mypy/ruff、CI run 链接（含 png-export job 的 PNG 产物）、Windows 本机真实导出路径与尺寸、中文 PNG 目视证据；然后本线程进入第 2 轮复审。\nd) 第 2 轮复审确认 6 条 P1 全部 fixed、P2 已处置、验收 7 条逐条有证据，才可 approve 并判定 plan-20261114-001 完全解决；在此之前该计划项不得置 done。若本计划项暂不排期，请改回 backlog/todo 并关闭线程，不要让无分支线程保持 open。",
+  "startedAt": "2026-11-16T00:57:44.532Z",
+  "finishedAt": "2026-11-16T01:07:35.743Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 6,
+    "P2": 1,
+    "total": 7
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbjr5aw-e7ceb8",
+  "threadId": "rev-20261111-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "文档-条件归属冲突",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "47",
+  "title": "ADR-015 条件全部挂在 plan-20261107-003，与冻结清单「FTS5 归 004」及 004 的验收条目冲突",
+  "evidence": "冻结清单 :47 的排期调整表写「plan-20261110-004（files.py 布局 + FTS5）→ plan-20261107-003（解析）+ plan-20261107-004（检索）」，即 FTS5 索引归 plan-20261107-004；.devloop/plan/items/plan-20261107-004.json:19 的验收条目也确实写着「（ADR-015 C2，并入自 plan-20261110-004）file_chunks 用 FTS5 建立全文索引…」。但 ADR-015 正文 .devloop/architecture/adr/ADR-015-file-ingestion.md:62 写的是「以下条件…必须在 plan-20261107-003 内完成」，且 C1（:64-66）明确包含「FTS5 建表语句与冻结清单 §4 字符级一致」；冻结清单结论表 :33 与 ADR-012 状态变更记录 :107 也只把 ADR-015 挂在 plan-20261107-003。结果是 C1/C2 同时被两份文档指给两个不同计划项，plan-20261107-004 没有 ADR 条件链接，而 plan-20261107-003 的验收里未必含 FTS5——条件到底由谁验收说不清；门禁 tests/test_architecture_gate.py:106-116 对 WITH_CONDITIONS 只要求正文出现任意 plan id，查不出这种归属冲突。",
+  "suggestion": "按条件拆承接项并三处同步：ADR-015 条件段改为「C1/C3 → plan-20261107-003，C2 → plan-20261107-004」；冻结清单 §0.2 结论表 ADR-015 行写「003 + 004」；ADR-012 状态变更记录同步。若确定全部归 003，则删掉 :47 合并表里「FTS5 属检索」的表述，并从 plan-20261107-004 的验收里移除 C2。改完后把门禁的 WITH_CONDITIONS 断言加强为：条件段里出现的每个 plan id 都必须在 .devloop/plan/items 中存在，且该 plan 的 acceptance 中出现对应条件号（如 C2）。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:40:49.997Z"
+  },
+  "createdAt": "2026-11-11T03:15:52.088Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:40:49.997Z"
+    }
+  ]
+}

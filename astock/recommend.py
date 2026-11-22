@@ -9,7 +9,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -360,7 +360,7 @@ def _fallback_reason(row: dict, evidence: list[dict]) -> tuple[str, list[str], l
 def _parse_json(text: str) -> dict:
     text = (text or "").strip()
     if "```" in text:
-        m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
+        m = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
         if m:
             text = m.group(1).strip()
     start, end = text.find("{"), text.rfind("}")
@@ -369,16 +369,16 @@ def _parse_json(text: str) -> dict:
     try:
         data = json.loads(text)
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except (ValueError, TypeError):  # LLM 输出非 JSON 时退回空结果
         return {}
 
 
 def _llm_rank(rows: list[dict], evidence_map: dict[str, list[dict]], market: str) -> dict:
     lines = [
         "你是A股研究员。只能使用下面提供的数据，不得编造新闻、价格或业绩。",
-        "为每只候选给出 reason、catalysts、risks、evidence（引用的 E 编号）；"
+        ("为每只候选给出 reason、catalysts、risks、evidence（引用的 E 编号）；"
         "不要给出买卖建议或动作词——技术面强弱由规则按综合分给出（池内分位仅作横截面展示），"
-        "你只负责解释证据。",
+        "你只负责解释证据。"),
         "输出严格 JSON：{\"market\":\"一句话市场判断\",\"items\":[{\"code\":\"600519.SH\",\"reason\":\"...\",\"catalysts\":[\"...\"],\"risks\":[\"...\"],\"evidence\":[\"E1\"]}],\"risk_note\":\"...\"}",
         "",
         f"市场背景：{market}",
@@ -410,7 +410,7 @@ def _llm_rank(rows: list[dict], evidence_map: dict[str, list[dict]], market: str
             temperature=0.2,
         )
         return _parse_json(raw)
-    except Exception:
+    except Exception:  # noqa: BLE001 - LLM/网关异常类型不一，失败退回规则理由（ADR-009）
         return {}
 
 
@@ -431,7 +431,7 @@ def _market_snapshot(
     except ContractError:
         # 指数 schema 漂移与其他入口一致：显式失败，不降级成"数据不可用"。
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 - ContractError 已单独 raise；其余异常只降级指数文案
         idx_text = "沪深300 数据不可用"
 
     valid = [df for df in daily_map.values() if len(df) >= 30]
@@ -467,8 +467,8 @@ def _report_markdown(
     lines = [
         f"# 每日推荐 · {as_of}",
         "",
-        f"**数据截止**：{as_of} 收盘；**可成交起点**：{tradable_from or '下一交易日'} 开盘；"
-        f"生成时间 {datetime.now():%Y-%m-%d %H:%M}",
+        (f"**数据截止**：{as_of} 收盘；**可成交起点**：{tradable_from or '下一交易日'} 开盘；"
+        f"生成时间 {datetime.now():%Y-%m-%d %H:%M}"),
         "",
         f"**市场背景**：{market}",
         "",
@@ -507,8 +507,8 @@ def _report_markdown(
             "## 风险提示",
             risk_note,
             "",
-            "> 数据来源：Tushare 日线/公告/研报/新闻/政策库；AI 只做归因和表述，不改变量化排序。"
-            "本页仅供研究，不构成投资建议。",
+            ("> 数据来源：Tushare 日线/公告/研报/新闻/政策库；AI 只做归因和表述，不改变量化排序。"
+            "本页仅供研究，不构成投资建议。"),
         ]
     )
     return "\n".join(lines)
@@ -578,6 +578,8 @@ def _save(
     source: str = "live",
     params: dict | None = None,
     diagnostics: dict | None = None,
+    report_md: str = "",
+    status_line: str = "",
 ) -> tuple[str, str]:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     table = pd.DataFrame(
@@ -615,6 +617,8 @@ def _save(
         "diagnostics": diagnostics or {},
         "market": market,
         "ai": ai,
+        "report_md": report_md,
+        "status_line": status_line,
         "table": table.to_dict("records"),
         "evidence": {
             code: [
@@ -646,8 +650,7 @@ def _save(
         from .ledger import save_run
 
         save_run(payload, json_path=str(json_path), csv_path=str(csv_path))
-    except Exception:
-        # JSON 仍是主产物；ledger 故障不应阻断推荐生成
+    except Exception:  # noqa: BLE001, S110 - JSON 仍是主产物；ledger 故障不应阻断推荐生成
         pass
     return str(csv_path), str(json_path)
 
@@ -796,7 +799,7 @@ def generate_recommendation(
                 if pub > generated_ts:
                     evidence_dropped += 1
                     continue
-            except Exception:
+            except (TypeError, ValueError):  # 发布时间非法时丢弃该条证据
                 evidence_dropped += 1
                 continue
             kept.append(ev)
@@ -870,6 +873,25 @@ def generate_recommendation(
         ],
         "percentile_basis": "candidate_pool",
     }
+    report = _report_markdown(
+        final_rows, market, ai, data_as_of, tradable_from, candidate_n=len(candidates)
+    )
+    evidence_md = _evidence_markdown(final_rows, evidence_map)
+
+    elapsed = time.time() - started
+    ai_ok = bool((ai or {}).get("items"))
+    industry_note = ""
+    if len(final_rows) < top_n:
+        industry_note = f" · 行业上限导致输出少于 {top_n} 只"
+    status = (
+        f"股票池 {len(codes)} 只 · 有效日线 {len(rows)} 只 · 技术预筛 {len(candidates)} · "
+        f"输出 {len(final_rows)} 只（同行业最多 2 只）{industry_note} · "
+        f"新闻 {min(3, news_days)} 天 / 公告 30 天 / 研报 7 天 / 政策 {news_days} 天 · "
+        f"AI归因 {'已生成' if ai_ok else '未生成（使用规则理由）'} · 用时 {elapsed:.1f}s · "
+        f"data_as_of {data_as_of} · tradable_from {tradable_from} · run_id {run_id}"
+    )
+    if failed:
+        status += f" · 失败/剔除 {len(failed)} 只（详见 JSON diagnostics）"
     step(0.92, "保存结果")
     params = {
         "top_n": top_n,
@@ -890,26 +912,9 @@ def generate_recommendation(
         source="live",
         params=params,
         diagnostics=diagnostics,
+        report_md=report,
+        status_line=status,
     )
-    report = _report_markdown(
-        final_rows, market, ai, data_as_of, tradable_from, candidate_n=len(candidates)
-    )
-    evidence_md = _evidence_markdown(final_rows, evidence_map)
-
-    elapsed = time.time() - started
-    ai_ok = bool((ai or {}).get("items"))
-    industry_note = ""
-    if len(final_rows) < top_n:
-        industry_note = f" · 行业上限导致输出少于 {top_n} 只"
-    status = (
-        f"股票池 {len(codes)} 只 · 有效日线 {len(rows)} 只 · 技术预筛 {len(candidates)} · "
-        f"输出 {len(final_rows)} 只（同行业最多 2 只）{industry_note} · "
-        f"新闻 {min(3, news_days)} 天 / 公告 30 天 / 研报 7 天 / 政策 {news_days} 天 · "
-        f"AI归因 {'已生成' if ai_ok else '未生成（使用规则理由）'} · 用时 {elapsed:.1f}s · "
-        f"data_as_of {data_as_of} · tradable_from {tradable_from} · run_id {run_id}"
-    )
-    if failed:
-        status += f" · 失败/剔除 {len(failed)} 只（详见 JSON diagnostics）"
     return Recommendation(
         table=pd.DataFrame(
             [

@@ -2,14 +2,14 @@
   "id": "plan-20261103-008",
   "title": "SW2014→SW2021 行业边界校准与 crosswalk",
   "description": "ADR-007 的已知限制：没有官方 crosswalk，SW2014 的采掘等旧行业在 SW2021 拆成煤炭/石油石化等，跨版本名称不完全可比。本项不改主流程，只做边界校准：建立 28→31 的 L1 映射（含一对多/多对一/无匹配），量化切换日前后行业分布差异，把结论写进研究文档，避免\"2016 年前 IC\"被误读。",
-  "status": "todo",
+  "status": "done",
   "priority": "P1",
   "milestone": "ms-research",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-27",
   "estimateH": 6,
-  "progress": 0,
+  "progress": 100,
   "acceptance": [
     "产出一张 SW2014 L1 ↔ SW2021 L1 的可审计映射表（含未匹配清单）",
     "2021-12-13 前后各 6 个快照的行业分布差异有量化说明",
@@ -25,8 +25,29 @@
   "links": {
     "adr": [
       "ADR-007"
+    ],
+    "module": "astock/sw_crosswalk.py",
+    "branch": "feat/sw2014-sw2021-crosswalk (merged, deleted)",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/20",
+    "merge": "9b71fb5",
+    "docs": [
+      "docs/sw2014_sw2021_crosswalk.md",
+      "docs/sw2014_sw2021_crosswalk.csv",
+      "docs/sw2014_sw2021_distribution_metrics.csv",
+      "docs/AStockAgent_research_conclusions_v1.3.md",
+      "docs/AStockAgent_PIT_data_interfaces.md"
+    ],
+    "test": [
+      "pytest tests/test_sw_crosswalk.py -q -p no:cacheprovider --basetemp=.tmp-test/pytest_sw7 -> 25 passed, 1 warning in 1.75s (round-2: 10/40 sensitivity + distribution cache hit/threshold invalidation)",
+      "pytest tests -q -m \"not png\" -p no:cacheprovider --basetemp=.tmp-test/pytest5 -> 558 passed, 1 skipped, 5 deselected, 1 warning, 12 subtests passed in 32.47s",
+      "mypy astock/sw_crosswalk.py -> Success: no issues found in 1 source file",
+      "python -m astock.sw_crosswalk --refresh --export-docs -> exit 0, edges 200 (32 structural), paired 4194, changed 1306, dist 807 rows, metrics 25; re-export produced zero CSV diff",
+      "GitHub Actions run 43922165135 (head 1e24be4): test pass 1m18s, png-export pass 1m9s",
+      "GitHub Actions run 43922508546 (head bfd2b63): test pass 1m29s, png-export pass 1m50s",
+      "PR #20 merged fast-forward to main at 9b71fb5"
     ]
   },
   "createdAt": "2026-11-03T12:10:44.089Z",
-  "updatedAt": "2026-11-03T12:10:44.089Z"
+  "updatedAt": "2026-11-16T17:55:15.638Z",
+  "devSessionId": "session-7bc34221-e10d-4cf7-8884-b65970d84206"
 }

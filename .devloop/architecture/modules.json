@@ -1,6 +1,6 @@
 {
   "version": "v1.1",
-  "updatedAt": "2026-11-10",
+  "updatedAt": "2026-11-19",
   "modules": [
     {
       "id": "app",
@@ -221,7 +221,7 @@
     {
       "id": "chart_render",
       "title": "agent/chart_render.py",
-      "description": "ChartSpec → Plotly → HTML/PNG artifact",
+      "description": "ChartSpec → Plotly 纯渲染器：校验/取数/指标/HTML/PNG bytes/meta 草稿，不写审计库",
       "layer": 3
     },
     {
@@ -229,6 +229,12 @@
       "title": "agent/store.py",
       "description": "agent_runs/steps/artifacts 审计表与留存清理",
       "layer": 5
+    },
+    {
+      "id": "chart_service",
+      "title": "agent/chart_service.py",
+      "description": "图表唯一审计入口：render_chart 写 artifact/version/link，ArtifactReader 只读回放，load_chart_artifact 分离 as_recorded/recomputed",
+      "layer": 4
     }
   ],
   "edges": [
@@ -518,6 +524,16 @@
       "to": "chart_spec"
     },
     {
+      "from": "chart_render",
+      "to": "data",
+      "label": "market-read"
+    },
+    {
+      "from": "chart_render",
+      "to": "indicators",
+      "label": "compute"
+    },
+    {
       "from": "file_ingest",
       "to": "agent_store"
     },
@@ -528,6 +544,26 @@
     {
       "from": "agent_store",
       "to": "config"
+    },
+    {
+      "from": "chart_service",
+      "to": "chart_render",
+      "label": "render"
+    },
+    {
+      "from": "chart_service",
+      "to": "agent_store",
+      "label": "artifact-write"
+    },
+    {
+      "from": "agent_tools",
+      "to": "chart_service",
+      "label": "chart"
+    },
+    {
+      "from": "chart_render",
+      "to": "agent_store",
+      "label": "pure-helpers"
     }
   ]
 }

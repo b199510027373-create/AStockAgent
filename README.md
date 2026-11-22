@@ -20,13 +20,15 @@ A 股智能投顾本地系统，基于 Gradio + Tushare + DeepSeek。在原有�
 - **台账**：新增 SQLite `data/astock.db`，推荐/证据双写，调度任务以 `jobs` 表为准；`python -m astock.ledger stats` 可查。
 - **PIT 指数池**：新增 `astock/pit.py`，用 `index_weight` 历史成分 + `stock_basic(D)` 退市过滤 + `bak_basic` 历史行业；因子 IC 支持 PIT沪深300/中证500/中证1000。
 
-测试从 18 个增加到 57 个（`tests/test_hardening.py`）。
+测试从 18 个增加到 610 个（2026-11-17 实测：610 passed + 1 skipped，`pytest tests -q -m "not png"`）。
 
 文档分工：
 
 - 产品快照：[docs/AStockAgent_product_snapshot_v1.3.md](docs/AStockAgent_product_snapshot_v1.3.md)
 - 架构说明：[docs/AStockAgent_architecture_v1.3.md](docs/AStockAgent_architecture_v1.3.md)
 - 研究结论：[docs/AStockAgent_research_conclusions_v1.3.md](docs/AStockAgent_research_conclusions_v1.3.md)
+- PNG 导出运维（Chrome / 中文字体 / 版本升级）：[docs/AStockAgent_png_export_ops.md](docs/AStockAgent_png_export_ops.md)
+- 仓库单一真源与根目录校验：[docs/AStockAgent_repo_source_of_truth.md](docs/AStockAgent_repo_source_of_truth.md)
 
 
 ## 功能
@@ -216,10 +218,10 @@ tests/
 ## 测试
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m pytest tests -q -m "not png"
 ```
 
-当前覆盖：信号次日成交、资金不足一手、一字涨停不可买、T+1、成本侵蚀、平价数据指标无 `inf`、周线聚合、分钟前复权、前向收益；技术分、事件情感、别名、行业分散、LLM JSON 解析；参数网格、walk-forward、连续持仓、策略实验室、显著性、因子 IC；调度幂等、严格 JSON、ST 5%、行业上限、NW/BH、t 分布、SQLite ledger、PIT 快照。共 57 个测试。
+当前覆盖：信号次日成交、资金不足一手、一字涨停不可买、T+1、成本侵蚀、平价数据指标无 `inf`、周线聚合、分钟前复权、前向收益；技术分、事件情感、别名、行业分散、LLM JSON 解析；参数网格、walk-forward、连续持仓、策略实验室、显著性、因子 IC；调度幂等、严格 JSON、ST 5%、行业上限、NW/BH、t 分布、SQLite ledger、PIT 快照。共 610 个通过 + 1 个跳过（2026-11-17 实测）。
 
 ## 已知待办
 

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfciv9a-8ce571",
+  "threadId": "rev-20261113-003",
+  "roundNo": 4,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/store.py",
+  "lines": "432-452",
+  "title": "prune_artifacts 的孤儿目录扫描会删除仍被活跃 artifact 引用的 PNG",
+  "evidence": "chart_render 在 astock/agent/chart_render.py:1243-1246 用独立的 `put_content(..., filename=f\"chart_{artifact_id}.png\")` 写 PNG，因此 PNG 落在自己的 digest 目录；但 astock/agent/chart_render.py:1276-1284 的 `record_artifact` 只记录 HTML 行，PNG digest 不进入 `agent_artifacts.digest`。store.py:432-443 把“不在 DB 行 digest 集合中”的目录一律当孤儿删除，且不读取保留行的 `meta[\"png_path\"]`、也不受 `keep_digests` 保护。结果：只要调用 `prune_artifacts(delete_files=True)`，即使 HTML artifact 行因 `created_at` 新或 `keep_digests` 被保留，其 PNG 仍会被删掉。tests/test_agent_store.py:318-351 只构造“无 DB 行的孤儿 PNG”，没有构造“保留的 HTML 行 + 其 PNG”场景，所以测试通过但漏掉该回归。",
+  "suggestion": "在删除孤儿目录前，把保留行 `meta_json` 中 `png_path` 解析出的 digest 加入保护集（同时保留 `keep_digests` 语义），或把 PNG 作为 `kind=\"file\"` 的 artifact 行记录，使其进入 `referenced`。补回归：创建 HTML 行 + 其 `png_path` 指向的 PNG，调用 `prune_artifacts` 并保留该 HTML，断言 PNG 文件和 `meta[\"png_path\"]` 仍存在；再构造真正无引用的 PNG，断言被清理。",
+  "confidence": 0.96,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T00:38:14.781Z"
+  },
+  "createdAt": "2026-11-13T19:04:33.214Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T00:38:14.781Z"
+    }
+  ]
+}

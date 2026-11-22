@@ -1,0 +1,252 @@
+{
+  "id": "ho-20261118-001",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-008",
+  "threadId": null,
+  "sessionId": "",
+  "title": "rev-20261117-003 修复：5 P1 + 4 P2 全部关闭（内容寻址身份/run 生命周期/快照 blob）",
+  "summary": "针对 rev-20261117-003 的 9 条问题逐条修复并补回归测试，未改动验收范围。核心变化：artifact 身份改为 §4.4 canonical_spec+data_digest+env_fingerprint（文件名不参与），env 变化生成新 artifact、同内容不同文件名合并为一行；ensure_run 冲突时补齐 provider/model/temperature/seed/code_version；finish_run 不把 failed 降级为 success/partial，runtime 在步数写入失败或 finish_run 失败时兜底落 failed；PNG require 失败后 run 保持 failed；render 不再把 5000 行快照塞进 meta，改为 data.json blob + data_digest/data_rows/data_truncated，回放从 blob 读；备份改用 conn.backup 并校验 wal_checkpoint/integrity_check，ensure_schema 从 PRAGMA database_list 取实际库路径；RenderedFigure 暴露 artifact_version/meta_digest。CI 重新跑 pending。目标 150 passed、全量 673 passed（排除既有 png 标记与 scheduler 挂起用例）、mypy 39 files、ruff 全通过。",
+  "requirements": [
+    {
+      "id": "AC-1",
+      "text": "agent_runs 只记录真实 Agent；直接渲染不创建 run，link.source=render 且 run_id 可空",
+      "source": "plan-20261107-008 acceptance #1"
+    },
+    {
+      "id": "AC-2",
+      "text": "agent_artifacts 无 run_id；内容寻址、digest 去重；同内容多来源通过 link 保留归属",
+      "source": "plan-20261107-008 acceptance #2"
+    },
+    {
+      "id": "AC-3",
+      "text": "agent_artifact_versions 保存 meta_json/meta_digest/env_version，meta 不可变；correction 追加且 actor/理由/时间必填",
+      "source": "plan-20261107-008 acceptance #3"
+    },
+    {
+      "id": "AC-4",
+      "text": "agent_run_artifacts 支持 run 删除后 artifact 保留；删 run 只删 link，GC 只删无引用文件",
+      "source": "plan-20261107-008 acceptance #4 / ADR-017 C3"
+    },
+    {
+      "id": "AC-5",
+      "text": "旧 agent_* 三表迁移：新表→拷贝→重建→改名，备份+PRAGMA foreign_keys 处理，旧合成 run 标 run_kind=render 且指标排除",
+      "source": "plan-20261107-008 acceptance #5"
+    },
+    {
+      "id": "AC-6",
+      "text": "指标查询默认排除 render；成功后 token/步数统计不受每图合成 run 污染",
+      "source": "plan-20261107-008 acceptance #6"
+    },
+    {
+      "id": "AC-7",
+      "text": "路径白名单与上传类型/大小校验、文件内容按不可信数据包裹、禁止 shell/HTTP/文件删除/推荐写入",
+      "source": "plan-20261107-008 acceptance #7"
+    },
+    {
+      "id": "AC-8",
+      "text": "工具调用参数/结果摘要/耗时完整记录；失败与非法参数也落 agent_steps",
+      "source": "plan-20261107-008 acceptance #8"
+    },
+    {
+      "id": "AC-9",
+      "text": "权限只用七个只读/计算标签，越权标签注册期拒绝；AST 扫描双保险",
+      "source": "plan-20261107-008 acceptance #9 / ADR-017 C2"
+    },
+    {
+      "id": "AC-10",
+      "text": "DDL 与冻结清单 v2 一致；迁移脚本在旧库 fixture 跑通，全量测试与 mypy 通过",
+      "source": "plan-20261107-008 acceptance #10 / ADR-017 C1"
+    },
+    {
+      "id": "P1-1",
+      "text": "artifact_id 必须含 env_fingerprint 与 canonical_spec，同内容不同文件名不重复建行",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P1-2",
+      "text": "ensure_run 冲突时补齐 temperature/seed/code_version",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P1-3",
+      "text": "步数写入失败或 finish_run 失败也必须收尾，不能永久 running",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P1-4",
+      "text": "finish_run 不得把 failed 降级为 success/partial",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P1-5",
+      "text": "render 快照落 blob，meta 不存完整 rows，recomputed 回放可用",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P2-1",
+      "text": "备份前确认 WAL checkpoint，备份校验完整性",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P2-2",
+      "text": "迁移/备份使用连接实际数据库路径，:memory: 跳过备份",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P2-3",
+      "text": "RenderedFigure 暴露 artifact_version/meta_digest",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P2-4",
+      "text": "token 语义明确：整轮总 token 记 completion，prompt=0",
+      "source": "rev-20261117-003"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/store.py",
+      "summary": "artifact_id_for 按 spec+data_digest+env 生成 id（filename 不参与）；record_artifact 不再因 path 不同冲突并保留首路径；ensure_run COALESCE 补 provenance；finish_run 保护 failed 状态并拆分 prompt/completion；_connection_db_path+ensure_schema 迁移透传；_backup_database 用 conn.backup+checkpoint/integrity_check 校验；新增 data_snapshot_digest/load_data_snapshot；load_artifact(recomputed) 返回快照字典。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "新增 temperature/seed/code_version 参数与 provenance 解析；_start_audit 传 provenance；_finish_audit 在 finally 独立收尾，步数/收尾失败兜底 UPDATE failed；工具消息以 <untrusted_data> 包裹。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "快照写 data.json blob 并记录 data_digest/data_rows/data_truncated；artifact id 使用 canonical spec+data_digest+env；RenderedFigure 暴露 artifact_version/meta_digest；_load_artifact_frame 从 blob 回放并透传 artifact_root。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "tests/test_agent_store.py",
+      "summary": "新增身份（文件名/env）、provenance 补齐、failed 防降级、token 语义、连接库备份、checkpoint busy 中止等回归；recomputed 用真实 blob。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 provenance 落库、record_step 失败仍收尾、finish_run 失败兜底、工具 fail_run 后不被 runtime 降级、untrusted_data 包裹等回归。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "新增真实 render meta 无 rows/recomputed 快照、env 变化双 artifact、两次渲染 artifact_version=2 且 meta_digest 与库一致等回归。",
+      "commit": "0c89df6"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".dsh_pytest.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py tests/test_architecture_gate.py -q",
+      "result": "150 passed, 1 warning in 13.04s",
+      "passed": true,
+      "evidence": "r2 目标测试：store/runtime/chart/architecture gate"
+    },
+    {
+      "command": ".dsh_pytest.py tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -q",
+      "result": "673 passed, 5 deselected, 1 warning, 12 subtests passed in 51.29s",
+      "passed": true,
+      "evidence": "全量（排除既有 png 标记与 scheduler stop.wait(600) 挂起用例）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock",
+      "result": "Success: no issues found in 39 source files",
+      "passed": true,
+      "evidence": "类型检查"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock/agent/store.py astock/agent/runtime.py astock/agent/chart_render.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "lint"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github-push",
+      "reason": "使用本机 gh CLI token 推送分支（schannel 失败，改用 openssl backend）",
+      "status": "granted"
+    },
+    {
+      "name": "pytest-temp-dir",
+      "reason": "本机 mkdir(mode=0o700) 目录不可访问，使用未跟踪 .dsh_pytest.py monkeypatch 为 0o777",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-008-v2-audit",
+    "commit": "0c89df6",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
+    "ci": "pending (pushed 0c89df6; gh pr checks 暂无 check，等待 workflow)",
+    "merge": "open, mergeable",
+    "status": "ci-running"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "changes_requested → fixed",
+    "resolved": true,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "artifact_id 未含 env，同内容不同文件名重复建行",
+        "suggestion": "按 §4.4 spec+data_digest+env 生成，补 env 双 artifact 与文件名合并测试",
+        "status": "fixed"
+      },
+      {
+        "severity": "P1",
+        "title": "ensure_run 冲突不补 provenance 列",
+        "suggestion": "COALESCE 补 provider/model/temperature/seed/code_version",
+        "status": "fixed"
+      },
+      {
+        "severity": "P1",
+        "title": "record_step 失败导致 run 永久 running",
+        "suggestion": "finish_run 放独立 finally，失败兜底 UPDATE failed",
+        "status": "fixed"
+      },
+      {
+        "severity": "P1",
+        "title": "finish_run 把 PNG require failed 改回 success",
+        "suggestion": "finish_run 不降级 failed，测试断言 error 保留",
+        "status": "fixed"
+      },
+      {
+        "severity": "P1",
+        "title": "meta 存 5000 行快照且无 data_digest，recomputed 必失败",
+        "suggestion": "data.json blob + data_digest，回放从 blob 读",
+        "status": "fixed"
+      },
+      {
+        "severity": "P2",
+        "title": "备份吞 WAL checkpoint 失败",
+        "suggestion": "busy 中止 + conn.backup + integrity_check",
+        "status": "fixed"
+      },
+      {
+        "severity": "P2",
+        "title": "ensure_schema 迁移未传 db_path",
+        "suggestion": "PRAGMA database_list 取实际路径",
+        "status": "fixed"
+      },
+      {
+        "severity": "P2",
+        "title": "RenderedFigure 缺 artifact_version/meta_digest",
+        "suggestion": "新增字段并在 metadata 输出",
+        "status": "fixed"
+      },
+      {
+        "severity": "P2",
+        "title": "token 语义不清（prompt 恒 0）",
+        "suggestion": "finish_run 拆分参数，文档化 completion=整轮总 token",
+        "status": "fixed"
+      }
+    ]
+  },
+  "previousHandoffId": "ho-20261117-027",
+  "next": "1) 等 PR #30 CI（push 0c89df6）完成后把 plan links.ci 更新为 passed，并补一条 update handoff；2) 请 reviewer 复核 rev-20261117-003（openP0=0/openP1=0 后合并）；3) 若 CI 失败，按日志修复并重跑目标/全量/mypy/ruff。",
+  "createdAt": "2026-11-17T19:26:44.761Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-001.md"
+}

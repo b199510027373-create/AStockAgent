@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwm6towg-2aaf86",
+  "threadId": "rev-20261118-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "test-coverage",
+  "file": "tests/test_data_time_semantics.py",
+  "lines": "135-137",
+  "title": "周/月重采样分支与指数（is_index）取数分支零测试覆盖",
+  "evidence": "market_tools.load_series 的周/月分支（market_tools.py:472-475 `frame = deps.resample(frame, \"W-FRI\")` / `\"ME\"`）和指数字段分支（467-469 `deps.index_daily(code, start=start, end=end)`，source=\"index_daily\"）在测试里完全没被执行：tests/test_data_time_semantics.py 与 tests/test_agent_tools.py 中没有任何 period=\"week\"/\"month\" 的用例；tests/test_agent_tools.py:808 定义了 `index_daily=lambda ts_code, *, start, end: daily.copy()` 但 _market_registry 的所有用例（test_market_result_requires_both_timestamps 等）都只用 MARKET_CODE，没有 000300.SH 用例；tests/test_data_time_semantics.py:137 直接把 _Deps.index_daily 标成 `# pragma: no cover - 指数路径由 chart 测试覆盖`，而 astock/agent 的 chart 测试覆盖的是渲染器，不是 market_tools 的取数分支。同时 KLINE_SCHEMA 通过 INDEX_REF_RE 对外声明支持指数，market_tools.py:441 还有「指数 {code} 暂无分钟线」的显式错误路径，均无用例。links.test 声称 702 passed，但这些分支不在其中，验收第 1/6/7/8 条在周/月与指数口径上没有证据。",
+  "suggestion": "在 tests/test_data_time_semantics.py 补 4 个用例：(a) kline(period=\"week\")：固定日线 frame + 真实 market.resample_ohlcv，断言返回根数、data_time 取周期内最后实际交易日的 15:00、盘中 freshness=eod 且 notes 含「收盘后更新」；(b) kline(period=\"month\", limit=130)：覆盖 W/M 两条 PERIOD_FREQ 路径与 range 生成；(c) kline(\"000300.SH\", period=\"day\")：断言走到 index_daily 分支、source 含 index_daily、data_as_of/data_time 双时点齐全；(d) kline(\"000300.SH\", period=\"1min\")：断言 ValueError 文案含「暂无分钟线」。跑 pytest tests/test_data_time_semantics.py -q 与 pytest tests -q，把结果更新到 planItem.links.test。不需要改产品代码，但需证明周/月/指数这三条已在代码里的分支可用。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T15:37:44.380Z"
+  },
+  "createdAt": "2026-11-18T13:59:23.728Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T15:37:44.380Z"
+    }
+  ]
+}

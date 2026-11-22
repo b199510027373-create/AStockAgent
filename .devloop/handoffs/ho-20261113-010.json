@@ -1,0 +1,91 @@
+{
+  "id": "ho-20261113-010",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-007",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261103-007 收盘任务自动化与 5 日验收采集",
+  "summary": "按用户要求把收盘任务做成 Windows 计划任务：AStockAgent-Plan007-CloseJob 在每个工作日 16:45 启动，每 30 分钟重复至 22:45。任务运行 data/recommendations/run_daily_job.py，依次执行 jobs --once --slot close、--maintenance（含心跳告警）、--report 5，写 scheduler_task.log、acceptance_5d.json，连续 5 个交易日全 success 时写 acceptance_5d.ok。已人工触发任务，LastTaskResult=0；当前 15:53 未到 16:40，close 正常跳过，report 5 尚未通过（11-09..11-12 缺失），首个可能通过日为 2026-11-19。代码交付仍为已合并 main 的 a9c1248（PR #9）。",
+  "requirements": [
+    {
+      "id": "REQ-AUTO-01",
+      "text": "把收盘调度与 5 日验收做成自动化任务，无需人工每天执行。",
+      "source": "用户 m00716"
+    },
+    {
+      "id": "REQ-007-04",
+      "text": "连续 5 个交易日 job 全 success 的验收可复现。",
+      "source": "plan-20261103-007 验收标准 4"
+    },
+    {
+      "id": "REQ-007-03",
+      "text": "心跳超过阈值触发告警。",
+      "source": "plan-20261103-007 验收标准 3"
+    }
+  ],
+  "changes": [
+    {
+      "path": "data/recommendations/run_daily_job.py",
+      "summary": "本地自动化包装器（data/ 被 gitignore，不纳入代码提交）：subprocess 调用 .venv Python，执行 close、maintenance、report 5；日志 UTF-8，异常落日志，始终退出 0，验收通过写 marker。",
+      "commit": ""
+    },
+    {
+      "path": "Windows 计划任务 AStockAgent-Plan007-CloseJob",
+      "summary": "工作日 16:45 起每 30 分钟运行，持续 6 小时；StartWhenAvailable、IgnoreNew、40 分钟执行上限；当前用户交互登录运行。",
+      "commit": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": "Start-ScheduledTask -TaskName AStockAgent-Plan007-CloseJob",
+      "result": "LastTaskResult=0；日志出现 close job exit=0、maintenance exit=0、report 5 exit=2（未满 5 日，预期）",
+      "passed": true,
+      "evidence": "Get-ScheduledTaskInfo LastRunTime=2026-11-13 15:53:39，NextRunTime=2026-11-13 16:45:00；data/recommendations/scheduler_task.log"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe data\\recommendations\\run_daily_job.py",
+      "result": "exit=0；acceptance_5d.json 生成，all_success=false、passed=1；心跳 maintenance 检测到 11-09..11-12 缺失并写 scheduler_alerts.jsonl",
+      "passed": true,
+      "evidence": "scheduler_task.log、acceptance_5d.json、scheduler_alerts.jsonl"
+    },
+    {
+      "command": "python -m astock.jobs --heartbeat",
+      "result": "reference=2026-11-12, streak=4, ok=false；CLI 退出 2（只读检查，不写告警）",
+      "passed": true,
+      "evidence": "stdout JSON"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "windows-task-scheduler",
+      "reason": "注册并触发当前用户计划任务",
+      "status": "granted"
+    },
+    {
+      "name": "local-command-run",
+      "reason": "运行包装器与任务验证",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "a9c1248",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/9",
+    "ci": "PR run 43291879416 pass；main run 43292151867 success",
+    "merge": "已 squash 合并到 main（a9c1248）；自动化任务为本机运行配置，不随仓库分发",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261113-007",
+  "next": "16:45 后检查任务 LastTaskResult、scheduler_task.log 与 acceptance_5d.json；每日可用 .venv\\\\Scripts\\\\python.exe -m astock.jobs --report 1 和 --heartbeat 抽查。2026-11-19 收盘后运行 --report 5，确认退出码 0、all_success=true、5 行 success，并检查 acceptance_5d.ok；若中间任一日 stale/failed，按 jobs 表 attempts/error 定位，窗口顺延重算。",
+  "createdAt": "2026-11-13T07:54:48.337Z",
+  "markdownPath": ".devloop/handoffs/ho-20261113-010.md"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwq6p6ia-79c506",
+  "threadId": "rev-20261121-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "docs-consistency",
+  "file": "docs/AStockAgent_repo_source_of_truth.md",
+  "lines": "78-79",
+  "title": "真源说明文档声称正式 handoff/review 记录“随仓库提交”，实际全部未跟踪",
+  "evidence": "新增的权威文档写「正式 handoff 和评审记录仍放在 `.devloop/handoffs/`、`.devloop/reviews/` 并随仓库提交；只有草稿进入 `drafts/` 或 `archive/`」。但 `chore/repo-single-source` 上 `git status --short` 显示 22 组 handoff（ho-20261119-026/029、ho-20261120-003…021、ho-20261121-002/009/010/011，共 44 个 .json/.md）全部是 `??`，另有 `?? .devloop/calendar/2027-01.json`、`?? .devloop/reviews/rev-20261119-002/`、`rev-20261120-001/`、`rev-20261120-002/`；而 `.gitignore:103-105` 只忽略 `.devloop/drafts/`、`handoffs/archive/`、`reviews/archive/`，不覆盖实际写入路径。即文档描述的状态与仓库实测不一致，验收项「handoff/review 草稿…不污染 git status」缺少可核验证据。",
+  "suggestion": "二选一并落定：(a) 若正式记录应入库，就由开发在 PR #44 合并后追加一个 `chore(devloop)` 提交，把这 22 组 handoff 与新增 review 目录纳入版本库，并以提交后 `git status --short` 无 .devloop 条目作为验收证据；(b) 若确定只本地留存，则把 L78-79 改写为「正式记录由 DevLoop 会话单独提交/本地留存，未跟踪期间会出现在 git status」，并在 `.gitignore` 补 `/.devloop/handoffs/*.json`、`*.md` 等规则。完全解决标准：文档 L78-79 的表述与 `git status --short` 实测结果一致。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-21T09:24:33.927Z"
+  },
+  "createdAt": "2026-11-21T09:06:57.970Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-21T09:24:33.927Z"
+    }
+  ]
+}

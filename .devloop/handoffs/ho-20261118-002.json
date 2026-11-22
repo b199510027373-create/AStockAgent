@@ -1,0 +1,184 @@
+{
+  "id": "ho-20261118-002",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-008",
+  "threadId": null,
+  "sessionId": "",
+  "title": "CI passed：rev-20261117-003 修复可复核（PR #30，50470c2）",
+  "summary": "CI 状态更新：rev-20261117-003 修复提交 0c89df6 与记录提交 50470c2 的 GitHub Actions 均通过（test + png-export）。plan-20261107-008 已置 in_review(97%)，links.commit=50470c2、links.ci=passed。代码/测试改动与上一份 handoff ho-20261118-001 一致，无新增修改；本份仅补 CI 证据与交付状态，PR #30 仍 open/mergeable，等待 reviewer 复核后合并。",
+  "requirements": [
+    {
+      "id": "AC-1..AC-10",
+      "text": "首轮交付已覆盖 10 条验收；本轮未改变范围，仅修复评审问题并补回归测试。",
+      "source": "plan-20261107-008 acceptance"
+    },
+    {
+      "id": "P1-1..P1-5",
+      "text": "artifact 身份含 env/canonical_spec；ensure_run 补 provenance；游程步数/收尾失败不永久 running；failed 不降级；快照 blob+data_digest 回放。",
+      "source": "rev-20261117-003"
+    },
+    {
+      "id": "P2-1..P2-4",
+      "text": "备份校验 checkpoint/integrity；迁移用连接实际库路径；RenderedFigure 暴露 artifact_version/meta_digest；token 语义文档化。",
+      "source": "rev-20261117-003"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/store.py",
+      "summary": "artifact 身份=canonical_spec+data_digest+env（文件名不参与）；record_artifact 同内容不因路径冲突；ensure_run COALESCE 补 provenance；finish_run 保护 failed、拆分 prompt/completion；连接库路径透传；conn.backup+checkpoint/integrity 校验；data_snapshot_digest/load_data_snapshot；recomputed 回放。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "provenance 参数；_finish_audit finally 独立收尾+失败兜底 UPDATE failed；工具输出 untrusted_data 包裹。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "astock/agent/chart_render.py",
+      "summary": "快照写 data.json blob + data_digest/data_rows/data_truncated；artifact id 用 §4.4 身份；RenderedFigure 暴露 artifact_version/meta_digest；回放从 blob 读。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "tests/test_agent_store.py",
+      "summary": "新增身份/防降级/token/备份/checkpoint 回归。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "tests/test_agent_runtime.py",
+      "summary": "新增 provenance/步数失败/收尾失败/PNG failed 保持回归。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": "tests/test_agent_chart_render.py",
+      "summary": "新增 real render blob/双 artifact/version+meta_digest 回归。",
+      "commit": "0c89df6"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-008.json",
+      "summary": "plan 状态 in_review，links 记录 r2 测试与 CI。",
+      "commit": "50470c2"
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub Actions run 44162105017 (sha 50470c2)",
+      "result": "success",
+      "passed": true,
+      "evidence": "test + png-export 两个 job 均 success"
+    },
+    {
+      "command": "GitHub Actions run 44161487849 (sha 8978dd8)",
+      "result": "success",
+      "passed": true,
+      "evidence": "test + png-export 均 success"
+    },
+    {
+      "command": ".dsh_pytest.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py tests/test_architecture_gate.py -q",
+      "result": "150 passed in 13.04s",
+      "passed": true,
+      "evidence": "本地目标测试"
+    },
+    {
+      "command": ".dsh_pytest.py tests -m \"not png\" --deselect tests/test_scheduler_ledger.py::SchedulerLoopTests::test_loop_runs_due_job_once_and_records_success -q",
+      "result": "673 passed, 5 deselected, 12 subtests passed in 51.29s",
+      "passed": true,
+      "evidence": "本地全量（排除既有 png 标记与 scheduler 挂起用例）"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock",
+      "result": "Success: no issues found in 39 source files",
+      "passed": true,
+      "evidence": "类型检查"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock/agent/store.py astock/agent/runtime.py astock/agent/chart_render.py tests/test_agent_store.py tests/test_agent_runtime.py tests/test_agent_chart_render.py",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "lint"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github-push",
+      "reason": "使用 gh CLI token + openssl backend 推送",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-008-v2-audit",
+    "commit": "50470c2",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/30",
+    "ci": "passed: run 44162105017 (sha 50470c2) test + png-export; 前一提交 run 44161487849 亦 passed",
+    "merge": "open, mergeable (PR #30 等待 reviewer 复核)",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "fixed",
+    "resolved": true,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "artifact_id 未含 env/canonical spec",
+        "suggestion": "",
+        "status": "fixed"
+      },
+      {
+        "severity": "P1",
+        "title": "ensure_run 不补 provenance",
+        "suggestion": "",
+        "status": "fixed"
+      },
+      {
+        "severity": "P1",
+        "title": "步数写入失败导致永久 running",
+        "suggestion": "",
+        "status": "fixed"
+      },
+      {
+        "severity": "P1",
+        "title": "finish_run 把 PNG failed 改回 success",
+        "suggestion": "",
+        "status": "fixed"
+      },
+      {
+        "severity": "P1",
+        "title": "meta 存完整 rows 且无 data_digest",
+        "suggestion": "",
+        "status": "fixed"
+      },
+      {
+        "severity": "P2",
+        "title": "备份吞 checkpoint 失败",
+        "suggestion": "",
+        "status": "fixed"
+      },
+      {
+        "severity": "P2",
+        "title": "迁移未传实际 db_path",
+        "suggestion": "",
+        "status": "fixed"
+      },
+      {
+        "severity": "P2",
+        "title": "RenderedFigure 缺版本/meta_digest",
+        "suggestion": "",
+        "status": "fixed"
+      },
+      {
+        "severity": "P2",
+        "title": "token 语义不清",
+        "suggestion": "",
+        "status": "fixed"
+      }
+    ]
+  },
+  "previousHandoffId": "ho-20261118-001",
+  "next": "1) reviewer 复核 rev-20261117-003：9 条均已修复，openP0=0/openP1=0，CI passed；2) 复核通过后合并 PR #30 并把 plan-20261107-008 置 done；3) 后续如需拆分 prompt/completion token，可在网关提供 usage 明细时扩展 finish_run 调用。",
+  "createdAt": "2026-11-17T20:01:26.098Z",
+  "markdownPath": ".devloop/handoffs/ho-20261118-002.md"
+}

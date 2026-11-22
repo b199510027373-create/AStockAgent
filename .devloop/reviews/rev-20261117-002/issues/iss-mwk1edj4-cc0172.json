@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwk1edj4-cc0172",
+  "threadId": "rev-20261117-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "hygiene",
+  "file": "tests/test_ci_quality_gates.py",
+  "lines": "1,48-49",
+  "title": "test_ci_quality_gates.py 被写入 UTF-8 BOM，且受检模块数注释与 39 不一致",
+  "evidence": "devloop_git diff 显示 tests/test_ci_quality_gates.py:1 由 `\"\"\"CI 质量门禁的配置守护（plan-20261103-012）。` 变成 `﻿\"\"\"CI 质量门禁的配置守护（plan-20261103-012）。`，即文件被写入 UTF-8 BOM（U+FEFF）；同时 :49 `EXPECTED_CHECKED_MODULES = 35` 改为 `39`（与本轮新增 4 个模块一致），但 :48 注释仍是「astock 下共 44 个 .py，排除上述 9 个 → 35 个受检 + app.py = CI 日志里的 36 files」，与 39/40 files 矛盾。BOM 与本项功能无关，且会让后续按首行做字符串比较/哈希的工具（脚本读取、diff 工具、预编译缓存签名）产生噪声差异。",
+  "suggestion": "用 UTF-8 无 BOM 保存该文件（去掉首行 U+FEFF），并把 :48 注释更新为「astock 下共 48 个 .py，排除上述 9 个 → 39 个受检 + app.py = CI 日志里的 40 files」，与 mypy 输出的 40 source files 对齐；这类与文件工具无关的改动建议从本 PR 拆出，避免 eval/门禁文件被顺手改动。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:16:09.843Z"
+  },
+  "createdAt": "2026-11-17T01:51:58.720Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:16:09.843Z"
+    }
+  ]
+}

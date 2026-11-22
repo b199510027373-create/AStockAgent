@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbp12uh-d09875",
+  "threadId": "rev-20261111-003",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "功能回退/信息丢失",
+  "file": "astock/use_cases.py",
+  "lines": "148-156, 271-274, 365-385",
+  "title": "生成后「报告」区与生成摘要丢失：rec.report 被丢弃且未归档，页面只剩 6 行台账摘要",
+  "evidence": "base main 删除的 `_generate_view`（diff 中被删的 use_cases.py 原 256-292 行）曾把 `rec.report` 作为 payload['report']、`rec.status` 作为 status_line 交给渲染器；现在 `_ledger_view` 的 payload（use_cases.py:365-380）不含 report，`_render_recommendation`（271-274）只要 run_id 存在就回退到 `_history_report`（148-156，仅 run_id/data_as_of/tradable_from/generated_at/source 六行），页面 report Markdown（recommend_ui.py:140、145）因此不再显示 `recommend._report_markdown`（recommend.py:894-896）生成的详细报告，`Recommendation.status`（recommend.py:904-910 的股票池/有效日线/预筛/输出/AI 归因/用时）也不再展示。JSON 归档 payload（recommend.py:606-633）不含 report/status 文本，生成后即丢失、无法从归档恢复；tests/test_use_cases.py::test_success_reads_back_from_ledger 反而只断言 report 含「### SQLite 推荐记录」。",
+  "suggestion": "由 plan-20261103-003 开发者在合并前修复：优先在 ledger runs 增加 report_md（和/或 status_line）列并递增 schema_version，在 recommend._save / ledger.save_run / get_run 中写入与读回，`_render_recommendation` 直接消费台账里的报告文本；若产品确认生成报告不再展示，须在计划/ADR 中记录该降级、说明替代查看方式，并加测试锁定。完成标准：生成后页面报告区显示本次生成的详细报告或经确认的替代内容，且 tests/test_core_paths.py 的生成→台账集成测试断言 report 内容（而不只是 6 行台账摘要）。",
+  "confidence": 0.78,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T06:05:42.612Z"
+  },
+  "createdAt": "2026-11-11T05:43:33.545Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T06:05:42.612Z"
+    }
+  ]
+}

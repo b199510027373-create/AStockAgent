@@ -18,11 +18,11 @@ import shutil
 import sqlite3
 import tempfile
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterator
+from typing import Any
 
-import pandas as pd
 import pytest
 
 from astock.agent import files as F
@@ -471,7 +471,7 @@ def test_xlsx_multi_sheet_with_coordinates(tmp_path: Path) -> None:
     frame = F.load_table(result.doc.file_id, "sheet", root=tmp_path / "store")  # type: ignore[union-attr]
     assert list(frame.columns) == ["项目", "本期", "上期"]
     assert frame["本期"].tolist() == [100.0, 20.0]
-    assert set(p.name for p in (tmp_path / "store" / meta["sha256"] / "tables").iterdir()) == {  # type: ignore[index]
+    assert {p.name for p in (tmp_path / "store" / meta["sha256"] / "tables").iterdir()} == {  # type: ignore[index]
         "sheet.parquet",
         "sheet_2.parquet",
     }
@@ -640,7 +640,7 @@ def test_pdf_keeps_page_numbers_and_table_bbox(
         (1, "第一页文字"),
         (2, "第二页文字"),
     ]
-    summary = [row for row in rows if row["sheet"] == "p2_table_1"][0]
+    summary = next(row for row in rows if row["sheet"] == "p2_table_1")
     assert summary["page"] == 2
     assert summary["bbox"] == [10.0, 20.0, 110.0, 60.0]
     assert "工作表 p2_table_1" in summary["text"]

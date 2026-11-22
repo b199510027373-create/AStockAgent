@@ -1,0 +1,71 @@
+{
+  "id": "ho-20261117-017",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261117-002",
+  "sessionId": "",
+  "title": "评审：文件检索 / 表格查询 + 强制引用",
+  "summary": "第 1 轮（scope=full）评审 6 条：P0 0、P1 3、P2 3。结论 request_changes，openP1=3 不满足 approve 条件。\n\n一、已核对通过的部分（无需返工）\n- A5 性能：tests/test_agent_tools.py:463 test_table_query_100k_rows_under_three_seconds 只计查询耗时的口径在 handoff 里如实说明（整例约 35s 主要是生成/导入），可接受。\n- A7：15 字段顺序 + 缺字段用例存在（:145、:171），load_meta 缺字段报「meta.json 字段不符合冻结规范」不静默降级。\n- A8/A9：PDF 表格 bbox 走页面坐标、Excel/CSV/DOCX 走 [row_start,col_start,row_end,col_end] 1-based，两类不混用；DOCX 写回源行号、Excel 多 sheet 引用含工作表名与单元格范围，均有对应用例（:507、:523、:538、:483）。\n- 安全侧（AGENT-01/AGENT-05）：五工具权限统一 file:read；table_path 做 _SHEET_SLUG_RE 校验 + is_relative_to；用户 SQL 执行前已 SET enable_external_access=false；sql_guard 拒多条语句、DDL/DML、表函数与路径字面量；未发现 shell / 任意 HTTP / 文件删除调用。未发现 P0。\n- A10 部分：docs/AStockAgent_interface_freeze_v1.md §4/§4.1 与 docs/AStockAgent_contract_rule_map_v1.md AGENT-04 行已更新，旧 13 字段/单一 bbox 表述已删。\n\n二、阻断项（开发修，逐条闭环后复审）\n- P1 回答级强制引用未落到运行时（astock/agent/runtime.py:180-184，finalize_file_answer 生产零调用点）：A3/A4 目前只有 SYSTEM_PROMPT 文本，AGENT-04 声明的 enforcement=test 落点不存在。修法见 iss-mwk1e76b-235fe7。\n- P1 FTS5 中文检索无测试证据（astock/agent/files.py:170-171 + astock/agent/tools/file_tools.py:125-129）：中文查询实际靠 LIKE 全量扫描，A6 在证据上不成立。修法见 iss-mwk1e77l-f00b8a。\n- P1 五工具未接入运行时（astock/agent/tools/file_tools.py:528-536，build_file_registry 无生产调用点；runtime.py:107 默认空注册表）：A1/A2 端到端不可达，ho-20261117-016 的 A1–A10 完成声明需修正。修法见 iss-mwk1e78k-81f44e。\n\n三、应修提示（可与阻断项同批提交）\n- P2 finalize_file_answer 不校验引用白名单（citations.py:184-186）——模型自造引用会被放行。\n- P2 table_query 计时器覆盖装载阶段 + done/close 与计时器线程无同步（file_tools.py:477-497）——超时文案会误导模型。\n- P2 tests/test_ci_quality_gates.py 首行被写 UTF-8 BOM，且 :48 注释仍写 35 个受检/36 files（实际 39/40）。\n\n四、完全解决的判定条件\n开发者（plan-20261107-004 承担人）在 feat/plan-20261107-004-file-tools 上完成上述 6 条修复——其中 3 条 P1 必须各有对应测试证据（运行时回答装配两例、metadata[\"backend\"]==\"fts5\" 的 FTS 命中例、AgentRuntime 集成例）——并重跑 pytest tests/test_agent_tools.py、pytest tests -q -m \"not png\" + coverage、ruff、mypy（PR #28 CI 全绿），提交新的 developer handoff 逐条回应 6 个 issue id；若某项改为由 plan-20261107-005/007 承接，则必须在 docs/AStockAgent_interface_freeze_v1.md §4.1 写明承接受理项与测试锚点并同步撤回本轮验收声明。下一轮复审确认 openP0=0 且 openP1=0、P2 已修或书面接受后，才可 approve 并标记完全解决；在此之前 PR #28 不得合并。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 3,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "回答级强制引用未落到运行时：finalize_file_answer 在生产路径零调用点",
+        "suggestion": "在 runtime.py:180-184 的 COMPLETED 分支加装配兜底：若本轮 steps 中任一 ToolResult 的 source 以 `file:` 开头（或工具名命中 {file_search, file_read, table_schema, table_query}），收集这些结果的引用（table 行的 citation 字段 + text 中的《…》片段）作为 cites，执行 `answer = finalize_file_answer(reply.content, cites)` 后再 add_assistant；无文件工具调用时保持现状。并在 tests/test_agent_runtime.py 增加两例（FakeModel 驱动）：① 调用 file_search 后返回无引用的 content → 断言 run_result.answer == CITATION_NOT_FOUND；② content 已含「《年报.pdf》第 2 页」且该引用来自本轮工具结果 → 断言原样保留。若该装配明确由 plan-20261107-005/007 承接，则必须在 docs/AStockAgent_interface_freeze_v1.md §4.1 与 developer handoff 写明承接计划项与测试锚点，并把 A3/A4 从本轮完成声明中撤回——不能以「SYSTEM_PROMPT 已写规则」视为已实现。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "FTS5 中文检索无任何测试证据：unicode61 不切分 CJK，命中实际全靠 LIKE 回退",
+        "suggestion": "二选一修复并补测试：① 保持冻结 DDL 不变，在写入侧把 CJK 切成 bigram（或对接分词）写入 FTS（contentless `fts5(tokens)` 表 + 显式写入，原文仍存 file_chunks.text，检索结果仍按 block 回查原文）；② 把 tokenize 改为 `trigram`（SQLite ≥3.34，支持中文子串），但需按验收 A10 同步 ADR-015 §5 与 docs/AStockAgent_interface_freeze_v1.md §4 的 DDL 文本，并处理存量库：`CREATE ... IF NOT EXISTS`（files.py:1252-1255）不会替换旧表，需按 schema 版本判断后 DROP 重建 FTS 或 `INSERT INTO file_chunks_fts(file_chunks_fts) VALUES('rebuild')`。测试：在 tests/test_agent_tools.py:205-223 增加 `assert found.metadata[\"backend\"] == \"fts5\"`（建议再补一例只在 FTS 索引里出现的词，确保不是 LIKE 命中），并把 freeze §4.1:303 的措辞改成如实描述（当前中文命中率与回退触发条件）。修复后 A6 才算有证据。",
+        "status": "open"
+      },
+      {
+        "severity": "P1",
+        "title": "build_file_registry 无生产调用点：五个文件工具在运行时不可被 Agent 调用",
+        "suggestion": "在明确的装配点调用 build_file_registry 并把结果并入传给 AgentRuntime 的 registry（例如对话/Agent 入口构造 AgentRuntime 的位置；后续行情工具按 plan-20261107-005 追加到同一 registry，避免二次拆分），并补一条集成测试：用 FakeModel 走 AgentRuntime，先调 file_search 再返回带引用的回答，断言 tools schema 里含五个工具名且工具结果进入 steps。若装配有意留给后续计划项，则必须在 docs/AStockAgent_interface_freeze_v1.md §4.1 写明承接受理项与测试锚点，并把本轮的 A1/A2/A3 验收方式改为「工具层可达性 + 承接项锚点」，同步修正 handoff 的完成声明；否则本轮不满足 A1。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "finalize_file_answer 只校验「有引用」，不校验引用是否来自本次工具结果",
+        "suggestion": "在 finalize_file_answer 里用 `_CITATION_RE` 抽出 text 中全部引用，逐一与 citations 白名单比对（对空白/全角标点做规范化）；任一条不在白名单即视为无据回答，丢弃 text 并仅用 citations 重建「引用：…」（或返回 CITATION_NOT_FOUND）。同时在 tests/test_agent_tools.py:313-324 增加一例：text 带「《虚构.pdf》第 9 页」而 citations 只有真实引用 → 不得原样返回。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "table_query 超时计时器覆盖表格装载阶段，且 done/close 与计时器线程无同步",
+        "suggestion": "把 `_interrupt_on_timeout` 挪到 `CREATE TEMP TABLE` 之后（装载阶段单独给预算或不限时，超时文案区分为「表格装载超时」而非「请缩小查询范围」）；`_interrupt_on_timeout` 内用 `threading.Lock` 保护 `state[\"done\"]` 检查与 `conn.interrupt()`，并在 `conn.close()` 之前 cancel，必要时 join 计时器线程。补一条测试：把 timeout_seconds 设很小但允许装载完成，断言报错文案是查询超时而非装载超时。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "test_ci_quality_gates.py 被写入 UTF-8 BOM，且受检模块数注释与 39 不一致",
+        "suggestion": "用 UTF-8 无 BOM 保存该文件（去掉首行 U+FEFF），并把 :48 注释更新为「astock 下共 48 个 .py，排除上述 9 个 → 39 个受检 + app.py = CI 日志里的 40 files」，与 mypy 输出的 40 source files 对齐；这类与文件工具无关的改动建议从本 PR 拆出，避免 eval/门禁文件被顺手改动。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-17T01:52:06.154Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-017.md"
+}

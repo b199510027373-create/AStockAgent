@@ -1,16 +1,29 @@
-gradio>=6.0
-pandas>=2.0
-numpy>=1.26
-plotly>=5.0
-openai>=1.0
-httpx>=0.27
-requests>=2.31
-python-dotenv>=1.0
-pyarrow>=15.0
+# 运行时依赖：全部锁精确版本（plan-20261103-012）。
+#
+# 为什么不再用 >=：2026-11-16 的 main CI 实测到「裸装最新版」导致工具链漂移
+# （ruff 0.17.5 / coverage 7.17.3 与本地 0.17.3 / 7.17.0 不一致），同一 commit
+# 在本地与 CI 可能给出不同结论。这里把运行时依赖也钉死，让安装可复现。
+#
+# 升级流程：改版本 → 本地 `pip install -r requirements-dev.txt` → 跑
+# `pytest tests -q -m "not png"` + `mypy astock app.py` + `ruff check astock tests`
+# + coverage 门槛 → PR 里说明升级理由，CI 连续两次通过后合并。
+# 版本号取自本地 .venv 实测（Python 3.13.5，Windows 11），Linux CI 同版本可用。
+gradio==6.15.2
+pandas==3.0.3
+numpy==2.2.6
+# 图表导出（ADR-016 Q6=A）：plotly/kaleido 锁定精确版本，PNG 字节随版本漂移（见 docs/AStockAgent_png_export_ops.md）
+plotly==6.7.0
+# kaleido 1.5.1 需系统 Chrome/Chromium；Linux CI 用预装 Chrome + fonts-noto-cjk（见 docs/AStockAgent_png_export_ops.md）
+kaleido==1.5.1
+openai==2.38.0
+httpx==0.28.1
+requests==2.34.2
+python-dotenv==1.2.2
+pyarrow==24.0.0
 # 文件导入解析（ADR-015）：PDF 文本层/表格、DOCX、表格查询
-pdfplumber>=0.11
-python-docx>=1.1
-openpyxl>=3.1
-xlrd>=2.0
-duckdb>=1.0
-tushare>=1.4
+pdfplumber==0.11.10
+python-docx==1.2.0
+openpyxl==3.1.5
+xlrd==2.0.2
+duckdb==2.0.0
+tushare==1.4.29

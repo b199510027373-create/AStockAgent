@@ -1,0 +1,33 @@
+{
+  "id": "iss-mweoulp2-c72028",
+  "threadId": "rev-20261113-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "security",
+  "file": "astock/agent/files.py",
+  "lines": "1282-1287",
+  "title": "load_table 的 sheet_slug 未做白名单/归属校验，可路径穿越或绝对路径逃逸出 data/agent/files",
+  "evidence": "`load_table` 直接用调用方传入的 `sheet_slug` 拼路径（1286 行）：`path = file_dir(file_id, root=root) / \"tables\" / f\"{sheet_slug}.parquet\"`，没有任何白名单/解析后归属校验。两个逃逸面：1) `sheet_slug=\"../../<另一个 sha256>/tables/sheet\"` 可读到别的内容寻址目录里的 parquet；2) Windows 下 `sheet_slug` 若是绝对路径（如 `C:/Windows/...` 或 `/etc/...`），pathlib 的 `/` 运算符会丢弃左侧前缀，直接读到任意位置。`load_table` 在 `__all__` 里导出，plan-20261107-004 的 `table_query(file_id, sheet, sql)` 会把模型给的 sheet 参数喂进这条路，属于模型可控输入。现有测试只覆盖了 `file_dir(\"../../etc\")`（tests/test_agent_files.py:684-694 走的是 meta.json 扫描分支，本身安全），`load_table` 的越权路径零覆盖。违反接口冻结清单 §4「仅允许 data/agent/files/ 下的读取，拒绝路径穿越与符号链接」与契约 AGENT-05。",
+  "suggestion": "路径构造前先校验 slug：`if not re.fullmatch(r\"[a-z0-9_]{1,48}\", sheet_slug): raise ValueError(\"非法 sheet_slug\")`（与 `_sheet_slug` 产出规则一致）；再把 `tables_dir = (directory / \"tables\").resolve()` 与 `path.resolve()` 做 `is_relative_to(tables_dir)` 断言，双保险覆盖 `..` 与绝对路径。同步补 `test_load_table_rejects_traversal`：分别断言 `\"../../x\"`、`\"../meta\"`、绝对路径三种输入抛 ValueError/FileNotFoundError，且不产生任何读取。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T08:25:22.662Z"
+  },
+  "createdAt": "2026-11-13T08:01:49.910Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T08:25:22.662Z"
+    }
+  ]
+}

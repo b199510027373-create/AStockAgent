@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261119-001-r2",
+  "threadId": "rev-20261119-001",
+  "roundNo": 2,
+  "scope": "diff",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 2 轮（scope=diff，base=1ba2293 → head=eca6667）复核结论：第 1 轮 6 条问题全部有落地修复与证据，但本轮修复自身新引入 1 条 P1（iss-mwmvlhso-cd6199），因此仍 request_changes，openP0=0 / openP1=1。\n\n一、第 1 轮 6 条逐条复核（均已修复，接受关闭）\n1. iss-mwmtsmue-f7a49c（P1 审批审计未接线）→ 已修：app.py:28 import DEFAULT_DB_PATH as AGENT_DB_PATH，app.py:481-487 把 db_path=AGENT_DB_PATH 传入 build_agent_chat_tab；astock/agent/chat.py 新增 db_path property（chat.py:677-680）并透传到 AgentRuntime(db_path=...)，agent_runs/agent_steps 真正落库。证据：tests/test_agent_chat.py test_run_and_step_records_are_persisted（sqlite 直查 agent_runs 1 行、agent_steps == len(steps)+1 且末行 kind=final）、test_db_path_reaches_controller，加真机 agent_runs=9 / agent_steps=27。\n2. iss-mwmtsmv4-4f6d7f（P1 AC2–AC5 无真机证据）→ 已修：.smoke-agent-ui/shots/1-figure-iframe.png … 8-citation-1280.png 共 8 张截图 + smoke_drive.py / degraded_drive.py / visual_drive.py / cdp.py 等驱动脚本已随分支提交；handoff ho-20261119-011/012/013 记录 CDP 断言（AC1 附件 2/2、AC2 20 帧+3 步、AC3 三个 iframe srcdoc、AC4 点击 #cite-1、AC5 中断保留 121 字且可立刻再问、降级横幅+128 字回答）。CI run 44436480771 全绿（含 png-export），PR #32 未合并。\n3. iss-mwmtt39d-d8e449（P2 每帧重算引用）→ 已修：agent_chat_ui.py 内嵌 citations_block() 按 (label, page, sheet, file_id) 指纹缓存 + render_citations_html(memo=...)，只在变化时重算；证据 test_citation_html_rendered_once_per_round、test_memo_reuses_resolved_details。\n4. iss-mwmtt3ab-775ed6（P2 建模型/检索阶段中断失效 + 死 cancel 参数）→ 已修：worker 直接传 cancel_event=self._cancelled，删除局部 threading.Event，ask() 在 _ensure_runtime 后新增前置检查（chat.py:752-756），证据 test_interrupt_before_runtime_starts_skips_run。但该修复的「无条件 runtime.request_interrupt()」引入了本轮新 P1，见下。\n5. iss-mwmtta2g-c95a18（P2 工作表级匹配却宣称行/单元格定位）→ 已修：resolve_citation 记录 matched_scope，工作表级命中且引用带行/单元格时 note 改为「工作表级定位：未精确到第 N 行/单元格 X，先展示该工作表首段内容。」；证据 test_sheet_level_match_with_cell_does_not_claim_cell_precision。\n6. iss-mwmtta3c-cfdaaa（P2 三处测试缺口）→ 已修：补 test_page_mismatch_falls_back_to_first_chunk、test_more_than_limit_truncates_with_hint（21 条 → 20 卡 +「还有 1 条引用未展示」）、test_busy_round_is_rejected_and_lock_released 等 10 例，目标测试 84 passed。\n\n二、本轮新问题（必须修）\n- iss-mwmvlhso-cd6199（P1，astock/agent/chat.py:700-708、752-756）：interrupt() 现在无条件把中断转发给缓存复用的 runtime，而 runtime._interrupt 只在 run() 的 finally（runtime.py:512）清理。于是在「run 已返回、回答仍在流式输出」或「建模型/新闻检索阶段」点「⏹」会让下一问在首个 _guard（runtime.py:645-647）直接判 INTERRUPTED：零步骤、文案「已中断」。修法：控制器用 self._running 事件标记 run 是否真在途（worker set/finally clear），仅 _running.is_set() 时调 request_interrupt()；不要改成 run() 入口 clear（tests/test_agent_runtime.py:215-229 已钉住 pre-run 语义）；并按 issue 里的用例补「run 已结束后 interrupt() → 下一问仍 COMPLETED」的回归测试。\n\n三、残存风险（不计问题，要求第 3 轮带一句话结论）\n去掉 stop.click 的 cancels 后，若某次工具/模型调用长时间不返回（runtime.py:266-267 明确无法抢占），respond() 的 queue_.get()（chat.py:775-776）无超时会一直阻塞，busy 锁直到该调用返回才释放，期间提问均为「上一轮仍在生成」。请在第 3 轮 handoff 里说明是否接受该取舍（httpx 客户端有 read timeout，属于有界阻塞）或改为 queue_.get(timeout=...) 轮询 + 可中断收尾。\n\n四、何时算完全解决\n开发在 PR #32 上按 iss-mwmvlhso-cd6199 的修法改 chat.py，补上「run 已结束中断不污染下一问」的回归用例并跑通目标测试 + 全量 + ruff/mypy，附一条真机 CDP 冒烟（连续两问之间点一次「⏹」，第二问仍返回带步骤的正常回答）；第 3 轮我只复核该条与残存风险说明，届时 openP0=0 且 openP1=0 即 approve 并标记完全解决。",
+  "startedAt": "2026-11-19T01:30:40.114Z",
+  "finishedAt": "2026-11-19T01:33:00.191Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 0,
+    "total": 1
+  }
+}

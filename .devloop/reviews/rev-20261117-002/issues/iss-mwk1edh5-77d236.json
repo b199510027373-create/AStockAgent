@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwk1edh5-77d236",
+  "threadId": "rev-20261117-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/tools/citations.py",
+  "lines": "178-190",
+  "title": "finalize_file_answer 只校验「有引用」，不校验引用是否来自本次工具结果",
+  "evidence": "citations.py:184-186 `if has_file_citation(text): return text` —— 只要 text 里出现形如《任意名》第 N 页 / 工作表「名」的片段就直接放行，不与传入的 citations 白名单比对。因此模型凭记忆或提示注入写出「《虚构.pdf》第 9 页」，只要 citations 非空就会被原样保留，防幻觉目标没有达成；tests/test_agent_tools.py:322-323 固化了这条宽松行为（用的恰好是真实引用，掩盖了缺口）。与 AGENT-04「不得凭记忆补写文件内容」的意图不符——当前只保证「有引用」，不保证「引用来自本次检索」。",
+  "suggestion": "在 finalize_file_answer 里用 `_CITATION_RE` 抽出 text 中全部引用，逐一与 citations 白名单比对（对空白/全角标点做规范化）；任一条不在白名单即视为无据回答，丢弃 text 并仅用 citations 重建「引用：…」（或返回 CITATION_NOT_FOUND）。同时在 tests/test_agent_tools.py:313-324 增加一例：text 带「《虚构.pdf》第 9 页」而 citations 只有真实引用 → 不得原样返回。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:15:59.110Z"
+  },
+  "createdAt": "2026-11-17T01:51:58.649Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:15:59.110Z"
+    }
+  ]
+}

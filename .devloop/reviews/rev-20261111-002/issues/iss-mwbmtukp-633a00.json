@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbmtukp-633a00",
+  "threadId": "rev-20261111-002",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "契约/证据一致性",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "377",
+  "title": "§6.4 声称「任意批次可用 JSON table 的前 candidate_n 行复算分位」，但落盘只保存 final_rows，复算必然对不上",
+  "evidence": "分位在候选池内计算：`astock/recommend.py:284-287`（`pool = sorted(rows, ...)[:candidate_n]`，在 pool 上 rank）。但落盘只写最终入选行：`astock/recommend.py:874-889` 调 `_save(final_rows, ...)`，`_save` 的 table 由 `result_rows` 构造（`recommend.py:583-601`），`final_rows = _pick_diverse(candidates, top_n=5, ...)`（`recommend.py:817` 附近），因此 JSON/CSV 只有 ≤5 行；backfill 同样只把 `selected = _pick_diverse(pool, top_n, ...)` 写进 table（`astock/backfill.py:106-118`），pool 是 15 行。按 §6.4 行 377 用「table 的前 candidate_n 行」复算时，实际只有 5 行，rank(pct)*100 结果（20/40/60/80/100）与库中 15 行池算出的值（如 6.7/13.3/…）不同；`tests/test_research_semantics.py:47-56` 只在内存里验证 `assign_percentiles`，没有任何用例从落盘 JSON 复算。`ledger.save_run` 也只写入 table 行（`astock/ledger.py:175-193`），所以 items.percentile 同样无法从 ledger 自证。",
+  "suggestion": "二选一并补测试：①保留候选池快照——在 payload 增加 `diagnostics.candidate_pool`（[{code, composite}]，长度=N）或 `params.candidate_n` + 池内综合分列表，并写一个用例：读回落盘 JSON、对 candidate_pool 跑 `pool_percentile`，逐行断言等于 table 中的 `技术分位`；②若不愿膨胀 payload，就把 §6.4「复算」行改为「分位不可由 table 复算；复算需候选池快照（未持久化）」，并在 ADR-010 实现回写里同步，避免把不可执行的审计步骤写成冻结契约。修复责任：开发（本分支 plan-20261103-006），在 P1 关闭前不得视为完全解决。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T05:07:44.205Z"
+  },
+  "createdAt": "2026-11-11T04:41:57.001Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T05:07:44.205Z"
+    }
+  ]
+}

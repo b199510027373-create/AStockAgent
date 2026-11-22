@@ -1,0 +1,130 @@
+{
+  "id": "ho-20261121-016",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261110-002",
+  "threadId": null,
+  "sessionId": "",
+  "title": "plan-20261110-002 · P2 AppBannerWiringTests skip 降级修复",
+  "summary": "修复评审 rev-20261110-002 第 2 轮 P2 iss-mwaf2gr0：AppBannerWiringTests.setUpClass 原先使用 except Exception 把 app 导入/构建异常全部降级为 SkipTest，导致唯一验证真实 app load→banner 接线的用例会静默 skip、CI 仍绿。核对 HEAD（4d41512）确认评审虽标 fixed 但代码未修，tests/test_alpha_banner.py:284-287 仍是宽泛 except。\n\n本次仅改 tests/test_alpha_banner.py（+77/−5，app.py 无 diff）：抽出 import_app_for_wiring_test(importer=importlib.import_module)，只对已声明可选依赖 APP_OPTIONAL_DEPENDENCIES=frozenset({\"gradio\"}) 缺失抛 SkipTest，其余异常（app/astock.* 模块缺失、ImportError、Blocks 构建异常）原样抛出；setUpClass 只调用该 helper。新增 AppBannerWiringGuardTests（5 用例/2 subtests）锁定该边界，含 setUpClass 自身不再吞异常的用例。\n\n变异测试证明可观测性：注释 app.py 的 bind_banner_refresh 接线 → AppBannerWiringTests FAILED（AssertionError: 'alpha-banner' not found in set()）；改 app.py 引入不存在的 import → ERROR（ImportError）；两次均非 skip 且已还原。本地目标测试 22 passed、全量 860 passed、mypy/ruff 全绿；PR #45 CI（run 44890767554）test 与 png-export 均 pass。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "AppBannerWiringTests.setUpClass 不得用 except Exception 把所有 app 导入/构建异常降级为 SkipTest；import 链断裂或 app.py 接线被删时必须失败而非静默 skip。",
+      "source": "plan-20261110-002 描述 / 评审 rev-20261110-002 P2 iss-mwaf2gr0 (tests/test_alpha_banner.py:237-245)"
+    },
+    {
+      "id": "REQ-2",
+      "text": "只对可选依赖缺失跳过（ModuleNotFoundError 且模块在显式声明的可选依赖白名单内，或 skipUnless 显式声明），其余异常直接抛出。",
+      "source": "plan-20261110-002 描述「建议」"
+    },
+    {
+      "id": "REQ-3",
+      "text": "验证：临时删除 app.py 的 bind_banner_refresh 接线时该测试 fail。",
+      "source": "plan-20261110-002 描述「验证」"
+    },
+    {
+      "id": "REQ-4",
+      "text": "改行为必须新增/更新测试并记录真实命令/结果；至少运行目标测试、相关全量测试和类型检查。",
+      "source": "会话硬规则 / DevLoop 开发协议"
+    },
+    {
+      "id": "REQ-5",
+      "text": "测试失败或证据缺失不得标 in_review；结束前写 developer handoff（需求对标/改动/测试/权限/交付状态）。",
+      "source": "会话硬规则 / DevLoop 开发协议"
+    },
+    {
+      "id": "REQ-6",
+      "text": "评审把问题标为 fixed 不等于代码已修：必须核对 HEAD 实际代码后再决定改动（本次发现 4d41512 恰恰引入了宽泛 except）。",
+      "source": "开发者核对结论（git show 4d41512 / HEAD tests/test_alpha_banner.py:284-287）"
+    }
+  ],
+  "changes": [
+    {
+      "path": "tests/test_alpha_banner.py",
+      "summary": "+77/−5：新增 APP_OPTIONAL_DEPENDENCIES=frozenset({\"gradio\"}) 与 import_app_for_wiring_test（只对可选依赖缺失 SkipTest，其余异常 raise）；AppBannerWiringTests.setUpClass 改为 cls.app_module = import_app_for_wiring_test()；新增 AppBannerWiringGuardTests 5 用例/2 subtests（gradio 缺失 skip、app 缺失 fail、astock.* 缺失 fail、ImportError/RuntimeError fail、setUpClass 不吞异常）；顶层补 import importlib、sys。",
+      "commit": "3abe12b"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_alpha_banner.py -q -p no:cacheprovider",
+      "result": "22 passed, 2 subtests passed (11.64s)",
+      "passed": true,
+      "evidence": "含新增 AppBannerWiringGuardTests 5 用例与 AppBannerWiringTests 真实 app load→banner 用例"
+    },
+    {
+      "command": "pytest tests -q -m \"not png\" -p no:cacheprovider",
+      "result": "860 passed, 3 skipped, 5 deselected, 20 subtests passed (69.88s)",
+      "passed": true,
+      "evidence": "全量非 PNG 套件；基线 855 passed + 本次新增 5 用例 = 860"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "无类型回归；app.py 未改"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "与 CI 相同的 ruff.toml 配置（app.py 被 exclude；直接带 app.py 会报 117 条历史假阳性）。修正了新增用例的 2 条 SIM117（合并嵌套 with）"
+    },
+    {
+      "command": "变异1：注释 app.py:505 bind_banner_refresh(app, recommend_banner) → pytest tests/test_alpha_banner.py::AppBannerWiringTests",
+      "result": "FAILED (AssertionError: 'alpha-banner' not found in set())，非 skip；已还原",
+      "passed": true,
+      "evidence": "符合 REQ-3：接线删除必须 fail"
+    },
+    {
+      "command": "变异2：app.py:19 引入不存在的 _probe_missing_name → pytest tests/test_alpha_banner.py::AppBannerWiringTests",
+      "result": "ERROR (ImportError: cannot import name '_probe_missing_name')，非 skip；已还原，git status app.py 干净",
+      "passed": true,
+      "evidence": "符合 REQ-1：import 链断裂必须暴露"
+    },
+    {
+      "command": "gh pr checks 45 --watch（run 44890767554 @ 3abe12b）",
+      "result": "test pass 1m43s；png-export pass 1m21s",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/44890767554"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "sandbox: danger-full-access",
+      "reason": "本机 .tmp-tests 曾因 Windows ACL（Everyone Deny DeleteSubdirectoriesAndFiles）导致 tempfile mkdtemp 目录无法再建子目录（PermissionError WinError 5），全量套件基线 1 failed；改用 danger-full-access 后通过。属于环境限制，与代码无关，已在测试记录中说明。",
+      "status": "granted"
+    },
+    {
+      "name": "git push origin test/plan-20261110-002-app-banner-skip",
+      "reason": "gh auth status 显示 b199510027373-create 具备 repo scope",
+      "status": "granted"
+    },
+    {
+      "name": "PR #45 合并",
+      "reason": "等评审通过后合并入 main；本 handoff 不自行合并",
+      "status": "needed"
+    }
+  ],
+  "delivery": {
+    "branch": "test/plan-20261110-002-app-banner-skip",
+    "commit": "3abe12b",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/45",
+    "ci": "run 44890767554: test pass (1m43s), png-export pass (1m21s)",
+    "merge": "pending",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "1) 评审验收 PR #45：重点看 import_app_for_wiring_test 的白名单（仅 gradio 可选）是否认可、AppBannerWiringGuardTests 是否覆盖充分；2) 合并到 main；3) 合并后把 plan-20261110-002 置 done（currently in_review, progress 100）；4) 评审可在 rev-20261110-002 第 3 轮或新 thread 复核 iss-mwaf2gr0。",
+  "createdAt": "2026-11-21T09:43:36.816Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-016.md"
+}

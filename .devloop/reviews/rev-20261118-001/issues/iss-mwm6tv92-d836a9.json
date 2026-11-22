@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwm6tv92-d836a9",
+  "threadId": "rev-20261118-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "consistency",
+  "file": "astock/agent/runtime.py",
+  "lines": "746-756",
+  "title": "_summarize_result 仍把完整图表 HTML 拼进部分答案，与 MAX_FIGURE_CHARS 的裁剪意图不一致",
+  "evidence": "新增的 MAX_FIGURE_CHARS=2000（runtime.py:56）与 _format_observation 的句柄化（672-687）只作用于模型 observation；同文件 _summarize_result 的兜底分支仍是 `if result.figure: return f\"图表 {result.figure}\"`（755-756），被 _partial_answer 拼进「已获得的部分结果」（728）。chart_render 默认 include_plotlyjs=\"inline\"（chart_render.py:1368），单图 HTML 可达数 MB，一旦有工具只返回 figure 而 text/table 为空，就会把整段 HTML 塞进部分答案。market 工具目前都带 text，所以当前不触发，但同一文件里同一意图存在两套写法，后续新增图表类工具很容易踩到。",
+  "suggestion": "让 _summarize_result 复用 _format_observation 的句柄逻辑：figure 长度超过 MAX_FIGURE_CHARS 时输出「图表（artifact_id=…，N 字符，完整 HTML 已落 agent_artifacts）」，不超过时保持原样。补一个直接调用 _summarize_result 的单测（构造 figure=5000 字符的 ToolResult），断言返回串不含 HTML 标签且包含 artifact_id。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T15:38:05.055Z"
+  },
+  "createdAt": "2026-11-18T13:59:31.958Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T15:38:05.055Z"
+    }
+  ]
+}

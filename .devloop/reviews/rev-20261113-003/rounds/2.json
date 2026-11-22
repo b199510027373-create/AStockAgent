@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261113-003-r2",
+  "threadId": "rev-20261113-003",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 2 轮复核确认上一轮 8 条均已实质修复：adj 真实区分 qfq/hfq/none、时点在 transforms 后重算且快照保留最新 bar、非法日期结构化报错、latest_bar_time 取 max 并排除午休、ensure_run running 不写 finished_at、测试拆分、schema 封闭 item。但 2026-11-14 ADR-016 Q4=B 推翻了上一轮“补记别名”的处置：代码/冻结清单/schema/测试仍接受 panes/style/raw，与 005 验收“别名已删除”冲突（iss-mwf84pz8-07ebf8，P1）；schema data.ref 的 oneOf 因 stock/index pattern 重叠会拒绝 000001.SH、399001.SZ 等合法指数（iss-mwf84sjv-42aad0，P1）；artifact 源过滤为空时仍回退旧 data_as_of/data_time（iss-mwf84uq4-1153df，P2）。\n修复责任：plan-20261107-005 开发负责 schema ref 与空态回退；别名按 Q4=B 要么在本分支删除，要么由架构把 005 验收改为“待 plan-20261114-002”，并同步删除冻结清单 §3.2.1 和锁定别名的测试。完全解决条件：下一轮 openP0=0、openP1=0，新增 jsonschema 指数用例与空态回归测试，目标 pytest 113 passed、全量、mypy、architecture gate、CI 均通过；在此之前不可 approve。",
+  "startedAt": "2026-11-13T16:59:19.046Z",
+  "finishedAt": "2026-11-13T17:01:44.744Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 1,
+    "total": 3
+  }
+}

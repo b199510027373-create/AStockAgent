@@ -1,0 +1,21 @@
+{
+  "id": "rev-20261113-001",
+  "title": "评审：调度状态机迁移 jobs 表 + 心跳告警",
+  "planItemId": "plan-20261103-007",
+  "sourceDevSessionId": "session-680f1ea7-de6d-4144-b50d-61c8204ae454",
+  "branch": "feat/plan-20261103-007-scheduler-ledger",
+  "base": "main",
+  "files": [
+    "README.md",
+    "astock/jobs.py",
+    "astock/ledger.py",
+    "astock/scheduler.py",
+    "tests/test_hardening.py",
+    "tests/test_scheduler_ledger.py",
+    "tools/build_product_doc.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-12T16:57:32.750Z",
+  "updatedAt": "2026-11-21T08:32:19.866Z",
+  "reviewSessionId": "session-1ca27ade-b718-4b80-afd9-ad1b76960e6f"
+}

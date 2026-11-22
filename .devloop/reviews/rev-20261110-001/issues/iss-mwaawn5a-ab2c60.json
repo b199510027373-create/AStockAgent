@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwaawn5a-ab2c60",
+  "threadId": "rev-20261110-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "diagnostics",
+  "file": "astock/use_cases.py",
+  "lines": "443-446",
+  "title": "跟踪 stale 的诊断把\"缺沪深300 基准\"说成\"还没有 T+1 收盘数据\"",
+  "evidence": "_usable_t1 只统计 `detail[\"超额T+1\"]` 非空（use_cases.py:443-446），所以\"个股 T+1 收益已有、但沪深300 基准缺失\"会被判成 usable==0 → status=\"stale\"，message 固定写成\"已有 N 条推荐记录，但还没有 T+1 收盘数据\"（503-508 行）。tests/test_use_cases.py:364-381 的 fixture 正是这种情况：`self._detail(excess=float(\"nan\"))` 里 \"T+1\"=1.2，测试却断言消息是\"还没有 T+1 收盘数据\"。即使用例层保留域层 track.py:823/837-838 的 usable 口径，给用户看的这句话在有 T+1、只缺基准时是错的，而验收标准 4 要求的正是\"stale 时有明确可读诊断\"。",
+  "suggestion": "保持 stale 判定口径不变，只把 message 按原因分开：若 \"T+1\" 列有非空值而 \"超额T+1\" 全为空，写\"已有 T+1 个股收益，但缺沪深300 基准数据，超额统计暂不可用；等基准数据补齐后再刷新\"，并记 diagnostics[\"bench_missing\"]=True；两者都为空时才保留现有措辞。补一条 T+1 有值、超额 NaN 的用例断言该措辞（可直接改造现有 test_no_forward_return_is_stale）。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-10T06:47:51.193Z"
+  },
+  "createdAt": "2026-11-10T06:20:25.774Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-10T06:47:51.193Z"
+    }
+  ]
+}

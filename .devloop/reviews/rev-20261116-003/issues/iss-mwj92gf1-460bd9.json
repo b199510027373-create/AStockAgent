@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwj92gf1-460bd9",
+  "threadId": "rev-20261116-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "docs",
+  "file": "docs/AStockAgent_PIT_data_interfaces.md",
+  "lines": "230",
+  "title": "PIT 接口文档称 edges.parquet「可逐股回映」，但该文件只有行业对级 200 行、无 code 列",
+  "evidence": "docs/AStockAgent_PIT_data_interfaces.md:230 新增的句子称「`cache/pit/sw_crosswalk_edges.parquet` 可逐股回映」。但该 parquet 是 edge_table（astock/sw_crosswalk.py:151-173）的输出，列只有 _EDGE_COLUMNS，即 sw2014_l1/sw2021_l1/n_stocks/share_of_sw2014/share_of_sw2021/is_structural（与 docs/sw2014_sw2021_crosswalk.csv 的表头一致），没有 code 列，也不含 4,194 只股票的逐股行；逐股回映必须再用 PIT 快照里的行业列做一次 join（doc §5.3:132 说的也是「用股票级 crosswalk 重建旧行业」）。按该句字面把它当逐股映射表用，会得到 200 行行业对而不是股票映射。同一句里「28→31 个 L1，24 个一对一、4 个一对多、2 个多对一」也把旧侧/新侧计数混排（24+4=28 是旧侧，2 个多对一是新侧），与总数 28/31 对不上。",
+  "suggestion": "把「`cache/pit/sw_crosswalk_edges.parquet` 可逐股回映」改成「`sw_crosswalk_edges.parquet` 给出 200 条行业对映射及其两侧占比，逐股回映需与 PIT 快照的行业列 join」；若要真的提供逐股映射，可让模块额外落一份 code/sw2014_l1/sw2021_l1 的 parquet 并在该处引用。计数句改为「旧侧 24 个一对一（含 4 个改名）+ 4 个一对多 = 28；新侧 28 个回映唯一 + 2 个多对一 + 1 个无旧来源 = 31」。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T17:43:29.672Z"
+  },
+  "createdAt": "2026-11-16T12:38:53.341Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T17:43:29.672Z"
+    }
+  ]
+}

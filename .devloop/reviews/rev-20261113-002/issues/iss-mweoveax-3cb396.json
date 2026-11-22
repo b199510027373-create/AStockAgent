@@ -1,0 +1,33 @@
+{
+  "id": "iss-mweoveax-3cb396",
+  "threadId": "rev-20261113-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "traceability",
+  "file": "tests/test_agent_files.py",
+  "lines": "162-174",
+  "title": "ADR-015 的验收锚点测试名不存在、字段数写 13（实际 15）、Excel bbox 语义未入契约，文档与实现漂移",
+  "evidence": "ADR-015 与《接口冻结清单》§4、实现三处不同步：1) 验收锚点写 `tests/test_agent_files.py::test_layout_matches_frozen_spec` 与 `::test_scan_like_pdf_is_flagged`，仓库里没有这两个测试（布局断言是 tests/test_agent_files.py:162-174 的 `_assert_layout` helper，扫描件用例是 585-599 的 `test_pdf_without_text_layer_is_suspected_scan`），按 ADR 锚点跑门禁会 collected 0 个用例；2) ADR-015 条件与 summary 写\"meta.json 13 个必填字段\"，而 §4 字段表与实现 `META_FIELDS`（astock/agent/files.py:116-135）都是 15 个，测试 `list(meta) == list(F.META_FIELDS)`（:171）也只锁 15 个；3) Excel 行 chunk 的 bbox 是行/列号区间（files.py:782-784、:807），而 §4 只写 `\"bbox\": [x0,y0,x1,y1]|null`，PDF 表格仍写页面坐标（tests/test_agent_files.py:553 断言 `[10.0, 20.0, 110.0, 60.0]`），该重载只写在 files.py 模块 docstring:31-35，契约文档没有记录。行为覆盖本身没问题，问题是\"文档里的测试名/字段数/字段语义\"与可执行实现不一致，下一轮或 plan-004 会按错的口径检查。",
+  "suggestion": "三处一起订正，由架构在 plan-20261107-004 开工前完成：1) 把 `_assert_layout` 的冻结布局断言提成具名 `test_layout_matches_frozen_spec`（用 pytest.mark.parametrize 覆盖 txt/csv/xlsx/docx/pdf），或把 ADR-015 锚点改成实际测试名；2) 把扫描件用例改名为 `test_scan_like_pdf_is_flagged`，或订正 ADR 锚点；3) ADR-015 的\"13 个必填字段\"改为 15，并在 §4 extracted.jsonl 字段表下补一句\"page 非空时 bbox 为页面坐标 [x0,y0,x1,y1]；sheet 非空时 bbox=[row_start,col_start,row_end,col_end]，1 基闭区间\"，与 files.py docstring 逐字一致。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T08:25:44.203Z"
+  },
+  "createdAt": "2026-11-13T08:02:26.985Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T08:25:44.203Z"
+    }
+  ]
+}

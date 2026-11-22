@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfa2o0p-6ff259",
+  "threadId": "rev-20261113-003",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "correctness/time-point",
+  "file": "astock/agent/chart_render.py",
+  "lines": "576-593,1195-1204",
+  "title": "空态回退仍被标记 fixed：transforms 过滤为空后 _time_points 仍从 attrs 取旧 data_as_of，且没有回归测试",
+  "evidence": "`devloop_review get` 把 `iss-mwf84uq4-1153df` 标成 status=fixed，但 `_time_points` 的空态分支没有变：`if not frame.empty` 才重算（chart_render.py:576-584）；transformed 为空时直接走 `snapshot_as_of = frame.attrs.get(\"data_as_of\")`（:585-588），而 `apply_transforms` 会把输入 frame 的 attrs 原样复制（:317-320），artifact 回放时 attrs 就带着旧的 `data_as_of`。因此 `limit=0`、过滤后零行等空结果仍会返回旧时点，图注显示“数据截止 2024-01-04”而快照为空；`render` 随后用这个 as_of 生成 caption/meta（:1195-1204）。现有测试只覆盖显式 `data_as_of=\"\"` 的 unknown（tests/test_agent_chart_render.py:578-580），没有覆盖 transforms 后为空的路径。",
+  "suggestion": "在 `_time_points` 里把空态置于 attrs 回退之前：`if frame.empty: warnings.append(\"数据为空，时点未知…\"); return \"\", \"\"`；attrs 兜底只用于“非空但缺时间列”的情况。若确实需要保留 artifact 旧时点，必须同时保留旧快照并在 meta 标记 `time_point_scope=\"artifact\"`，不能把旧时点配空数据。补测试：用 `limit=0` 或过滤后零行的 spec（inline 与 artifact 源各一条），断言 `rendered.data_as_of == \"\"`、`meta[\"data\"][\"rows\"] == []`、caption 含“时点未知”，并断言 `time_point_scope == \"unknown\"`。",
+  "confidence": 0.94,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T00:38:39.081Z"
+  },
+  "createdAt": "2026-11-13T17:55:58.105Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T00:38:39.081Z"
+    }
+  ]
+}

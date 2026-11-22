@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwf84sjv-42aad0",
+  "threadId": "rev-20261113-003",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "contract",
+  "file": "astock/agent/chart_spec.py",
+  "lines": "949-956",
+  "title": "JSON Schema 的 data.ref 使用 oneOf，合法指数代码会同时命中 stock/index 两个分支而被拒绝",
+  "evidence": "STOCK_REF_RE=^[0-9]{6}\\.(SH|SZ|BJ)$（:123）匹配所有六位代码，INDEX_REF_RE=^000[0-9]{3}\\.SH$|^399[0-9]{3}\\.SZ$（:124）是它的子集；因此合法指数代码如 000001.SH、399001.SZ 会同时匹配两个 pattern。JSON Schema 的 oneOf 要求恰好命中一个分支（:949-956），实际会拒绝这些合法 ref；而运行时校验在 :480 用 `STOCK_REF_RE or INDEX_REF_RE`，会接受。现有测试 tests/test_agent_chart_spec.py:405-409 只验证运行时接受指数，:572-583 只检查 oneOf 有三个 pattern，没有真正用 jsonschema 校验指数 ref，所以没暴露该冲突。",
+  "suggestion": "把 data.ref 的 oneOf 改为 anyOf（或从 STOCK_REF_RE 排除 000xxx.SH / 399xxx.SZ 指数前缀，保留互斥），并在 tests/test_agent_chart_spec.py 增加真正的 jsonschema.validate 用例：000001.SH、399001.SZ 必须通过，art_ 与非法代码按预期失败。确保 schema 与 validate_chart_spec 的接受集合一致。",
+  "confidence": 0.96,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T17:53:36.137Z"
+  },
+  "createdAt": "2026-11-13T17:01:38.059Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T17:53:36.137Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwowqrs8-a6c895",
+  "threadId": "rev-20261120-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "maintainability",
+  "file": "tests/smoke/agent_ui/smoke_drive.py",
+  "lines": "335",
+  "title": "smoke_drive 的 --timeout 解析后从未使用，README 的「驱动超时（默认 300s）」对手动两步不成立",
+  "evidence": "`parser.add_argument(\"--timeout\", type=float, default=300.0, help=\"单次运行总超时（秒）\")`（smoke_drive.py:335），但全文没有 `args.timeout` 的任何引用；实际等待都是硬编码：60（:150）、90（:157）、180（:172）、60（:205）、15（:233）、120（:260）、60（:263）、180（:282），最坏串起来约 765s。README.md:63 参数表写「`--port` / `--timeout` | 夹具端口 / 驱动超时（默认 300s）」，这条对 run_smoke.py 成立（run_smoke.py:372 `timeout=args.timeout + 120`），但 README.md:71-74 的手动两步是直接调 smoke_drive，此时 --timeout 被静默忽略，manual 路径没有任何总时限。另外 run_smoke.py:354-355 仍把这个死参数透传给子进程，容易让人误以为它在生效。",
+  "suggestion": "二选一：(a) 删掉 smoke_drive 的 --timeout 及 run_smoke.py:354-355 的透传，README.md:63 只对 run_smoke.py 保留 `--timeout` 描述；(b) 真正实现——在 main 里 `deadline = started + args.timeout`，把每个 `_wait_text/_wait_any/cdp.wait_for` 的 timeout 改成 `min(phase_timeout, deadline - time.monotonic())`，并在超时时抛 `AssertionError(\"driver timeout\")` 让 report.json 记下阶段。同时 README 明确写清「run_smoke 总超时 = --timeout + 120s 兜底；smoke_drive 单步超时可另由 --timeout 限定」。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-20T13:01:24.821Z"
+  },
+  "createdAt": "2026-11-20T11:40:29.864Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-20T13:01:24.821Z"
+    }
+  ]
+}

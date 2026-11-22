@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261113-002",
+  "title": "评审：文件导入解析：PDF / Excel / CSV / DOCX",
+  "planItemId": "plan-20261107-003",
+  "sourceDevSessionId": "session-3100e9bd-3b63-4022-9649-c18a3f5278f8",
+  "branch": "feat/agent-file-ingest",
+  "base": "main",
+  "files": [
+    "astock/agent/files.py",
+    "requirements.txt",
+    "tests/fixtures/build_legacy_xls.py",
+    "tests/fixtures/legacy_two_sheets.xls",
+    "tests/test_agent_files.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-13T07:59:11.025Z",
+  "updatedAt": "2026-11-13T08:37:41.158Z",
+  "reviewSessionId": "session-f18cd9f5-0a4c-4c6b-a1ee-68ae4a6a30ae"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwiwbdhs-638fac",
+  "threadId": "rev-20261116-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/data.py",
+  "lines": "715-726,827-829",
+  "title": "分钟线盘中：当日 adj_factor 未发布时 load_minute 必然抛 DataContractError，实时 K 线不可用",
+  "evidence": "load_minute 在复权前固定取\"截至今天\"的因子表：data.py:828 `factors = load_adj_factors(code, end=_fmt(_today()), client=client)`，随后 data.py:829 调 _apply_minute_adj；而 _apply_minute_adj 对任何缺因子的交易日直接硬失败：data.py:715-726 `merged = df.merge(fct, on=\"trade_date\", how=\"left\")` → `if missing.any(): raise DataContractError(\"AdjFactor\", f\"{ts_code or '?'} 分钟线以下交易日缺少 adj_factor（{adj}）：{dates}；禁止用 1.0 填充或回退 qfq\", invalid=[\"adj_factor\"])`。同时 data.py:803-811 会把当日 rt_min bar 并入（`df = pd.concat([df, rt], ...)`），所以盘中当日 bar 一定在 df 里。rt_min/stk_mins 的当日 bar 在 09:30-15:00 及收盘后因子发布前是存在的，但 Tushare adj_factor 当日因子要收盘后才更新，于是 merged 里当日 trade_date 恒为 NaN → 每次盘中刷新都抛 DataContractError。调用方默认 qfq 且无降级：astock/ui.py:151、astock/ui.py:193 以默认 adj=\"qfq\" 调 load_minute，异常最终落到 ui.py:217 的 `except Exception` 变成错误提示，K 线分钟档（含\"实时\"档）在交易时段不可用。本次改动删除了 main 上的 `merged[\"adj_factor\"] = merged[\"adj_factor\"].ffill().bfill()`，等于把原来的兜底换成了硬失败；handoff ho-20261116-014 把\"分钟 hfq/因子缺失\"列为评审重点，但 ADR-008:30-33 只写了\"缺因子报错\"，没有对\"当日 bar 因子尚未发布\"这一必然场景给出决定。tests/test_data_adj_caliber.py:209-265 的分钟用例全部用已发布的完整因子表，没有任何\"当日 bar 存在但当日因子缺失\"的用例，所以 CI 全绿也覆盖不到这个路径。",
+  "suggestion": "请在下面两条里明确选一条并落到 ADR-008 D1 与测试，不要留成\"CI 绿但盘中必挂\"的灰色地带：(a) 允许\"仅当日 bar 缺因子\"这一例外——在 _apply_minute_adj 里判断缺失日期是否等于 _today() 且因子表 max(trade_date) < _today()，是则用因子表最后一行（最近已发布因子）对当日 bar 复权，并在 attrs 增加 factor_as_of=<最后因子日期> 与 partial=true（下游 plan-20261114-002 图注可据此标注），同时在 ADR-008:33 补一条\"盘中当日 bar 用最近已发布因子\"的显式例外；非当日缺因子仍硬失败。(b) 坚持只用已发布因子——则在 load_minute 里对\"仅当日缺因子\"给出可读降级（当日 bar 不进图或自动回退 adj=None 并提示\"盘中复权待收盘后可用\"），不要让 DataContractError 冒泡成通用错误。无论哪条，请在 tests/test_data_adj_caliber.py 增加用例：因子表末行=前一交易日、分钟 bar 含 _today() 的 trade_date，断言 (a) 不抛错且 attrs 标注 partial/factor_as_of，(b) 抛出可识别且信息指向\"待收盘后可用\"的错误。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T07:07:46.619Z"
+  },
+  "createdAt": "2026-11-16T06:41:54.448Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T07:07:46.619Z"
+    }
+  ]
+}

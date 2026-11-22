@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwma8thg-10656a",
+  "threadId": "rev-20261118-001",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/tools/market_tools.py",
+  "lines": "392-393,493-497,688-691",
+  "title": "长停牌在真实数据上仍不会标 suspended：_is_suspended 只认 vol=0 行，而停牌是「缺 bar」（iss-mwm6toxk 残留）",
+  "evidence": "1) astock/agent/tools/market_tools.py:392-393 `def _is_suspended(frame)` 只判「最新交易日全部 bar 的 vol/amount 都为 0」，493-497 据此把 freshness 置 suspended。2) 本仓库自己的停牌语义是「缺 bar」而不是「0 成交量行」：astock/track.py:688「成分股当日缺 bar（停牌）按上一收盘持有」；astock/recommend.py:704「停牌/长期无新 bar 的股票不参与打分」并用 723-731 的 open_days 缺口 >5 天判 stale。真实日线里停牌日通常根本没行，最后一根 bar 是停牌前最后一个成交日（vol>0）→ _is_suspended 返回 False。3) 于是 quote（688-691 现在 bars=QUOTE_LOOKBACK_BARS=60）遇到停牌三周的股票：不再报「无 day 行情数据」（iss-mwm6toxk 的症状消失了），但会走非交易时段分支给 eod、「最近交易日收盘数据，不是实时价」（533 附近 notes），盘中则给 delayed + 「延迟」；data_as_of 停在停牌前那天，回答里没有 ADR-018 C2 要求的「停牌/无成交」。4) 新增用例 tests/test_data_time_semantics.py:719-733（test_quote_handles_long_suspension）用的是 _daily_frame(suspended=(\"2023-12-15\",))，而 _daily_frame 在 51-76 行对 halted 日照样造一行、只把 vol/amount 置 0——这个 fixture 只覆盖「有 0 量行」的合成形态，没覆盖「停牌日无行」的真实形态，所以测试通过不代表验收第 10 条「停牌/无成交标的显式标注」在真实数据上成立。",
+  "suggestion": "在 load_series 判停牌时补上「缺 bar」判据：load_series 已经调用 deps.trade_cal（348-369），用最近一个已完成的交易日 open_day 与 data_as_of 比较，若 data_as_of 早于 open_day（缺口 ≥1 个交易日）也置 suspended=True，并把 note 写成可审计的形态，如「停牌/无成交：最后一根 bar 为 {data_as_of}，其后 {n} 个交易日无行情」；vol/amount 双 0 的判据保留（覆盖盘中 0 量 bar）。同时在 tests/test_data_time_semantics.py 补一条「停牌日缺行」的用例：日线 frame 只到 2023-12-15 且该行 vol=1000（真实形态），clock=2024-01-04 16:30，断言 freshness==\"suspended\"、notes/text 含「停牌」、data_as_of==\"2023-12-15\"；再补一条盘中（clock=10:00）同样缺行的用例，断言不会只报 delayed。改完后重跑 pytest tests/test_data_time_semantics.py 与全量 pytest、更新 links.test 与 PR #31，下一轮按此复核即可关闭。",
+  "confidence": 0.82,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-18T16:06:13.829Z"
+  },
+  "createdAt": "2026-11-18T15:35:08.356Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-18T16:06:13.829Z"
+    }
+  ]
+}

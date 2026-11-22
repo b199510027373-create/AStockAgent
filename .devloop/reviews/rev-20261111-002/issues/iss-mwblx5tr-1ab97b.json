@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwblx5tr-1ab97b",
+  "threadId": "rev-20261111-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "ux",
+  "file": "app.py",
+  "lines": "341-346",
+  "title": "「技术面」值自带前缀，拼进句子后出现「技术面技术面强」",
+  "evidence": "astock/contracts.py:51 `RESEARCH_ACTIONS = (\"技术面强\", \"技术面中性\", \"技术面弱\")`，值本身已含「技术面」；app.py:345 `f\"技术面{normalize_action(row.get('技术面') or row.get('建议'))}：\"` 对新批次会渲染成「技术面技术面强：…」，旧批次（建议=关注）同样如此。astock/recommend.py:471 `f\"- **技术面**：{action}；{pct_text}；…\"` 也会输出「**技术面**：技术面强」。同一问题在表格里表现为表头「技术面」+ 单元格「技术面强」重复。现有测试只做词表/字段断言（tests/test_research_semantics.py 的 ReportMarkdownTests 断言包含「技术面强」），没有覆盖 app.py 上下文行，所以未暴露。",
+  "suggestion": "开发在 astock/recommend.py 增加一个句内短标签函数（例如 `action_short(action) -> \"强\"/\"中性\"/\"弱\"`，内部 `normalize_action(action).removeprefix(\"技术面\")`），app.py:345 与 recommend.py:471 改用它（「技术面强」→「技术面：强」/「**技术面**：强」），表格单元格保留完整短语；补一条 `tests/test_research_semantics.py::test_latest_recommendation_context_has_no_duplicated_prefix`，用伪 latest.json（新列与旧「建议」各一例）断言输出不含「技术面技术面」。完全解决标准：两处渲染不再出现重复前缀且有测试锁定。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:32:16.054Z"
+  },
+  "createdAt": "2026-11-11T04:16:31.935Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:32:16.054Z"
+    }
+  ]
+}

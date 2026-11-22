@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261111-003-r2",
+  "threadId": "rev-20261111-003",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "第 2 轮：全量代码",
+  "status": "completed",
+  "verdict": "comment",
+  "summary": "第 2 轮复核 ade4e43（5d17184..ade4e43），逐条核验第 1 轮 3 条问题：代码层均已修复，测试覆盖充分，未发现新的 P0/P1/P2。\n\n1) P1 iss-mwbp12uh-d09875（报告/生成摘要丢失）：astock/ledger.py:28-33 runs 增 report_md/status_line，:98-115 _migrate 旧库逐列补列，:162-236 save_run 写入（:190-191）；astock/recommend.py:569-583 _save 增参，:620-621 写入 JSON，:877-918 生成前计算 report/status 并传入；astock/use_cases.py:387-388 从台账读回 report_md/status_line，:246-260 batch_md 增「生成摘要（台账记录）」，:287-290 仅对无 report 的旧批次回退 6 行摘要。tests/test_core_paths.py:98-117 断言报告含「## 今日候选」「## 风险提示」、JSON/ledger 的 report_md/status_line 一致；tests/test_use_cases.py:179-190 断言台账详细报告与生成摘要。\n2) P2 iss-mwbp1809-bdee9a（少 3 列）：astock/ledger.py:43-48 items 增 close/ret20/rsi，save_run :211-214 写入；astock/use_cases.py RECOMMEND_COLUMNS 恢复 13 列，_ledger_view :377-379 映射；tests/test_core_paths.py:93-94,115-117 断言三列与 close 值。\n3) P2 iss-mwbp1a4j-79492d（now docstring）：astock/use_cases.py:520-521 改为 now 仅历史读取、生成路径以台账 diagnostics 为准；历史文案 :635-638 改为「已显示最近 N 个批次（上限 limit）」，tests/test_use_cases.py:530-535 同步；tests/test_research_semantics.py 的 test_old_database_gains_new_columns 覆盖旧库补列。\n\n测试证据：开发 handoff ho-20261111-026 记录目标测试 108 passed、全量 305 passed/1 skipped、mypy 30 files；未做浏览器 smoke（合入后按 handoff 执行）。\n\n未 approve 的原因不是代码，而是评审台账未闭环：iss-mwbp12uh-d09875（P1）、iss-mwbp1809-bdee9a（P2）、iss-mwbp1a4j-79492d（P2）仍为 open、feedback=null；ho-20261111-026 的 review.issues 为空（开发未提交逐条 feedback）。按硬规则 openP1 必须为 0 才能 approve，当前 openP1=1，此时 approve 会被判 resolved=false。当前评审工具未提供 reviewer 侧修改 issue feedback 的动作，无法代开发关闭。\n\n本轮结论：verdict=comment，不请求代码改动。由 plan-20261103-003 开发者在评审线程逐条提交 feedback（status=fixed，evidence=ade4e43 + 上述文件/行/测试）；回填后跑一轮 targeted 复审，确认 openP0=0、openP1=0 时 approve；之后按 ho-20261111-026 建 PR/CI，合入后做浏览器 smoke（生成→历史列表→所选批次报告/证据/13 列→空台账）。完全解决判据：三条 feedback=fixed 且 targeted 轮 approve。",
+  "startedAt": "2026-11-11T05:55:54.717Z",
+  "finishedAt": "2026-11-11T06:01:06.851Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 0,
+    "total": 0
+  }
+}

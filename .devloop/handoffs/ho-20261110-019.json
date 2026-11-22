@@ -1,0 +1,218 @@
+{
+  "id": "ho-20261110-019",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261110-003",
+  "threadId": null,
+  "sessionId": "session-195d3959-8114-42c5-a38b-fd9665fdc7c7",
+  "title": "架构契约评审门禁交付：ADR 裁决 + 六接口冻结 + 18 条规则落点 + 治理附录",
+  "summary": "8 条 proposed ADR（002/010/013–018）全部裁决完成，无 deferred：ADR-002/013/014/016 accepted，ADR-010/015/017/018 accepted-with-conditions，条件分别挂 plan-20261103-006 与新建的 plan-20261110-004~007。已实现的 4 条（002/010/013/014）不重写代码，只对照实现补「实现回写」段，把 AgentModel 与 ChatModel 两层分工、ChatModel.complete 无 stream 形参、Permission 七标签取代原文 read/compute/write 三级、支持抽取质量自检等偏差固化为正式口径。产出《接口冻结清单》v1（ToolResult/ToolSpec、ChatModel.complete、ChartSpec v1、文件存储布局、agent_* 三表 DDL、data_as_of/data_time 六个接口逐字冻结）与《契约规则落点表》v1.1（18 条规则 test 10 / review 8 全覆盖 + RC-01~RC-08 评审清单），contract.json 升 v1.1 每条规则补「落点：」。ADR-012 追加治理附录：状态语义表（proposed 不得作为实现依据）、先行实现 7 天内追认、实现回写义务、接口冻结顺序、门禁、状态变更记录表。新增 tests/test_architecture_gate.py 防漂移门禁，目标测试 20 passed / 1 skipped，全量 259 passed，mypy 32 文件无问题，ruff 通过。评审提前于 11-12 截止完成，003/005 可按计划 11-15 开工。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "任务描述原文：「18 条 ADR 中 8 条仍是 proposed…11-11~11-12 限时 6h 做接口级评审，不做全面架构复审，不重写已通过评审的代码；结论直接更新 ADR 状态」，议程为已实现 4 条追认 + 015/016/018 预评审 + 017 安全边界与落点映射。",
+      "source": "plan-20261110-003 description"
+    },
+    {
+      "id": "REQ-2",
+      "text": "验收 1：8 条 proposed ADR 全部给出 accepted / accepted-with-conditions / deferred 结论，工作台不再出现「已实现但仍是 proposed」。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-3",
+      "text": "验收 2：001/002 实现与 ADR-013/014 的偏差写回 ADR「实现回写」章节，不重写已通过评审的代码。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-4",
+      "text": "验收 3：冻结 6 个接口——ToolResult/ToolSpec、ChatModel.complete、ChartSpec v1、文件存储布局、agent_* 三表、data_as_of/data_time。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-5",
+      "text": "验收 4：18 条 contract 规则逐条标注 enforcement 落点（测试文件或评审清单），无主规则。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-6",
+      "text": "验收 5：未决问题（默认模型 / tick / OCR / 任意 Python）转为 ADR 非目标或二期项。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-7",
+      "text": "验收 6：ADR-012 增加治理附录——proposed 状态不得作为实现依据；先行实现须 7 天内追认。",
+      "source": "plan-20261110-003 acceptance"
+    },
+    {
+      "id": "REQ-8",
+      "text": "验收 7：评审在 11-12 前结束，不阻塞 11-15 的 003/005 开工。",
+      "source": "plan-20261110-003 acceptance"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/architecture/adr/ADR-002-layered-architecture-contracts.md",
+      "summary": "状态改 accepted，加「裁决」行与「实现回写」：contracts.py 的 ContractError/BarFrame/EventFrame/Evidence/RecommendationRun、use_cases.RunResult 状态与渲染出口逐条对照。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-010-research-semantics.md",
+      "summary": "判 accepted-with-conditions，写实现回写（横幅读 ledger、T+h 样本与 NW lag、组合净值、动作词落点），条件 C1 动作词/分位一致性挂 plan-20261103-006、C2 横幅四状态文案去重。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-012-product-scope-requirements.md",
+      "summary": "追加「治理附录（2026-11-10）：ADR 状态纪律」——状态语义表、先行实现 7 天追认、实现回写义务、接口冻结顺序、门禁、8 条 ADR 状态变更记录表。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-013-agent-runtime.md",
+      "summary": "判 accepted，写实现回写：默认常量、AgentModel 协议、ToolResult 9 字段、StopReason 8 值、会话记忆与打转保护；偏差（新增 types.py/fake.py、AgentModel 与 ChatModel 分层）。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-014-model-gateway.md",
+      "summary": "判 accepted，写实现回写：ChatModel 实签名无 stream、ChatResult 11 字段、三适配器与桥接、补 AGENT_TIMEOUT_SECONDS/AGENT_USAGE_LOG；「流式输出」列为 v1 非目标。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-015-file-ingestion.md",
+      "summary": "判 accepted-with-conditions：加「预评审结论」（file_id 短 id、extracted.jsonl/parquet 拆分、FTS5 DDL 与 chunk→block 列名收敛、工具签名）与 C1~C3 条件，承接 plan-20261110-004。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-016-chart-spec.md",
+      "summary": "判 accepted：加「预评审结论」冻结 ChartSpec v1 边界（version=1、additionalProperties=false、算子/图层参数区间、渲染返回与时点必展示）与「非目标」（任意 Python 二期、join/pivot、交互图），承接 plan-20261110-005。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-017-agent-audit-security.md",
+      "summary": "判 accepted-with-conditions：预评审记录主要发现（实现为七标签且无 write、DDL 缺 temperature/seed/code_version/digest、status 四值），C1~C3 承接 plan-20261110-006。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-018-realtime-quotes.md",
+      "summary": "判 accepted-with-conditions：预评审确认 data_as_of 已实现而 data_time 无生产者，冻结 latest_bar_time(df, *, freq) 唯一入口与语义，C1/C2 承接 plan-20261110-007。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/adrs.json",
+      "summary": "8 条 ADR 状态 proposed→accepted，summary 前置 [accepted]/[accepted-with-conditions] 裁决标签；ADR-012 summary 补治理附录。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/architecture/contract.json",
+      "summary": "升 v1.1（updatedByAdr=ADR-002）：18 条规则 rationale 统一「落点：…」指向具体测试函数或 RC 清单，scope 字段保留。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v1.md",
+      "summary": "新增《接口冻结清单》v1：评审记录与结论表 + 六个接口（ToolResult/ToolSpec/权限、ChatModel.complete、ChartSpec v1、文件布局 v1、agent_* 三表 DDL、data_as_of/data_time）+ 未决问题去向 + 冻结流程。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": "docs/AStockAgent_contract_rule_map_v1.md",
+      "summary": "新增《契约规则落点表》v1.1：18 行落点表（test 10 / review 8，16 已覆盖、AGENT-02/04 部分覆盖挂后续项）、RC-01~RC-08 评审清单、缺口承诺表、维护规则。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": "tests/test_architecture_gate.py",
+      "summary": "新增 21 项门禁测试：无 proposed ADR、adrs.json 与 markdown 状态一致、条件段与承接计划项、实现回写段、ADR-012 治理附录、18 条规则落点存在性（解析 tests/xxx.py::test_name 并核对 AST）、冻结接口与代码签名（ToolResult/ToolSpec/Permission/ChatModel/AgentModel/运行时默认值）、ChartSpec 与 DDL 文档要素、供应商 SDK 隔离、工具层越权能力。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-003.json",
+      "summary": "状态 doing→in_review，progress 95，links 补 doc/test（4 条测试证据），保留原有 adr 链接。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-004.json",
+      "summary": "新建：ADR-015 文件导入按冻结布局实现 files.py（内容寻址 + FTS5 + DuckDB 只读），P1，11-16~21，承接 ADR-015 C1~C3。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-005.json",
+      "summary": "新建：ChartSpec v1 校验与渲染（不执行任意 Python），P1，11-17~22，承接 ADR-016。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-006.json",
+      "summary": "新建：agent_* 三表与 artifact 内容寻址、留存/GC，P1，11-18~24，承接 ADR-017 C1~C3。",
+      "commit": "28a0dc2"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261110-007.json",
+      "summary": "新建：data_as_of/data_time 生产者与降级标注，P1，11-19~25，承接 ADR-018 C1/C2。",
+      "commit": "28a0dc2"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "20 passed, 1 skipped, 1 warning in 1.77s",
+      "passed": true,
+      "evidence": "跳过项为 test_agent_tools_dir_has_no_shell_or_http_capability（astock/agent/tools 目录尚未实现，plan-20261110-004/005）。首轮曾 3 项失败，均为测试自身解析问题（review 规则被误要求测试引用、适配器注解类型不同、文档片段写法不同），修正后全绿，未放松任何断言。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest tests -q",
+      "result": "259 passed, 1 skipped, 2 subtests passed in 13.72s",
+      "passed": true,
+      "evidence": "全量回归，含原有 test_contracts/test_agent_runtime/test_agent_gateway/test_track_nav 等；无回归失败。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m mypy astock app.py tests/test_architecture_gate.py",
+      "result": "Success: no issues found in 32 source files",
+      "passed": true,
+      "evidence": "类型检查覆盖新测试文件。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m ruff check astock tests/test_architecture_gate.py --select E9,F63,F7,F82",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "F 类（未定义名/未使用 import 等）静态检查通过。"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -c \"...\"（逐条核对 ADR markdown 的状态/裁决/条件/实现回写）",
+      "result": "8 条目标 ADR 均输出 accepted + verdict 行；002/010/013/014 含实现回写，010/015/017/018 含「## 条件」",
+      "passed": true,
+      "evidence": "人工脚本核对，输出形如 'ADR-017-agen | accepted | - | cond | **accepted-with-conditions**（2026-11-10 契约评审门禁…'。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "workspace-write / git commit on feature branch",
+      "reason": "提交 ADR 与门禁测试到 feat/adr-gate-freeze，不直接改 main",
+      "status": "granted"
+    },
+    {
+      "name": "network push (git push origin feat/adr-gate-freeze)",
+      "reason": "推送评审分支以便开 PR；若远端不可达则留本地分支并在 delivery 说明",
+      "status": "granted"
+    },
+    {
+      "name": "ADF 状态字段扩展（accepted-with-conditions）",
+      "reason": "devloop_architecture 的 status 枚举不含 accepted-with-conditions，故 adrs.json 用 accepted + summary 裁决标签 + markdown「裁决/条件」段表达，已在 ADR-012 治理附录说明",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/adr-gate-freeze",
+    "commit": "28a0dc2",
+    "pr": "未创建（待推送后开 PR）",
+    "ci": "本地测试全绿；仓库未配置 CI 流水线",
+    "merge": "未合并",
+    "status": "branch-ready"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "1) 评审人按《接口冻结清单》§0.2 结论表逐条确认，重点看 ADR-017 七标签替代 read/write 三级、ADR-014 无 stream 形参两处「实现回写」是否接受；2) 确认 4 个承接项（plan-20261110-004~007）排期不晚于 11-25，特别是 006 的 DDL 与 007 的 latest_bar_time 必须在 003/005 落地前完成接口对齐；3) 合入后 main 上跑一次 tests/test_architecture_gate.py 作为门禁基线；4) .devloop/calendar/2026-11.json、worklog、handoffs 未纳入本次提交（工作区存在其他会话未提交的 .devloop 改动，避免混入），如需入库请单独提交；5) 后续任何冻结接口变更按 ADR-012 治理附录：先改 ADR → accepted → 升冻结清单 v2 → 同步改门禁测试。",
+  "createdAt": "2026-11-10T08:50:13.472Z",
+  "markdownPath": ".devloop/handoffs/ho-20261110-019.md"
+}

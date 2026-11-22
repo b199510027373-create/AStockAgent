@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbjqphi-8cafbe",
+  "threadId": "rev-20261111-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "文档-数据源漂移",
+  "file": "docs/AStockAgent_interface_freeze_v1.md",
+  "lines": "33-36, 41-50",
+  "title": "承接项合并只落在 ADR 正文，工作台数据源 adrs.json 与 contract.json 仍指向已取消的 plan-20261110-004~007",
+  "evidence": "冻结清单 §0.2 结论表把 ADR-015/016/017/018 的承接项写成 plan-20261107-003/-005/-008/-006，并在 §0.2「排期调整」表（第 41–50 行）声明 plan-20261110-004~007 已取消、并入 20261107 线。但工作台实际数据源没跟着改：.devloop/architecture/adrs.json:184 ADR-015 summary 仍是「条件 C1–C3 挂 plan-20261110-004」，:198 ADR-016「承接 plan-20261110-005」，:211 ADR-017「挂 plan-20261110-006」，:224 ADR-018「挂 plan-20261110-007」；.devloop/architecture/contract.json:138 AGENT-02 写「待 plan-20261110-006」，:157 AGENT-04 写「待 plan-20261110-005/-007」。glob 确认 .devloop/plan/items 下只剩 plan-20261107-003/004/005/006/008 等 24 个文件，不存在 plan-20261110-004..007。门禁 tests/test_architecture_gate.py:89-95 只断言 summary 以 \"[accepted\" 开头，不解析计划项 id，因此这条漂移 CI 查不出来——而该门禁的立意正是「ADR 状态/落点不漂移」。",
+  "suggestion": "1) 把 adrs.json 四条 summary 与 contract.json 两条 rationale 的 plan id 改成合并后的 plan-20261107-003/004（ADR-015）、-005（ADR-016）、-008（ADR-017）、-006（ADR-018）；2) 在 tests/test_architecture_gate.py 增加断言：对 adrs.json 的每条 summary 与 contract.json 的每个 rationale 解析 plan-\\d{8}-\\d{3}，要求 .devloop/plan/items/<id>.json 存在且 status != cancelled，缺失即失败（错误信息列出 id 与引用位置）；3) 补一条手工验证记录：devloop_architecture list 中 015/016/017/018 的 summary 不再出现 20261110。",
+  "confidence": 0.95,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:41:33.586Z"
+  },
+  "createdAt": "2026-11-11T03:15:31.590Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:41:33.586Z"
+    }
+  ]
+}

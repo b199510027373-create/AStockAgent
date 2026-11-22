@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261111-002-r2",
+  "threadId": "rev-20261111-002",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "第 2 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 2 轮（full，commit 8884a60，branch feat/adr-gate-freeze）结论：request_changes。上轮 5 条（P1×2、P2×3）已按证据核实闭合：①C2 归属与门禁——plan-20261103-006 新增独立 C2 验收（横幅文案去重），C1 收回兼容映射；test_architecture_gate.py:155-220 改为标题语义关键词命中（≥2）并新增反例 test_condition_gate_rejects_number_only_acceptance，token 冒充无法通过；②分位口径——live 与 backfill 共用 astock/recommend.py:278-287 `assign_percentiles`（backfill.py:105-106），报告用 `percentile_basis` 带 N；③「技术面技术面强」——contracts.py:63-66 `action_short` 用于 recommend.py:471 与 app.py:345，测试断言不出现重复前缀；④ADR-010 回写——引用更新为真实存在的 `_action`（recommend.py:264-270）、`assign_percentiles`（278-287）、五状态（track.py:37）、错误路径（track.py:387）；⑤prompt 已改为「分位仅作横截面展示」。测试证据：目标 3 文件 68 passed/1 skipped（用例 19/17/33），全量 294 passed/1 skipped，ruff 与 mypy 31 files 通过；本评审不代跑，认可为交付证据。\n\n本轮新增 6 条（P0=0，P1=1，P2=5），核心是分位的审计链断裂：§6.4 行 377 声称「任意批次可用 JSON table 的前 candidate_n 行复算」，但 live 的 `_save(final_rows)`（recommend.py:874-889）与 backfill 的 `selected`（backfill.py:106-118）只持久化 ≤5 行，而分位是在 15 行候选池上算的（recommend.py:284-287）；用户/审计按文档复算必然得到 20/40/60/80/100 而非库中值，ledger.items 同样无法自证。其余 P2：docs:379-384 §7 标题被误删；backfill.py:132 N 写死 candidate_n（不足 15 行时误标）；app.py:341-345/CSV 列不带 N（与 §6.4 展示要求冲突，跨 candidate_n 批次不可比）；contracts.py:505,518 与 use_cases.py:192 仍把兼容映射标成 C2；plan:18 仍写「四状态」却枚举五个。\n\n修复责任与完全解决条件：开发（本分支，plan-20261103-006；计划项记录的 devSessionId=session-220c8f42-b3a7-4832-9fd9-c539d019a00c）在下一轮前：必须解决 P1——二选一：①payload 增加候选池快照（如 diagnostics.candidate_pool: [{code, composite}]，N=池大小），并新增「读回落盘 JSON → 对池快照跑 pool_percentile → 与 table 的技术分位逐行相等」的测试；②修正 §6.4 的复算承诺为「不可由 table 复算」并说明所需快照，同时同步 ADR-010。P2 可随 P1 一并修（N 用 len(pool)、摘要带 N、恢复 §7 标题、注释改 C1、四→五状态）。当 P1 关闭且 5 条 P2 均有「已修」或「明确改挂到后续计划项/issue」的结论、第 3 轮 full 复核 openP0=0 且 openP1=0 时，才可 approve 并标记完全解决；当前不得合并。注意本轮不重复已关闭问题，下一轮只复核这些新问题的修复证据。",
+  "startedAt": "2026-11-11T04:39:14.464Z",
+  "finishedAt": "2026-11-11T04:42:22.978Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 5,
+    "total": 6
+  }
+}

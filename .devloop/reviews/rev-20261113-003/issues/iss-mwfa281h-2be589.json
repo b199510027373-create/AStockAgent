@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwfa281h-2be589",
+  "threadId": "rev-20261113-003",
+  "roundNo": 3,
+  "severity": "P1",
+  "category": "model-schema",
+  "file": "astock/agent/chart_spec.py",
+  "lines": "947-956",
+  "title": "75b5d64 将 data.ref oneOf 标记 fixed，但 schema 仍用重叠 pattern 的 oneOf，jsonschema 仍拒绝合法指数代码",
+  "evidence": "`devloop_review get` 把 `iss-mwf84sjv-42aad0` 标成 status=fixed，但 75b5d64 没有改 `_JSON_SCHEMA.data.ref`：:949-956 仍是 `oneOf: [{\"pattern\": STOCK_REF_RE}, {\"pattern\": INDEX_REF_RE}, {\"pattern\": ARTIFACT_REF_RE}]`。`STOCK_REF_RE = ^[0-9]{6}\\.(SH|SZ|BJ)$` 覆盖所有六位代码，`INDEX_REF_RE = ^000[0-9]{3}\\.SH$|^399[0-9]{3}\\.SZ$` 是它的真子集；因此 `000001.SH`、`399001.SZ` 同时匹配 stock 与 index 两个 branch，而 JSON Schema 的 `oneOf` 要求恰好一个 branch 匹配，合法指数 ref 会被 schema 判为 invalid。运行时 `validate_chart_spec` 用 or 判断（chart_spec.py:488-495）会接受，所以模型拿到 schema 后会被误导，与“schema 即字段与枚举白名单”不一致。tests/test_agent_chart_spec.py:575-577 只断言 `len(oneOf)==3` 和 pattern 文本，没有用 jsonschema 实际校验 `000001.SH`/`399001.SZ`，所以这个 false fixed 没被发现。",
+  "suggestion": "把 `data.ref` 从 `oneOf` 改成 `anyOf`（运行时本来就是 or），或让 stock pattern 排除指数前缀（如 `^(?!000[0-9]{3}\\.SH$|399[0-9]{3}\\.SZ$)[0-9]{6}\\.(SH|SZ|BJ)$`），确保每个合法 ref 只命中一个 branch。补测试：用 `jsonschema.Draft202012Validator(chart_spec_json_schema()).validate({\"version\":1,\"kind\":\"line\",\"data\":{\"source\":\"market\",\"ref\":\"000001.SH\"},\"encode\":{\"x\":\"trade_date\",\"y\":\"close\"}})` 断言通过，并同时断言 `000001.SZ`（个股）和 `399001.SZ` 通过；不要再只断言 pattern 字符串。",
+  "confidence": 0.97,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T19:16:39.266Z"
+  },
+  "createdAt": "2026-11-13T17:55:37.397Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T19:16:39.266Z"
+    }
+  ]
+}

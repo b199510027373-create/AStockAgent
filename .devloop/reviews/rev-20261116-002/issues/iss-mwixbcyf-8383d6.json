@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwixbcyf-8383d6",
+  "threadId": "rev-20261116-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "contract",
+  "file": "astock/data.py",
+  "lines": "271-288,724-749",
+  "title": "ADR-008 第 8 条声称分钟路径也校验因子覆盖，代码只在日线路径调用 _check_factor_coverage",
+  "evidence": "新写的 ADR-008 第 8 条（.devloop/architecture/adr/ADR-008-price-adjustment-limits.md:38）写的是\"日线与分钟线的因子历史一律走 `query_all`，并校验覆盖：hfq 要求因子表首日 <= 行情首日，qfq 要求因子表末日 >= 行情末日（或请求 `end`），不满足抛 DataContractError(code=\"AdjFactor\")\"，但代码里 `_check_factor_coverage`（astock/data.py:290）只有一处调用点——astock/data.py:416 的日线路径 `_fetch_daily`；分钟路径 astock/data.py:744 `_query_adj_history(client, code, end)` 之后直接进 `_clean_adj_factors`，没有覆盖断言。也就是说分钟线 hfq 的基准正确性只靠\"query_all 一定返回全历史\"这一点，一旦 astock/data.py:271 的 `_query_adj_history` 走到回退分支（astock/data.py:285-287 `query_all = getattr(client, \"query_all\", None)` 取不到可调用对象时 `return client.query(\"adj_factor\", **params)`，或将来换成别的适配器/测试替身），被截断的因子表会让 `_adj_base` 取到错误的\"最早因子\"，而 `_apply_minute_adj` 的缺行检查（astock/data.py:781-800）只看\"分钟日期有没有对应因子\"，这种截断不会触发任何异常——与本次 P1-2 修掉的隐患同型，只是搬到了分钟路径。文档比代码承诺更多，验收时按 ADR 核对会误判该路径已被保护。",
+  "suggestion": "二选一，别让 ADR 与代码各说一套：(a) 改 ADR-008 第 8 条措辞，明确\"覆盖校验只在日线路径 `_fetch_daily` 执行；分钟路径的基准正确性依赖 `query_all` 分页完整性，缺行由 `_apply_minute_adj` 硬失败兜底（仅当日盘中例外），回退单次 query 时不保证基准\"；(b) 真给分钟路径也加防御——在 `load_adj_factors` 里对 hfq 断言\"因子表首日不晚于该股已知首日\"是不可行的（分钟帧看不到上市日），可行的做法是：`_query_adj_history` 落到回退分支时直接抛 DataContractError（提示\"客户端不支持分页，无法保证因子历史完整，禁止用于 hfq\"）或至少按 `ADJ_HISTORY_START` 分块拉取，避免静默降级。推荐 (b) 的\"回退即拒绝\"版本，改动 3 行、无额外网络开销，并且能让 ADR 第 8 条变成事实。顺带（可选）：补一条 `load_minute` 级断言，确认盘中 `partial`/`factor_as_of` 能穿透 astock/data.py:832-838 的 attrs 重挂（目前只有 `_apply_minute_adj` 直接调用的用例）。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-16T07:31:09.780Z"
+  },
+  "createdAt": "2026-11-16T07:09:53.367Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-16T07:31:09.780Z"
+    }
+  ]
+}

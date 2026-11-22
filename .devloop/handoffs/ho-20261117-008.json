@@ -1,0 +1,70 @@
+{
+  "id": "ho-20261117-008",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-012",
+  "threadId": null,
+  "sessionId": "",
+  "title": "记录归档：plan-20261103-012 证据提交与 main 同步",
+  "summary": "相对 ho-20261117-007 的增补（仅流程记录，无产品代码改动）：\\n\\n- 新增 PR #23（分支 chore/plan-20261103-012-evidence，提交 4266528），把 plan-20261103-012 的 in_review 状态、links.test 证据、calendar 两次开发记录与 worklog 提交到仓库（此前这些是工作区未提交状态）。\\n- PR #23 CI run 43931618188 连续两次通过（test + png-export 均 pass）；合并后 main run 43932111054（b395483）success；本地 main 已 fast-forward 到 b395483。\\n- 至此 main 上已有：PR #21（47645c3）、PR #22（e284a50）、PR #23（b395483）三次合并，全部 CI 绿；plan-20261103-012 保持 in_review / progress 95 等待评审。\\n\\n剩余风险与上份一致：pytest-timeout 未本地验证（2.4.0 取自 CI 日志）；本地跑 ruff 前需清理测试生成的 gradio/ 目录。",
+  "requirements": [
+    {
+      "id": "A6",
+      "text": "最终 `ruff check astock tests` 为 0，CI 全仓 blocking；PR 与 main 均跑 pytest+mypy+ruff，连续两次通过。",
+      "source": "plan-20261103-012.acceptance[5]"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261103-012.json",
+      "summary": "plan 置 in_review / progress 95，links.test 写入 9 条命令与 CI 证据（地址、分支、PR）",
+      "commit": "4266528"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json, .devloop/worklog/2026-11.jsonl",
+      "summary": "补两次开发记录：Ruff 基线归零（180min）、质量门禁收口（90min）",
+      "commit": "4266528"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 23（run 43931618188 两次）",
+      "result": "pass",
+      "passed": true,
+      "evidence": "attempt1 test pass 1m24s / png-export pass 43s；attempt2 test pass 59s / png-export pass 48s"
+    },
+    {
+      "command": "gh run list --branch main --limit 1 --json databaseId,headSha; gh run watch 43932111054",
+      "result": "pass",
+      "passed": true,
+      "evidence": "databaseId 43932111054, headSha b395483, conclusion success"
+    },
+    {
+      "command": "git merge --ff-only origin/main && git log --oneline -3",
+      "result": "pass",
+      "passed": true,
+      "evidence": "本地 main = b395483（PR #23 merge），工作区无跟踪文件改动（除未跟踪临时产物）"
+    }
+  ],
+  "permissions": [],
+  "delivery": {
+    "branch": "chore/plan-20261103-012-evidence → merged；main 已 fast-forward 到 b395483",
+    "commit": "b395483 (main merge commit; 工作提交 4266528)",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/23",
+    "ci": "PR #23 run 43931618188 两次全绿（attempt1 test pass 1m24s / png 43s；attempt2 test pass 59s / png 48s）；main run 43932111054 (b395483) success",
+    "merge": "PR #23 → b395483",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261117-007",
+  "next": "无新的开发动作待办；请求 reviewer 对 plan-20261103-012 做验收评审。后续排期见 ho-20261117-007 的 next（观察期后删 scheduler/jobs 豁免与清理、覆盖率 P2 80% / P3 85%、app.py 清理、RUF001-003/B905 评估）。",
+  "createdAt": "2026-11-16T18:46:43.687Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-008.md"
+}

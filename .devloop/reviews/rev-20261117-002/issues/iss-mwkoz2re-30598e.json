@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwkoz2re-30598e",
+  "threadId": "rev-20261117-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "maintainability",
+  "file": "astock/agent/files.py",
+  "lines": "186-202",
+  "title": "FILE_CHUNKS_TRIGGER_DDL 被两次赋值，遗留的旧 ai/ad/au 触发器脚本与新 contentless 表结构冲突",
+  "evidence": "FTS 布局从 `content='file_chunks'` 改为 `content='' + contentless_delete=1` 后，同步触发器已作废，但 files.py 里保留了一段被立即覆盖的死代码，且内容与新表结构冲突。\n\n- astock/agent/files.py:186-188 `#: 兼容旧导入；新布局不再使用 SQL 触发器（tokens 必须由 Python 计算）。\\nFILE_CHUNKS_TRIGGER_DDL = \"\"`；\n- astock/agent/files.py:190-202 紧接着又把它赋成旧触发器脚本：`CREATE TRIGGER ... INSERT INTO file_chunks_fts(rowid, text) VALUES (new.chunk_id, new.text)` / `VALUES ('delete', old.chunk_id, old.text)`；\n- 新 DDL（astock/agent/files.py:173-174）只有 `tokens` 列、无 `text` 列，执行这段脚本会得到 `OperationalError: table file_chunks_fts has no column named text`；\n- 该常量仍在 `__all__`（astock/agent/files.py:55）导出，grep 全仓库除定义与导出外无调用点，唯一写入方是 `index_chunks`（files.py:1349-1370）与迁移函数（files.py:1298-1310），二者都不用它；\n- 与冻结清单 docs/AStockAgent_interface_freeze_v1.md:282 的表述「不再使用 ai/ad/au 触发器」自相矛盾。",
+  "suggestion": "删除 files.py:186-202 中重复赋值的旧触发器脚本，只保留一行说明 `FILE_CHUNKS_TRIGGER_DDL = \"\"  # 新布局由 Python 写 tokens，不再使用触发器`；如果该常量已无外部调用，同时从 `__all__`（files.py:55）移除，或改为在 tests/test_agent_tools.py 增加断言 `F.FILE_CHUNKS_TRIGGER_DDL == \"\"` 钉住「不再使用触发器」这个契约，避免以后有人把它当真执行。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:28:19.900Z"
+  },
+  "createdAt": "2026-11-17T12:51:55.706Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:28:19.900Z"
+    }
+  ]
+}

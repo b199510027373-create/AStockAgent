@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwbjqv6k-3962b1",
+  "threadId": "rev-20261111-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "文档-引用失效",
+  "file": "docs/AStockAgent_contract_rule_map_v1.md",
+  "lines": "104",
+  "title": "落点表 §4 承诺的 test_rule_map_covers_all_contract_rules 不存在，且门禁并不校验本表引用的测试名",
+  "evidence": "docs/AStockAgent_contract_rule_map_v1.md:104（§4 缺口与承诺表最后一行）把「规则与落点漂移」的承诺测试写成 `tests/test_architecture_gate.py::test_rule_map_covers_all_contract_rules`，但该函数不存在；实际实现的是 tests/test_architecture_gate.py:174 的 `test_rule_map_lists_every_rule_and_review_checklist`。更关键的是承诺落空：第 174–180 行的实际测试只校验 contract.json 的规则 id 与 RC-01..08 出现在本文件中，并不解析、也不校验本文件（§2 逐条落点表、§4 承诺表）里引用的 `tests/...::test_xxx` 是否存在；同文件 §5 第 3 条却写「测试改名 → 本表的引用必须同步改，门禁测试会校验『引用到的测试函数真实存在』」。也就是说，这份「落点表」自身引用的测试名可以随便写错而无人发现——评审清单的可信度依赖这一环。",
+  "suggestion": "1) 把第 104 行的名字改为实际存在的 `test_rule_map_lists_every_rule_and_review_checklist`，或新增一个真正做这件事的测试再引用它；2) 让门禁真的覆盖本文件：用正则扫描 docs/AStockAgent_contract_rule_map_v1.md 与冻结清单里的 `tests/[\\w./-]+\\.py::\\w+` 引用，逐个用 `_test_functions()` 校验函数存在（不存在且未登记在「缺口与承诺」段则失败）；3) 修好后同步更新 §5 第 3 条的措辞，使承诺与门禁实际能力一致。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T03:41:19.318Z"
+  },
+  "createdAt": "2026-11-11T03:15:38.972Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T03:41:19.318Z"
+    }
+  ]
+}

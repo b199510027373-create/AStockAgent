@@ -1,0 +1,47 @@
+{
+  "id": "ho-20261117-014",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261117-001",
+  "sessionId": "",
+  "title": "评审：CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
+  "summary": "## 第 3 轮评审结论：approve（P0=0，P1=0，新 P2=2）\n\n本轮为第三轮全量复评，核对 ho-20261117-013 对第 2 轮 P2 的修复（含其附带的 ruff isort 修复与新增守护测试）。\n\n### 第 2 轮 P2 iss-mwjnea54-cbaf29（文档基线漏改）— 已关闭\n- docs/AStockAgent_development_status_2026-11-08.md:143 现为 `coverage: 9248 statements / 2157 miss = 76.68%（CI Linux 9248/2178 = 76.45%，门禁 76.45%）`，算术自洽（7091/9248 = 76.6773 → 76.68）。\n- README.md:23 与 :223 均为 610；docs 各处计数本地 610 / CI 609、覆盖率本地 9248/2157=76.68% / CI 9248/2178=76.45% 全一致：CI 日历:11/94/148/189/191/257、architecture_v1.3:107、development_status:135/140/143、product_snapshot:51。\n- grep 确认 docs+README 已无 `9247 statements`、`2155 miss`、`606 passed`、`607 passed`、`608 passed` 残留。\n- .coveragerc 仍 fail_under=76.45，注释保留「平台差异 610/609」「比 76.47 低 0.02pp 的原因」「零余量处置流程」「P2 80% / P3 85%」。\n\n### 附带改动—已核实无害且实际修复了一个本地/CI 分叉\n- ruff.toml `[lint.isort]` 新增 `known-third-party = [\"gradio\"]`：此前测试在仓库根生成 gradio/ 目录会让 Ruff 把 `import gradio` 判成 first-party，本地 9 条 I001 而干净检出 CI 全绿（首轮 CI 红灯根因）。钉死后本地与 CI 判定一致，是正确方向的收敛，不改变任何规则集，A4「显式配置」仍满足。\n- tests/test_ci_quality_gates.py 新增 test_coveragerc_baseline_arithmetic_is_self_consistent（对 .coveragerc 注释里的本地/CI 两组基线做算术校验）与 test_docs_baseline_matches_measured_numbers（以 .coveragerc 注释为唯一数据源，扫 5 个文档的旧标记并正向比对 3 个文件的数字）；变异验证（把 development_status 改回 9247/2155）会红，已在 plan.links.test 留证。\n\n### 本轮新增 2 条 P2（均为守护强度问题，不阻断）\n1. **iss-mwjo3ftq-d5ea0b**：test_docs_baseline_matches_measured_numbers 的 DOCS_WITH_BASELINE 列了 5 个文件，但正向数字断言只做了 development_status / CI 日历 / README 三个；architecture_v1.3:107 与 product_snapshot:51 只有旧标记扫描，把这两处百分比改成别的值用例仍绿，与 docstring 承诺及上一轮缺陷同类。\n2. **iss-mwjo3fur-2f386a**：stale 元组里的裸 `\"50%\"` 无上下文，README 未来写「单票仓位上限 50%」「涨跌幅 150%」都会误报为「旧基线残留」，误导修复方向。\n\n### 未发现回归\n- 本轮变更文件仅 7 个：.coveragerc、README.md、3 份 docs、ruff.toml、tests/test_ci_quality_gates.py；无 astock/ 运行时代码改动，`astock/scheduler.py`/`astock/jobs.py` 自第 2 轮起保持 92f5e47 原文（A7 观察期仍成立）。\n- CI 证据：PR #26 run 43939394936 attempt1+attempt2 均 test/png-export success（609 passed / 2 skipped、TOTAL 9248/2178=76.45%、ruff 0、mypy 36 files），main run 43939999492 success；PR #27 43940445367 两次 success，main run 43941051281 success。与文档/配置数字自洽。\n\n### 谁在什么条件下修、何时算完全解决\n- **负责方**：plan-20261103-012 的开发。\n- 两条 P2 属「守护测试写得不够严/不够稳」，不影响任何验收条目 A1–A7 的成立；建议并入观察期结束（2026-11-21）的后续计划项一起处理：届时本就要删 scheduler/jobs 的 per-file-ignores 并清理存量，可在同一提交里把 5 个文件的正向断言补齐、把 `\"50%\"` 换成带上下文的标记。\n- **判定**：第 1、2 轮共 6 条问题全部为 fixed，本轮无 P0/P1，故 approve；openP0=0、openP1=0 → 完全解决条件成立，plan-20261103-012 可置为 done。两条 P2 记录留在本线程，作为下一计划项的输入，不构成 done 的前置条件。\n\n### 评审局限\n本环境无 shell/gh 权限，未独立复跑 pytest/ruff/mypy/coverage，也未联网核对 CI run id；已做交叉核对：run id 与数字、提交链（0a4b80d 修复 → 0441eed 记录 → 3078048 merge → bb4f807 merge）在 handoff、.coveragerc、docs 之间自洽，且 `git diff` 文件清单无越界。测试执行结果采信开发记录。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 3,
+    "verdict": "approve",
+    "resolved": true,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": [
+      {
+        "severity": "P2",
+        "title": "文档基线守护只覆盖 5 个文件中的 3 个：architecture_v1.3 与 product_snapshot 改错数字仍全绿",
+        "suggestion": "把「正向断言」改成对 DOCS_WITH_BASELINE 里每个文件都执行：例如在循环里统一断言 `f\"{ci_pct:.2f}%\" in text and f\"{local_pct:.2f}%\" in text`（这两组百分比现在 5 个文件都有），再对 development_status 保留精确行断言、对 calendar 保留 stmts/miss、对 README 保留用例数断言作为加强项。可以先把 5 个文件当前应含的片段写成 dict 常量（文件名 → 必需片段元组），断言时逐个 `in`，这样某文件被改坏时错误信息能直接指出是哪个文件少了哪个数字。\n\n完全解决标准：把 tests/test_ci_quality_gates.py 的正向断言覆盖到 architecture_v1.3.md:107 与 product_snapshot_v1.3.md:51；把这两处百分比任改成非 76.45/76.68 的值时该用例变红。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "守护用例的 stale 标记含裸 \"50%\"：README 任何含 50% 的合法表述都会误报为旧基线残留",
+        "suggestion": "把裸 `\"50%\"` 换成带上下文的标记，例如 `\"门槛 50%\"`、`\"覆盖率 50%\"`、`\"50% 的门槛\"`、`\"覆盖率门槛 50%\"`（与 A7 要清理的那句原始表述一致），其余标记同理检查是否够具体（`\"606 passed\"`、`\"606 个\"` 已经足够具体，可保留）。这样既保住「旧 50% 门槛表述不得回归」的意图，又不会误伤产品文案里的百分数。\n\n完全解决标准：在 README.md 里写一句含「50%」的正常产品表述（如「单票仓位上限 50%」）时 test_docs_baseline_matches_measured_numbers 仍绿，而写入「覆盖率门槛 50%」时变红。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": "ho-20261117-012",
+  "next": "",
+  "createdAt": "2026-11-16T19:39:41.473Z",
+  "markdownPath": ".devloop/handoffs/ho-20261117-014.md"
+}

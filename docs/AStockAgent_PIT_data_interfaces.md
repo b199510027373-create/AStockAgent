@@ -227,7 +227,7 @@ client.query("index_member", index_code=..., fields="con_code,in_date,out_date,.
 3. 行业缺失时用 `stock_basic` 当前行业兜底；
 4. `bak_basic` 只补历史名称/ST，不再作为行业主来源。
 
-剩余限制：没有官方 crosswalk，旧 `801020` 采掘拆分为煤炭/石油石化等，跨版本行业名称不完全可比；快照里保留 `industry_version`（SW2014/SW2021/BAK）用于审计。
+剩余限制：没有官方 crosswalk，旧 `801020` 采掘拆分为煤炭/石油石化等，跨版本行业名称不完全可比；快照里保留 `industry_version`（SW2014/SW2021/BAK）用于审计。经验映射与切换日分布差异见 [sw2014_sw2021_crosswalk.md](sw2014_sw2021_crosswalk.md)：旧侧 24 个一对一（含 4 个改名）+4 个一对多=28，新侧 28 个回映唯一+2 个多对一+1 个无结构旧来源=31；全 A 31.14% 股票在切换日换标签（结构性 20.96%）。`cache/pit/sw_crosswalk_edges.parquet` 是 200 条**行业对级**边（无股票代码），需与 PIT 快照的行业列 join 才能逐股回映，未改动 PIT 主流程。
 
 ## 6. 能拼出的 PIT 数据模型
 

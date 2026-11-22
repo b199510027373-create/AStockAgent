@@ -1,0 +1,92 @@
+{
+  "id": "ho-20261116-021",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "复权口径收口：评审第 2 轮遗留 P2 已修并 CI 全绿（ac23253 / 643e381）",
+  "summary": "状态更新（无代码改动）：评审第 2 轮遗留 P2 的修复提交 ac23253 CI run 43822962615 success；交付文档与计划记录提交 643e381 CI run 43823253779 success；PR #15 当前 OPEN / mergeStateStatus=CLEAN，head 643e381，检查项 test 与 png-export 均 SUCCESS。代码与测试内容见 ho-20261116-020（astock/data.py 分钟路径 _check_factor_coverage、tests/test_data_adj_caliber.py 25 例、ADR-008 第 8 条改写）。plan-20261114-003 维持 in_review / progress 99，links.test 已含 25/99/538/32 与 ruff、mypy、11 个 CI run。",
+  "requirements": [
+    {
+      "id": "P2-R2-1",
+      "text": "分钟路径补齐因子覆盖校验且 ADR-008 第 8 条与代码一致——已随 ac23253 交付并 CI 绿；本条为状态更新，无新增代码。",
+      "source": "rev-20261116-002 r2 / iss-mwixbcyf-8383d6"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/data.py",
+      "summary": "分钟路径新增覆盖校验（无变化，沿用）",
+      "commit": "ac23253"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261116-020.md",
+      "summary": "评审第 2 轮遗留 P2 修复的 developer update handoff",
+      "commit": "643e381"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-003.json",
+      "summary": "links.test 更新（99/538/32/25）与 review/handoff 链接",
+      "commit": "643e381"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "补第 2 轮评审与修复的日历事件",
+      "commit": "643e381"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_data_adj_caliber.py -q -p no:cacheprovider",
+      "result": "25 passed, 10 subtests passed",
+      "passed": true,
+      "evidence": "单文件"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "538 passed, 1 skipped, 12 subtests passed",
+      "passed": true,
+      "evidence": "全量"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_architecture_gate.py -q",
+      "result": "32 passed, 1 skipped",
+      "passed": true,
+      "evidence": "门禁"
+    },
+    {
+      "command": "gh pr view 15 --json state,mergeStateStatus,headRefOid,statusCheckRollup",
+      "result": "OPEN CLEAN head 643e381；test SUCCESS；png-export SUCCESS",
+      "passed": true,
+      "evidence": "PR 全绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub push / CI 查询",
+      "reason": "推送修复与交付文档、确认 CI",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "fix/data-adj-caliber",
+    "commit": "643e381",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/15",
+    "ci": "43822962615 (ac23253) success；43823253779 (643e381) success；PR 检查 test 与 png-export 均 SUCCESS",
+    "merge": "未合并；PR #15 OPEN，mergeStateStatus=CLEAN",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261116-020",
+  "next": "1) 复核 ac23253 的 3 处代码/文档差异后把 iss-mwixbcyf-8383d6 标 resolved，PR #15 可直接合并（无 open P0/P1，代码层无待办）。2) 合并后复跑 main CI 并回填 run 号；验收⑥（图注/行情工具消费 attrs）仍由 plan-20261107-006 / plan-20261114-002 完成，在此之前 plan-20261114-003 不标 done。",
+  "createdAt": "2026-11-16T07:23:15.940Z",
+  "markdownPath": ".devloop/handoffs/ho-20261116-021.md"
+}

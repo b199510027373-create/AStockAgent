@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261113-003-r3",
+  "threadId": "rev-20261113-003",
+  "roundNo": 3,
+  "scope": "full",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 3 轮全量评审完成（head 75b5d64，base 2eac348）。本轮新增 4 条 P1、3 条 P2；其中 3 条是上一轮问题被标成 fixed、但代码/文档实际未修或只做了表面改动，属于 false fixed，不能按“已修复”结案。\n\nP1（必须修复/必须改验收）：\n1) iss-mwfa24ir-5a767e：`iss-mwf84pz8-07ebf8` 被标 fixed，但 chart_spec.py:85/120/526-527/776-785/930-989 仍接受 panes/style/raw，tests/test_agent_chart_spec.py:450-469/586-591 还锁定别名；ADR-016 2026-11-14 Q4=B 与 plan-005 验收第 6 条均要求删除。应真删并改测试，或由架构修改 005 验收为“005 保留、002 删除”，不能只标 fixed。\n2) iss-mwfa281h-2be589：`iss-mwf84sjv-42aad0` 被标 fixed，但 chart_spec.py:949-956 仍是重叠 pattern 的 `oneOf`；STOCK_REF_RE 覆盖 INDEX_REF_RE，000001.SH/399001.SZ 会被 jsonschema 拒绝。应改 anyOf 或排除指数前缀，并补 jsonschema 实校验测试。\n3) iss-mwfa2hib-1f519f：ADR-016 Q5=C 要求 chart_service 为唯一审计入口，plan-005 验收第 9 条也这么写，但全仓库无 chart_service，chart_render.py:1241-1275 仍直接 ensure_run/record_artifact。应抽出 chart_service + ArtifactReader，或把 005 第 9 条改为“002 迁移”并列为未完成项。\n4) iss-mwfa38a2-e20f69：同 HTML 二次渲染时 store.py:256-266 的 `ON CONFLICT DO NOTHING` 不更新 meta；先无 kaleido（degraded=True/png_path=None）后补 PNG，DB 仍保留旧降级状态。应 upsert meta 或把 PNG 作为独立 artifact 行，并补两次渲染测试。\n\nP2（可书面延期，但需明确记录）：\n5) iss-mwfa2ak6-9f265f：`params` 未记录 include_plotlyjs（chart_render.py:1116-1133/1252-1266），与冻结清单 §3.4 的复现前提不一致；补字段和测试。\n6) iss-mwfa2dot-8aa9b2：PNG 走独立 digest 目录，prune_artifacts（store.py:371-433）只清理已记录行，删除 HTML 行后 PNG 成为孤儿；补 PNG 引用/清理测试。\n7) iss-mwfa2o0p-6ff259：`iss-mwf84uq4-1153df` 被标 fixed，但 transforms 过滤为空后 _time_points（chart_render.py:576-593）仍从 attrs 取旧 data_as_of；应空态直接返回空并补空态回归。\n\n完全解决条件：plan-20261107-005 开发（或架构负责人对验收文字）在下一轮处理上述 4 条 P1；P2 若要延期，必须在交付文档中写明由哪个 plan 承接并经架构确认。下一轮 reviewer 需看到：别名删除或 005 验收已改；data.ref schema 用 jsonschema 实测指数通过；chart_service 存在且 chart_render 无直写，或第 9 条已改；record_artifact 二次渲染 meta 正确；include_plotlyjs 入 params；PNG 不再泄漏；空态 data_as_of 为空且测试覆盖。测试目标为 pytest spec/render/store/data_pit_events -q 至少 121 passed，全量 478 passed/2 skipped/2 subtests，mypy 34 files、architecture gate 32 passed/1 skipped、CI 通过；reviewer 下一轮确认 openP0=0 且 openP1=0 后才可 approve 并标记完全解决。",
+  "startedAt": "2026-11-13T17:52:59.611Z",
+  "finishedAt": "2026-11-13T17:56:32.918Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 4,
+    "P2": 3,
+    "total": 7
+  }
+}

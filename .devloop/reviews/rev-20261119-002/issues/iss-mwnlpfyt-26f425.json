@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwnlpfyt-26f425",
+  "threadId": "rev-20261119-002",
+  "roundNo": 1,
+  "severity": "P0",
+  "category": "correctness",
+  "file": "astock/agent/chart_render.py",
+  "lines": "1579, 945, 1080",
+  "title": "日/周/月线连续指标全部为空（MA/BOLL/MACD/RSI/KDJ 静默丢失）",
+  "evidence": "render_figure 在 1579 行无条件执行 `indicator_frame = market.continuous_bars(transformed, freq=freq) if view_column else None`。日/周/月线的 `_period_freq` 返回 D/W/M（chart_render.py:849-850、95），`data.classify_bar_time` 对非分钟频率直接返回 \"close\"（data.py:923-925），而 `continuous_bars` 只保留 session==\"continuous\"（data.py:951-956）——因此日/周/月线的 indicator_frame 恒为空表。`_indicator_frame` 以 `base=source_frame` 计算 `sma(close).reindex(frame.index)`（chart_render.py:599、619），`_pane_series` 同样以空表计算后 reindex（634-655），结果 MA/BOLL/MACD/RSI/KDJ 全部为 NaN；`_build_figure` 仍无条件 add_trace（992-1006、1079-1080），所以图例里有名字、图上没有线，且没有任何 warning。现有测试 `test_candlestick_supports_ma_boll_and_volume`（412-422）和 `test_candlestick_indicator_panes`（425-429）只断言 HTML 中出现图例文字，NaN 也能通过。该问题影响最常用的日线 K 线叠加指标路径，属于本分支 Q7 过滤引入的静默正确性回归。",
+  "suggestion": "1) 只对分钟周期做连续竞价过滤：`indicator_frame = market.continuous_bars(transformed, freq=freq) if freq in MINUTE_FREQS else transformed`（日/周/月线全部是 close bar，应全部参与指标计算）；或让 `continuous_bars` 对非分钟频率返回全部行并同步调整 Q7 测试。2) 在 `_indicator_frame`/`_pane_series` 增加防御：当请求了 layers 但 indicator_frame 为空时写 warning，避免再次静默。3) 补数值断言而不只是图例名：对 daily/weekly/monthly 的 `layers=[{\"type\":\"ma\",\"window\":20}]`，用 `indicators.sma(close,20)` 算出期望序列，断言渲染结果中 MA20 trace 的 y 与期望一致（至少尾部非 NaN）；保留现有 auction-only 分钟用例验证集合竞价被排除。修复后重跑 `pytest tests/test_agent_chart_render.py -q`。",
+  "confidence": 0.97,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-19T15:29:08.794Z"
+  },
+  "createdAt": "2026-11-19T13:43:45.941Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-19T15:29:08.794Z"
+    }
+  ]
+}

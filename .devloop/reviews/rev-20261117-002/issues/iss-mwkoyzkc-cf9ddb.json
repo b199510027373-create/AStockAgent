@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwkoyzkc-cf9ddb",
+  "threadId": "rev-20261117-002",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/runtime.py",
+  "lines": "236-239",
+  "title": "file_list 结果不含引用，收口逻辑会把「有哪些文件」这类合法回答改写成「未在文件中找到」",
+  "evidence": "本轮 R1 新增的收口逻辑对「任何文件工具」无条件生效，但 file_list 的结果本身不含引用，导致合法回答被改写成「未在文件中找到」。\n\n- astock/agent/runtime.py:54-56 `FILE_TOOL_NAMES = frozenset({\"file_list\", \"file_search\", \"file_read\", \"table_schema\", \"table_query\"})`；\n- astock/agent/runtime.py:236-239 `if _uses_file_tools(steps): answer = finalize_file_answer(answer, _collect_file_citations(steps))`；\n- astock/agent/tools/file_tools.py:218-223 list_files 返回 `metadata={\"files\": len(metas), \"returned\": len(selected)}`，table 行（:206-217）没有 `citation` 键，text（:195-205）只有「共 N 个文件…- 《name》（f_xxx，pdf，3 页…）」，没有「第 N 页 / 工作表」定位；\n- astock/agent/tools/citations.py:203-209：`if not text or not cites: return CITATION_NOT_FOUND`，且 `_CITATION_RE` 不匹配「《年报.pdf》」这种无页码写法，所以 `found` 也为空，同样落到 CITATION_NOT_FOUND。\n\n可复现路径：用户问「我上传了哪些文件？」→ FakeModel 调 file_list → 回答「共 2 个文件：《年报.pdf》、《财务.xlsx》」→ runtime.py:236 判定用过文件工具 → cites 为空 → 回答被替换成「未在文件中找到」。同样地，模型先 file_list 再看行情回答，也会整段被丢弃。本轮新增的测试只覆盖了 file_search 有引用/无引用两种情况（tests/test_agent_runtime.py:745-774），没有 file_list-only 路径。",
+  "suggestion": "把收口范围从「任一文件工具」收窄为「产生了引用定位的工具」：在 runtime.py 新增 `_CITING_FILE_TOOLS = frozenset({\"file_search\", \"file_read\", \"table_schema\", \"table_query\"})`，`_uses_file_tools` 改用它（file_list 视为清单类工具豁免）；若产品上要求文件清单也必须带出处，则改在 file_tools.py:218-223 给 list_files 补文件级引用（如 metadata[\"citations\"] = [f\"《{name}》\"]）并在 citations.py 增加 file_level_citation，二者选一。同时在 tests/test_agent_runtime.py::FileCitationTests 增加一例：FakeModel 先 `ToolCall(\"file_list\", {})` 再回答「共 2 个文件：《年报.pdf》、《财务.xlsx》」，断言 `run.answer` 原样保留而不是「未在文件中找到」。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-17T13:15:51.661Z"
+  },
+  "createdAt": "2026-11-17T12:51:51.564Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-17T13:15:51.661Z"
+    }
+  ]
+}

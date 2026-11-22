@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwesozpx-7d920e",
+  "threadId": "rev-20261113-003",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "model-schema",
+  "file": "astock/agent/chart_spec.py",
+  "lines": "906-955",
+  "title": "交给模型的 JSON Schema 对 transforms/layers/annotations 未封闭，data.range/ref 也没有 pattern/enum，弱于“schema 即字段与枚举白名单”",
+  "evidence": "`_JSON_SCHEMA` 只在顶层、`data`、`encode` 设了 `additionalProperties: false`（:862、:870、:893）；`transforms`（:906-923）、`layers`（:925-941）、`annotations`（:943-955）的 item 只有 `properties`，没有 `additionalProperties: false`，`metrics`（:918）还是完全开放的 object。`data.ref`（:874）没有个股/指数/artifact 的 pattern，`data.range`（:883）只有 `type: string`，没有枚举或日期 pattern。于是模型按 schema 可以合法产出 `{\"op\":\"filter\",\"foo\":1}`、`{\"type\":\"ma\",\"bogus\":1}` 或任意 `range` 字符串，直到 `validate_chart_spec` 才被拒绝；验收条目写的是“交给模型的 schema 就是字段与枚举白名单”，当前 schema 并不是完整白名单。",
+  "suggestion": "让 `_JSON_SCHEMA` 与校验常量同源：对 transforms/layers/annotations 的 item 加 `additionalProperties: false`；`data.ref` 用 `oneOf` 表达 stock/index/artifact 三个 pattern；`data.range` 用 `oneOf` 枚举 + `^\\\\d{4}-\\\\d{2}-\\\\d{2}:\\\\d{4}-\\\\d{2}-\\\\d{2}$`；`metrics` 至少声明 `additionalProperties` 为白名单 metric 枚举。补一条 schema 测试：用 `jsonschema`（若已是依赖）或直接断言 `additionalProperties is False`，并断言未知 transform 键被 schema 拒绝。若不想维护两份定义，至少从 `TRANSFORM_PARAMS`/`LAYER_PARAMS` 等常量生成 properties，避免漂移。",
+  "confidence": 0.88,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-13T16:44:45.521Z"
+  },
+  "createdAt": "2026-11-13T09:49:26.613Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-13T16:44:45.521Z"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "ho-20261114-006",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261113-003",
+  "sessionId": "",
+  "title": "评审：图表 spec 与渲染管线",
+  "summary": "第 4 轮 diff 评审完成（base 75b5d64 → head b8736a8，3eca51e 仅 plan 证据）。上一轮 7 条已逐条核对并确认真实修复：panes/style/raw 已从校验器/schema/测试删除；data.ref 改 anyOf，jsonschema 指数用例通过；include_plotlyjs 进入 params；空 transforms 直接返回空时点；record_artifact meta 改 upsert；prune_artifacts 增加孤儿扫描；验收第 9 条已改为 v1 直接落库、chart_service 迁移 plan-20261114-002。上述 7 条可结案。\n\n本轮新增 1 条 P1、2 条 P2：\n1) P1 iss-mwfciv9a-8ce571（astock/agent/store.py:432-452）：prune_artifacts 的孤儿目录扫描只把 agent_artifacts.digest 当引用集，不读取保留行 meta[\"png_path\"]，也不受 keep_digests 保护；而 PNG 由 chart_render.py:1243-1246 写入独立 digest 目录、chart_render.py:1276-1284 只记录 HTML 行。因此清理时会把仍被活跃 HTML artifact 引用的 PNG 一并删除。必须修复并补“保留 HTML + 其 PNG”的回归。\n2) P2 iss-mwfciyhq-d889ce（astock/agent/store.py:261）：无条件 latest-wins upsert 会在同一 HTML 二次渲染且本次 PNG 失败时，把已有 degraded=False/有效 png_path 覆盖成 degraded=True/None；冻结清单第 221 行要求 degraded/png_path 升级，tests/test_agent_chart_render.py:186-212 只测 degraded→success。需改单调更新，或同步改契约并补 success→degraded 用例。\n3) P2 iss-mwfcj1wk-cda93e（docs/AStockAgent_chart_pipeline_decisions_v1.md:31,53,109-124,275）：决策记录仍写“保留 panes/style/raw、删除动作在 plan-20261114-002”，与已删除别名的代码和冻结清单冲突；需改为“已随 plan-005 删除/已取代”，并覆盖 raw 映射描述。\n\n修复责任：plan-20261107-005 开发负责 P1 与两条 P2；P2 若延期，须由架构在交付文档中书面承接并说明承接 plan。完全解决条件：下一轮 reviewer 确认 P1 已修、PNG 引用保护回归通过，P2 已修或经架构书面接受；pytest 目标 125+ passed、全量 482 passed/2 skipped、mypy 34 files、architecture gate 32 passed/1 skipped、CI 通过。当前 openP1=1，不能 approve；下一轮只复审本轮 diff 与新增回归。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 4,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 5,
+    "issues": [
+      {
+        "severity": "P1",
+        "title": "prune_artifacts 的孤儿目录扫描会删除仍被活跃 artifact 引用的 PNG",
+        "suggestion": "在删除孤儿目录前，把保留行 `meta_json` 中 `png_path` 解析出的 digest 加入保护集（同时保留 `keep_digests` 语义），或把 PNG 作为 `kind=\"file\"` 的 artifact 行记录，使其进入 `referenced`。补回归：创建 HTML 行 + 其 `png_path` 指向的 PNG，调用 `prune_artifacts` 并保留该 HTML，断言 PNG 文件和 `meta[\"png_path\"]` 仍存在；再构造真正无引用的 PNG，断言被清理。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "record_artifact 的最新写入 upsert 会把 success 降级回 degraded 并丢掉有效 png_path",
+        "suggestion": "把 `degraded`/`png_path` 做成单调升级：若已有 meta 为 `degraded=False` 且 `png_path` 非空，本次 PNG 失败时保留旧 PNG 引用（可把本次失败写入 warnings），只有成功导出才覆盖；若确定采用“最新写入为准”，则同步修改冻结清单第 221 行的“必须升级”表述并补 success→degraded 用例，明确旧 PNG 的清理策略。新增回归：先成功导出，再让 `_try_png` 返回 None，断言行仍是 degraded=False 且 png_path 指向仍存在的文件（或按文档明确断言降级行为）。",
+        "status": "open"
+      },
+      {
+        "severity": "P2",
+        "title": "决策记录仍写“保留 panes/style/raw 别名、删除动作在 plan-002”，与已删除别名的代码和冻结清单冲突",
+        "suggestion": "把 D5 整节改为“Q4=B 已随 plan-20261107-005 删除别名”，删除 `raw` 映射描述；把 :275 的 Q4 行改为“已落地（b8736a8）；plan-20261114-002 只承接渲染/审计边界”，并同步 :31/:53 的 `raw` 表述。若保留历史决策，请显式标注“已被 2026-11-14 裁决取代”，不要继续用“本轮保留”的现在时。可把 `test_freeze_doc_records_alias_removal` 扩展为同时断言决策记录含“已删除/已取代”且不含“保留别名”。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": "ho-20261114-003",
+  "next": "",
+  "createdAt": "2026-11-13T19:04:51.873Z",
+  "markdownPath": ".devloop/handoffs/ho-20261114-006.md"
+}

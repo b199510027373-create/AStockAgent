@@ -95,3 +95,27 @@ def latest_bar_time(df: pd.DataFrame, *, freq: str = "D") -> tuple[str, str]:
 - 全库检索：`data_time` 无生产者（2026-11-10 核验）
 - ADR-005（data_as_of / tradable_from 的拆分）
 - 用户 2026-11-07 消息；冻结语义：`docs/AStockAgent_interface_freeze_v1.md` §6
+
+## 落地回填（2026-11-19，plan-20261114-002 / Q1 + Q7）
+
+- **时点拆成两对**：`data_as_of`/`data_time` 仍是行情时点（transforms 之前，runtime/gateway
+  与 `ToolResult` 读它，文案不变）；新增 `view_as_of`/`view_time` 为 transforms 之后图上的
+  最后一根，只做展示（`RenderedFigure`/`meta`/`ToolResult.metadata`），聚合掉时间列时为空并在
+  图注写「视图时点未知（聚合后无时间列）」。旧记录写「旧版记录时点（语义未区分）」。
+- **09:25 集合竞价与盘后固定价不再是错误**：`astock/data.py` 新增
+  `classify_bar_time` / `bar_sessions` / `continuous_bars` / `validate_bar_time`；
+  `latest_bar_time` 接受这两类 bar 并在 notes/`meta["session"]` 标 `pre`/`post`，
+  `strict=True` 才硬失败；MA/BOLL/MACD/RSI/KDJ 只用连续竞价 bar，只有竞价数据时图注
+  「盘前，暂无连续竞价数据」，不回退前一日。验收：
+  `tests/test_data_pit_events.py::LatestBarTimeTests`、
+  `tests/test_agent_chart_render.py::test_auction_only_minute_frame_renders_with_pre_session_and_no_indicators`。
+- **回放语义**：`chart_service.load_chart_artifact(mode="as_recorded"|"recomputed")`
+  分离——as_recorded 逐字读记录的 HTML/meta；recomputed 只重算 `view_*`，行情时点采信 meta，
+  不一致只追加 warning，不静默覆盖。
+
+
+## 评审回填（2026-11-19，rev-20261119-002 / Q1 + Q7）
+- **指标样本**：`continuous_bars` 只用于分钟周期；日/周/月线（`classify_bar_time` 返回 `close`）
+  全量参与指标计算，避免日/周/月 MA/BOLL/MACD 静默为空。
+- **视图时点归因**：只有 transforms 丢掉时间列才写「（聚合后无时间列）」；`time_semantics=none`
+  写「（声明 time_semantics=none）」；图注文本由 `RenderedFigure.view_unknown_reason` 驱动。

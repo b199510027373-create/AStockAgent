@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwblx5s8-c58823",
+  "threadId": "rev-20261111-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "architecture",
+  "file": ".devloop/plan/items/plan-20261103-006.json",
+  "lines": "17",
+  "title": "ADR-010 条件 C2（横幅四状态文案去重）被改成「旧批次字段兼容映射」，C2 本身无人承接且门禁只做 token 匹配",
+  "evidence": "ADR-010 的 C2 原文是「横幅四状态文案去重：insufficient/unavailable/positive/negative 四状态已在统计层实现，但 UI 上与原有静态风险提示重复表述…验收：同一屏幕只出现一处「未验证」提示，四状态各有说明文案」。本分支把 plan-20261103-006 第 4 条验收改成「（ADR-010 C2）回归：旧批次渲染时做字段兼容映射」，astock/contracts.py:512、astock/use_cases.py:192 的注释也把 legacy 映射标成「ADR-010 C2」。在 .devloop/plan/items 内 grep「C2|四状态|文案去重|未验证」只有这一行命中，没有任何计划项承接横幅去重；去重也没做——astock/recommend_ui.py:57-58 仍写「若显示「样本不足」，说明还不能下结论」，与 astock/track.py:419 横幅自带的「样本不足，不显示显著性」在同一屏重复出现。门禁 tests/test_architecture_gate.py:155-171 只做 `condition_ids = re.findall(r\"\\*\\*(C\\d)\", section)` 后子串包含判断，acceptance 里只要有「C2」两个字就通过，因此这次错配不会被发现。",
+  "suggestion": "由开发在本分支修正三处：①把 plan-20261103-006 第 4 条验收恢复为 C1 口径（例如「（ADR-010 C1）回归：旧批次渲染时做字段兼容映射」）；②为 C2 新增独立验收并落地实现——在 astock/recommend_ui.py 删除或改写与横幅重复的静态提示，使 insufficient 状态下整屏只有一处「样本不足/未验证」表述，四状态各保留一句可读说明（track.py:417-446 已具备，补 no_alpha 即可），同时新增测试，例如 tests/test_alpha_banner.py::test_banner_states_do_not_duplicate_caveat 断言四/五状态渲染文本中「样本不足」最多出现一次；③把 tests/test_architecture_gate.py:155-171 从「C2」token 匹配改为条件标题关键词匹配（acceptance 必须同时命中条件标题中的关键词，如「四状态」「文案去重」），否则同类错配下次仍会通过。完全解决标准：C2 有明确承接计划项与验收、同屏去重有测试覆盖、门禁对「只写 C2 编号不写语义」的 acceptance 报错。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-11T04:32:06.393Z"
+  },
+  "createdAt": "2026-11-11T04:16:31.880Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-11T04:32:06.393Z"
+    }
+  ]
+}
