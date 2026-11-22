@@ -28,6 +28,7 @@
     ],
     "branch": "feat/plan-20261103-009-board-rules",
     "commit": "a36d581",
+    "head": "502deb2",
     "module": "backtest",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
     "test": [
@@ -35,10 +36,12 @@
       "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider => 901 passed, 3 skipped, 46 subtests passed in 112.03s",
       ".venv\\Scripts\\ruff.exe check astock tests => All checks passed!",
       ".venv\\Scripts\\mypy.exe astock app.py => Success: no issues found in 44 source files",
-      "gh run view 45043984007 => CI test pass 1m44s / png-export pass 1m0s (PR #46)"
+      "gh run view 45043984007 (head a36d581) => test pass 1m44s / png-export pass 1m0s",
+      "gh run view 45044322816 (head 82798bf) => test pass 1m43s / png-export pass 1m11s",
+      "gh run view 45044560146 (head 502deb2) => test pass 1m41s / png-export pass 1m9s"
     ]
   },
   "createdAt": "2026-11-03T12:10:47.673Z",
-  "updatedAt": "2026-11-22T16:30:00.511Z",
+  "updatedAt": "2026-11-22T16:36:04.097Z",
   "devSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613"
 }
