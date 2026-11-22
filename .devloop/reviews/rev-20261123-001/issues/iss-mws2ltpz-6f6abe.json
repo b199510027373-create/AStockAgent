@@ -1,0 +1,33 @@
+{
+  "id": "iss-mws2ltpz-6f6abe",
+  "threadId": "rev-20261123-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_board_rules.py",
+  "lines": "110-190, 283-304",
+  "title": "ST 5% 与旧规首日 44%/36% 只有纯函数用例，缺 run_backtest 端到端用例",
+  "evidence": "tests/test_board_rules.py:110-190（LimitPctTests/IpoRuleTests）只断言 limit_pct/limit_rule 的返回值；run_backtest 的端到端用例只有 SuspensionTests（:233-280）与 IpoBacktestTests（:283-304，仅创业板无涨跌幅窗口）。缺两条关键端到端断言：(1) 主板 ST（name=\"*ST某某\"、pre=10、high==low==10.5）一字 5% 应 0 成交；(2) 旧规则首日 44%（pre=10、high==low==14.4、list_date=首根 bar）应 0 成交。\"name 是否真的传入 rule\"\"44%/36% 是否真的阻断成交\"因此未被验证——这正是上面 P1（optimize/strategy_lab 未传 name/list_date）在本地用例题里无法暴露的原因。",
+  "suggestion": "在 tests/test_board_rules.py 增加两条 run_backtest 用例：测试 1 用 name=\"*ST某某\"、list_date 早于数据起点、第二根 bar pre_close=10/high=low=10.5，断言 `len(result.trades)==0` 且 shares==0；测试 2 用主板 code、list_date=首根 bar 日期、第二根 bar high=low=14.4、pre_close=10，断言 0 成交，再加一根 14.5 的 bar 验证非限价一字可成交（避免用死断言）。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已补端到端用例（54a3cd8）：tests/test_board_rules.py EndToEndRuleTests 覆盖 ST 5% 一字 0 成交（对照非 ST 可成交）、旧规首日 44% 一字 0 成交、首日低于 44% 可成交、次日高于 44% 可成交。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T17:52:42.695Z"
+  },
+  "createdAt": "2026-11-22T16:47:55.319Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已补端到端用例（54a3cd8）：tests/test_board_rules.py EndToEndRuleTests 覆盖 ST 5% 一字 0 成交（对照非 ST 可成交）、旧规首日 44% 一字 0 成交、首日低于 44% 可成交、次日高于 44% 可成交。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T17:52:42.695Z"
+    }
+  ]
+}

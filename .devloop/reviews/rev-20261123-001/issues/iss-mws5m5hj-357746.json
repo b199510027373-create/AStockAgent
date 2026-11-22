@@ -1,0 +1,33 @@
+{
+  "id": "iss-mws5m5hj-357746",
+  "threadId": "rev-20261123-001",
+  "roundNo": 5,
+  "severity": "P2",
+  "category": "process",
+  "file": ".devloop/reviews/rev-20261123-001/issues/iss-mws2ln9l-646d4c.json",
+  "lines": "13-32",
+  "title": "11 条 issue 批量回填 status=fixed，但其中 4 条（含第 1 轮 P1）feedback.comment 为空，与交付文档「comment 含提交号/文件行/测试证据」不符",
+  "evidence": "2874e62 把 11 条 issue 批量回填为 `\"status\": \"fixed\"` + `feedback.option=\"fixed\"`，但其中 4 条的 `feedback.comment` 与 `feedbackHistory[0].comment` 为空字符串：iss-mws2ln9l-646d4c.json:17/27（第 1 轮 P1）、iss-mws2ltn4-c82470.json:17/27、iss-mws2lto3-f8ab4c.json:17/27、iss-mws2ltp0-6b9e10.json:17/27（grep `\"comment\":` 共 22 处命中，7 条有实质内容、4 条为空）。ho-20261123-016 的 changes 自述「feedback（option=fixed、comment 含提交号/文件行/测试证据、feedbackHistory 各 1 条）」，与文件实际内容不符。技术修复本身我在第 2~5 轮已逐条复核（security_meta 接线、README 差异登记、工作日计数窗口），因此不影响本轮 approve；缺的是闭环记录的可审计性：后续接手者只看 ledger 时，对这条 P1 只能看到「fixed」而无提交号/文件行/验证证据，无法判断修复口径（是接线还是 README 限定 + 后续项，两者结论不同）。",
+  "suggestion": "开发会话在 2874e62 的 issues 目录里补 4 条空的 `feedback.comment`（同步 `feedbackHistory[0].comment`）：iss-mws2ln9l-646d4c 写「已接线（54a3cd8）：optimize.py:86/178/193 与 strategy_lab.py:71/136/150 透传 name/list_date，UI 经 events.security_meta() 取数；tests/test_optimize.py RuleWiringTests 覆盖四条入口」，另 3 条按第 1 轮修复提交写清文件行与验证方式（README.md:171-186 口径修订、README.md:182 ST 非 PIT 登记、astock/backtest.py:191-210 np.busday_count + ListingOffsetGapTests）。改完后 `feedback.comment` 非空且含提交号/文件行/测试证据，与 ho-016 的描述一致即可。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已修复（本次记录提交）：补齐 iss-mws2ln9l-646d4c（astock/optimize.py:86/178/193-203 与 astock/strategy_lab.py:71/136/150-160 透传 name/list_date，tests/test_optimize.py:63-122 spy 断言）、iss-mws2ltn4-c82470（astock/backtest.py:239-256 临停 ≥30% 近似，IntradayHaltTests）、iss-mws2lto3-f8ab4c（README 已知差异 + ADR-008 登记 ST 非 PIT）、iss-mws2ltp0-6b9e10（astock/backtest.py:191-210 np.busday_count 工作日计数，tests 断言 [0,1,9]）四条空 comment；11 条历史 issue 现均带非空反馈，feedbackHistory 已同步。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T18:13:32.356Z"
+  },
+  "createdAt": "2026-11-22T18:12:09.415Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已修复（本次记录提交）：补齐 iss-mws2ln9l-646d4c（astock/optimize.py:86/178/193-203 与 astock/strategy_lab.py:71/136/150-160 透传 name/list_date，tests/test_optimize.py:63-122 spy 断言）、iss-mws2ltn4-c82470（astock/backtest.py:239-256 临停 ≥30% 近似，IntradayHaltTests）、iss-mws2lto3-f8ab4c（README 已知差异 + ADR-008 登记 ST 非 PIT）、iss-mws2ltp0-6b9e10（astock/backtest.py:191-210 np.busday_count 工作日计数，tests 断言 [0,1,9]）四条空 comment；11 条历史 issue 现均带非空反馈，feedbackHistory 已同步。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T18:13:32.356Z"
+    }
+  ]
+}

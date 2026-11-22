@@ -32,42 +32,228 @@ class BacktestResult:
     state: dict[str, Any] = field(default_factory=dict)
 
 
+#: 创业板注册制改革生效日：此后涨跌幅 20%，新股上市前 5 个交易日不设限。
+CHINEXT_REFORM_DATE = pd.Timestamp("2020-08-24")
+#: 沪深主板全面注册制首批上市日：此后主板新股前 5 个交易日不设涨跌幅。
+MAIN_BOARD_REG_IPO_DATE = pd.Timestamp("2023-04-10")
+
+_BOARD_LIMIT: dict[str, float] = {"main": 0.10, "chinext": 0.20, "star": 0.20, "bse": 0.30}
+_BOARD_LABEL: dict[str, str] = {"main": "主板", "chinext": "创业板", "star": "科创板", "bse": "北交所"}
+
+
+def _to_ts(value) -> pd.Timestamp | None:
+    """宽松转日期：None/NaT/非法值返回 None，不抛异常。"""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        return None
+    try:
+        return pd.Timestamp(value).normalize()
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def board_of(code: str) -> str:
+    """按代码归属交易板块：``main`` / ``chinext`` / ``star`` / ``bse``。
+
+    北交所：``.BJ`` 后缀或 43/83/87/92 开头（88 开头是北证指数，不算股票）；
+    创业板 300/301；科创板 688/689。未知前缀按主板处理（保守：不放大涨跌幅）。
+    """
+    raw = str(code or "").strip().upper()
+    body = raw.split(".", 1)[0]
+    if raw.endswith(".BJ"):
+        return "bse"
+    if body.startswith(("300", "301")):
+        return "chinext"
+    if body.startswith(("688", "689")):
+        return "star"
+    if body.startswith(("43", "83", "87", "92")):
+        return "bse"
+    return "main"
+
+
 def limit_pct(code: str, name: str = "") -> float:
-    """涨跌停比例；ST 5%，创业板/科创板 20%，北交所 30%。"""
-    if "ST" in str(name).upper():
+    """**当前**口径的涨跌停比例：ST 5%，创业板/科创板 20%，北交所 30%，主板 10%。
+
+    历史切换（创业板 2020-08-24 前 10%、IPO 无涨跌幅窗口）由 :func:`limit_rule`
+    按交易日逐根判断；本函数只用于展示与不带日期的调用。
+
+    注：创业板/科创板 ST 现实规则仍是 20%，这里统一按 5% 处理是**保守**方向
+    （更早触发"一字板不可成交"），README「回测口径与限制」有说明。
+    """
+    if "ST" in str(name or "").upper():
         return 0.05
-    code = code.upper()
-    if code.startswith(("300", "301", "688")):
-        return 0.20
-    if code.startswith(("8", "4")):
-        return 0.30
-    return 0.10
+    return _BOARD_LIMIT[board_of(code)]
+
+
+@dataclass(frozen=True)
+class LimitRule:
+    """单根 bar 的涨跌幅限制；``None`` 表示该方向不设限。"""
+
+    up: float | None
+    down: float | None
+    note: str = ""
+
+    @property
+    def unbounded(self) -> bool:
+        return self.up is None and self.down is None
+
+
+def ipo_unbounded_days(code: str, list_date=None) -> int:
+    """上市后前 N 个交易日**完全不设涨跌幅**（首日算第 0 天）。
+
+    科创板 5 日；2020-08-24 起创业板 5 日；北交所 1 日；2023-04-10 起沪深主板 5 日。
+    旧规则（2023-04-10 前主板、2020-08-24 前创业板）首日 44%/36%，故返回 0。
+    """
+    board = board_of(code)
+    if board == "star":
+        return 5
+    if board == "bse":
+        return 1
+    listed = _to_ts(list_date)
+    if board == "chinext":
+        return 5 if listed is not None and listed >= CHINEXT_REFORM_DATE else 0
+    return 5 if listed is not None and listed >= MAIN_BOARD_REG_IPO_DATE else 0
+
+
+def limit_rule(
+    code: str,
+    name: str = "",
+    trade_date=None,
+    list_date=None,
+    listing_day: int | None = None,
+) -> LimitRule:
+    """一根 bar 的涨跌停规则：板块基准 + 历史切换 + IPO 窗口 + ST。
+
+    ``listing_day`` 为该 bar 是上市后第几个交易日（首日 0）；只有回测数据从上市日
+    起完整覆盖时才由 :func:`_listing_offsets` 传入，未知时传 ``None``（按常规限价，
+    宁可保守也不假设"新股无涨跌停"）。
+    """
+    board = board_of(code)
+    if listing_day is not None:
+        if listing_day < 0:
+            return LimitRule(0.0, 0.0, "未上市")
+        window = ipo_unbounded_days(code, list_date)
+        if listing_day < window:
+            return LimitRule(None, None, f"{_BOARD_LABEL[board]}上市前 {window} 个交易日无涨跌幅")
+        if listing_day == 0:
+            return LimitRule(0.44, 0.36, "旧规则上市首日 44%/36%")
+    pct = limit_pct(code, name)
+    if board == "chinext":
+        day = _to_ts(trade_date)
+        if day is not None and day < CHINEXT_REFORM_DATE:
+            pct = 0.05 if "ST" in str(name or "").upper() else 0.10
+    return LimitRule(pct, pct, _BOARD_LABEL[board])
+
+
+def _raw_price(row: pd.Series, *keys: str) -> float | None:
+    """按优先级取第一个有效的正价格（缺失/NaN/<=0 继续找下一个）。"""
+    for key in keys:
+        try:
+            number = float(row.get(key))
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(number) and number > 0:
+            return number
+    return None
+
+
+def _one_price_limit_by_rule(row: pd.Series, rule: LimitRule, side: str) -> bool:
+    """一字涨/跌停：全天只有一个价格且顶在限价上，无法成交。"""
+    if rule.unbounded:
+        return False
+    pct = rule.up if side == "buy" else rule.down
+    if pct is None:
+        return False
+    pre = _raw_price(row, "raw_pre_close", "pre_close")
+    high = _raw_price(row, "raw_high", "high")
+    low = _raw_price(row, "raw_low", "low")
+    if pre is None or high is None or low is None or high != low:
+        return False
+    if side == "buy":
+        limit_price = round(pre * (1 + pct), 2)
+        return low >= limit_price - 0.005
+    limit_price = round(pre * (1 - pct), 2)
+    return high <= limit_price + 0.005
 
 
 def _one_price_limit(row: pd.Series, pct: float, side: str, list_date=None) -> bool:
-    """一字涨/跌停：全天只有一个价格，无法成交。
+    """兼容入口：按固定比例判断一字板；上市首日按旧口径直接视为可成交。"""
+    trade_date = _to_ts(row.get("trade_date"))
+    if _to_ts(list_date) is not None and trade_date == _to_ts(list_date):
+        return False
+    return _one_price_limit_by_rule(row, LimitRule(float(pct), float(pct)), side)
 
-    优先使用未复权原始价；复权价只用于收益，不用于交易所限价。
-    新股上市首日通常不设涨跌幅，直接视为可成交。
+
+def _listing_offsets(dates, list_date) -> np.ndarray | None:
+    """每个 bar 距上市日的交易日序号（首日 0）；数据未覆盖上市日则返回 None。
+
+    按**工作日**（周一至周五）计数，而不是 bar 序号：日线里停牌缺口、缺 bar
+    不会再让"上市后第 N 个交易日"偏小，把已恢复常规限价的 bar 错放进 IPO
+    无涨跌幅窗口。法定节假日被当成工作日计入会**高估**偏移，只会让窗口更早
+    结束（更保守）。数据首根 bar 晚于上市日时无法推断，返回 ``None`` 走常规
+    限价；首日之前若混入 bar，序号为负，调用方按"未上市"拒绝成交。
     """
-    if list_date is not None and pd.notna(list_date):
-        try:
-            if pd.Timestamp(row.get("trade_date")).normalize() == pd.Timestamp(list_date).normalize():
-                return False
-        except (ValueError, TypeError):  # 日期缺失/非法时按“未上市”继续
-            pass
-    pre = row.get("raw_pre_close", row.get("pre_close"))
-    high = row.get("raw_high", row.get("high"))
-    low = row.get("raw_low", row.get("low"))
-    if pd.isna(pre) or pre <= 0:
+    listed = _to_ts(list_date)
+    if listed is None:
+        return None
+    days = pd.to_datetime(pd.Series(dates)).dt.normalize()
+    if days.empty:
+        return None
+    if days.iloc[0] > listed:
+        return None
+    start = np.datetime64(listed.date(), "D")
+    ends = days.to_numpy().astype("datetime64[D]")
+    return np.busday_count(start, ends)
+
+
+def _positive(value) -> bool | None:
+    """价格/量能转正数判断；缺失或非有限值返回 None。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(number):
+        return None
+    return number > 0
+
+
+def _has_trading_volume(row: pd.Series) -> bool:
+    """该 bar 是否有成交：停牌/无成交（0 量、0 额）不产生成交。
+
+    优先看成交量；缺失时退回成交额；两者都没有才按"可成交"处理，避免无 vol
+    列的测试/导出数据被静默判成停牌。
+    """
+    volume = _positive(row.get("vol"))
+    if volume is not None:
+        return volume
+    amount = _positive(row.get("amount"))
+    if amount is not None:
+        return amount
+    return True
+
+
+#: 无涨跌幅窗口内，单日振幅达到该阈值视为可能触发盘中临停（科创板/创业板 30% 档）。
+INTRADAY_HALT_AMPLITUDE = 0.30
+
+
+def _suspected_intraday_halt(row: pd.Series, rule: LimitRule) -> bool:
+    """无涨跌幅窗口内振幅 ≥30% 时，按"可能盘中临停"拒绝成交（保守近似）。
+
+    日线只有开高低收，无法还原临停时段与复牌后的真实可成交性；振幅异常放大时
+    宁可错过交易，也不假设全天都能自由买卖。常规限价日不启用该判定（振幅大
+    但未触板的情况仍按一字板规则处理）。README「回测与实盘的已知差异」有说明。
+    """
+    if not rule.unbounded:
         return False
-    if high != low:
+    high = _raw_price(row, "raw_high", "high")
+    low = _raw_price(row, "raw_low", "low")
+    if high is None or low is None or low <= 0:
         return False
-    if side == "buy":
-        limit_price = round(float(pre) * (1 + pct), 2)
-        return float(low) >= limit_price - 0.005
-    limit_price = round(float(pre) * (1 - pct), 2)
-    return float(high) <= limit_price + 0.005
+    return high / low - 1 >= INTRADAY_HALT_AMPLITUDE
 
 
 def run_backtest(
@@ -91,6 +277,7 @@ def run_backtest(
     - t 日收盘生成信号，t+1 日开盘成交（避免未来函数）
     - T+1：当日买入不能当日卖出
     - 一字涨停不能买、一字跌停不能卖
+    - 停牌（0 量/0 额、缺 bar）不成交；无涨跌幅窗口内振幅 ≥30% 视为可能盘中临停，不成交
     - 佣金双边万 2.5、最低 5 元；印花税卖出万 5；滑点单边万 5
     - 按 100 股整数倍交易，满仓
     """
@@ -109,7 +296,17 @@ def run_backtest(
         .to_numpy()
     )
 
-    pct = limit_pct(code, name)
+    offsets = _listing_offsets(data["trade_date"], list_date)
+    rules = [
+        limit_rule(
+            code,
+            name,
+            trade_date=day,
+            list_date=list_date,
+            listing_day=None if offsets is None else int(offsets[pos]),
+        )
+        for pos, day in enumerate(data["trade_date"])
+    ]
     initial_state = initial_state or {}
     cash = float(initial_state.get("cash", cfg.initial_cash))
     shares = int(initial_state.get("shares", 0) or 0)
@@ -124,8 +321,11 @@ def run_backtest(
         # 常规回测：执行前一日收盘信号；连续 WF：首日执行上一窗口最后信号
         target = sig[i - 1] if i > 0 else prev_signal
         if target is not None:
-            has_volume = pd.notna(row.get("vol")) and float(row["vol"]) > 0
-            if target == 1 and position == 0 and has_volume and not _one_price_limit(row, pct, "buy", list_date):
+            # 停牌（0 量/0 额）、未上市（上市日之前的 bar）与可能盘中临停都不产生成交。
+            rule = rules[int(i)]
+            listed = offsets is None or int(offsets[i]) >= 0
+            tradable = listed and _has_trading_volume(row) and not _suspected_intraday_halt(row, rule)
+            if target == 1 and position == 0 and tradable and not _one_price_limit_by_rule(row, rule, "buy"):
                 price = float(row["open"]) * (1 + cfg.slippage)
                 lots = int(cash // (price * cfg.lot_size * (1 + cfg.commission_rate)))
                 while lots > 0:
@@ -144,7 +344,7 @@ def run_backtest(
                     entry_date = row["trade_date"]
                     entry_cost = amount + fee
 
-            elif target == 0 and position == 1 and has_volume and not _one_price_limit(row, pct, "sell", list_date):
+            elif target == 0 and position == 1 and tradable and not _one_price_limit_by_rule(row, rule, "sell"):
                 price = float(row["open"]) * (1 - cfg.slippage)
                 amount = shares * price
                 fee = max(cfg.min_commission, amount * cfg.commission_rate)

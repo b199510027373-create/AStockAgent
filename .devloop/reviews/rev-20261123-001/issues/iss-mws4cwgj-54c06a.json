@@ -1,0 +1,33 @@
+{
+  "id": "iss-mws4cwgj-54c06a",
+  "threadId": "rev-20261123-001",
+  "roundNo": 3,
+  "severity": "P2",
+  "category": "docs",
+  "file": "README.md",
+  "lines": "184-185",
+  "title": "README 新增「更旧缓存显式报错、避免静默用过期股票池」但进程内 _BASIC/_BASIC_ALL 无日期校验，跨天仍静默复用",
+  "evidence": "README.md:184-185 新增「离线时只有**当天**写出的基础信息缓存允许静默回退；更旧的缓存会显式报错，避免推荐/选股静默使用过期股票池」。该约束只作用于 **文件** 路径（astock/events.py:154-159 _cache_is_current、:189-205 _load_basic），而进程内 memo 仍然无日期判断：astock/events.py:224-225 `if _BASIC is not None and not refresh: return _BASIC.copy()`、:237-238 `if _BASIC_ALL is not None and not refresh: return _BASIC_ALL.copy()`。长驻进程（Gradio app / scheduler loop，astock/scheduler.py 的 loop）跨过零点后，:224 会继续返回前一天的股票池，不会走 _load_basic 的当天校验，也不会报错——与 README 让读者推断的「不会静默使用过期股票池」不一致。影响有限（进程重启即恢复，且不影响涨跌停口径），故 P2。",
+  "suggestion": "二选一：(a) 文档限定——把 :184-185 改为「**离线回退**时只有当天写出的缓存文件允许静默使用；进程内缓存自首次调用起保留到进程重启」；(b) 代码对齐——给 `_BASIC` / `_BASIC_ALL` 各记一个写入日期（或复用 `_cache_is_current` 的同日判断），跨天时视为失效并重新走 `_load_basic`，并补一条用例：把 `_BASIC` 置为旧数据 + meta 为昨天，跨天后 `stock_basic()` 不再返回旧行。完成条件：README 表述与 `stock_basic()` / `stock_basic_all()` 在跨天场景下的实际行为一致（含用例或明确限定措辞）。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已修复（ee6b2c3）：astock/events.py 为 stock_basic/stock_basic_all 的进程内 memo 增加纪元日期与 _memo_is_current()，跨天重新读盘/回源；README 新鲜度条目改为同时覆盖文件与进程内缓存；新增跨天刷新、同日复用两条用例。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T17:52:42.695Z"
+  },
+  "createdAt": "2026-11-22T17:36:58.195Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已修复（ee6b2c3）：astock/events.py 为 stock_basic/stock_basic_all 的进程内 memo 增加纪元日期与 _memo_is_current()，跨天重新读盘/回源；README 新鲜度条目改为同时覆盖文件与进程内缓存；新增跨天刷新、同日复用两条用例。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T17:52:42.695Z"
+    }
+  ]
+}

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import unittest
+from typing import ClassVar
+from unittest import mock
 
 import numpy as np
 import pandas as pd
 
+from astock import optimize
+from astock import strategy_lab as lab
 from astock.backtest import make_signals_params
 from astock.factors import compute_ic
 from astock.indicators import add_all
@@ -54,6 +58,68 @@ class OptimizeTests(unittest.TestCase):
         )
         self.assertGreaterEqual(wf.metrics["windows"], 1)
         self.assertIn("best", wf.walk.columns)
+
+
+class RuleWiringTests(unittest.TestCase):
+    """评审 iss-mws2ln9l：优化/策略实验室必须与单票回测同口径（ST 5%、IPO 窗口）。"""
+
+    META: ClassVar[dict[str, str]] = {"name": "*ST某某", "list_date": "2020-01-02"}
+
+    def assert_forwarded(self, spy):
+        calls = spy.call_args_list
+        self.assertTrue(calls)
+        for call in calls:
+            self.assertEqual(call.kwargs.get("name"), self.META["name"])
+            self.assertEqual(call.kwargs.get("list_date"), self.META["list_date"])
+
+    def test_grid_search_forwards_name_and_list_date(self):
+        daily = synthetic_daily(400)
+        with mock.patch.object(optimize, "run_backtest", wraps=optimize.run_backtest) as spy:
+            optimize.grid_search(
+                daily, "600000.SH", [2, 3], [5, 10], None, "sharpe",
+                name="*ST某某", list_date="2020-01-02",
+            )
+        self.assert_forwarded(spy)
+
+    def test_walk_forward_forwards_name_and_list_date(self):
+        daily = synthetic_daily(400)
+        with mock.patch.object(optimize, "run_backtest", wraps=optimize.run_backtest) as spy:
+            optimize.walk_forward(
+                daily, "600000.SH", [2, 3], [5, 10], None,
+                train_years=1.0, test_months=1, metric="sharpe",
+                name="*ST某某", list_date="2020-01-02",
+            )
+        self.assert_forwarded(spy)
+
+    def test_strategy_grid_forwards_name_and_list_date(self):
+        daily = synthetic_daily(400)
+        with mock.patch.object(lab, "run_backtest", wraps=lab.run_backtest) as spy:
+            lab.grid_strategy(
+                daily, "600000.SH", "MA双均线",
+                [{"fast": 2, "slow": 5}, {"fast": 3, "slow": 10}], None,
+                name="*ST某某", list_date="2020-01-02",
+            )
+        self.assert_forwarded(spy)
+
+    def test_strategy_walk_forward_forwards_name_and_list_date(self):
+        daily = synthetic_daily(400)
+        with mock.patch.object(lab, "run_backtest", wraps=lab.run_backtest) as spy:
+            lab.walk_forward_strategy(
+                daily, "600000.SH", "MA双均线",
+                [{"fast": 2, "slow": 5}, {"fast": 3, "slow": 10}], None,
+                1.0, 1, "sharpe", name="*ST某某", list_date="2020-01-02",
+            )
+        self.assert_forwarded(spy)
+
+    def test_portfolio_passes_per_code_meta(self):
+        daily = synthetic_daily(400)
+        meta = {"600000.SH": self.META}
+        with mock.patch.object(lab, "load_data", return_value=(daily, None)), \
+                mock.patch.object(lab, "walk_forward_strategy", wraps=lab.walk_forward_strategy) as spy:
+            lab.portfolio_walk_forward(
+                ["600000.SH"], "MA双均线", "3年", 1.0, 1, "sharpe", meta=meta
+            )
+        self.assert_forwarded(spy)
 
 
 class SignificanceTests(unittest.TestCase):

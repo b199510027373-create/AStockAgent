@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261123-001-r4",
+  "threadId": "rev-20261123-001",
+  "roundNo": 4,
+  "scope": "diff",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "approve",
+  "summary": "第 4 轮（scope=diff，base 156f962 → ee6b2c3，记录提交 8f26641/28ec190 仅 .devloop 文档）复核结论：approve。本轮 counts P0=0 / P1=0 / P2=1；线程 status=approved。\n\n一、diff 内改动已逐条核对通过\n1. astock/events.py:18-22 新增 `_BASIC_DAY` / `_BASIC_ALL_DAY` 纪元日期，:220-223 `_memo_is_current(day)` 以 `day == _today_str()` 判定；:230-235 `stock_basic()` 的 memo 命中条件加入 `_memo_is_current(_BASIC_DAY)` 并在 `_load_basic(\"stock_basic.parquet\", (\"L\",), refresh)` 后写回当天日期；:244-249 `stock_basic_all()` 对 `(\"L\",\"D\",\"P\")` / `stock_basic_all.parquet` 做同样处理。iss-mws4cwgj-54c06a（README 声称按天新鲜度但进程内 memo 无日期校验）在实现层已消除，改法与建议一致。\n2. tests/test_board_rules.py:326 第 4 根 bar 显式设为 2024-05-20，offsets 由 [0,1,9,9] 变为 [0,1,9,10]，夹具不再倒序（iss-mws4cwf7-d94964 消除）；:345-347 新增 `assertLess(trade[\"买入日期\"], trade[\"卖出日期\"])` 守住卖出晚于买入这一前提；:464 setUp 同步重置 4 个模块级全局，避免用例间污染；:557-583 新增跨天刷新与同日复用两条用例，后者 `loader.assert_not_called()` 能真正锁住「当日复用」分支。\n3. README.md:185 新鲜度条目已扩为「文件缓存 + 进程内缓存都带写出日期、跨天重新读盘/回源」，与代码口径一致；ADR-008 第 3 轮收尾两条记录、adrs.json summary 同步，符合 ADR-008「差异必须登记」的既有约束，未违反契约 v1.1 的 DATA-04 与 ARCH-01/02。\n4. 第 2、3 轮遗留修复未回退：`_listing_offsets` 工作日计数（astock/backtest.py:191-210）、`_suspected_intraday_halt` 振幅 ≥30%（astock/backtest.py:239-256 并入 :320-328 tradable）、优化/策略实验室 name/list_date 透传（astock/optimize.py:86/178/193、astock/strategy_lab.py:71/136/150、portfolio meta 路径）均仍在位。\n\n二、本轮新增问题（1 条 P2，open）\n- iss-mws4ttve-4b599a（tests/test_board_rules.py:557-583）：按天校验只对 `stock_basic` 有用例，回测真正调用的 `security_meta() → stock_basic_all()`（astock/events.py:252-274）跨天刷新分支无用例，而 `_BASIC_ALL_DAY` 在 tests 里只出现在 setUp 重置。属新修分支的配套覆盖缺口，不构成功能缺陷。\n\n三、测试证据评估（执行归开发，本次只审充分性）\nplan-20261103-009 links.test 与 ho-20261123-014 提供的证据：test_board_rules 47 passed / 26 subtests、5 文件集 131 passed、全量 923 passed / 3 skipped、ruff clean、mypy 44 files clean、coverage 80.45%（fail_under 76.45）、判别性验证 failures=1（用旧 bar 序号实现替换 `_listing_offsets` 时 `test_suspension_gap_ends_ipo_window` 失败）、CI run 45051208430（head 8f26641）test+png-export success。四条验收（板块 20%/30%/ST 5% 单测、IPO 首日与 N 日窗口有实现、停牌与上市前 bar 不成交、README 记录差异）均有对应实现与用例支撑，第 1 轮 P1「规则未接入优化/策略实验室」已由 `security_meta` + 三个 UI 统一取数闭环。\n\n四、结论与闭环责任（明确到人、条件、判定标准）\n1. 开发（本计划 owner）：处理 iss-mws4ttve-4b599a——在 tests/test_board_rules.py 补 `stock_basic_all` 跨天刷新/同日复用对称用例（或参数化现有两条）；实测命令建议 `python -m pytest tests/test_board_rules.py -q` 与全量 pytest 复跑，ruff/mypy 不变。属 P2，可在下一次交付或后续 plan 项内完成，不阻断本线程。\n2. 开发：`.devloop/reviews/rev-20261123-001/issues/` 下 10 条历史 issue（含 iss-mws2ln9l-646d4c P1）status 仍为 open、feedback 为 null；评审工具没有关闭 issue 的 action，需要开发侧按 PR.md「逐条填写真实反馈（已修复/换方案/延后/不采纳/重复）」再触发归零。handoff 的 openP1=1 与 resolved=false 即由此产生，不是新发现的缺陷。\n3. 用户：合并 PR #46（当前 OPEN/MERGEABLE，未合并）由用户决定；plan-20261103-009 的 in_review → done 由 owner 在合并与反馈回填后推进。\n4. 判定「完全解决」的条件：openP0=0 且 openP1=0（本轮已满足：P0=0、P1=0），且 iss-mws4ttve-4b599a 与其余 P2 在下一轮评审中被复核为已修复/已登记延后；一旦开发回填 issue 反馈并合并 PR #46，本线程即可标记 resolved。",
+  "startedAt": "2026-11-22T17:49:38.985Z",
+  "finishedAt": "2026-11-22T17:50:16.116Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 1,
+    "total": 1
+  }
+}

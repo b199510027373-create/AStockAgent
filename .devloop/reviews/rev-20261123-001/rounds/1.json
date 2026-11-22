@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261123-001-r1",
+  "threadId": "rev-20261123-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮（scope=full）评审完成。范围：README.md、astock/backtest.py、tests/test_board_rules.py，外加接线核对所需的 astock/optimize.py、optimize_ui.py、strategy_lab.py、backtest_ui.py；对照 ADR-008、契约 v1.1 DATA-04（raw 价判涨跌停、ST 5%）与 plan-20261103-009 四条验收。\n\n结论：request_changes。openP0=0、openP1=1、openP2=4，不满足完整解决条件。核心逻辑本身质量较好：board_of/limit_pct/LimitRule/limit_rule 分层清晰，买入与卖出两侧的一字板判定都用 raw_* 价并留 0.005 容差，停牌按量能识别、上市前 bar 不成交，qfq 信号/raw 成交口径符合契约。\n\n必须修的一条（P1）：\n- iss-mws2ln9l-646d4c ｜ astock/optimize.py:83,172,187-195 + astock/strategy_lab.py:68,130,144：ST 5% 与 IPO 无涨跌幅规则只接进了 astock/backtest_ui.py:46-58 → astock/backtest.py:619 这一条路径，参数优化与策略实验室仍用默认 name=\"\"/list_date=None。ST 股真实 5% 一字板在 10%/20% 口径下会被当作可成交（乐观偏差，直接影响选参与 walk-forward 择优），README.md:166/169 的无条件表述对这两个 Tab 不成立。修复责任：开发。修复方式二选一——(a) grid_search/walk_forward/grid_strategy 透传 name/list_date 并由 UI 从 stock_basic() 取；(b) 明确不接线，则 README 改为限定表述并为两个 Tab 建后续 plan 项。验收条件：三条 run_backtest 入口行为一致，或有 README 限定 + 后续项，二者缺一不算解决。\n\n四条 P2（开发修，下一轮 diff 复核）：\n- iss-mws2ltn4-c82470 ｜ README.md:171-175,181：验收 3「临时停牌不产生虚假成交」与实现（只识别全天停牌）不一致，ho-20261123-003 的 REQ-3 却已标完成。改 plan acceptance 为限定表述并同步 ADR-008（需架构 owner 确认），或落地「无涨跌幅窗口内振幅≥30% 视作临停不可成交」。\n- iss-mws2lto3-f8ab4c ｜ astock/backtest.py:78-90：ST 用 stock_basic 当前名称，非 PIT；README.md:159 未标注。README 已知差异补一条 + ADR-008 登记，或接 namechange 按 trade_date 取历史名称。\n- iss-mws2ltp0-6b9e10 ｜ astock/backtest.py:191-207：_listing_offsets 用 bar 序号近似交易日序号，窗口内停牌缺口会拉长无涨跌幅窗口。改用交易日历，或检测间隔异常返回 None（退回常规限价），并补缺口用例。\n- iss-mws2ltpz-6f6abe ｜ tests/test_board_rules.py:110-190,283-304：ST 5% 一字与旧规首日 44%/36% 只有纯函数断言，缺 run_backtest 端到端用例（也正因如此 P1 那类接线缺口本地测不出来）。各补一条端到端用例。\n\n测试充分性：开发提供的证据（tests/test_board_rules.py 30 passed/26 subtests、全量 pytest 901 passed/3 skipped、ruff、mypy 44 files、CI run 45043984007/45044322816/45044560146 全绿）本轮未能独立复核——当前会话无 shell 工具，无法执行 `gh auth status`/pytest，仅依据 plan links 与 handoff 记录；CI 侧以 PR #46 的 run 记录为准，无 P0 级测试缺失（关键正确性风险由 P1 覆盖）。PR #46 仍 OPEN/MERGEABLE、代码自 a36d581 未变，评审基于该提交。\n\n何时判定完全解决：开发完成 P1 的 (a) 或 (b) 且按各自改法处理四条 P2（或对其中任一条给出经 owner 确认的显式降级/延期决定）→ 下一轮 diff 复核确认 P1 已关、P2 逐条关闭后，本线程可 approve 并标记完全解决。当前状态：未解决。",
+  "startedAt": "2026-11-22T16:45:21.362Z",
+  "finishedAt": "2026-11-22T16:48:14.672Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 4,
+    "total": 5
+  }
+}

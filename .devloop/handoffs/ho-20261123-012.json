@@ -1,0 +1,58 @@
+{
+  "id": "ho-20261123-012",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "板块/停牌/北交所规则补齐：第 2 轮收尾 CI 全绿与交付状态",
+  "summary": "记录评审第 2 轮收尾后的 CI 结果：代码提交 1f7e124 的 run 45049593799 与记录提交 9342963 的 run 45049839619 均为 test success / png-export success；PR #46 当前 OPEN / MERGEABLE，未合并。工作内容无变化（与 ho-20261123-011 相同 3 条 P2 修复），本次仅补 CI 证据与交付状态：分支 feat/plan-20261103-009-board-rules，代码提交 1f7e124，记录提交 9342963，plan-20261103-009 状态 in_review / progress 97，links.test 保留 10 条最新证据（含 test_board_rules 45 passed、相关集 169 passed、全量 921 passed、ruff/mypy、coverage 80.43%、判别性验证、CI run 记录）。",
+  "requirements": [],
+  "changes": [],
+  "tests": [
+    {
+      "command": "gh run view 45049839619 (head 9342963)",
+      "result": "test success / png-export success",
+      "passed": true,
+      "evidence": "记录提交（plan/calendar/worklog/handoff/review）不改变代码，CI 复跑通过"
+    },
+    {
+      "command": "gh pr view 46 --json state,mergeable,statusCheckRollup",
+      "result": "OPEN / MERGEABLE / test SUCCESS / png-export SUCCESS",
+      "passed": true,
+      "evidence": "PR #46 OPEN / MERGEABLE，statusCheckRollup 两项 SUCCESS"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "Tushare stock_basic list_status=D/P 查询权限",
+      "reason": "security_meta 取退市/暂停上市个股名称与上市日；无权限时自动退回仅 L（保守）",
+      "status": "needed"
+    },
+    {
+      "name": "GitHub 分支推送 / PR #46 更新 / CI 读取",
+      "reason": "推送记录提交并核对 run 45049839619",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-009-board-rules",
+    "commit": "9342963",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "ci": "run 45049839619 (head 9342963): test success / png-export success；此前 run 45049593799 (head 1f7e124, 代码提交) 亦全绿。本 handoff 记录提交之后的 head CI 以 PR statusCheckRollup 为准。",
+    "merge": "未合并：PR #46 OPEN / MERGEABLE，等 reviewer 复核第 2 轮 3 条 P2 关闭后由用户决定合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261123-011",
+  "next": "请 reviewer 复核 rev-20261123-001 第 2 轮的 3 条 P2（iss-mws3oxhq-d35643 / iss-mws3oxip-3c3b84 / iss-mws3oxjy-108c8a）并给出是否完全解决；合并 PR #46 由用户决定。若需 Tushare D/P 权限验证或 namechange 历史名称 PIT，建议另建 plan 项。",
+  "createdAt": "2026-11-22T17:32:50.277Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-012.md"
+}

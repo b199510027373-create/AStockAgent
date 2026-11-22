@@ -1017,6 +1017,56 @@
       "notes": "第 2 轮 · approve"
     },
     {
+      "id": "cal-rev-20261123-001-r1",
+      "type": "review",
+      "title": "评审：评审：板块/停牌/北交所交易规则补齐",
+      "start": "2026-11-22T16:45:21.362Z",
+      "end": "2026-11-22T16:48:14.672Z",
+      "planItemId": "plan-20261103-009",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
+      "id": "cal-rev-20261123-001-r2",
+      "type": "review",
+      "title": "评审：评审：板块/停牌/北交所交易规则补齐",
+      "start": "2026-11-22T17:16:48.809Z",
+      "end": "2026-11-22T17:18:27.074Z",
+      "planItemId": "plan-20261103-009",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261123-001-r3",
+      "type": "review",
+      "title": "评审：评审：板块/停牌/北交所交易规则补齐",
+      "start": "2026-11-22T17:35:41.147Z",
+      "end": "2026-11-22T17:37:05.883Z",
+      "planItemId": "plan-20261103-009",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261123-001-r4",
+      "type": "review",
+      "title": "评审：评审：板块/停牌/北交所交易规则补齐",
+      "start": "2026-11-22T17:49:38.985Z",
+      "end": "2026-11-22T17:50:16.116Z",
+      "planItemId": "plan-20261103-009",
+      "source": "reviewer-agent",
+      "notes": "第 4 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261123-001-r5",
+      "type": "review",
+      "title": "评审：评审：板块/停牌/北交所交易规则补齐",
+      "start": "2026-11-22T18:11:54.064Z",
+      "end": "2026-11-22T18:12:15.346Z",
+      "planItemId": "plan-20261103-009",
+      "source": "reviewer-agent",
+      "notes": "第 5 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",

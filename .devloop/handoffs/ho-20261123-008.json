@@ -1,0 +1,206 @@
+{
+  "id": "ho-20261123-008",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "板块/停牌/北交所规则补齐：评审修复 CI 通过（developer update）",
+  "summary": "评审 rev-20261123-001 的 5 条 issue 已全部修复并推送：P1 规则接线（optimize/strategy_lab 透传 name/list_date，events.security_meta 统一取元数据，三个 UI 同口径）；P2 临停保守近似（无涨跌幅窗口振幅≥30% 不成交）、IPO 窗口改工作日计数（停牌缺口不再放行）、ST 非 PIT 登记、ST 5% 与旧规首日端到端用例。本地：target 50 passed、相关集 136 passed、全量 917 passed/3 skipped、ruff/mypy 通过、coverage 80.19%（门槛 76.45）。PR #46 在 54a3cd8 与 c07e020 上 CI（test + png-export）均成功，PR MERGEABLE、未合并。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试（LimitPctTests 逐板块 + EndToEndRuleTests ST 5%）",
+      "source": "plan-20261103-009 acceptance #1"
+    },
+    {
+      "id": "REQ-2",
+      "text": "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖（ipo_unbounded_days/limit_rule + README 依赖 list_date/日线完整性说明）",
+      "source": "plan-20261103-009 acceptance #2"
+    },
+    {
+      "id": "REQ-3",
+      "text": "临时停牌/全天停牌不产生虚假成交（0 量/0 额、缺 bar、上市前 bar 不成交；无涨跌幅窗口振幅≥30% 视为可能临停不成交）",
+      "source": "plan-20261103-009 acceptance #3"
+    },
+    {
+      "id": "REQ-4",
+      "text": "回测与实盘规则差异写进 README（涨跌幅规则、IPO 与上市初期、停牌与虚假成交、已知差异四节）",
+      "source": "plan-20261103-009 acceptance #4"
+    },
+    {
+      "id": "ISS-1 (P1)",
+      "text": "ST 5% 与 IPO 规则接入参数优化/策略实验室，三条入口行为一致（已接线并有用例）",
+      "source": "review rev-20261123-001 iss-mws2ln9l-646d4c"
+    },
+    {
+      "id": "ISS-2 (P2)",
+      "text": "临停口径：无涨跌幅窗口振幅≥30% 视为可能临停、不成交，README 标为保守近似",
+      "source": "review rev-20261123-001 iss-mws2ltn4-c82470"
+    },
+    {
+      "id": "ISS-3 (P2)",
+      "text": "ST 非 PIT：README 已知差异 + ADR-008 登记",
+      "source": "review rev-20261123-001 iss-mws2lto3-f8ab4c"
+    },
+    {
+      "id": "ISS-4 (P2)",
+      "text": "_listing_offsets 改工作日计数，停牌缺口不拉长无涨跌幅窗口，并补缺口用例",
+      "source": "review rev-20261123-001 iss-mws2ltp0-6b9e10"
+    },
+    {
+      "id": "ISS-5 (P2)",
+      "text": "ST 5% 与旧规首日 44%/36% 补 run_backtest 端到端用例",
+      "source": "review rev-20261123-001 iss-mws2ltpz-6f6abe"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/backtest.py",
+      "summary": "_listing_offsets 改 np.busday_count 工作日计数（停牌缺口不再拉长 IPO 窗口）；新增 INTRADAY_HALT_AMPLITUDE=0.30 与 _suspected_intraday_halt，无涨跌幅窗口振幅≥30% 当日不成交",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "astock/optimize.py",
+      "summary": "grid_search/walk_forward 增加 name/list_date 形参并透传 run_backtest（train 与 test 两处）",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "astock/strategy_lab.py",
+      "summary": "grid_strategy/walk_forward_strategy 透传 name/list_date；portfolio_walk_forward 增加 meta[code] 逐只传入",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "astock/events.py",
+      "summary": "stock_basic 查询补 list_date（%Y%m%d 解析）；新增 security_meta(code) -> (name, list_date)，缺列重拉、离线退回旧缓存、失败返回 (\"\", None)",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "astock/backtest_ui.py",
+      "summary": "改用 security_meta(code) 取名称/上市日，删除内联 stock_basic 查询",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "astock/optimize_ui.py",
+      "summary": "load_data 后取 security_meta，grid_search/walk_forward 传入 name/list_date",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "astock/strategy_ui.py",
+      "summary": "逐 code 构造 meta（name/list_date）传给 portfolio_walk_forward",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "tests/test_board_rules.py",
+      "summary": "新增 ListingOffsetGapTests、IntradayHaltTests、EndToEndRuleTests（ST 5% 一字 0 成交、旧规首日 44% 一字 0 成交、次根非一字可成交）、SecurityMetaTests",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "tests/test_optimize.py",
+      "summary": "新增 RuleWiringTests：断言 grid_search/walk_forward/grid_strategy/walk_forward_strategy 透传 name/list_date，portfolio meta 透传",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": "README.md",
+      "summary": "IPO 小节补工作日计数与停牌缺口说明；停牌小节改为振幅≥30% 保守近似；已知差异补 ST 非 PIT、优化/策略实验室同口径、临停边界、退市整理期",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-008-price-adjustment-limits.md",
+      "summary": "新增「评审 rev-20261123-001 修复」5 条；第 7 条未覆盖项引用保守近似",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": ".devloop/architecture/adrs.json",
+      "summary": "ADR-008 index summary 追加本轮修复摘要",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": ".devloop/",
+      "summary": "plan-20261103-009 置 in_review/progress 95、links 记录测试与 CI；worklog/calendar 开发记录；handoff ho-20261123-007",
+      "commit": "c07e020"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_optimize.py -q -p no:cacheprovider",
+      "result": "50 passed",
+      "passed": true,
+      "evidence": "50 passed, 1 warning, 26 subtests passed in 10.73s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_optimize.py tests/test_quant.py tests/test_hardening.py tests/test_recommend.py tests/test_contracts.py tests/test_core_paths.py -q",
+      "result": "136 passed",
+      "passed": true,
+      "evidence": "136 passed, 26 subtests passed in 24.00s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "917 passed, 3 skipped",
+      "passed": true,
+      "evidence": "917 passed, 3 skipped, 46 subtests passed in 112.71s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "clean",
+      "passed": true,
+      "evidence": "All checks passed!"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "clean",
+      "passed": true,
+      "evidence": "Success: no issues found in 44 source files"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && .venv\\Scripts\\python.exe -m coverage report",
+      "result": "coverage gate pass",
+      "passed": true,
+      "evidence": "912 passed, 3 skipped, 5 deselected；TOTAL 80.19%，fail_under 76.45，exit=0"
+    },
+    {
+      "command": "gh run view 45047171563 --json headSha,status,conclusion",
+      "result": "CI pass",
+      "passed": true,
+      "evidence": "head 54a3cd8，test success / png-export success"
+    },
+    {
+      "command": "gh run view 45047241503 --json headSha,status,conclusion",
+      "result": "CI pass",
+      "passed": true,
+      "evidence": "head c07e020，test success / png-export success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push / PR #46 更新",
+      "reason": "推送修复提交与 devloop 记录；仓库写权限已具备",
+      "status": "granted"
+    },
+    {
+      "name": "无新增外部依赖或密钥",
+      "reason": "security_meta 复用现有 Tushare 客户端与本地缓存，离线退回常规限价",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-009-board-rules",
+    "commit": "54a3cd8",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "ci": "run 45047171563 (54a3cd8) test success / png-export success；run 45047241503 (c07e020) test success / png-export success",
+    "merge": "未合并，等评审复核 rev-20261123-001",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261123-007",
+  "next": "等评审对 rev-20261123-001 的 5 条 issue 做 diff 复核（P1 接线 + 4×P2）。通过后合并 main 并将 plan 置 done；若仍有问题按新一轮 issue 继续修。遗留风险已在 README/ADR 标注：ST 名称非 PIT、盘中临停仅 ≥30% 振幅近似、封单排队与退市整理期未建模。",
+  "createdAt": "2026-11-22T17:06:21.171Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-008.md"
+}

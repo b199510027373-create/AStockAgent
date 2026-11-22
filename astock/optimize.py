@@ -75,12 +75,15 @@ def grid_search(
     slow_values: list[int],
     benchmark: pd.Series | None,
     metric: str = "sharpe",
+    name: str = "",
+    list_date=None,
 ) -> GridResult:
+    """全样本参数网格；``name`` / ``list_date`` 与单票回测同口径（ST 5%、IPO 窗口）。"""
     cfg = CostConfig()
     rows = []
     for fast, slow in _params(fast_values, slow_values):
         signals = ma_cross_signals(daily_e, fast, slow)
-        result = run_backtest(daily_e, signals, code, cfg, benchmark)
+        result = run_backtest(daily_e, signals, code, cfg, benchmark, name=name, list_date=list_date)
         m = result.metrics
         rows.append(
             {
@@ -138,7 +141,10 @@ def walk_forward(
     train_years: float = 1.5,
     test_months: int = 3,
     metric: str = "sharpe",
+    name: str = "",
+    list_date=None,
 ) -> WalkForwardResult:
+    """滚动 walk-forward；``name`` / ``list_date`` 透传到每个窗口的回测。"""
     train_bars = max(120, int(250 * float(train_years)))
     test_bars = max(21, int(21 * int(test_months)))
     combos = _params(fast_values, slow_values)
@@ -169,7 +175,7 @@ def walk_forward(
         best = None
         for fast, slow in combos:
             sig = signals_cache[(fast, slow)].iloc[start : start + train_bars].reset_index(drop=True)
-            result = run_backtest(train, sig, code, cfg, benchmark)
+            result = run_backtest(train, sig, code, cfg, benchmark, name=name, list_date=list_date)
             m = result.metrics
             value = m.get("sharpe") if metric == "sharpe" else m.get("annual_return")
             if value is None or not math.isfinite(value):
@@ -192,6 +198,8 @@ def walk_forward(
             benchmark,
             initial_state=state,
             prev_signal=prev_signal,
+            name=name,
+            list_date=list_date,
         )
         state = test_result.state
         tm = test_result.metrics

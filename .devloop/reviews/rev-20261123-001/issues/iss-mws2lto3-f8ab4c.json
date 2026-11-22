@@ -1,0 +1,33 @@
+{
+  "id": "iss-mws2lto3-f8ab4c",
+  "threadId": "rev-20261123-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "pit",
+  "file": "astock/backtest.py",
+  "lines": "78-90",
+  "title": "ST 判定使用当前证券名称，非历史 ST 状态（PIT），README 未标注",
+  "evidence": "astock/backtest.py:84 `if \"ST\" in str(name or \"\").upper()` 决定 5% 限价，而 name 来自 astock/backtest_ui.py:46-48 的 `stock_basic()` 当前名称；run_strategy（astock/backtest.py:588-619）把同一 name 用于整段历史。于是\"曾 ST、现已摘帽\"的个股在 ST 期间按 10%/20% 处理，真实的 5% 一字板会被当作可成交（乐观偏差）；\"当前 ST、历史正常\"则反向偏保守。README.md:159 只写\"名称含 ST | 5%\"，未说明名称是当前值而非历史状态。",
+  "suggestion": "在 README「回测与实盘的已知差异」（README.md:177-185）加一条：\"ST 判定用 stock_basic 当前名称近似，未接 Tushare namechange 历史，摘帽个股的 ST 期间按常规限价处理，可能偏乐观\"；并在 ADR-008 落地记录登记该限制。若要真正做到 PIT，可拉 namechange 按 trade_date 取生效名称（缓存后按 code 一次拉取，开销可接受）。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已登记（54a3cd8）：README.md「回测与实盘的已知差异」新增「ST 判定用 stock_basic 当前名称近似，未接 namechange，摘帽个股 ST 期间按常规限价处理，可能偏乐观」；ADR-008 修复记录第 4 条同步登记该限制（未实现 PIT，属显式降级）。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T17:52:35.774Z"
+  },
+  "createdAt": "2026-11-22T16:47:55.251Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已登记（54a3cd8）：README.md「回测与实盘的已知差异」新增「ST 判定用 stock_basic 当前名称近似，未接 namechange，摘帽个股 ST 期间按常规限价处理，可能偏乐观」；ADR-008 修复记录第 4 条同步登记该限制（未实现 PIT，属显式降级）。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T17:52:35.774Z"
+    }
+  ]
+}

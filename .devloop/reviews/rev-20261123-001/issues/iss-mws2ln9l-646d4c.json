@@ -1,0 +1,33 @@
+{
+  "id": "iss-mws2ln9l-646d4c",
+  "threadId": "rev-20261123-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "integration",
+  "file": "astock/optimize.py",
+  "lines": "83, 172, 187-195（另 astock/strategy_lab.p",
+  "title": "ST 5% 与 IPO 无涨跌幅规则未接入参数优化/策略实验室（run_backtest 未传 name/list_date）",
+  "evidence": "astock/optimize.py:83 `result = run_backtest(daily_e, signals, code, cfg, benchmark)`、:172、:187-195，以及 astock/strategy_lab.py:68、:130、:144 全部走 astock/backtest.py:242-245 的默认 `name=\"\"`、`list_date=None`；只有 astock/backtest_ui.py:46-58（stock_basic 取 name/list_date）→ astock/backtest.py:619 这一条路径传了参数。后果：ST 股真实的 5% 一字板（high==low==round(pre*1.05,2)）在 10%/20% 口径下不满足 `_one_price_limit_by_rule`，run_backtest 会在限价一字板开盘成交（虚假成交、收益偏乐观），而参数优化正是用这些收益挑选最优参数与 walk-forward 窗口；IPO 前 5 日窗口与\"上市前 bar 不成交\"（README.md:166、169 的无条件表述）在这两个 Tab 同样不成立。CI 全绿与 tests/test_board_rules.py 30 用例都只覆盖单条路径，抓不到这类接线缺口。",
+  "suggestion": "二选一落地：(a) 接线——给 astock/optimize.py:71 grid_search、:132 walk_forward 与 astock/strategy_lab.py:56 起的 grid_strategy/walk-forward 增加 name/list_date 形参并透传到 run_backtest，UI 侧照 astock/backtest_ui.py:46-49 从 stock_basic() 取 name/list_date（astock/optimize_ui.py:61-74 与 strategy_ui 对应回调）；(b) 若本轮明确不接线，必须把 README.md:166、169 改为限定表述（\"仅「回测」Tab 应用 ST/IPO 规则；参数优化/策略实验室未接线，ST 按板块基准限价处理\"）并为这两个 Tab 建后续 plan 项。完成条件：三条 run_backtest 入口行为一致，或有 README 限定 + 后续项，二者缺一不算解决。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已修复（54a3cd8）：astock/optimize.py:86/178/193-203 的 grid_search、walk_forward 与 astock/strategy_lab.py:71/136/150-160 的 grid_strategy、walk_forward_strategy 全部透传 name/list_date，portfolio_walk_forward 经 meta[code] 逐只传入；新增 astock/events.py security_meta()，astock/backtest_ui.py:46、astock/optimize_ui.py:64、astock/strategy_ui.py:48 统一取数；tests/test_optimize.py:63-122 RuleWiringTests 用 spy 断言四条入口均透传（条目 openP1 因此归零）。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T17:52:24.083Z"
+  },
+  "createdAt": "2026-11-22T16:47:46.953Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已修复（54a3cd8）：astock/optimize.py:86/178/193-203 的 grid_search、walk_forward 与 astock/strategy_lab.py:71/136/150-160 的 grid_strategy、walk_forward_strategy 全部透传 name/list_date，portfolio_walk_forward 经 meta[code] 逐只传入；新增 astock/events.py security_meta()，astock/backtest_ui.py:46、astock/optimize_ui.py:64、astock/strategy_ui.py:48 统一取数；tests/test_optimize.py:63-122 RuleWiringTests 用 spy 断言四条入口均透传（条目 openP1 因此归零）。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T17:52:24.083Z"
+    }
+  ]
+}

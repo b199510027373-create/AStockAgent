@@ -1,0 +1,33 @@
+{
+  "id": "iss-mws3oxhq-d35643",
+  "threadId": "rev-20261123-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_board_rules.py",
+  "lines": "319-329",
+  "title": "缺口用例 test_suspension_gap_ends_ipo_window 实际从未下单，断言恒真",
+  "evidence": "tests/test_board_rules.py:319-329 的 `df = bars([10.0, 10.0, 12.5], start=\"2024-05-06\")` 后 `run_backtest(df, pd.Series([0, 0, 1]), ...)`。按 astock/backtest.py:322 的语义 `target = sig[i-1] if i>0 else prev_signal`，且此处未传 prev_signal：i=0 的 target 为 None，i=1 取 sig[0]=0，i=2 取 sig[1]=0 —— 三根 bar 都没有任何下单尝试，`len(result.trades)==0` 恒成立。把 `_listing_offsets` 退回到旧的 bar 序号实现（offsets [0,1,2]）时该用例依然通过，因此它没有验证\"停牌缺口结束 IPO 窗口\"这一修复。真正起回归保护作用的只有 tests/test_board_rules.py:313-317 的纯函数断言 [0,1,9]。",
+  "suggestion": "把信号改为 `pd.Series([0, 1, 0])`，让买入尝试落在第 3 根 bar（trade_date=2024-05-17、listing_day=9、20% 涨停价 12.0、high==low==12.5）上；再补一条对照断言证明用例可区分：同一帧把 `df.loc[2, \"pre_close\"]` 改为 12.5（20% 涨停价 15.0，12.5 非一字）跑一次，断言 `len(trades)==1`。改后若把 `_listing_offsets` 还原成 bar 序号实现，第一条断言应当失败。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已修复（1f7e124 + ee6b2c3）：缺口用例改 signals=[0,1,0,0]（第 3 根 bar 买入、第 4 根卖出），并加 pre_close=12.5 对照断言 1 笔成交；夹具第 4 根 bar 改为 2024-05-20 保证日期单调。已手工验证：把 _listing_offsets 换回 bar 序号实现后该用例失败（failures=1, AssertionError 1 != 0）。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T17:52:42.695Z"
+  },
+  "createdAt": "2026-11-22T17:18:19.790Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已修复（1f7e124 + ee6b2c3）：缺口用例改 signals=[0,1,0,0]（第 3 根 bar 买入、第 4 根卖出），并加 pre_close=12.5 对照断言 1 笔成交；夹具第 4 根 bar 改为 2024-05-20 保证日期单调。已手工验证：把 _listing_offsets 换回 bar 序号实现后该用例失败（failures=1, AssertionError 1 != 0）。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T17:52:42.695Z"
+    }
+  ]
+}

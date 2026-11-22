@@ -21,7 +21,7 @@
 
 - 正面：六个 Tab 口径一致；涨跌停规则正确；复权基准可追溯。
 - 负面：Parquet 体积增加（qfq + raw 双份）；板块规则会随交易所调整，需要维护。
-- 现状：qfq/raw、ST 5%、Beta ddof 已落地；不同板块与临时停牌细则仍未完全覆盖。
+- 现状：qfq/raw、ST 5%、Beta ddof 已落地；不同板块与停牌细则已由 plan-20261103-009 补齐（2026-11-23），盘中临停/封单排队仍不建模。
 
 ## 补充裁决（2026-11-14，D1）
 
@@ -63,6 +63,37 @@
 1. **`partial`/`factor_as_of` 被消费**（选 (a)，未拆后续计划项）：`astock/agent/tools/market_tools.py` 的 `MarketSeries` 增加 `partial`/`factor_as_of` 字段，`load_series()` 从 `frame.attrs["adjustment"]` 读并追加一条 notes「盘中近似：当日 bar 按最近已发布因子（截至 X）复权」；`metadata()` 固定输出这两个键；`_render_kline()` 把它们写进 `ChartSpec.meta`（自由对象，不占 `data` 白名单）；`astock/agent/chart_render.py:_caption()` 与 `astock/charts.py:_adj_caption()` 据此追加「盘中近似（因子截至 X）」。因子已发布时不得出现该提示。
 2. **空帧也带标注**：`astock/data.py` 新增 `_empty_with_attrs()`，`enrich()`/`resample_ohlcv()` 的空帧快速返回改为回填输入 `attrs`（停牌整段、窗口内无交易日时图注/回测不再退回调用方 adj）。
 3. **周期线回归**：`period_frame` 用例的 subTest 覆盖 `week`/`month`/`quarter`（`data.py` 有 `QE` 规则），季线标注通道有回归保护。
+
+## 落地（plan-20261103-009，2026-11-23）：板块 / IPO 窗口 / 停牌
+
+决策第 4 条遗留的「IPO 首日无涨跌幅与临时停牌细则」在本项补齐，`limit_pct` 之外新增规则层：
+
+1. **板块识别**：`board_of(code)` 按后缀/前缀分类（`.BJ`、43/83/87/92 → 北交所，88 开头为同花顺行业指数不按股票处理；300/301 → 创业板；688/689 → 科创板；其余主板），限价 `_BOARD_LIMIT` 为 10%/20%/20%/30%；ST 仍全局 5%（契约 DATA-04 不变，创业板/科创板 ST 现实 20%，取保守侧并在 README 说明）。
+2. **日期切换**：`limit_rule()` 以 `trade_date` 处理创业板 2020-08-24 前 10%（`CHINEXT_REFORM_DATE`）。
+3. **IPO 窗口**：`ipo_unbounded_days()` 给出无涨跌幅交易日数——科创板/创业板 5 日、北交所 1 日、2023-04-10 起主板注册制新股 5 日（`MAIN_BOARD_REG_IPO_DATE`）；窗口内 `LimitRule(None, None)`，旧规则首日 44%/36%，次日起常规限价。窗口判定依赖 `list_date` 且日线必须从上市日起完整覆盖（`_listing_offsets`），覆盖不足时返回 `None` 走常规限价，不乐观假设「新股无涨跌停」。
+4. **停牌**：`_has_trading_volume()` 0 量（无 vol 时看 amount）视为不可成交；`run_backtest` 对上市前 bar（负偏移）与停牌 bar 都不产生买卖；缺 bar 时只在实际存在的 bar 上成交，不补虚假行。
+5. **测试**：`tests/test_board_rules.py` 覆盖板块限价、创业板日期切换、IPO 窗口与旧规则、一字板按板块判定、停牌/复牌/缺 bar/上市前 bar、以及「数据未覆盖上市日不假设无涨跌幅」。
+6. **文档**：README「回测口径与限制」新增板块限价表、IPO 窗口、停牌与「回测 vs 实盘已知差异」小节。
+7. **未覆盖（显式标注）**：盘中临时停牌（日线不可见，见下方保守近似）、涨跌停价逐步取整、退市整理期、ST 板块感知、封单量与排队。
+
+### 评审 rev-20261123-001 修复（2026-11-23）
+
+1. **规则接线（P1）**：`optimize.grid_search` / `walk_forward`、`strategy_lab.grid_strategy` / `walk_forward_strategy` / `portfolio_walk_forward` 增加 `name` / `list_date`（组合入口用 `meta[code]`）并透传 `run_backtest`；三个 UI 统一用 `events.security_meta()` 取名称与上市日（`stock_basic` 字段补 `list_date`，旧缓存缺列时尝试重拉，离线退回旧缓存）。ST 5% 与 IPO 窗口不再只在单票回测生效。
+2. **停牌口径（P2）**：新增 `_suspected_intraday_halt()`——无涨跌幅窗口内振幅 `high/low-1 ≥ 30%` 视为可能盘中临停、不成交；README 同步为「保守近似」，振幅更小的临停仍不可见。
+3. **IPO 窗口计数（P2）**：`_listing_offsets` 改用工作日计数（`np.busday_count`），停牌缺口不再让「上市后第 N 个交易日」偏小、把已恢复限价的 bar 错放进无涨跌幅窗口；节假日计入只会收紧窗口。
+4. **ST 非 PIT（P2）**：README「回测与实盘的已知差异」登记 ST 判定取 `stock_basic` **当前名称**，未接 `namechange` 按交易日取历史名称。
+5. **测试**：新增端到端用例（ST 5% 一字 0 成交、旧规首日 44% 一字 0 成交、次日非一字可成交）、停牌缺口结束 IPO 窗口、临停振幅判定、优化/策略实验室透传规则与 `security_meta` 用例。
+
+### 评审 rev-20261123-001 第 2 轮收尾（2026-11-23）
+
+1. **缺口用例可判别**：`test_suspension_gap_ends_ipo_window` 改为 `signals=[0,1,0,0]`（第 3 根 bar 尝试买入、第 4 根卖出），断言停牌缺口后 `trades==0` 且 `shares==0`；对照用例把 `pre_close` 改为 12.5 时 `trades==1`。已手工验证：把 `_listing_offsets` 还原为 bar 序号实现后该用例失败。
+2. **退市/暂停上市覆盖**：`events.stock_basic_all()` 查询 `list_status ∈ {L,D,P}` 并独立缓存（`_BASIC_ALL` / `stock_basic_all.parquet`），`security_meta()` 改用它，退市股的 ST 5% 与 IPO 窗口不再静默失效；`stock_basic()` 仍只含 L，推荐/选股池不会被退市股污染。D/P 查询失败时退回仅 L（不阻断主流程）。
+3. **缓存新鲜度**：新增 `_cache_is_current()`；网络失败时只有当天缓存允许静默回退，更旧缓存按原行为抛出异常，避免推荐/选股等调用方无提示地使用过期股票池。
+
+### 评审 rev-20261123-001 第 3 轮收尾（2026-11-23）
+
+1. **缺口用例夹具单调**：`test_suspension_gap_ends_ipo_window` 的第 4 根 bar 显式设为 2024-05-20（原为 05-09，早于买入日 05-17），offsets 变为 `[0,1,9,10]`；对照用例额外断言卖出日期晚于买入日期，避免持有天数等派生断言失真。
+2. **进程内缓存按天校验**：`stock_basic()` / `stock_basic_all()` 的 memo 增加 `_BASIC_DAY` / `_BASIC_ALL_DAY`，只有当天写入才复用，长驻进程跨天会重新读盘/回源；README 的「新鲜度」表述同步覆盖文件缓存与进程内缓存，并补 `test_in_process_memo_is_refreshed_across_days` / `test_in_process_memo_reused_within_day` 两条用例。
 
 ## 证据
 
