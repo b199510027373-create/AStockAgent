@@ -323,6 +323,7 @@ class ListingOffsetGapTests(unittest.TestCase):
     def test_suspension_gap_ends_ipo_window(self):
         df = bars([10.0, 10.0, 12.5, 12.5], start="2024-05-06")
         df.loc[2, "trade_date"] = pd.Timestamp("2024-05-17")
+        df.loc[3, "trade_date"] = pd.Timestamp("2024-05-20")
         df.loc[2, ["open", "high", "low", "close"]] = 12.5
         df.loc[2, "pre_close"] = 10.0
         # signals[1]=1 → 第 3 根 bar 尝试买入，第 4 根 bar 卖出（让 trades 可判别）。
@@ -341,6 +342,9 @@ class ListingOffsetGapTests(unittest.TestCase):
             relaxed, pd.Series([0, 1, 0, 0]), "300750.SZ", zero_cost(), list_date="2024-05-06"
         )
         self.assertEqual(len(control.trades), 1)
+        trade = control.trades.iloc[0]
+        # 卖出日期必须晚于买入日期：防止夹具倒序让「持有天数」等后续断言失真。
+        self.assertLess(trade["买入日期"], trade["卖出日期"])
 
 
 class IntradayHaltTests(unittest.TestCase):
@@ -457,7 +461,7 @@ class StockBasicCoverageTests(unittest.TestCase):
         patch_dir = mock.patch("astock.events.EVENT_DIR", Path(self._tmp.name))
         patch_dir.start()
         self.addCleanup(patch_dir.stop)
-        for name in ("_BASIC", "_BASIC_ALL"):
+        for name in ("_BASIC", "_BASIC_ALL", "_BASIC_DAY", "_BASIC_ALL_DAY"):
             patcher = mock.patch(f"astock.events.{name}", None)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -548,6 +552,33 @@ class StockBasicCoverageTests(unittest.TestCase):
         client = self._client(self._frames(), fail=("L",))
         with mock.patch("astock.events.get_client", return_value=client):
             out = events.stock_basic()
+        self.assertEqual(out["ts_code"].tolist(), ["600000.SH"])
+
+    def test_in_process_memo_is_refreshed_across_days(self):
+        stale = self._frames()["L"].copy()
+        stale["name"] = ["旧名称"]
+        fresh = self._frames()["L"].copy()
+        fresh["name"] = ["新名称"]
+        with (
+            mock.patch("astock.events._BASIC", stale),
+            mock.patch("astock.events._BASIC_DAY", "20000101"),
+            mock.patch("astock.events._load_basic", return_value=fresh) as loader,
+        ):
+            out = events.stock_basic()
+            loader.assert_called_once_with("stock_basic.parquet", ("L",), False)
+            self.assertEqual(events._BASIC_DAY, events._today_str())
+        # 长驻进程跨天后必须换掉内存里的旧股票池，而不是静默复用。
+        self.assertEqual(out["name"].iloc[0], "新名称")
+
+    def test_in_process_memo_reused_within_day(self):
+        cached = self._frames()["L"].copy()
+        with (
+            mock.patch("astock.events._BASIC", cached),
+            mock.patch("astock.events._BASIC_DAY", events._today_str()),
+            mock.patch("astock.events._load_basic") as loader,
+        ):
+            out = events.stock_basic()
+        loader.assert_not_called()
         self.assertEqual(out["ts_code"].tolist(), ["600000.SH"])
 
 

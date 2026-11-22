@@ -90,6 +90,11 @@
 2. **退市/暂停上市覆盖**：`events.stock_basic_all()` 查询 `list_status ∈ {L,D,P}` 并独立缓存（`_BASIC_ALL` / `stock_basic_all.parquet`），`security_meta()` 改用它，退市股的 ST 5% 与 IPO 窗口不再静默失效；`stock_basic()` 仍只含 L，推荐/选股池不会被退市股污染。D/P 查询失败时退回仅 L（不阻断主流程）。
 3. **缓存新鲜度**：新增 `_cache_is_current()`；网络失败时只有当天缓存允许静默回退，更旧缓存按原行为抛出异常，避免推荐/选股等调用方无提示地使用过期股票池。
 
+### 评审 rev-20261123-001 第 3 轮收尾（2026-11-23）
+
+1. **缺口用例夹具单调**：`test_suspension_gap_ends_ipo_window` 的第 4 根 bar 显式设为 2024-05-20（原为 05-09，早于买入日 05-17），offsets 变为 `[0,1,9,10]`；对照用例额外断言卖出日期晚于买入日期，避免持有天数等派生断言失真。
+2. **进程内缓存按天校验**：`stock_basic()` / `stock_basic_all()` 的 memo 增加 `_BASIC_DAY` / `_BASIC_ALL_DAY`，只有当天写入才复用，长驻进程跨天会重新读盘/回源；README 的「新鲜度」表述同步覆盖文件缓存与进程内缓存，并补 `test_in_process_memo_is_refreshed_across_days` / `test_in_process_memo_reused_within_day` 两条用例。
+
 ## 证据
 
 - `astock/data.py`（`raw_*`、`base_factor`）

@@ -18,6 +18,8 @@ _REPORT_TTL = 600.0
 _CACHE: dict[tuple, tuple[float, pd.DataFrame]] = {}
 _BASIC: pd.DataFrame | None = None
 _BASIC_ALL: pd.DataFrame | None = None
+_BASIC_DAY: str | None = None
+_BASIC_ALL_DAY: str | None = None
 
 POSITIVE_WORDS = [
     "预增", "扭亏", "增长", "回购", "增持", "中标", "签约", "签订", "合同",
@@ -215,15 +217,21 @@ def _load_basic(filename: str, statuses: tuple[str, ...], refresh: bool) -> pd.D
     return df
 
 
+def _memo_is_current(day: str | None) -> bool:
+    """进程内缓存的纪元日期：跨天必须重新读盘/回源，避免长驻进程静默复用过期股票池。"""
+    return day == _today_str()
+
+
 def stock_basic(refresh: bool = False) -> pd.DataFrame:
     """在市股票基础信息（名称/行业/上市日），本地缓存一天。
 
     已退市/暂停上市代码见 :func:`stock_basic_all`；推荐与选股仍只应在市列表。
     """
-    global _BASIC
-    if _BASIC is not None and not refresh:
+    global _BASIC, _BASIC_DAY
+    if _BASIC is not None and not refresh and _memo_is_current(_BASIC_DAY):
         return _BASIC.copy()
     _BASIC = _load_basic("stock_basic.parquet", ("L",), refresh)
+    _BASIC_DAY = _today_str()
     return _BASIC.copy()
 
 
@@ -233,10 +241,11 @@ def stock_basic_all(refresh: bool = False) -> pd.DataFrame:
     退市股历史里常含 ST 段与次新段；只查在市列表会让 ST 5% 与 IPO 无涨跌幅
     窗口在这些代码上静默失效。**不要**用它构建推荐股票池（会带入退市股）。
     """
-    global _BASIC_ALL
-    if _BASIC_ALL is not None and not refresh:
+    global _BASIC_ALL, _BASIC_ALL_DAY
+    if _BASIC_ALL is not None and not refresh and _memo_is_current(_BASIC_ALL_DAY):
         return _BASIC_ALL.copy()
     _BASIC_ALL = _load_basic("stock_basic_all.parquet", ("L", "D", "P"), refresh)
+    _BASIC_ALL_DAY = _today_str()
     return _BASIC_ALL.copy()
 
 
