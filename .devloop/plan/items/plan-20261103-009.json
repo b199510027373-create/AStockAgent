@@ -9,7 +9,7 @@
   "start": "2026-11-23",
   "due": "2026-11-26",
   "estimateH": 8,
-  "progress": 95,
+  "progress": 97,
   "acceptance": [
     "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试",
     "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖",
@@ -27,25 +27,25 @@
       "ADR-008"
     ],
     "branch": "feat/plan-20261103-009-board-rules",
-    "commit": "54a3cd8",
-    "head": "c07e020",
+    "commit": "1f7e124",
+    "head": "1f7e124",
     "module": "backtest",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
     "review": "rev-20261123-001",
     "test": [
-      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_optimize.py -q -p no:cacheprovider => 50 passed, 26 subtests passed in 10.73s",
-      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_optimize.py tests/test_quant.py tests/test_hardening.py tests/test_recommend.py tests/test_contracts.py tests/test_core_paths.py -q => 136 passed, 26 subtests passed in 24.00s",
-      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider => 917 passed, 3 skipped, 46 subtests passed in 112.71s",
-      ".venv\\Scripts\\ruff.exe check astock tests (after review fixes) => All checks passed!",
-      ".venv\\Scripts\\mypy.exe astock app.py (after review fixes) => Success: no issues found in 44 source files",
-      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" => 912 passed, 3 skipped, 5 deselected; coverage report TOTAL 80.19% (fail_under 76.45), exit=0",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q -p no:cacheprovider => 45 passed, 26 subtests passed in 0.39s",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_data_pit_events.py tests/test_contracts.py tests/test_core_paths.py tests/test_recommend.py tests/test_optimize.py tests/test_hardening.py tests/test_quant.py -q => 169 passed, 26 subtests passed in 18.17s",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider => 921 passed, 3 skipped, 46 subtests passed in 97.83s",
+      ".venv\\Scripts\\ruff.exe check astock tests => All checks passed!",
+      ".venv\\Scripts\\mypy.exe astock app.py => Success: no issues found in 44 source files",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" => 916 passed, 3 skipped, 5 deselected; coverage report TOTAL 80.43% (fail_under 76.45), exit=0",
+      "判别性验证：用旧 bar 序号实现替换 _listing_offsets 后 test_suspension_gap_ends_ipo_window 失败（failures=1），证明缺口用例不再是恒真断言",
+      "gh run view 45049593799 (head 1f7e124) => test success / png-export success",
       "gh run view 45047171563 (head 54a3cd8) => test success / png-export success",
-      "gh run view 45047241503 (head c07e020) => test success / png-export success",
-      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q (round 1) => 30 passed, 26 subtests passed in 0.24s",
-      "gh run view 45043984007 (head a36d581) => test success / png-export success"
+      "gh run view 45047793336 (head 65f14b2) => test success / png-export success"
     ]
   },
   "createdAt": "2026-11-03T12:10:47.673Z",
-  "updatedAt": "2026-11-22T17:06:20.972Z",
+  "updatedAt": "2026-11-22T17:30:09.632Z",
   "devSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613"
 }

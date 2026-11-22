@@ -1,0 +1,16 @@
+{
+  "id": "iss-mws2ltn4-c82470",
+  "threadId": "rev-20261123-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "acceptance",
+  "file": "README.md",
+  "lines": "171-175, 181",
+  "title": "验收 3「临时停牌不产生虚假成交」与实现/README 口径不一致",
+  "evidence": "README.md:175 明写\"只识别日线级别的全天停牌。盘中临时停牌…回测会当作可成交\"，README.md:181 又列为未建模；而 plan-20261103-009 验收 3 原文是\"临时停牌/全天停牌不产生虚假成交\"，ho-20261123-003 的 REQ-3 已把该条标为完成。实际只覆盖全天停牌（tests/test_board_rules.py:233-280 的 SuspensionTests 全部是 0 量 bar 或缺失 bar），没有任何盘中临停/临停触发用例，也没有在 plan acceptance 或 ADR-008 里把这条缩小范围。",
+  "suggestion": "由开发在 plan-20261103-009 的 acceptance 里把验收 3 改成经架构 owner 确认的限定表述（例：\"全天停牌/停牌无 bar 不产生虚假成交；盘中临停因日线不可见显式不建模，见 README「回测与实盘的已知差异」\"），并在 ADR-008 的未建模项同步；或实现保守判定（无涨跌幅窗口内振幅 ≥30% 视为可能临停，按不可成交处理）。二者之一落地并经 reviewer 复核后本条才算关闭。",
+  "confidence": 0.75,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-22T16:47:55.216Z"
+}

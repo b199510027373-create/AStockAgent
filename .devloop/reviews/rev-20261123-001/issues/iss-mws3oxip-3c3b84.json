@@ -1,0 +1,16 @@
+{
+  "id": "iss-mws3oxip-3c3b84",
+  "threadId": "rev-20261123-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "coverage",
+  "file": "astock/events.py",
+  "lines": "173-179, 215-217",
+  "title": "stock_basic 只查 list_status=\"L\"，已退市/暂停上市个股的 ST 5% 与 IPO 窗口静默失效且未登记",
+  "evidence": "astock/events.py:173-179 的 `stock_basic` 固定查询 `list_status=\"L\"`；astock/events.py:215-217 的 `security_meta` 在 `basic[\"ts_code\"] == code` 无匹配时返回 `(\"\", None)`。因此对已退市（list_status=\"D\"）或暂停上市（\"P\"）的个股，ST 5% 与 IPO 无涨跌幅窗口在回测中静默失效，按板块基准 10%/20% 处理——退市股历史里常含 ST 段与次新段，恰好是最容易踩 5% 一字板的场景。README.md:184 只说明\"离线拿不到基础信息时退回常规限价\"，未覆盖\"在市列表里没有这只股票\"的情况；README.md:183 只登记了 ST 非 PIT，没有登记这个缺口。",
+  "suggestion": "二选一：(a) `stock_basic` 对 `list_status in (\"L\", \"D\", \"P\")` 分别查询后 concat 并缓存（每天 3 次调用，回测按需触发，可接受）；(b) 本轮不动代码，在 README「回测与实盘的已知差异」补一条：\"`stock_basic` 只含在市股票，已退市/暂停上市个股取不到名称与上市日，ST 5% 与 IPO 无涨跌幅窗口对其不生效\"，并在 ADR-008 未覆盖项登记。",
+  "confidence": 0.75,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-22T17:18:19.825Z"
+}

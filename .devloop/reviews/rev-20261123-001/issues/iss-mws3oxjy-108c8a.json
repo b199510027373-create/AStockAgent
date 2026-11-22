@@ -1,0 +1,16 @@
+{
+  "id": "iss-mws3oxjy-108c8a",
+  "threadId": "rev-20261123-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "robustness",
+  "file": "astock/events.py",
+  "lines": "173-187",
+  "title": "stock_basic 网络失败时静默回退到任意日期的旧缓存，推荐/选股等调用方从失败变为拿到过期股票池",
+  "evidence": "astock/events.py:173-187：`get_client().query(...)` 抛异常时，只要 `path.exists()` 就 `pd.read_parquet(path)` 返回旧缓存，且不看 `meta` 里的日期——缓存可能已是任意多天前。此前该函数在网络失败时直接抛错，调用方（astock/recommend.py:79/698、astock/universe.py:54、astock/events.py:243 extract_entities、astock/factors.py:388）会显式失败；现在它们会在无提示的情况下拿到过期股票池。对回测本身影响小（名称/上市日本就按当前值近似，README.md:183 已登记），但推荐链路的股票池新鲜度被静默降级，且没有任何日志或 data_as_of 标记。",
+  "suggestion": "离线回退仅在 `meta.exists() and meta.read_text() == _today_str()` 时启用（当天缓存才允许静默回退），否则按原行为抛错；若确实需要\"任意旧缓存兜底\"，至少在回退分支记一条 warning（含缓存日期）并把 `basic_as_of` 出现在返回值/缓存元数据里，供 UI 与推荐标注数据新鲜度。",
+  "confidence": 0.7,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-22T17:18:19.870Z"
+}

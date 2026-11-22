@@ -1,0 +1,16 @@
+{
+  "id": "iss-mws2ltp0-6b9e10",
+  "threadId": "rev-20261123-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/backtest.py",
+  "lines": "191-207",
+  "title": "_listing_offsets 用 bar 序号当交易日序号，停牌缺口会拉长 IPO 无涨跌幅窗口",
+  "evidence": "astock/backtest.py:191-207 的 docstring 自称\"只用 bar 序号近似交易日序号\"，实现为 `first = int((days >= listed).to_numpy().argmax())` + `np.arange(len(days)) - first`。若新股上市第 2 个交易日起停牌 10 个交易日后复牌，复牌 bar 的 listing_day 被算成 2 而非 12，仍落在 ipo_unbounded_days=5 窗口内，`_one_price_limit_by_rule` 因 rule.unbounded 直接放行（astock/backtest.py:167-169）→ 可能在真实已恢复 20% 限价的一字板上成交。tests/test_board_rules.py:199-207 只覆盖连续交易日，无缺口用例。",
+  "suggestion": "改用交易日历计算 offset（astock/data.py 已有交易日接口：取 list_date 到各 bar 日期之间的交易日数量）；若不想引入日历依赖，则在检测到 bar 间隔与自然交易日数不一致（如相邻 bar 相差 >4 个自然日）时返回 None，退回常规限价（保守）。并补一条\"窗口内停牌缺口\"用例：上市日 bar + 隔 10 个自然日后的 bar，断言第二根 bar 不再享无涨跌幅。",
+  "confidence": 0.8,
+  "status": "open",
+  "feedback": null,
+  "createdAt": "2026-11-22T16:47:55.284Z"
+}

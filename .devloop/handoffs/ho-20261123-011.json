@@ -1,0 +1,156 @@
+{
+  "id": "ho-20261123-011",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "板块/停牌/北交所规则补齐：评审第 2 轮 3 条 P2 收尾",
+  "summary": "按 reviewer handoff ho-20261123-010 / 线程 rev-20261123-001 第 2 轮（verdict=approve，新增 3 条不阻断合并的 P2）逐条收尾，提交 1f7e124 并推送 PR #46；CI run 45049593799（head 1f7e124）test 与 png-export 均 success。三条 P2 的处理：\\n\\n1) iss-mws3oxhq-d35643（vacuous 用例）：tests/test_board_rules.py 的 test_suspension_gap_ends_ipo_window 改为 signals=[0,1,0,0]（第 3 根 bar 尝试买入、第 4 根卖出），断言停牌缺口后 trades==0 且 shares==0；新增对照：pre_close 改 12.5 时 trades==1。已手工把 _listing_offsets 换成旧的 bar 序号实现跑该用例，断言失败（failures=1），证明用例可判别。\\n2) iss-mws3oxip-3c3b84（退市/暂停上市覆盖，选方案 a 的变体）：astock/events.py 新增 stock_basic_all()（list_status L/D/P，独立缓存 stock_basic_all.parquet + _BASIC_ALL），security_meta 改用它；stock_basic() 保持仅 L，推荐/选股池不被退市股污染。D/P 查询失败时容忍并退回仅 L。新增 StockBasicCoverageTests 覆盖三态合并、D 失败降级、L 池不含退市股。\\n3) iss-mws3oxjy-108c8a（旧缓存回退）：新增 _cache_is_current()，网络失败时只有当天缓存允许静默回退，更旧缓存按原行为抛出异常，避免 recommend/universe/extract_entities/factors 静默使用过期股票池；测试覆盖 stale 抛错与当天缓存回退。\\n\\nREADME「回测与实盘的已知差异」补两条（security_meta 用 L/D/P、推荐池仍 L；离线仅当天缓存可回退），ADR-008 增加「第 2 轮收尾」3 条，adrs.json 索引 summary 同步。原 plan 4 条验收不受影响，验收 3 仍以「保守近似 + 文档登记」满足。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试",
+      "source": "plan-20261103-009 acceptance[0]"
+    },
+    {
+      "id": "REQ-2",
+      "text": "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖",
+      "source": "plan-20261103-009 acceptance[1]"
+    },
+    {
+      "id": "REQ-3",
+      "text": "临时停牌/全天停牌不产生虚假成交",
+      "source": "plan-20261103-009 acceptance[2]（以无涨跌幅窗口振幅≥30% 保守近似 + README/ADR 登记满足）"
+    },
+    {
+      "id": "REQ-4",
+      "text": "回测与实盘规则差异写进 README",
+      "source": "plan-20261103-009 acceptance[3]"
+    },
+    {
+      "id": "REV-R2-1",
+      "text": "iss-mws3oxhq-d35643：缺口用例 test_suspension_gap_ends_ipo_window 从未下单、断言恒真，需改为可判别并加对照",
+      "source": "review rev-20261123-001 round 2（ho-20261123-010）"
+    },
+    {
+      "id": "REV-R2-2",
+      "text": "iss-mws3oxip-3c3b84：stock_basic 只查 list_status=L，退市/暂停上市个股的 ST 5% 与 IPO 窗口静默失效；需补 L/D/P 或 README+ADR 登记",
+      "source": "review rev-20261123-001 round 2（ho-20261123-010）"
+    },
+    {
+      "id": "REV-R2-3",
+      "text": "iss-mws3oxjy-108c8a：网络失败时静默回退任意日期旧缓存；需仅当天缓存允许回退或记录 basic_as_of/warning",
+      "source": "review rev-20261123-001 round 2（ho-20261123-010）"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/events.py",
+      "summary": "新增 stock_basic_all()（L/D/P 合并、独立缓存）与 _cache_is_current()；security_meta 改用 stock_basic_all；网络失败仅当天缓存可静默回退，旧缓存 re-raise；_load_basic 抽出缓存/刷新逻辑",
+      "commit": "1f7e124"
+    },
+    {
+      "path": "tests/test_board_rules.py",
+      "summary": "缺口用例改 [0,1,0,0] + pre_close 对照；SecurityMetaTests 改 patch stock_basic_all；新增 StockBasicCoverageTests（三态合并、D 失败降级、stale 缓存抛错、当天缓存回退）",
+      "commit": "1f7e124"
+    },
+    {
+      "path": "README.md",
+      "summary": "已知差异补 security_meta 用 stock_basic_all（L/D/P）与推荐池仅 L、离线仅当天缓存可回退；D/P 失败时按板块基准限价的保守性说明",
+      "commit": "1f7e124"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-008-price-adjustment-limits.md",
+      "summary": "新增「评审 rev-20261123-001 第 2 轮收尾」3 条（可判别用例、L/D/P 覆盖、缓存新鲜度）",
+      "commit": "1f7e124"
+    },
+    {
+      "path": ".devloop/architecture/adrs.json",
+      "summary": "ADR-008 索引 summary 追加第 2 轮收尾口径",
+      "commit": "1f7e124"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q -p no:cacheprovider",
+      "result": "45 passed, 1 warning, 26 subtests passed in 0.39s",
+      "passed": true,
+      "evidence": "含新增 StockBasicCoverageTests 与改写后的缺口用例"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_data_pit_events.py tests/test_contracts.py tests/test_core_paths.py tests/test_recommend.py tests/test_optimize.py tests/test_hardening.py tests/test_quant.py -q",
+      "result": "169 passed, 26 subtests passed in 18.17s",
+      "passed": true,
+      "evidence": "规则/数据/推荐/优化相关集全绿"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "921 passed, 3 skipped, 1 warning, 46 subtests passed in 97.83s",
+      "passed": true,
+      "evidence": "全量回归"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "含 BLE001/PLR0402/SIM117 修复"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "类型检查"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && python -m coverage report",
+      "result": "916 passed, 3 skipped, 5 deselected; TOTAL 80.43% (fail_under 76.45), exit=0",
+      "passed": true,
+      "evidence": "CI 口径覆盖率门禁"
+    },
+    {
+      "command": "手动判别性验证：mock.patch astock.backtest._listing_offsets 为旧 bar 序号实现后运行 ListingOffsetGapTests.test_suspension_gap_ends_ipo_window",
+      "result": "FAILED (failures=1)：AssertionError 1 != 0",
+      "passed": true,
+      "evidence": "证明改写后的缺口用例可区分新旧实现，不再恒真"
+    },
+    {
+      "command": "gh run view 45049593799 (head 1f7e124)",
+      "result": "test success / png-export success",
+      "passed": true,
+      "evidence": "PR #46 CI 全绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "Tushare stock_basic list_status=D/P 查询权限",
+      "reason": "security_meta 需要退市/暂停上市个股的名称与上市日；无权限时 D/P 查询失败会自动退回仅 L（退市股按板块基准限价）",
+      "status": "needed"
+    },
+    {
+      "name": "GitHub 分支推送 / PR #46 更新 / CI 读取",
+      "reason": "推送 1f7e124 并核对 CI run 45049593799",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-009-board-rules",
+    "commit": "1f7e124",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "ci": "run 45049593799 (head 1f7e124): test success / png-export success；后续 devloop 记录提交的 CI 以 PR statusCheckRollup 为准",
+    "merge": "未合并：PR #46 OPEN，等 reviewer 复核第 2 轮 3 条 P2 关闭后由用户决定合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261123-009",
+  "next": "请 reviewer 复核 rev-20261123-001 第 2 轮的 3 条 P2（iss-mws3oxhq-d35643 / iss-mws3oxip-3c3b84 / iss-mws3oxjy-108c8a）：缺口用例已可判别、security_meta 已覆盖 L/D/P、旧缓存回退已收紧。若 3 条确认关闭，可将线程标记为完全解决并决定是否合并 PR #46；若要求补充 Tushare D/P 权限/更深的历史名称 PIT，请另建 plan 项（本任务范围内不再扩）。",
+  "createdAt": "2026-11-22T17:30:24.521Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-011.md"
+}

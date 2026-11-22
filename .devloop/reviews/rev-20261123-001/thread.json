@@ -1,0 +1,24 @@
+{
+  "id": "rev-20261123-001",
+  "title": "评审：板块/停牌/北交所交易规则补齐",
+  "planItemId": "plan-20261103-009",
+  "sourceDevSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613",
+  "branch": "feat/plan-20261103-009-board-rules",
+  "base": "main",
+  "files": [
+    "README.md",
+    "astock/backtest.py",
+    "astock/backtest_ui.py",
+    "astock/events.py",
+    "astock/optimize.py",
+    "astock/optimize_ui.py",
+    "astock/strategy_lab.py",
+    "astock/strategy_ui.py",
+    "tests/test_board_rules.py",
+    "tests/test_optimize.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-22T16:45:21.256Z",
+  "updatedAt": "2026-11-22T17:18:27.074Z",
+  "reviewSessionId": "session-ba41bffc-b6aa-4fb9-9f72-52d333f036c0"
+}
