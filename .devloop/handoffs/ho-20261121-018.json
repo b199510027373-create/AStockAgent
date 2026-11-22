@@ -1,0 +1,34 @@
+{
+  "id": "ho-20261121-018",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261121-002",
+  "sessionId": "",
+  "title": "评审：修复 P2：AppBannerWiringTests 导入异常不得降级为 skip",
+  "summary": "第 1 轮全量评审（rev-20261121-002 / plan-20261110-002「AppBannerWiringTests 导入异常不得降级为 skip」）。\n\n结论：approve。openP0=0，openP1=0，openP2=0，本轮未新增任何 issue——没有发现需要开发修改的缺陷。\n\n评审对象与范围：branch test/plan-20261110-002-app-banner-skip，代码提交 3abe12b（tests/test_alpha_banner.py +77/−5），分支 head 92489be 仅含 .devloop/handoffs/ho-20261121-017.{json,md} 记录，`devloop_git diff base=3abe12b path=tests/test_alpha_banner.py` 为空，故评审内容与 3abe12b 一致。另按需读了 app.py:1-28 与 app.py:504-505（仅用于核验白名单声明与真实接线存在，未扩散到其他文件）。\n\n三条需求的逐条核对：\n1) REQ-1（不得宽泛吞异常）成立：旧 `except Exception as exc: raise unittest.SkipTest(...)` 已删除（diff 移除原 237-245 行）；tests/test_alpha_banner.py:286-300 `import_app_for_wiring_test(importer=importlib.import_module)` 只在 `ModuleNotFoundError` 且 `(exc.name or \"\").split(\".\")[0]` 命中白名单时抛 SkipTest，其余异常原样 `raise`；:306-308 setUpClass 只调用该 helper，不再有 try/except 包裹。\n2) REQ-2（只对已声明可选依赖跳过）成立：:283 `APP_OPTIONAL_DEPENDENCIES = frozenset({\"gradio\"})`，app.py:1-28 的顶层依赖里 gradio 是唯一 UI 栈可选依赖，pandas/numpy/plotly/requests 与 astock.* 均被套件其他用例强制导入（如 tests/test_alpha_banner.py:241 在用例内 import gradio、astock.agent.chart_render 依赖 plotly），缺失即真实故障，判为 fail 的口径正确。:330-334 覆盖 app 缺失 fail、:336-342 覆盖 astock.recommend_ui 缺失 fail、:344-352 覆盖 ImportError 与 Blocks 构建 RuntimeError fail、:354-363 覆盖 setUpClass 自身不吞异常（用 `AppBannerWiringTests.setUpClass.__func__` 复制真实函数体，若回退成普通 `import app` 或重新加宽泛 except，该用例都会失败，不是同义反复）。\n3) REQ-3（破坏接线必须 fail 而非 skip）成立：真实接线断言仍在 :310-311（`_load_output_element_ids(app.app)` 必须含 alpha-banner），配合 app.py:505 的 `bind_banner_refresh(app, recommend_banner)`；开发者记录的两次手工变异（注释接线 → FAILED AssertionError；注入不存在 import → ERROR ImportError，均已还原）与该断言一致，属可接受的手工验证（变异测试不适合固化进日常套件）。\n\n为什么不把「gradio 缺失仍会 skip」记成问题：缺 gradio 时本文件 :241 起的 MultiplePeriodBannerTests/RecommendTabBannerTests 会在用例内 import gradio 直接失败，整套套件同时变红，skip 无法单独把 CI 变绿；白名单口径因此不构成「藏回归」的通道。\n\n测试充分性：handoff ho-20261121-016/017 记录 pytest tests/test_alpha_banner.py -q => 22 passed, 2 subtests passed；pytest tests -q -m \"not png\" => 860 passed, 3 skipped, 5 deselected, 20 subtests passed（基线 855 + 新增 5）；mypy astock app.py => 44 files no issues；ruff check astock tests => All checks passed；CI run 44890767554（3abe12b）、44890948780、44891236449 均 test + png-export 全绿。注意：本会话没有 bash/run_code 工具，无法独立执行 `gh auth status` / `gh pr checks 45`，CI 结论取自上述 handoff 记录 + 本地 git（branch 与 origin 同步、代码自 3abe12b 未变），不是本轮重新执行的 CI。\n\n遗留流程事项（不是缺陷，无需改代码）：\n- 谁：本分支开发者（b199510027373-create）。条件：本线程 approve 后合并 PR #45 入 main；合并后把 plan-20261110-002 置 done，并在 rev-20261110-002 关闭 iss-mwaf2gr0 时引用本线程。\n- 何时算完全解决：PR #45 合并且 main 上 tests/test_alpha_banner.py 仍为该实现（`diff main..branch path=tests/test_alpha_banner.py` 为空）、plan 置 done、CI 绿。\n- 提示（不入 issue）：plan-20261110-002 的 acceptance 为空，完成判据目前只落在 handoff REQ-1..3；建议置 done 时把「import 链断→fail / 真实接线删除→fail / 只对 gradio 缺失 skip」三条写进 acceptance，便于后续机器核对。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 1,
+    "verdict": "approve",
+    "resolved": true,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "",
+  "createdAt": "2026-11-21T11:29:28.582Z",
+  "markdownPath": ".devloop/handoffs/ho-20261121-018.md"
+}

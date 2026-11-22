@@ -1,0 +1,15 @@
+{
+  "id": "rev-20261121-002",
+  "title": "评审：修复 P2：AppBannerWiringTests 导入异常不得降级为 skip",
+  "planItemId": "plan-20261110-002",
+  "sourceDevSessionId": "session-d4c01b00-1bac-4b27-8eab-1192501dc281",
+  "branch": "test/plan-20261110-002-app-banner-skip",
+  "base": "main",
+  "files": [
+    "tests/test_alpha_banner.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-21T11:27:42.817Z",
+  "updatedAt": "2026-11-21T11:29:28.294Z",
+  "reviewSessionId": "session-01c93137-8525-4855-94e1-b765407a14c1"
+}
