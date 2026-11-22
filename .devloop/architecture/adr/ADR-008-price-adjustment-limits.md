@@ -74,7 +74,15 @@
 4. **停牌**：`_has_trading_volume()` 0 量（无 vol 时看 amount）视为不可成交；`run_backtest` 对上市前 bar（负偏移）与停牌 bar 都不产生买卖；缺 bar 时只在实际存在的 bar 上成交，不补虚假行。
 5. **测试**：`tests/test_board_rules.py` 覆盖板块限价、创业板日期切换、IPO 窗口与旧规则、一字板按板块判定、停牌/复牌/缺 bar/上市前 bar、以及「数据未覆盖上市日不假设无涨跌幅」。
 6. **文档**：README「回测口径与限制」新增板块限价表、IPO 窗口、停牌与「回测 vs 实盘已知差异」小节。
-7. **未覆盖（显式标注）**：盘中临时停牌（日线不可见）、涨跌停价逐步取整、退市整理期、ST 板块感知、封单量与排队。
+7. **未覆盖（显式标注）**：盘中临时停牌（日线不可见，见下方保守近似）、涨跌停价逐步取整、退市整理期、ST 板块感知、封单量与排队。
+
+### 评审 rev-20261123-001 修复（2026-11-23）
+
+1. **规则接线（P1）**：`optimize.grid_search` / `walk_forward`、`strategy_lab.grid_strategy` / `walk_forward_strategy` / `portfolio_walk_forward` 增加 `name` / `list_date`（组合入口用 `meta[code]`）并透传 `run_backtest`；三个 UI 统一用 `events.security_meta()` 取名称与上市日（`stock_basic` 字段补 `list_date`，旧缓存缺列时尝试重拉，离线退回旧缓存）。ST 5% 与 IPO 窗口不再只在单票回测生效。
+2. **停牌口径（P2）**：新增 `_suspected_intraday_halt()`——无涨跌幅窗口内振幅 `high/low-1 ≥ 30%` 视为可能盘中临停、不成交；README 同步为「保守近似」，振幅更小的临停仍不可见。
+3. **IPO 窗口计数（P2）**：`_listing_offsets` 改用工作日计数（`np.busday_count`），停牌缺口不再让「上市后第 N 个交易日」偏小、把已恢复限价的 bar 错放进无涨跌幅窗口；节假日计入只会收紧窗口。
+4. **ST 非 PIT（P2）**：README「回测与实盘的已知差异」登记 ST 判定取 `stock_basic` **当前名称**，未接 `namechange` 按交易日取历史名称。
+5. **测试**：新增端到端用例（ST 5% 一字 0 成交、旧规首日 44% 一字 0 成交、次日非一字可成交）、停牌缺口结束 IPO 窗口、临停振幅判定、优化/策略实验室透传规则与 `security_meta` 用例。
 
 ## 证据
 

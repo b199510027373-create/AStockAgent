@@ -3,6 +3,7 @@ from __future__ import annotations
 import gradio as gr
 import pandas as pd
 
+from .events import security_meta
 from .recommend import parse_universe
 from .strategy_lab import portfolio_figure, portfolio_walk_forward
 
@@ -42,8 +43,13 @@ def run_lab(
         if len(codes) > 10:
             codes = codes[:10]
         progress(0.1, desc=f"加载并回测 {len(codes)} 只股票")
+        meta = {}
+        for code in codes:
+            name, list_date = security_meta(code)
+            meta[code] = {"name": name, "list_date": list_date}
         result = portfolio_walk_forward(
-            codes, strategy, years, float(train_years), int(test_months), metric, max_assets=10
+            codes, strategy, years, float(train_years), int(test_months), metric,
+            max_assets=10, meta=meta,
         )
         m = result.metrics
         summary = (

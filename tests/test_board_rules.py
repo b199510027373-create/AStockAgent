@@ -8,6 +8,7 @@ IPO 无涨跌幅窗口（创业板/科创板 5 日、北交所首日、主板注
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 import pandas as pd
 
@@ -17,12 +18,14 @@ from astock.backtest import (
     _listing_offsets,
     _one_price_limit,
     _one_price_limit_by_rule,
+    _suspected_intraday_halt,
     board_of,
     ipo_unbounded_days,
     limit_pct,
     limit_rule,
     run_backtest,
 )
+from astock.events import security_meta
 
 
 def zero_cost(initial_cash: float = 100_000.0) -> CostConfig:
@@ -302,6 +305,133 @@ class IpoBacktestTests(unittest.TestCase):
         )
         self.assertEqual(len(result.trades), 0)
         self.assertEqual(result.state["shares"], 0)
+
+
+class ListingOffsetGapTests(unittest.TestCase):
+    """IPO 窗口按工作日计数：停牌缺口不会把恢复限价后的 bar 错放进无涨跌幅窗口。"""
+
+    def test_offsets_count_business_days_not_bars(self):
+        dates = [pd.Timestamp("2024-05-06"), pd.Timestamp("2024-05-07"), pd.Timestamp("2024-05-17")]
+        offsets = _listing_offsets(pd.Series(dates), "2024-05-06")
+        # 05-06 到 05-17 之间隔了 9 个工作日（含停牌/缺 bar 的日子）。
+        self.assertEqual(offsets.tolist(), [0, 1, 9])
+
+    def test_suspension_gap_ends_ipo_window(self):
+        df = bars([10.0, 10.0, 12.5], start="2024-05-06")
+        df.loc[2, "trade_date"] = pd.Timestamp("2024-05-17")
+        df.loc[2, ["open", "high", "low", "close"]] = 12.5
+        df.loc[2, "pre_close"] = 10.0
+        # listing_day=9 ≥ 5：已恢复 20% 限价，12.5 高于涨停价 12.0，买不到。
+        result = run_backtest(
+            df, pd.Series([0, 0, 1]), "300750.SZ", zero_cost(), list_date="2024-05-06"
+        )
+        self.assertEqual(len(result.trades), 0)
+        self.assertEqual(result.state["shares"], 0)
+
+
+class IntradayHaltTests(unittest.TestCase):
+    """验收 3：无涨跌幅窗口内异常振幅按"可能盘中临停"拒绝成交（保守近似）。"""
+
+    def _ipo_df(self, high: float, low: float) -> pd.DataFrame:
+        df = bars([10.0, 12.0, 12.0], start="2024-05-06")
+        df.loc[1, ["open", "high", "low", "close"]] = [12.0, high, low, 12.0]
+        df.loc[1, "pre_close"] = 10.0
+        return df
+
+    def test_large_amplitude_in_unbounded_window_does_not_trade(self):
+        df = self._ipo_df(high=15.0, low=10.5)  # 振幅 42.9% ≥ 30%
+        result = run_backtest(
+            df, pd.Series([1, 0, 0]), "300750.SZ", zero_cost(), list_date=df.loc[0, "trade_date"]
+        )
+        self.assertEqual(len(result.trades), 0)
+        self.assertEqual(result.state["shares"], 0)
+
+    def test_moderate_amplitude_in_unbounded_window_still_trades(self):
+        df = self._ipo_df(high=12.0, low=10.0)  # 振幅 20% < 30%
+        result = run_backtest(
+            df, pd.Series([1, 0, 0]), "300750.SZ", zero_cost(), list_date=df.loc[0, "trade_date"]
+        )
+        self.assertEqual(len(result.trades), 1)
+
+    def test_helper_only_applies_to_unbounded_rules(self):
+        row = pd.Series({"high": 15.0, "low": 10.0})
+        unbounded = limit_rule("300750.SZ", list_date="2024-05-06", listing_day=0)
+        bounded = limit_rule("600000.SH", trade_date="2024-05-06")
+        self.assertTrue(_suspected_intraday_halt(row, unbounded))
+        self.assertFalse(_suspected_intraday_halt(row, bounded))
+
+
+class EndToEndRuleTests(unittest.TestCase):
+    """验收 1/2 的端到端用例：ST 5% 与旧规则首日 44%/36% 必须真的挡住成交。"""
+
+    def test_st_five_percent_one_price_blocks_buy(self):
+        df = bars([10.0, 10.5, 10.5])
+        df.loc[1, ["open", "high", "low", "close"]] = 10.5
+        df.loc[1, "pre_close"] = 10.0
+        signals = pd.Series([1, 0, 0])
+        st = run_backtest(df, signals, "600000.SH", zero_cost(), name="*ST某某")
+        self.assertEqual(len(st.trades), 0)
+        self.assertEqual(st.state["shares"], 0)
+        # 同一根 bar 在非 ST 10% 口径下不是一字板，可以成交（证明 name 真的生效）。
+        normal = run_backtest(df, signals, "600000.SH", zero_cost())
+        self.assertEqual(len(normal.trades), 1)
+        self.assertEqual(normal.trades.iloc[0]["买入日期"], df.loc[1, "trade_date"])
+
+    def test_old_rule_first_day_44_percent_blocks_one_price(self):
+        df = bars([14.4, 14.5, 14.5], start="2020-05-06")
+        df.loc[0, ["open", "high", "low", "close"]] = 14.4
+        df.loc[0, "pre_close"] = 10.0
+        result = run_backtest(
+            df, pd.Series([0, 0, 0]), "600000.SH", zero_cost(),
+            list_date=df.loc[0, "trade_date"], prev_signal=1,
+        )
+        self.assertEqual(len(result.trades), 0)
+        self.assertEqual(result.state["shares"], 0)
+
+    def test_old_rule_listing_day_below_44_percent_is_tradable(self):
+        df = bars([12.0, 12.5, 12.5], start="2020-05-06")
+        df.loc[0, ["open", "high", "low", "close"]] = 12.0
+        df.loc[0, "pre_close"] = 10.0
+        # 首日 44% 限价 14.4：12.0 不是一字板；若按常规 10% 会误判为买不到。
+        result = run_backtest(
+            df, pd.Series([0, 0, 0]), "600000.SH", zero_cost(),
+            list_date=df.loc[0, "trade_date"], prev_signal=1,
+        )
+        self.assertEqual(len(result.trades), 1)
+        self.assertEqual(result.trades.iloc[0]["买入日期"], df.loc[0, "trade_date"])
+
+    def test_old_rule_next_bar_above_44_percent_yet_tradable(self):
+        # 14.5 高于首日 44% 涨停价，但已到第 2 个交易日（10% 限价 15.84），不是一字。
+        df = bars([14.4, 14.5, 14.5], start="2020-05-06")
+        df.loc[0, ["open", "high", "low", "close"]] = 14.4
+        df.loc[0, "pre_close"] = 10.0
+        df.loc[1, ["open", "high", "low", "close"]] = 14.5
+        df.loc[1, "pre_close"] = 14.4
+        result = run_backtest(
+            df, pd.Series([1, 1, 0]), "600000.SH", zero_cost(),
+            list_date=df.loc[0, "trade_date"], prev_signal=1,
+        )
+        self.assertGreater(result.state["shares"], 0)
+        self.assertEqual(result.state["entry_date"], df.loc[1, "trade_date"])
+
+
+class SecurityMetaTests(unittest.TestCase):
+    def test_meta_from_stock_basic(self):
+        basic = pd.DataFrame(
+            {
+                "ts_code": ["600000.SH", "300001.SZ"],
+                "name": ["*ST某某", "某某股份"],
+                "list_date": [pd.Timestamp("2020-01-02"), pd.NaT],
+            }
+        )
+        with mock.patch("astock.events.stock_basic", return_value=basic):
+            self.assertEqual(security_meta("600000.SH"), ("*ST某某", pd.Timestamp("2020-01-02")))
+            self.assertEqual(security_meta("300001.SZ"), ("某某股份", None))
+            self.assertEqual(security_meta("000001.SZ"), ("", None))
+
+    def test_meta_offline_falls_back_to_regular_limits(self):
+        with mock.patch("astock.events.stock_basic", side_effect=RuntimeError("offline")):
+            self.assertEqual(security_meta("600000.SH"), ("", None))
 
 
 if __name__ == "__main__":

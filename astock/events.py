@@ -151,7 +151,7 @@ def _aliases(name: str) -> str:
 
 
 def stock_basic(refresh: bool = False) -> pd.DataFrame:
-    """股票基础信息（名称/行业），本地缓存一天。"""
+    """股票基础信息（名称/行业/上市日），本地缓存一天。"""
     global _BASIC
     if _BASIC is not None and not refresh:
         return _BASIC.copy()
@@ -161,27 +161,66 @@ def stock_basic(refresh: bool = False) -> pd.DataFrame:
     if path.exists() and not refresh:
         try:
             if meta.exists() and meta.read_text(encoding="utf-8").strip() == _today_str():
-                _BASIC = pd.read_parquet(path)
-                return _BASIC.copy()
+                cached = pd.read_parquet(path)
+                # 旧缓存可能没有 list_date（IPO 无涨跌幅窗口依赖它）：宁可行内重拉，
+                # 也不要把缺列缓存继续用一天。重拉失败时退回旧缓存（仅名称/行业）。
+                if "list_date" in cached.columns:
+                    _BASIC = cached
+                    return _BASIC.copy()
         except (OSError, ValueError):  # 缓存缺失/损坏时走网络重拉
             pass
 
-    df = get_client().query(
-        "stock_basic",
-        exchange="",
-        list_status="L",
-        fields="ts_code,name,industry,market",
-    )
+    try:
+        df = get_client().query(
+            "stock_basic",
+            exchange="",
+            list_status="L",
+            fields="ts_code,name,industry,market,list_date",
+        )
+    except Exception:  # 离线时退回当天旧缓存（若有），不阻断回测
+        if path.exists() and not refresh:
+            try:
+                _BASIC = pd.read_parquet(path)
+                return _BASIC.copy()
+            except (OSError, ValueError):
+                pass
+        raise
     if df.empty:
         raise TushareError("stock_basic 返回为空")
     df["name"] = df["name"].fillna("").astype(str)
     df["industry"] = df["industry"].fillna("").astype(str)
     df["market"] = df["market"].fillna("").astype(str)
+    if "list_date" in df.columns:
+        df["list_date"] = pd.to_datetime(df["list_date"], format="%Y%m%d", errors="coerce")
     df["aliases"] = df["name"].map(_aliases)
     df.to_parquet(path, index=False)
     meta.write_text(_today_str(), encoding="utf-8")
     _BASIC = df
     return df.copy()
+
+
+def security_meta(code: str) -> tuple[str, pd.Timestamp | None]:
+    """返回 ``(当前名称, 上市日)``，供 ST 5% 与 IPO 无涨跌幅窗口使用。
+
+    取不到基础信息时返回 ``("", None)``：回测退回常规限价，宁可保守也不假设
+    "新股无涨跌幅"。注意名称是**当前**名称，不是按交易日的历史名称（README
+    「回测与实盘的已知差异」已登记）。
+    """
+    try:
+        basic = stock_basic()
+    except Exception:  # noqa: BLE001 - 离线/接口异常时退回保守口径
+        return "", None
+    if basic is None or basic.empty or "ts_code" not in basic.columns:
+        return "", None
+    row = basic[basic["ts_code"] == code]
+    if row.empty:
+        return "", None
+    rec = row.iloc[0]
+    name = str(rec.get("name", "") or "")
+    listed = rec.get("list_date")
+    if listed is None or pd.isna(listed):
+        return name, None
+    return name, pd.Timestamp(listed)
 
 
 def _meta_for(code: str) -> dict:

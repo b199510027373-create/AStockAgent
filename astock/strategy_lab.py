@@ -60,12 +60,15 @@ def grid_strategy(
     params: list[dict],
     benchmark: pd.Series | None,
     metric: str = "sharpe",
+    name: str = "",
+    list_date=None,
 ) -> pd.DataFrame:
+    """策略参数网格；``name`` / ``list_date`` 与单票回测同口径（ST 5%、IPO 窗口）。"""
     cfg = CostConfig()
     rows = []
     for p in params:
         signals = _signals(daily_e, strategy, p)
-        result = run_backtest(daily_e, signals, code, cfg, benchmark)
+        result = run_backtest(daily_e, signals, code, cfg, benchmark, name=name, list_date=list_date)
         m = result.metrics
         rows.append(
             {
@@ -95,7 +98,10 @@ def walk_forward_strategy(
     train_years: float = 1.5,
     test_months: int = 3,
     metric: str = "sharpe",
+    name: str = "",
+    list_date=None,
 ) -> WalkForwardResult:
+    """滚动 walk-forward；``name`` / ``list_date`` 透传到训练与测试窗口的回测。"""
     train_bars = max(120, int(250 * float(train_years)))
     test_bars = max(21, int(21 * int(test_months)))
     if len(daily_e) < train_bars + test_bars:
@@ -127,7 +133,7 @@ def walk_forward_strategy(
         for p in params:
             key = _param_text(p)
             sig = signals_cache[key].iloc[start : start + train_bars].reset_index(drop=True)
-            result = run_backtest(train, sig, code, cfg, benchmark)
+            result = run_backtest(train, sig, code, cfg, benchmark, name=name, list_date=list_date)
             m = result.metrics
             value = m.get("sharpe") if metric == "sharpe" else m.get("annual_return")
             value = float(value) if value is not None and math.isfinite(float(value)) else -9.99
@@ -149,6 +155,8 @@ def walk_forward_strategy(
             benchmark,
             initial_state=state,
             prev_signal=prev_signal,
+            name=name,
+            list_date=list_date,
         )
         state = test_result.state
         tm = test_result.metrics
@@ -250,7 +258,9 @@ def portfolio_walk_forward(
     test_months: int = 3,
     metric: str = "sharpe",
     max_assets: int = 10,
+    meta: dict[str, dict[str, Any]] | None = None,
 ) -> PortfolioResult:
+    """多标的 walk-forward；``meta[code]`` 提供 ``name`` / ``list_date``，与单票回测同口径。"""
     codes = list(dict.fromkeys(codes))[:max_assets]
     if not codes:
         raise ValueError("股票池为空")
@@ -260,8 +270,18 @@ def portfolio_walk_forward(
     for code in codes:
         daily, bench = load_data(code, years)
         benchmarks[code] = bench
+        info = (meta or {}).get(code) or {}
         wfs[code] = walk_forward_strategy(
-            daily, code, strategy, params, bench, train_years, test_months, metric
+            daily,
+            code,
+            strategy,
+            params,
+            bench,
+            train_years,
+            test_months,
+            metric,
+            name=str(info.get("name", "")),
+            list_date=info.get("list_date"),
         )
 
     per_rows = []

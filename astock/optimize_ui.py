@@ -3,6 +3,7 @@ from __future__ import annotations
 import gradio as gr
 import pandas as pd
 
+from .events import security_meta
 from .optimize import grid_heatmap, grid_search, load_data, oos_figure, walk_forward
 from .utils import is_code, normalize_code
 
@@ -59,8 +60,13 @@ def run_optimize(
     try:
         progress(0.05, desc="加载日线与基准")
         daily, bench = load_data(code, years)
+        # 与单票回测同口径：ST 5% 与 IPO 无涨跌幅窗口都依赖名称/上市日。
+        name, list_date = security_meta(code)
         progress(0.20, desc="全样本参数网格")
-        grid = grid_search(daily, code, fast_values, slow_values, bench, metric)
+        grid = grid_search(
+            daily, code, fast_values, slow_values, bench, metric,
+            name=name, list_date=list_date,
+        )
         progress(0.55, desc="滚动 walk-forward")
         wf = walk_forward(
             daily,
@@ -71,6 +77,8 @@ def run_optimize(
             train_years=float(train_years),
             test_months=int(test_months),
             metric=metric,
+            name=name,
+            list_date=list_date,
         )
         progress(0.95, desc="汇总")
         best = grid.best

@@ -191,9 +191,11 @@ def _one_price_limit(row: pd.Series, pct: float, side: str, list_date=None) -> b
 def _listing_offsets(dates, list_date) -> np.ndarray | None:
     """每个 bar 距上市日的交易日序号（首日 0）；数据未覆盖上市日则返回 None。
 
-    只用 bar 序号近似交易日序号：数据必须从上市日起完整覆盖，否则宁可返回
-    ``None`` 走常规限价，也不猜"新股无涨跌幅"。首日之前若混入 bar，序号为负，
-    调用方按"未上市"拒绝成交。
+    按**工作日**（周一至周五）计数，而不是 bar 序号：日线里停牌缺口、缺 bar
+    不会再让"上市后第 N 个交易日"偏小，把已恢复常规限价的 bar 错放进 IPO
+    无涨跌幅窗口。法定节假日被当成工作日计入会**高估**偏移，只会让窗口更早
+    结束（更保守）。数据首根 bar 晚于上市日时无法推断，返回 ``None`` 走常规
+    限价；首日之前若混入 bar，序号为负，调用方按"未上市"拒绝成交。
     """
     listed = _to_ts(list_date)
     if listed is None:
@@ -203,8 +205,9 @@ def _listing_offsets(dates, list_date) -> np.ndarray | None:
         return None
     if days.iloc[0] > listed:
         return None
-    first = int((days >= listed).to_numpy().argmax())
-    return np.arange(len(days)) - first
+    start = np.datetime64(listed.date(), "D")
+    ends = days.to_numpy().astype("datetime64[D]")
+    return np.busday_count(start, ends)
 
 
 def _positive(value) -> bool | None:
@@ -233,6 +236,26 @@ def _has_trading_volume(row: pd.Series) -> bool:
     return True
 
 
+#: 无涨跌幅窗口内，单日振幅达到该阈值视为可能触发盘中临停（科创板/创业板 30% 档）。
+INTRADAY_HALT_AMPLITUDE = 0.30
+
+
+def _suspected_intraday_halt(row: pd.Series, rule: LimitRule) -> bool:
+    """无涨跌幅窗口内振幅 ≥30% 时，按"可能盘中临停"拒绝成交（保守近似）。
+
+    日线只有开高低收，无法还原临停时段与复牌后的真实可成交性；振幅异常放大时
+    宁可错过交易，也不假设全天都能自由买卖。常规限价日不启用该判定（振幅大
+    但未触板的情况仍按一字板规则处理）。README「回测与实盘的已知差异」有说明。
+    """
+    if not rule.unbounded:
+        return False
+    high = _raw_price(row, "raw_high", "high")
+    low = _raw_price(row, "raw_low", "low")
+    if high is None or low is None or low <= 0:
+        return False
+    return high / low - 1 >= INTRADAY_HALT_AMPLITUDE
+
+
 def run_backtest(
     df: pd.DataFrame,
     signals: pd.Series,
@@ -254,6 +277,7 @@ def run_backtest(
     - t 日收盘生成信号，t+1 日开盘成交（避免未来函数）
     - T+1：当日买入不能当日卖出
     - 一字涨停不能买、一字跌停不能卖
+    - 停牌（0 量/0 额、缺 bar）不成交；无涨跌幅窗口内振幅 ≥30% 视为可能盘中临停，不成交
     - 佣金双边万 2.5、最低 5 元；印花税卖出万 5；滑点单边万 5
     - 按 100 股整数倍交易，满仓
     """
@@ -297,10 +321,10 @@ def run_backtest(
         # 常规回测：执行前一日收盘信号；连续 WF：首日执行上一窗口最后信号
         target = sig[i - 1] if i > 0 else prev_signal
         if target is not None:
-            # 停牌（0 量/0 额）或尚未上市（上市日之前的 bar）都不产生成交。
-            listed = offsets is None or int(offsets[i]) >= 0
-            tradable = listed and _has_trading_volume(row)
+            # 停牌（0 量/0 额）、未上市（上市日之前的 bar）与可能盘中临停都不产生成交。
             rule = rules[int(i)]
+            listed = offsets is None or int(offsets[i]) >= 0
+            tradable = listed and _has_trading_volume(row) and not _suspected_intraday_halt(row, rule)
             if target == 1 and position == 0 and tradable and not _one_price_limit_by_rule(row, rule, "buy"):
                 price = float(row["open"]) * (1 + cfg.slippage)
                 lots = int(cash // (price * cfg.lot_size * (1 + cfg.commission_rate)))
