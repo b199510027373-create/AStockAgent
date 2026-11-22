@@ -1,0 +1,156 @@
+{
+  "id": "ho-20261123-014",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "板块/停牌/北交所规则补齐：评审第 3 轮 2 条 P2 收尾",
+  "summary": "评审第 3 轮（r3，approve + 2 条 P2）收尾完成。① iss-mws4cwf7-d94964：tests/test_board_rules.py 缺口用例第 4 根 bar 改 2024-05-20，trade_date 严格递增（offsets [0,1,9,10]），对照用例新增 assertLess(买入日期, 卖出日期)；用旧 bar 序号实现复验仍 failures=1，判别力保持。② iss-mws4cwgj-54c06a：astock/events.py 给 stock_basic/stock_basic_all 的进程内 memo 增加 _BASIC_DAY/_BASIC_ALL_DAY 与 _memo_is_current()，跨天重新读盘/回源；新增跨天刷新与同日复用两条用例；README 新鲜度条目改为同时覆盖文件与进程内缓存；ADR-008 与 adrs.json 登记第 3 轮收尾。验证：test_board_rules 47 passed/26 subtests；5 文件相关集 131 passed；全量、ruff、mypy、coverage 全通过；相关测试见 tests。PR #46 仍未合并。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试",
+      "source": "plan-20261103-009 验收 1"
+    },
+    {
+      "id": "REQ-2",
+      "text": "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖",
+      "source": "plan-20261103-009 验收 2"
+    },
+    {
+      "id": "REQ-3",
+      "text": "临时停牌/全天停牌不产生虚假成交",
+      "source": "plan-20261103-009 验收 3"
+    },
+    {
+      "id": "REQ-4",
+      "text": "回测与实盘规则差异写进 README",
+      "source": "plan-20261103-009 验收 4"
+    },
+    {
+      "id": "REV-R3-1",
+      "text": "缺口用例的时间夹具倒序：卖出 bar 的日期（05-09）早于买入 bar（05-17）；要求显式构造单调日期，并对对照用例断言卖出日期晚于买入日期",
+      "source": "review rev-20261123-001 r3 · iss-mws4cwf7-d94964"
+    },
+    {
+      "id": "REV-R3-2",
+      "text": "README 新增「更旧缓存显式报错」只约束文件缓存，进程内 _BASIC/_BASIC_ALL 无日期校验，长驻进程跨天仍静默复用；要求 README 限定措辞或给进程内缓存加同日校验并补跨天用例",
+      "source": "review rev-20261123-001 r3 · iss-mws4cwgj-54c06a"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/events.py",
+      "summary": "stock_basic/stock_basic_all 增加 _BASIC_DAY/_BASIC_ALL_DAY 纪元日期与 _memo_is_current()，进程内缓存只在当天复用，跨天重新读盘/回源；修复 README 承诺只覆盖文件缓存的缺口（iss-mws4cwgj-54c06a）。",
+      "commit": "ee6b2c3"
+    },
+    {
+      "path": "tests/test_board_rules.py",
+      "summary": "缺口用例第 4 根 bar 改为 2024-05-20，offsets 变 [0,1,9,10]，对照用例断言卖出日期晚于买入日期（iss-mws4cwf7-d94964）；新增 test_in_process_memo_is_refreshed_across_days / test_in_process_memo_reused_within_day，setUp 同时重置 _BASIC_DAY/_BASIC_ALL_DAY。",
+      "commit": "ee6b2c3"
+    },
+    {
+      "path": "README.md",
+      "summary": "新鲜度条目改为同时覆盖文件缓存与进程内缓存：跨天重新读盘/回源，不会静默复用过期股票池。",
+      "commit": "ee6b2c3"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-008-price-adjustment-limits.md",
+      "summary": "新增「评审 rev-20261123-001 第 3 轮收尾（2026-11-23）」2 条：夹具日期单调、进程内缓存按天校验。",
+      "commit": "ee6b2c3"
+    },
+    {
+      "path": ".devloop/architecture/adrs.json",
+      "summary": "ADR-008 summary 追加第 3 轮收尾说明，json.load 校验通过。",
+      "commit": "ee6b2c3"
+    },
+    {
+      "path": ".devloop/reviews/rev-20261123-001, .devloop/handoffs/ho-20261123-013.*",
+      "summary": "入库评审第 3 轮线程记录与 reviewer handoff（另一会话产出，非本次代码改动）。",
+      "commit": "8f26641"
+    }
+  ],
+  "tests": [
+    {
+      "command": "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q -p no:cacheprovider",
+      "result": "47 passed, 26 subtests passed",
+      "passed": true,
+      "evidence": "输出尾行：47 passed, 1 warning, 26 subtests passed in 0.39s"
+    },
+    {
+      "command": "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_optimize.py tests/test_data_pit_events.py tests/test_contracts.py tests/test_core_paths.py -q -p no:cacheprovider",
+      "result": "131 passed, 26 subtests passed",
+      "passed": true,
+      "evidence": "输出尾行：131 passed, 1 warning, 26 subtests passed in 15.60s"
+    },
+    {
+      "command": "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "923 passed, 3 skipped",
+      "passed": true,
+      "evidence": "输出尾行：923 passed, 3 skipped, 1 warning, 46 subtests passed in 91.82s"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "输出：All checks passed!"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "no issues in 44 files",
+      "passed": true,
+      "evidence": "输出：Success: no issues found in 44 source files"
+    },
+    {
+      "command": "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" && .venv\\Scripts\\coverage.exe report",
+      "result": "coverage 80.45% (fail_under 76.45)",
+      "passed": true,
+      "evidence": "918 passed, 3 skipped, 5 deselected, 46 subtests passed in 108.37s；coverage report TOTAL 12008 2348 80.45%；exit=0"
+    },
+    {
+      "command": "临时脚本 patch astock.backtest._listing_offsets 为旧 bar 序号实现后运行 ListingOffsetGapTests.test_suspension_gap_ends_ipo_window",
+      "result": "旧实现下用例失败，证明可判别",
+      "passed": true,
+      "evidence": "输出 failures: 1 errors: 0 / AssertionError: 1 != 0"
+    },
+    {
+      "command": "gh run view 45051208430",
+      "result": "CI 全绿",
+      "passed": true,
+      "evidence": "headSha 8f266419503f23f24617ab9d1793c79b0f301b40，test success / png-export success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "Tushare stock_basic list_status=D/P 查询权限",
+      "reason": "security_meta 取退市/暂停上市个股名称与上市日；无权限时自动退回仅 L（保守）",
+      "status": "needed"
+    },
+    {
+      "name": "GitHub 分支推送 / PR #46 更新 / CI 读取",
+      "reason": "推送 ee6b2c3/8f26641 并核对 run 45051208430",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-009-board-rules",
+    "commit": "ee6b2c3",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "ci": "run 45051208430 (head 8f26641): test success / png-export success",
+    "merge": "未合并：PR #46 OPEN / MERGEABLE，待 reviewer 第 4 轮复核确认 2 条 P2 关闭后由用户决定合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261123-012",
+  "next": "请 reviewer 复核 rev-20261123-001 第 3 轮 2 条 P2（iss-mws4cwf7-d94964 夹具单调、iss-mws4cwgj-54c06a 进程内缓存按天校验）是否关闭；ledger 中前 8 条 issue 的 status/feedback 仍为 reviewer 侧未回填，需 reviewer 侧标记，开发侧不代写评审反馈。合并 PR #46 由用户决定。",
+  "createdAt": "2026-11-22T17:47:10.749Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-014.md"
+}
