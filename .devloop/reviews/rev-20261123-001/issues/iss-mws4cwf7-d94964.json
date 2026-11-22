@@ -10,7 +10,24 @@
   "evidence": "tests/test_board_rules.py:324 `df = bars([10.0, 10.0, 12.5, 12.5], start=\"2024-05-06\")` 生成 bdate_range 四根 bar = 05-06/05-07/05-08/05-09，然后 :325 把**第 3 根**覆盖成 `pd.Timestamp(\"2024-05-17\")`，第 4 根仍是 05-09。于是 :328 注释里的「第 4 根 bar 卖出」实际发生在 2024-05-09——早于 :331 买入的 05-17，trade_date 序列非单调（offsets = [0, 1, 9, 3]）。对照用例 :340-343 断言 `len(control.trades) == 1` 恰好是这一对的成交，如果以后把断言加强为买入/卖出日期或持有天数（astock/backtest.py:430-454 的 _metrics 用 `trades[\"持有天数\"]`），就会得到负的持有天数；同时「第 4 根 bar 卖出」的注释与实际日期不符，后来者容易误读缺口场景。断言本身当前仍具判别力（把 _listing_offsets 退回 bar 序号实现会得到 listing_day=2 而放行成交，dev 已手工验证 1 != 0），因此只记 P2。",
   "suggestion": "把夹具日期显式写成单调序列，例如 `df.loc[2, \"trade_date\"] = pd.Timestamp(\"2024-05-17\")` 后补一行 `df.loc[3, \"trade_date\"] = pd.Timestamp(\"2024-05-20\")`（offsets 变 [0,1,9,10]，第 4 根仍在窗口外=20% 限价，卖出不受影响），或直接 `dates = [pd.Timestamp(\"2024-05-06\"), pd.Timestamp(\"2024-05-07\"), pd.Timestamp(\"2024-05-17\"), pd.Timestamp(\"2024-05-20\")]` 构造 DataFrame 再跑。改完后对照用例额外断言 `control.trades[0]` 的卖出日期 > 买入日期，锁住时间方向。完成条件：用例仍为 0/1 成交断言且 trade_date 严格递增。",
   "confidence": 0.82,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-22T17:36:58.147Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已修复（ee6b2c3）：tests/test_board_rules.py 第 4 根 bar 显式设为 2024-05-20（offsets [0,1,9,10]），对照用例新增 assertLess(买入日期, 卖出日期)；夹具单调化后复验旧 _listing_offsets 实现仍 failures=1。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T17:52:42.695Z"
+  },
+  "createdAt": "2026-11-22T17:36:58.147Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已修复（ee6b2c3）：tests/test_board_rules.py 第 4 根 bar 显式设为 2024-05-20（offsets [0,1,9,10]），对照用例新增 assertLess(买入日期, 卖出日期)；夹具单调化后复验旧 _listing_offsets 实现仍 failures=1。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T17:52:42.695Z"
+    }
+  ]
 }

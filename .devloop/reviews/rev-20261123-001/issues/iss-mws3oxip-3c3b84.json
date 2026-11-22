@@ -10,7 +10,24 @@
   "evidence": "astock/events.py:173-179 的 `stock_basic` 固定查询 `list_status=\"L\"`；astock/events.py:215-217 的 `security_meta` 在 `basic[\"ts_code\"] == code` 无匹配时返回 `(\"\", None)`。因此对已退市（list_status=\"D\"）或暂停上市（\"P\"）的个股，ST 5% 与 IPO 无涨跌幅窗口在回测中静默失效，按板块基准 10%/20% 处理——退市股历史里常含 ST 段与次新段，恰好是最容易踩 5% 一字板的场景。README.md:184 只说明\"离线拿不到基础信息时退回常规限价\"，未覆盖\"在市列表里没有这只股票\"的情况；README.md:183 只登记了 ST 非 PIT，没有登记这个缺口。",
   "suggestion": "二选一：(a) `stock_basic` 对 `list_status in (\"L\", \"D\", \"P\")` 分别查询后 concat 并缓存（每天 3 次调用，回测按需触发，可接受）；(b) 本轮不动代码，在 README「回测与实盘的已知差异」补一条：\"`stock_basic` 只含在市股票，已退市/暂停上市个股取不到名称与上市日，ST 5% 与 IPO 无涨跌幅窗口对其不生效\"，并在 ADR-008 未覆盖项登记。",
   "confidence": 0.75,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-22T17:18:19.825Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已修复（1f7e124）：astock/events.py 新增 _query_basic 查询 L/D/P 与 stock_basic_all()（独立缓存），security_meta 改用它；stock_basic 仍只含 L，推荐/选股池不被退市股污染；tests/test_board_rules.py StockBasicCoverageTests 覆盖三态合并、D 查询失败降级、L 池不含退市股。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T17:52:42.695Z"
+  },
+  "createdAt": "2026-11-22T17:18:19.825Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已修复（1f7e124）：astock/events.py 新增 _query_basic 查询 L/D/P 与 stock_basic_all()（独立缓存），security_meta 改用它；stock_basic 仍只含 L，推荐/选股池不被退市股污染；tests/test_board_rules.py StockBasicCoverageTests 覆盖三态合并、D 查询失败降级、L 池不含退市股。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T17:52:42.695Z"
+    }
+  ]
 }

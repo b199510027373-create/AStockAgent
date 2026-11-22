@@ -1,0 +1,33 @@
+{
+  "id": "iss-mws4ttve-4b599a",
+  "threadId": "rev-20261123-001",
+  "roundNo": 4,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_board_rules.py",
+  "lines": "557-583",
+  "title": "进程内缓存按天校验只测了 stock_basic，stock_basic_all（回测真正取名称/上市日的入口）跨天刷新无回归用例",
+  "evidence": "ee6b2c3 同时改了 astock/events.py:230-235（`stock_basic` 用 `_memo_is_current(_BASIC_DAY)`，加载后 `_BASIC_DAY = _today_str()`）与 astock/events.py:244-249（`stock_basic_all` 用 `_memo_is_current(_BASIC_ALL_DAY)`）。新增用例只有 tests/test_board_rules.py:557-570 `test_in_process_memo_is_refreshed_across_days` 和 :572-583 `test_in_process_memo_reused_within_day`，两者都只 patch/断言 `_BASIC`、`_BASIC_DAY`；`_BASIC_ALL_DAY` 在整个仓库仅出现在 astock/events.py:22、:245、:248 与 tests/test_board_rules.py:464 的 setUp 重置中（grep 结果），即回测实际调用的 `security_meta() → stock_basic_all()`（astock/events.py:252-274）跨天刷新分支没有任何用例。若后续有人在 `stock_basic_all` 里误删 `_memo_is_current(_BASIC_ALL_DAY)` 判断（例如合并两处 memo 实现时的常见手误），CI 全绿但长驻进程会重新出现「跨天静默沿用旧股票池」——正是 iss-mws4cwgj-54c06a 要修的问题。",
+  "suggestion": "在 tests/test_board_rules.py 的 StockBasicCoverageTests 里补一条对称用例（或把现有两条参数化）：`mock.patch(\"astock.events._BASIC_ALL\", stale_all)`、`mock.patch(\"astock.events._BASIC_ALL_DAY\", \"20000101\")`、`mock.patch(\"astock.events._load_basic\", return_value=fresh_all) as loader`，调用 `events.stock_basic_all()` 后断言 `loader.assert_called_once_with(\"stock_basic_all.parquet\", (\"L\", \"D\", \"P\"), False)`、`events._BASIC_ALL_DAY == events._today_str()` 且返回新帧；再加同日复用断言 `loader.assert_not_called()`。该用例只补测、不改实现，属第 4 轮 diff 内新增分支的配套覆盖。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "已补测（本次提交）：tests/test_board_rules.py StockBasicCoverageTests 新增 test_all_memo_is_refreshed_across_days / test_all_memo_reused_within_day，断言 stock_basic_all() 跨天调用 _load_basic(\"stock_basic_all.parquet\", (\"L\",\"D\",\"P\"), False) 并刷新 _BASIC_ALL_DAY，同日不重拉；tests/test_board_rules.py 49 passed / 26 subtests。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-22T17:52:42.695Z"
+  },
+  "createdAt": "2026-11-22T17:50:07.994Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "已补测（本次提交）：tests/test_board_rules.py StockBasicCoverageTests 新增 test_all_memo_is_refreshed_across_days / test_all_memo_reused_within_day，断言 stock_basic_all() 跨天调用 _load_basic(\"stock_basic_all.parquet\", (\"L\",\"D\",\"P\"), False) 并刷新 _BASIC_ALL_DAY，同日不重拉；tests/test_board_rules.py 49 passed / 26 subtests。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-22T17:52:42.695Z"
+    }
+  ]
+}

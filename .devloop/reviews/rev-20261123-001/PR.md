@@ -1,65 +1,55 @@
 # PR 评审：评审：板块/停牌/北交所交易规则补齐
 
-> 自动生成于 2026-11-22T17:37:05.883Z；可直接转交开发会话。
+> 自动生成于 2026-11-22T17:50:16.116Z；可直接转交开发会话。
 
 ## 概览
 
 - 线程：`rev-20261123-001`
 - 计划项：`plan-20261103-009`
 - 分支：`feat/plan-20261103-009-board-rules` → `main`
-- 轮次：第 3 轮（full）
+- 轮次：第 4 轮（diff）
 - 结论：通过（approve）
 - 开发会话：`session-9447de73-dfbd-4553-b66d-68047542f613`
-- 本轮问题：2（P0 0 / P1 0 / P2 2）
-- 线程未闭环：P0 0 / P1 1 / P2 9
+- 本轮问题：1（P0 0 / P1 0 / P2 1）
+- 线程未闭环：P0 0 / P1 1 / P2 10
 
 ## 本轮结论
 
-第 3 轮（full，复检 65f14b2..1f7e124 与分支 head 156f962）评审完成。结论：approve，本轮 P0=0 / P1=0 / P2=2（均为提示级，不阻断合并）。前两轮 8 条问题（1 条 P1 + 7 条 P2）技术上全部落实并已复核。
+第 4 轮（scope=diff，base 156f962 → ee6b2c3，记录提交 8f26641/28ec190 仅 .devloop 文档）复核结论：approve。本轮 counts P0=0 / P1=0 / P2=1；线程 status=approved。
 
-【第 2 轮 3 条 P2 逐条复核（均已修复）】
-1. iss-mws3oxhq-d35643（恒真用例）：tests/test_board_rules.py:323-343 改为 signals=[0,1,0,0]（第 3 根 bar 尝试买入、第 4 根卖出）并新增 pre_close=12.5 的对照断言（@:340-343 期望 1 笔成交）。按 sig[i-1] 语义，主用例在 offset=9（≥5，20% 限价、12.5 > 12.0 涨停价）处被一字板拦截→0 成交；若退回 bar 序号实现（listing_day=2）会放行→1 成交，断言可判别，dev 已用旧实现手工验证 failures=1。
-2. iss-mws3oxip-3c3b84（退市/暂停上市静默失效）：astock/events.py:162-178 新增 _query_basic 查询 L/D/P（D/P 失败仅记录性跳过、L 失败仍抛出），:230-240 新增 stock_basic_all（独立缓存 stock_basic_all.parquet / _BASIC_ALL），:251-252 security_meta 改用它；stock_basic 仍只有 L，推荐/选股池不被退市股污染。tests/test_board_rules.py:441-523 StockBasicCoverageTests 覆盖三态合并、D 查询失败降级、L 池不含退市股。
-3. iss-mws3oxjy-108c8a（旧缓存静默回退）：astock/events.py:154-159 新增 _cache_is_current（meta 内容须等于 _today_str()），:181-215 _load_basic 的 except 回退分支同样受该判定约束，更旧缓存 re-raise；用例 :503-523 覆盖 stale 抛 TushareError 与当天缓存回退。astock/scheduler.py:618-627 会把异常记为 failed 状态，硬失败可观测，可接受。
+一、diff 内改动已逐条核对通过
+1. astock/events.py:18-22 新增 `_BASIC_DAY` / `_BASIC_ALL_DAY` 纪元日期，:220-223 `_memo_is_current(day)` 以 `day == _today_str()` 判定；:230-235 `stock_basic()` 的 memo 命中条件加入 `_memo_is_current(_BASIC_DAY)` 并在 `_load_basic("stock_basic.parquet", ("L",), refresh)` 后写回当天日期；:244-249 `stock_basic_all()` 对 `("L","D","P")` / `stock_basic_all.parquet` 做同样处理。iss-mws4cwgj-54c06a（README 声称按天新鲜度但进程内 memo 无日期校验）在实现层已消除，改法与建议一致。
+2. tests/test_board_rules.py:326 第 4 根 bar 显式设为 2024-05-20，offsets 由 [0,1,9,9] 变为 [0,1,9,10]，夹具不再倒序（iss-mws4cwf7-d94964 消除）；:345-347 新增 `assertLess(trade["买入日期"], trade["卖出日期"])` 守住卖出晚于买入这一前提；:464 setUp 同步重置 4 个模块级全局，避免用例间污染；:557-583 新增跨天刷新与同日复用两条用例，后者 `loader.assert_not_called()` 能真正锁住「当日复用」分支。
+3. README.md:185 新鲜度条目已扩为「文件缓存 + 进程内缓存都带写出日期、跨天重新读盘/回源」，与代码口径一致；ADR-008 第 3 轮收尾两条记录、adrs.json summary 同步，符合 ADR-008「差异必须登记」的既有约束，未违反契约 v1.1 的 DATA-04 与 ARCH-01/02。
+4. 第 2、3 轮遗留修复未回退：`_listing_offsets` 工作日计数（astock/backtest.py:191-210）、`_suspected_intraday_halt` 振幅 ≥30%（astock/backtest.py:239-256 并入 :320-328 tradable）、优化/策略实验室 name/list_date 透传（astock/optimize.py:86/178/193、astock/strategy_lab.py:71/136/150、portfolio meta 路径）均仍在位。
 
-【四条验收复核（第 3 轮全量）】① 20%/30%/ST 5%：LimitPctTests + EndToEndRuleTests 覆盖；② IPO 无涨跌幅窗口：ipo_unbounded_days/limit_rule + README.md:166-170（含工作日计数、缺口说明）；③ 停牌/临停：0 量 bar、缺 bar、上市前 bar 不成交 + 无涨跌幅窗口振幅≥30% 保守近似（astock/backtest.py:239-256、:320-328）+ README.md:176/182-183 明确残余；④ README.md:151-186 四节差异表齐备，含 ST 非 PIT、D/P 覆盖、缓存新鲜度、退市整理期。ADR-008 与 adrs.json 同步登记第 2 轮收尾 3 条。代码层面仅 .devloop 记录变更（9342963、156f962），无未审代码。
+二、本轮新增问题（1 条 P2，open）
+- iss-mws4ttve-4b599a（tests/test_board_rules.py:557-583）：按天校验只对 `stock_basic` 有用例，回测真正调用的 `security_meta() → stock_basic_all()`（astock/events.py:252-274）跨天刷新分支无用例，而 `_BASIC_ALL_DAY` 在 tests 里只出现在 setUp 重置。属新修分支的配套覆盖缺口，不构成功能缺陷。
 
-【本轮新增 2 条 P2（开发处理，不阻断合并）】
-- iss-mws4cwf7-d94964｜tests/test_board_rules.py:323-343：缺口用例时间夹具倒序（第 4 根 bar 仍是 05-09，早于买入的 05-17）。改法：补 df.loc[3,"trade_date"]=2024-05-20 或显式构造单调日期，并对对照用例断言卖出日期 > 买入日期。
-- iss-mws4cwgj-54c06a｜README.md:184-185：新增的「更旧缓存显式报错、避免静默使用过期股票池」只约束文件缓存，进程内 _BASIC/_BASIC_ALL（astock/events.py:224-225、:237-238）无日期校验，长驻进程跨天仍静默复用。改法：README 限定为「离线回退」措辞，或给进程内缓存加同日校验并补跨天用例。
+三、测试证据评估（执行归开发，本次只审充分性）
+plan-20261103-009 links.test 与 ho-20261123-014 提供的证据：test_board_rules 47 passed / 26 subtests、5 文件集 131 passed、全量 923 passed / 3 skipped、ruff clean、mypy 44 files clean、coverage 80.45%（fail_under 76.45）、判别性验证 failures=1（用旧 bar 序号实现替换 `_listing_offsets` 时 `test_suspension_gap_ends_ipo_window` 失败）、CI run 45051208430（head 8f26641）test+png-export success。四条验收（板块 20%/30%/ST 5% 单测、IPO 首日与 N 日窗口有实现、停牌与上市前 bar 不成交、README 记录差异）均有对应实现与用例支撑，第 1 轮 P1「规则未接入优化/策略实验室」已由 `security_meta` + 三个 UI 统一取数闭环。
 
-【闭环状态与责任】
-技术上本轮 approve；但 ledger 里前两轮 issue 仍为 status=open（feedback=null），故 reviewer handoff 的 openP1 仍显示 1、resolved=false。责任人：开发会话——① 在第 2 轮 3 条 P2 上逐条填写反馈「已修复」（附本轮的代码/用例位置）；② 对第 1 轮 5 条同样补反馈；③ 处理或明确延后（写后续 plan 项）本轮 2 条 P2。上述三项完成后即可判定"完全解决"（resolved=true），PR #46 合并由用户决定；合并前建议 CI（当前 run 45049839619 head 9342963 全绿）在真正合并 head 上再确认一次。
+四、结论与闭环责任（明确到人、条件、判定标准）
+1. 开发（本计划 owner）：处理 iss-mws4ttve-4b599a——在 tests/test_board_rules.py 补 `stock_basic_all` 跨天刷新/同日复用对称用例（或参数化现有两条）；实测命令建议 `python -m pytest tests/test_board_rules.py -q` 与全量 pytest 复跑，ruff/mypy 不变。属 P2，可在下一次交付或后续 plan 项内完成，不阻断本线程。
+2. 开发：`.devloop/reviews/rev-20261123-001/issues/` 下 10 条历史 issue（含 iss-mws2ln9l-646d4c P1）status 仍为 open、feedback 为 null；评审工具没有关闭 issue 的 action，需要开发侧按 PR.md「逐条填写真实反馈（已修复/换方案/延后/不采纳/重复）」再触发归零。handoff 的 openP1=1 与 resolved=false 即由此产生，不是新发现的缺陷。
+3. 用户：合并 PR #46（当前 OPEN/MERGEABLE，未合并）由用户决定；plan-20261103-009 的 in_review → done 由 owner 在合并与反馈回填后推进。
+4. 判定「完全解决」的条件：openP0=0 且 openP1=0（本轮已满足：P0=0、P1=0），且 iss-mws4ttve-4b599a 与其余 P2 在下一轮评审中被复核为已修复/已登记延后；一旦开发回填 issue 反馈并合并 PR #46，本线程即可标记 resolved。
 
 ## 本轮问题
 
-### P2 · README 新增「更旧缓存显式报错、避免静默用过期股票池」但进程内 _BASIC/_BASIC_ALL 无日期校验，跨天仍静默复用
+### P2 · 进程内缓存按天校验只测了 stock_basic，stock_basic_all（回测真正取名称/上市日的入口）跨天刷新无回归用例
 
-- 位置：`README.md:184-185`
+- 位置：`tests/test_board_rules.py:557-583`
 - 状态：未闭环
-- 置信度：0.7
+- 置信度：0.75
 
 **证据**
 
-README.md:184-185 新增「离线时只有**当天**写出的基础信息缓存允许静默回退；更旧的缓存会显式报错，避免推荐/选股静默使用过期股票池」。该约束只作用于 **文件** 路径（astock/events.py:154-159 _cache_is_current、:189-205 _load_basic），而进程内 memo 仍然无日期判断：astock/events.py:224-225 `if _BASIC is not None and not refresh: return _BASIC.copy()`、:237-238 `if _BASIC_ALL is not None and not refresh: return _BASIC_ALL.copy()`。长驻进程（Gradio app / scheduler loop，astock/scheduler.py 的 loop）跨过零点后，:224 会继续返回前一天的股票池，不会走 _load_basic 的当天校验，也不会报错——与 README 让读者推断的「不会静默使用过期股票池」不一致。影响有限（进程重启即恢复，且不影响涨跌停口径），故 P2。
+ee6b2c3 同时改了 astock/events.py:230-235（`stock_basic` 用 `_memo_is_current(_BASIC_DAY)`，加载后 `_BASIC_DAY = _today_str()`）与 astock/events.py:244-249（`stock_basic_all` 用 `_memo_is_current(_BASIC_ALL_DAY)`）。新增用例只有 tests/test_board_rules.py:557-570 `test_in_process_memo_is_refreshed_across_days` 和 :572-583 `test_in_process_memo_reused_within_day`，两者都只 patch/断言 `_BASIC`、`_BASIC_DAY`；`_BASIC_ALL_DAY` 在整个仓库仅出现在 astock/events.py:22、:245、:248 与 tests/test_board_rules.py:464 的 setUp 重置中（grep 结果），即回测实际调用的 `security_meta() → stock_basic_all()`（astock/events.py:252-274）跨天刷新分支没有任何用例。若后续有人在 `stock_basic_all` 里误删 `_memo_is_current(_BASIC_ALL_DAY)` 判断（例如合并两处 memo 实现时的常见手误），CI 全绿但长驻进程会重新出现「跨天静默沿用旧股票池」——正是 iss-mws4cwgj-54c06a 要修的问题。
 
 **建议**
 
-二选一：(a) 文档限定——把 :184-185 改为「**离线回退**时只有当天写出的缓存文件允许静默使用；进程内缓存自首次调用起保留到进程重启」；(b) 代码对齐——给 `_BASIC` / `_BASIC_ALL` 各记一个写入日期（或复用 `_cache_is_current` 的同日判断），跨天时视为失效并重新走 `_load_basic`，并补一条用例：把 `_BASIC` 置为旧数据 + meta 为昨天，跨天后 `stock_basic()` 不再返回旧行。完成条件：README 表述与 `stock_basic()` / `stock_basic_all()` 在跨天场景下的实际行为一致（含用例或明确限定措辞）。
-
-### P2 · 缺口用例的时间夹具倒序：卖出 bar 的日期（05-09）早于买入 bar（05-17）
-
-- 位置：`tests/test_board_rules.py:323-343`
-- 状态：未闭环
-- 置信度：0.82
-
-**证据**
-
-tests/test_board_rules.py:324 `df = bars([10.0, 10.0, 12.5, 12.5], start="2024-05-06")` 生成 bdate_range 四根 bar = 05-06/05-07/05-08/05-09，然后 :325 把**第 3 根**覆盖成 `pd.Timestamp("2024-05-17")`，第 4 根仍是 05-09。于是 :328 注释里的「第 4 根 bar 卖出」实际发生在 2024-05-09——早于 :331 买入的 05-17，trade_date 序列非单调（offsets = [0, 1, 9, 3]）。对照用例 :340-343 断言 `len(control.trades) == 1` 恰好是这一对的成交，如果以后把断言加强为买入/卖出日期或持有天数（astock/backtest.py:430-454 的 _metrics 用 `trades["持有天数"]`），就会得到负的持有天数；同时「第 4 根 bar 卖出」的注释与实际日期不符，后来者容易误读缺口场景。断言本身当前仍具判别力（把 _listing_offsets 退回 bar 序号实现会得到 listing_day=2 而放行成交，dev 已手工验证 1 != 0），因此只记 P2。
-
-**建议**
-
-把夹具日期显式写成单调序列，例如 `df.loc[2, "trade_date"] = pd.Timestamp("2024-05-17")` 后补一行 `df.loc[3, "trade_date"] = pd.Timestamp("2024-05-20")`（offsets 变 [0,1,9,10]，第 4 根仍在窗口外=20% 限价，卖出不受影响），或直接 `dates = [pd.Timestamp("2024-05-06"), pd.Timestamp("2024-05-07"), pd.Timestamp("2024-05-17"), pd.Timestamp("2024-05-20")]` 构造 DataFrame 再跑。改完后对照用例额外断言 `control.trades[0]` 的卖出日期 > 买入日期，锁住时间方向。完成条件：用例仍为 0/1 成交断言且 trade_date 严格递增。
+在 tests/test_board_rules.py 的 StockBasicCoverageTests 里补一条对称用例（或把现有两条参数化）：`mock.patch("astock.events._BASIC_ALL", stale_all)`、`mock.patch("astock.events._BASIC_ALL_DAY", "20000101")`、`mock.patch("astock.events._load_basic", return_value=fresh_all) as loader`，调用 `events.stock_basic_all()` 后断言 `loader.assert_called_once_with("stock_basic_all.parquet", ("L", "D", "P"), False)`、`events._BASIC_ALL_DAY == events._today_str()` 且返回新帧；再加同日复用断言 `loader.assert_not_called()`。该用例只补测、不改实现，属第 4 轮 diff 内新增分支的配套覆盖。
 
 ## 历史未闭环问题
 
@@ -71,6 +61,8 @@ tests/test_board_rules.py:324 `df = bars([10.0, 10.0, 12.5, 12.5], start="2024-0
 - P2 · 缺口用例 test_suspension_gap_ends_ipo_window 实际从未下单，断言恒真 · `tests/test_board_rules.py:319-329`（第 2 轮）
 - P2 · stock_basic 只查 list_status="L"，已退市/暂停上市个股的 ST 5% 与 IPO 窗口静默失效且未登记 · `astock/events.py:173-179, 215-217`（第 2 轮）
 - P2 · stock_basic 网络失败时静默回退到任意日期的旧缓存，推荐/选股等调用方从失败变为拿到过期股票池 · `astock/events.py:173-187`（第 2 轮）
+- P2 · 缺口用例的时间夹具倒序：卖出 bar 的日期（05-09）早于买入 bar（05-17） · `tests/test_board_rules.py:323-343`（第 3 轮）
+- P2 · README 新增「更旧缓存显式报错、避免静默用过期股票池」但进程内 _BASIC/_BASIC_ALL 无日期校验，跨天仍静默复用 · `README.md:184-185`（第 3 轮）
 
 ## 变更文件
 

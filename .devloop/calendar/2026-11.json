@@ -1047,6 +1047,16 @@
       "notes": "第 3 轮 · approve"
     },
     {
+      "id": "cal-rev-20261123-001-r4",
+      "type": "review",
+      "title": "评审：评审：板块/停牌/北交所交易规则补齐",
+      "start": "2026-11-22T17:49:38.985Z",
+      "end": "2026-11-22T17:50:16.116Z",
+      "planItemId": "plan-20261103-009",
+      "source": "reviewer-agent",
+      "notes": "第 4 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261103-008-planned",
       "type": "planned",
       "title": "SW2014→SW2021 行业边界校准与 crosswalk",
