@@ -766,13 +766,16 @@ def test_real_pdf_text_layer_keeps_pages_and_tables(tmp_path: Path) -> None:
     )
     assert "Quarterly Report 2026 Q3" in first_page_text
 
-    row_chunks = [row for row in rows if row["sheet"] == "p1_table_1" and row["kind"] == "table"]
-    assert [row["bbox"] for row in row_chunks] == [[2, 1, 2, 3], [3, 1, 3, 3]]
-    assert all(row["page"] == 1 for row in row_chunks)
-
     summary = next(row for row in rows if row["sheet"] == "p1_table_1" and row["kind"] == "text")
     assert summary["bbox"] is not None and len(summary["bbox"]) == 4
     assert summary["bbox"][2] > summary["bbox"][0]
+    assert summary["bbox"][3] > summary["bbox"][1]
+
+    row_chunks = [row for row in rows if row["sheet"] == "p1_table_1" and row["kind"] == "table"]
+    # PDF 表格只有整表页面坐标（pdfplumber 的 [x0, y0, x1, y1]），行级
+    # [row, 1, row, cols] 只用于 Excel/CSV/DOCX —— 见 astock/agent/files.py 的 _add_sheet。
+    assert [row["bbox"] for row in row_chunks] == [summary["bbox"], summary["bbox"]]
+    assert all(row["page"] == 1 for row in row_chunks)
 
     frame = F.load_table(result.doc.file_id, "p1_table_1", root=tmp_path / "store")  # type: ignore[union-attr]
     assert frame.shape == (2, 3)
