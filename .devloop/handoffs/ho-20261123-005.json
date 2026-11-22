@@ -1,0 +1,141 @@
+{
+  "id": "ho-20261123-005",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-009",
+  "threadId": null,
+  "sessionId": "session-9447de73-dfbd-4553-b66d-68047542f613",
+  "title": "板块/停牌/北交所交易规则补齐",
+  "summary": "在 ho-20261123-004 之后仅追加 devloop 记录：分支再推两次 chore 提交（502deb2 记录 ho-20261123-004 与工作日志，0d1cc87 把分支 head 与三次 CI run 写入 plan links）。代码自 a36d581 起零改动。PR #46 现 head=0d1cc87、state=OPEN、mergeable=MERGEABLE；CI run 45043984007 / 45044322816 / 45044560146 / 45044767103 的 test 与 png-export 全部通过。plan-20261103-009 保持 in_review、progress 90，未合并，等待评审。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试（tests/test_board_rules.py，自 initial 未变）",
+      "source": "任务验收标准 1（plan-20261103-009）"
+    },
+    {
+      "id": "REQ-2",
+      "text": "IPO 首日无涨跌幅与后续 N 日规则有明确实现（limit_rule/ipo_unbounded_days）且 README 显式标注未覆盖项（盘中临停等）",
+      "source": "任务验收标准 2（plan-20261103-009）"
+    },
+    {
+      "id": "REQ-3",
+      "text": "临时停牌/全天停牌不产生虚假成交（_has_trading_volume + SuspensionTests）",
+      "source": "任务验收标准 3（plan-20261103-009）"
+    },
+    {
+      "id": "REQ-4",
+      "text": "回测与实盘规则差异写进 README「回测与实盘的已知差异」",
+      "source": "任务验收标准 4（plan-20261103-009）"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261103-009.json",
+      "summary": "相对 ho-20261123-004：links 增加 head=502deb2 与三次 CI run 证据（45043984007 / 45044322816 / 45044560146）",
+      "commit": "0d1cc87"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261123-004.json",
+      "summary": "入库 ho-20261123-004 与其 md（update 交付记录）",
+      "commit": "502deb2"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "追加 PR 闭环与 CI 证据的开发日志",
+      "commit": "502deb2"
+    },
+    {
+      "path": "astock/backtest.py",
+      "summary": "自 initial 交付 a36d581 起零改动",
+      "commit": "a36d581"
+    },
+    {
+      "path": "tests/test_board_rules.py",
+      "summary": "自 initial 交付 a36d581 起零改动",
+      "commit": "a36d581"
+    },
+    {
+      "path": "README.md",
+      "summary": "自 initial 交付 a36d581 起零改动",
+      "commit": "a36d581"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 45044767103 (head 0d1cc87)",
+      "result": "两个 job 均 pass",
+      "passed": true,
+      "evidence": "PR #46 checks：test pass 1m40s，png-export pass 56s"
+    },
+    {
+      "command": "gh run view 45044560146 (head 502deb2)",
+      "result": "两个 job 均 pass",
+      "passed": true,
+      "evidence": "test pass 1m41s，png-export pass 1m9s"
+    },
+    {
+      "command": "gh run view 45044322816 (head 82798bf)",
+      "result": "两个 job 均 pass",
+      "passed": true,
+      "evidence": "test pass 1m43s，png-export pass 1m11s"
+    },
+    {
+      "command": "gh run view 45043984007 (head a36d581)",
+      "result": "两个 job 均 pass",
+      "passed": true,
+      "evidence": "test pass 1m44s，png-export pass 1m0s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q",
+      "result": "30 passed, 26 subtests passed",
+      "passed": true,
+      "evidence": "a36d581 本地运行"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider",
+      "result": "901 passed, 3 skipped, 46 subtests passed",
+      "passed": true,
+      "evidence": "a36d581 本地运行"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "a36d581 本地运行"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "a36d581 本地运行"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI 推送/查询",
+      "reason": "推送 devloop 记录提交并查询 PR/CI",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-009-board-rules",
+    "commit": "0d1cc87（代码提交 a36d581，合并 82798bf，记录 502deb2）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "ci": "run 45044767103（head 0d1cc87）test+png-export 全绿；此前 45043984007 / 45044322816 / 45044560146 亦全绿",
+    "merge": "未合并；PR #46 OPEN / MERGEABLE，等待评审与人工合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261123-004",
+  "next": "1) reviewer 复核 PR #46（关注 ST 统一 5% 保守取向、IPO 窗口对 list_date/日线完整度依赖、停牌判定口径）；2) 通过后人工合并；合并时若 devloop worklog/handoff 再次冲突，保留两侧 id 并集；3) 合并后在 main 复跑 pytest tests + ruff + mypy 并补 update handoff；4) 后续可选：ST 板块感知限价、盘中临停与集合竞价成交概率建模。",
+  "createdAt": "2026-11-22T16:38:17.836Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-005.md"
+}
