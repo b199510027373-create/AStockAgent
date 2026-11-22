@@ -84,6 +84,12 @@
 4. **ST 非 PIT（P2）**：README「回测与实盘的已知差异」登记 ST 判定取 `stock_basic` **当前名称**，未接 `namechange` 按交易日取历史名称。
 5. **测试**：新增端到端用例（ST 5% 一字 0 成交、旧规首日 44% 一字 0 成交、次日非一字可成交）、停牌缺口结束 IPO 窗口、临停振幅判定、优化/策略实验室透传规则与 `security_meta` 用例。
 
+### 评审 rev-20261123-001 第 2 轮收尾（2026-11-23）
+
+1. **缺口用例可判别**：`test_suspension_gap_ends_ipo_window` 改为 `signals=[0,1,0,0]`（第 3 根 bar 尝试买入、第 4 根卖出），断言停牌缺口后 `trades==0` 且 `shares==0`；对照用例把 `pre_close` 改为 12.5 时 `trades==1`。已手工验证：把 `_listing_offsets` 还原为 bar 序号实现后该用例失败。
+2. **退市/暂停上市覆盖**：`events.stock_basic_all()` 查询 `list_status ∈ {L,D,P}` 并独立缓存（`_BASIC_ALL` / `stock_basic_all.parquet`），`security_meta()` 改用它，退市股的 ST 5% 与 IPO 窗口不再静默失效；`stock_basic()` 仍只含 L，推荐/选股池不会被退市股污染。D/P 查询失败时退回仅 L（不阻断主流程）。
+3. **缓存新鲜度**：新增 `_cache_is_current()`；网络失败时只有当天缓存允许静默回退，更旧缓存按原行为抛出异常，避免推荐/选股等调用方无提示地使用过期股票池。
+
 ## 证据
 
 - `astock/data.py`（`raw_*`、`base_factor`）

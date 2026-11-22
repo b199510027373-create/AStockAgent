@@ -7,11 +7,14 @@ IPO 无涨跌幅窗口（创业板/科创板 5 日、北交所首日、主板注
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import pandas as pd
 
+from astock import events
 from astock.backtest import (
     CostConfig,
     _has_trading_volume,
@@ -26,6 +29,7 @@ from astock.backtest import (
     run_backtest,
 )
 from astock.events import security_meta
+from astock.tushare_client import TushareError
 
 
 def zero_cost(initial_cash: float = 100_000.0) -> CostConfig:
@@ -317,16 +321,26 @@ class ListingOffsetGapTests(unittest.TestCase):
         self.assertEqual(offsets.tolist(), [0, 1, 9])
 
     def test_suspension_gap_ends_ipo_window(self):
-        df = bars([10.0, 10.0, 12.5], start="2024-05-06")
+        df = bars([10.0, 10.0, 12.5, 12.5], start="2024-05-06")
         df.loc[2, "trade_date"] = pd.Timestamp("2024-05-17")
         df.loc[2, ["open", "high", "low", "close"]] = 12.5
         df.loc[2, "pre_close"] = 10.0
+        # signals[1]=1 → 第 3 根 bar 尝试买入，第 4 根 bar 卖出（让 trades 可判别）。
         # listing_day=9 ≥ 5：已恢复 20% 限价，12.5 高于涨停价 12.0，买不到。
+        # 若退回 bar 序号实现（listing_day=2），会误判成无涨跌幅窗口而放行成交。
         result = run_backtest(
-            df, pd.Series([0, 0, 1]), "300750.SZ", zero_cost(), list_date="2024-05-06"
+            df, pd.Series([0, 1, 0, 0]), "300750.SZ", zero_cost(), list_date="2024-05-06"
         )
         self.assertEqual(len(result.trades), 0)
         self.assertEqual(result.state["shares"], 0)
+
+        # 对照：pre_close 改为 12.5（20% 涨停价 15.0），同一根 bar 不是一字板，可成交。
+        relaxed = df.copy()
+        relaxed.loc[2, "pre_close"] = 12.5
+        control = run_backtest(
+            relaxed, pd.Series([0, 1, 0, 0]), "300750.SZ", zero_cost(), list_date="2024-05-06"
+        )
+        self.assertEqual(len(control.trades), 1)
 
 
 class IntradayHaltTests(unittest.TestCase):
@@ -424,14 +438,117 @@ class SecurityMetaTests(unittest.TestCase):
                 "list_date": [pd.Timestamp("2020-01-02"), pd.NaT],
             }
         )
-        with mock.patch("astock.events.stock_basic", return_value=basic):
+        with mock.patch("astock.events.stock_basic_all", return_value=basic):
             self.assertEqual(security_meta("600000.SH"), ("*ST某某", pd.Timestamp("2020-01-02")))
             self.assertEqual(security_meta("300001.SZ"), ("某某股份", None))
             self.assertEqual(security_meta("000001.SZ"), ("", None))
 
     def test_meta_offline_falls_back_to_regular_limits(self):
-        with mock.patch("astock.events.stock_basic", side_effect=RuntimeError("offline")):
+        with mock.patch("astock.events.stock_basic_all", side_effect=RuntimeError("offline")):
             self.assertEqual(security_meta("600000.SH"), ("", None))
+
+
+class StockBasicCoverageTests(unittest.TestCase):
+    """退市/暂停上市代码要能取到名称与上市日；更旧的缓存不得静默回退。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        patch_dir = mock.patch("astock.events.EVENT_DIR", Path(self._tmp.name))
+        patch_dir.start()
+        self.addCleanup(patch_dir.stop)
+        for name in ("_BASIC", "_BASIC_ALL"):
+            patcher = mock.patch(f"astock.events.{name}", None)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _frames() -> dict[str, pd.DataFrame]:
+        return {
+            "L": pd.DataFrame(
+                {
+                    "ts_code": ["600000.SH"],
+                    "name": ["浦发银行"],
+                    "industry": ["银行"],
+                    "market": ["主板"],
+                    "list_date": ["19991110"],
+                }
+            ),
+            "D": pd.DataFrame(
+                {
+                    "ts_code": ["600001.SH"],
+                    "name": ["*ST某某"],
+                    "industry": ["钢铁"],
+                    "market": ["主板"],
+                    "list_date": ["19980101"],
+                }
+            ),
+            "P": pd.DataFrame(
+                {
+                    "ts_code": ["600002.SH"],
+                    "name": ["某某暂停"],
+                    "industry": ["化工"],
+                    "market": ["主板"],
+                    "list_date": ["20100101"],
+                }
+            ),
+        }
+
+    def _client(self, frames, fail: tuple[str, ...] = ()) -> mock.Mock:
+        client = mock.Mock()
+
+        def query(api: str, **kwargs):
+            status = kwargs.get("list_status")
+            if status in fail:
+                raise TushareError(f"{status} unavailable")
+            return frames[status].copy()
+
+        client.query.side_effect = query
+        return client
+
+    def _write_cache(self, filename: str, day: str) -> None:
+        path = Path(self._tmp.name) / filename
+        pd.DataFrame(
+            {
+                "ts_code": ["600000.SH"],
+                "name": ["浦发银行"],
+                "industry": ["银行"],
+                "market": ["主板"],
+                "list_date": [pd.Timestamp("1999-11-10")],
+            }
+        ).to_parquet(path, index=False)
+        path.with_suffix(".json").write_text(day, encoding="utf-8")
+
+    def test_stock_basic_all_covers_delisted_and_suspended(self):
+        frames = self._frames()
+        with mock.patch("astock.events.get_client", return_value=self._client(frames)):
+            basic_all = events.stock_basic_all()
+            pool = events.stock_basic()
+        self.assertEqual(set(basic_all["ts_code"]), {"600000.SH", "600001.SH", "600002.SH"})
+        # 推荐/选股用的在市池不能被退市股污染。
+        self.assertEqual(set(pool["ts_code"]), {"600000.SH"})
+        listed = basic_all.loc[basic_all["ts_code"] == "600001.SH", "list_date"].iloc[0]
+        self.assertEqual(pd.Timestamp(listed), pd.Timestamp("1998-01-01"))
+
+    def test_delisted_query_failure_still_returns_listed_pool(self):
+        frames = self._frames()
+        client = self._client(frames, fail=("D",))
+        with mock.patch("astock.events.get_client", return_value=client):
+            basic_all = events.stock_basic_all()
+        self.assertEqual(set(basic_all["ts_code"]), {"600000.SH", "600002.SH"})
+
+    def test_stale_cache_is_not_a_silent_fallback(self):
+        self._write_cache("stock_basic.parquet", "20000101")
+        client = self._client(self._frames(), fail=("L",))
+        with mock.patch("astock.events.get_client", return_value=client), self.assertRaises(TushareError):
+            events.stock_basic()
+
+    def test_same_day_cache_falls_back_when_offline(self):
+        self._write_cache("stock_basic.parquet", events._today_str())
+        client = self._client(self._frames(), fail=("L",))
+        with mock.patch("astock.events.get_client", return_value=client):
+            out = events.stock_basic()
+        self.assertEqual(out["ts_code"].tolist(), ["600000.SH"])
 
 
 if __name__ == "__main__":

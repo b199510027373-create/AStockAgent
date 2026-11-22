@@ -17,6 +17,7 @@ _NEWS_TTL = 300.0
 _REPORT_TTL = 600.0
 _CACHE: dict[tuple, tuple[float, pd.DataFrame]] = {}
 _BASIC: pd.DataFrame | None = None
+_BASIC_ALL: pd.DataFrame | None = None
 
 POSITIVE_WORDS = [
     "预增", "扭亏", "增长", "回购", "增持", "中标", "签约", "签订", "合同",
@@ -150,43 +151,59 @@ def _aliases(name: str) -> str:
     return "|".join(sorted(a for a in out if a))
 
 
-def stock_basic(refresh: bool = False) -> pd.DataFrame:
-    """股票基础信息（名称/行业/上市日），本地缓存一天。"""
-    global _BASIC
-    if _BASIC is not None and not refresh:
-        return _BASIC.copy()
+def _cache_is_current(path, meta) -> bool:
+    """只有当天写出的缓存才允许在网络失败时静默回退。"""
+    try:
+        return path.exists() and meta.exists() and meta.read_text(encoding="utf-8").strip() == _today_str()
+    except OSError:
+        return False
 
-    path = EVENT_DIR / "stock_basic.parquet"
-    meta = path.with_suffix(".json")
-    if path.exists() and not refresh:
+
+def _query_basic(statuses: tuple[str, ...]) -> pd.DataFrame:
+    """查询 stock_basic：L 必需，D/P（退市/暂停上市）是尽力补齐。"""
+    fields = "ts_code,name,industry,market,list_date,list_status"
+    frames: list[pd.DataFrame] = []
+    for status in statuses:
         try:
-            if meta.exists() and meta.read_text(encoding="utf-8").strip() == _today_str():
-                cached = pd.read_parquet(path)
-                # 旧缓存可能没有 list_date（IPO 无涨跌幅窗口依赖它）：宁可行内重拉，
-                # 也不要把缺列缓存继续用一天。重拉失败时退回旧缓存（仅名称/行业）。
-                if "list_date" in cached.columns:
-                    _BASIC = cached
-                    return _BASIC.copy()
+            part = get_client().query("stock_basic", exchange="", list_status=status, fields=fields)
+        except Exception:  # D/P 权限或接口波动不应阻断在市列表
+            if status == "L":
+                raise
+            continue
+        if part is not None and not part.empty:
+            frames.append(part)
+    if not frames:
+        raise TushareError("stock_basic 返回为空")
+    # 同一代码理论上只出现在一个状态里；去重时保留先行（L → D → P）的记录。
+    return pd.concat(frames, ignore_index=True).drop_duplicates("ts_code", keep="first")
+
+
+def _load_basic(filename: str, statuses: tuple[str, ...], refresh: bool) -> pd.DataFrame:
+    """读取/刷新基础信息缓存。
+
+    网络失败时只有**当天**缓存允许静默回退；更旧的缓存会让推荐/选股等调用方
+    在无提示的情况下拿到过期股票池，因此按原行为抛出网络异常。
+    """
+    path = EVENT_DIR / filename
+    meta = path.with_suffix(".json")
+    if not refresh and _cache_is_current(path, meta):
+        try:
+            cached = pd.read_parquet(path)
+            # 旧缓存可能没有 list_date（IPO 无涨跌幅窗口依赖它）：宁可行内重拉。
+            if "list_date" in cached.columns:
+                return cached
         except (OSError, ValueError):  # 缓存缺失/损坏时走网络重拉
             pass
-
     try:
-        df = get_client().query(
-            "stock_basic",
-            exchange="",
-            list_status="L",
-            fields="ts_code,name,industry,market,list_date",
-        )
-    except Exception:  # 离线时退回当天旧缓存（若有），不阻断回测
-        if path.exists() and not refresh:
+        df = _query_basic(statuses)
+    except Exception:
+        if not refresh and _cache_is_current(path, meta):
             try:
-                _BASIC = pd.read_parquet(path)
-                return _BASIC.copy()
+                return pd.read_parquet(path)
             except (OSError, ValueError):
                 pass
         raise
-    if df.empty:
-        raise TushareError("stock_basic 返回为空")
+    df = df.copy()
     df["name"] = df["name"].fillna("").astype(str)
     df["industry"] = df["industry"].fillna("").astype(str)
     df["market"] = df["market"].fillna("").astype(str)
@@ -195,19 +212,44 @@ def stock_basic(refresh: bool = False) -> pd.DataFrame:
     df["aliases"] = df["name"].map(_aliases)
     df.to_parquet(path, index=False)
     meta.write_text(_today_str(), encoding="utf-8")
-    _BASIC = df
-    return df.copy()
+    return df
+
+
+def stock_basic(refresh: bool = False) -> pd.DataFrame:
+    """在市股票基础信息（名称/行业/上市日），本地缓存一天。
+
+    已退市/暂停上市代码见 :func:`stock_basic_all`；推荐与选股仍只应在市列表。
+    """
+    global _BASIC
+    if _BASIC is not None and not refresh:
+        return _BASIC.copy()
+    _BASIC = _load_basic("stock_basic.parquet", ("L",), refresh)
+    return _BASIC.copy()
+
+
+def stock_basic_all(refresh: bool = False) -> pd.DataFrame:
+    """含在市/退市/暂停上市的全部代码，供 :func:`security_meta` 使用。
+
+    退市股历史里常含 ST 段与次新段；只查在市列表会让 ST 5% 与 IPO 无涨跌幅
+    窗口在这些代码上静默失效。**不要**用它构建推荐股票池（会带入退市股）。
+    """
+    global _BASIC_ALL
+    if _BASIC_ALL is not None and not refresh:
+        return _BASIC_ALL.copy()
+    _BASIC_ALL = _load_basic("stock_basic_all.parquet", ("L", "D", "P"), refresh)
+    return _BASIC_ALL.copy()
 
 
 def security_meta(code: str) -> tuple[str, pd.Timestamp | None]:
     """返回 ``(当前名称, 上市日)``，供 ST 5% 与 IPO 无涨跌幅窗口使用。
 
     取不到基础信息时返回 ``("", None)``：回测退回常规限价，宁可保守也不假设
-    "新股无涨跌幅"。注意名称是**当前**名称，不是按交易日的历史名称（README
-    「回测与实盘的已知差异」已登记）。
+    "新股无涨跌幅"。数据源是 :func:`stock_basic_all`（含退市/暂停上市），避免
+    退市股的 ST 段与次新段静默失效。注意名称是**当前**名称，不是按交易日的
+    历史名称（README「回测与实盘的已知差异」已登记）。
     """
     try:
-        basic = stock_basic()
+        basic = stock_basic_all()
     except Exception:  # noqa: BLE001 - 离线/接口异常时退回保守口径
         return "", None
     if basic is None or basic.empty or "ts_code" not in basic.columns:
