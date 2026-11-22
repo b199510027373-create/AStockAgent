@@ -581,6 +581,31 @@ class StockBasicCoverageTests(unittest.TestCase):
         loader.assert_not_called()
         self.assertEqual(out["ts_code"].tolist(), ["600000.SH"])
 
+    def test_all_memo_is_refreshed_across_days(self):
+        # 回测真正取名称/上市日走 security_meta → stock_basic_all，必须与 stock_basic 对称。
+        stale = self._frames()["L"].copy()
+        fresh = self._frames()["D"].copy()
+        with (
+            mock.patch("astock.events._BASIC_ALL", stale),
+            mock.patch("astock.events._BASIC_ALL_DAY", "20000101"),
+            mock.patch("astock.events._load_basic", return_value=fresh) as loader,
+        ):
+            out = events.stock_basic_all()
+            loader.assert_called_once_with("stock_basic_all.parquet", ("L", "D", "P"), False)
+            self.assertEqual(events._BASIC_ALL_DAY, events._today_str())
+        self.assertEqual(out["ts_code"].tolist(), ["600001.SH"])
+
+    def test_all_memo_reused_within_day(self):
+        cached = self._frames()["D"].copy()
+        with (
+            mock.patch("astock.events._BASIC_ALL", cached),
+            mock.patch("astock.events._BASIC_ALL_DAY", events._today_str()),
+            mock.patch("astock.events._load_basic") as loader,
+        ):
+            out = events.stock_basic_all()
+        loader.assert_not_called()
+        self.assertEqual(out["ts_code"].tolist(), ["600001.SH"])
+
 
 if __name__ == "__main__":
     unittest.main()
