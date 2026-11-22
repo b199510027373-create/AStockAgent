@@ -1,0 +1,41 @@
+{
+  "id": "ho-20261123-018",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261123-001",
+  "sessionId": "",
+  "title": "评审：板块/停牌/北交所交易规则补齐",
+  "summary": "第 5 轮（scope=diff，复核 ee6b2c3 → fee6c00 代码/测试改动，以及 2874e62 的 issue 反馈回填）结论：approve。本轮 counts P0=0 / P1=0 / P2=1。\n\n一、diff 内改动（fee6c00）逐条核对通过\n- tests/test_board_rules.py:584-608 `test_all_memo_is_refreshed_across_days`：stale `_BASIC_ALL` + `_BASIC_ALL_DAY=\"20000101\"`，断言 `loader.assert_called_once_with(\"stock_basic_all.parquet\", (\"L\",\"D\",\"P\"), False)`、`events._BASIC_ALL_DAY == events._today_str()`、返回新帧（D 池 600001.SH），与第 4 轮建议的对称写法一致；:610-620 `test_all_memo_reused_within_day` 用 `loader.assert_not_called()` 锁住当日复用分支。这条用例覆盖的正是 `security_meta() → stock_basic_all()`（astock/events.py:252-274）跨天刷新路径，iss-mws4ttve-4b599a 已实质关闭（用例判别力：若删掉 astock/events.py:245 的 `_memo_is_current(_BASIC_ALL_DAY)` 判断，`assert_called_once_with` 会失败）。\n- 其余 diff 均为 .devloop 记录（8f26641 评审第 3 轮入库、28ec190 第 3 轮收尾、2874e62 反馈回填与第 4 轮入库、0b953eb/659003d 第 4 轮收尾与 CI 证据），无未审代码。\n\n二、issue 台账状态\n`.devloop/reviews/rev-20261123-001/issues/` 11 条 issue 已由开发回填为 `status=fixed`（1 条 P1 + 10 条 P2），本轮 begin 返回的 previousIssues 全部为 fixed → openP0=0、openP1=0，ledger 层面已无未闭环的阻断项；我逐条对照了第 2~5 轮的代码/用例复核记录，技术结论与 fixed 一致。\n\n三、本轮新增问题（1 条 P2，open，不阻断）\n- iss-mws5m5hj-357746（.devloop/reviews/rev-20261123-001/issues/iss-mws2ln9l-646d4c.json:13-32）：11 条批量回填里 4 条的 `feedback.comment` 为空（含第 1 轮 P1 iss-mws2ln9l-646d4c、iss-mws2ltn4-c82470、iss-mws2lto3-f8ab4c、iss-mws2ltp0-6b9e10），与 ho-20261123-016 自述「comment 含提交号/文件行/测试证据」不符。属闭环记录可审计性问题，不影响功能正确性。\n\n四、测试证据评估（执行归开发，本次只审充分性）\nho-20261123-016/017 与 plan links.test：test_board_rules 49 passed / 26 subtests（新增 2 条）、5 文件集 133 passed、全量 925 passed / 3 skipped、ruff clean、mypy 44 files clean、coverage 920 passed / 80.45%（fail_under 76.45）、CI run 45052365895（head 2874e62）与 45052593250（head 0b953eb）test+png-export success，PR #46 OPEN/MERGEABLE。四条验收（20%/30%/ST 5% 单测、IPO 首日与 N 日窗口实现、停牌与上市前 bar 不成交、README 差异登记）均有实现与用例支撑，测试充分性满足本次计划项要求。\n\n五、结论与闭环责任\n1. 技术上本线程判定完全解决：openP0=0、openP1=0，第 4 轮唯一 P2 已由 fee6c00 关闭，前三轮全部问题均已修复并复核。\n2. 剩余 1 条 P2（iss-mws5m5hj-357746）由开发会话补 4 条空的 `feedback.comment`（含提交号、文件行、测试证据，feedbackHistory 同步），属台账卫生，不阻断合并；完成后本线程不再有需复核项。\n3. 用户决定 PR #46 是否合并（当前 OPEN/MERGEABLE，head 0b953eb 的 CI 已全绿）；合并后由 plan owner 把 plan-20261103-009 从 in_review 推到 done 并归档本线程交付文档。\n4. 判定标准：本线程已满足「approve 且 openP0=0 且 openP1=0」，标记为完全解决；若后续再有代码改动，需重新开轮次复核。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 5,
+    "verdict": "approve",
+    "resolved": true,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": [
+      {
+        "severity": "P2",
+        "title": "11 条 issue 批量回填 status=fixed，但其中 4 条（含第 1 轮 P1）feedback.comment 为空，与交付文档「comment 含提交号/文件行/测试证据」不符",
+        "suggestion": "开发会话在 2874e62 的 issues 目录里补 4 条空的 `feedback.comment`（同步 `feedbackHistory[0].comment`）：iss-mws2ln9l-646d4c 写「已接线（54a3cd8）：optimize.py:86/178/193 与 strategy_lab.py:71/136/150 透传 name/list_date，UI 经 events.security_meta() 取数；tests/test_optimize.py RuleWiringTests 覆盖四条入口」，另 3 条按第 1 轮修复提交写清文件行与验证方式（README.md:171-186 口径修订、README.md:182 ST 非 PIT 登记、astock/backtest.py:191-210 np.busday_count + ListingOffsetGapTests）。改完后 `feedback.comment` 非空且含提交号/文件行/测试证据，与 ho-016 的描述一致即可。",
+        "status": "open"
+      }
+    ]
+  },
+  "previousHandoffId": "ho-20261123-015",
+  "next": "",
+  "createdAt": "2026-11-22T18:12:15.565Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-018.md"
+}

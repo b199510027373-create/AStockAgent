@@ -14,7 +14,7 @@
   "feedback": {
     "verdict": "good",
     "option": "fixed",
-    "comment": "",
+    "comment": "已修复（54a3cd8）：astock/optimize.py:86/178/193-203 的 grid_search、walk_forward 与 astock/strategy_lab.py:71/136/150-160 的 grid_strategy、walk_forward_strategy 全部透传 name/list_date，portfolio_walk_forward 经 meta[code] 逐只传入；新增 astock/events.py security_meta()，astock/backtest_ui.py:46、astock/optimize_ui.py:64、astock/strategy_ui.py:48 统一取数；tests/test_optimize.py:63-122 RuleWiringTests 用 spy 断言四条入口均透传（条目 openP1 因此归零）。",
     "rating": null,
     "effective": true,
     "at": "2026-11-22T17:52:24.083Z"
@@ -24,7 +24,7 @@
     {
       "verdict": "good",
       "option": "fixed",
-      "comment": "",
+      "comment": "已修复（54a3cd8）：astock/optimize.py:86/178/193-203 的 grid_search、walk_forward 与 astock/strategy_lab.py:71/136/150-160 的 grid_strategy、walk_forward_strategy 全部透传 name/list_date，portfolio_walk_forward 经 meta[code] 逐只传入；新增 astock/events.py security_meta()，astock/backtest_ui.py:46、astock/optimize_ui.py:64、astock/strategy_ui.py:48 统一取数；tests/test_optimize.py:63-122 RuleWiringTests 用 spy 断言四条入口均透传（条目 openP1 因此归零）。",
       "rating": null,
       "effective": true,
       "at": "2026-11-22T17:52:24.083Z"

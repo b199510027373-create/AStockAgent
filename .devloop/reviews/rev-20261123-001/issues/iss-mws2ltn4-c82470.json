@@ -14,7 +14,7 @@
   "feedback": {
     "verdict": "good",
     "option": "fixed",
-    "comment": "",
+    "comment": "已实现保守判定（54a3cd8）：astock/backtest.py:239-256 新增 INTRADAY_HALT_AMPLITUDE=0.30 与 _suspected_intraday_halt（仅无涨跌幅窗口生效），并在 :320-328 并入 tradable；README.md:176/182 写明「≥30% 视为可能临停、当日不成交」与残余（<30% 及常规限价日临停不可见）；tests/test_board_rules.py IntradayHaltTests 覆盖 42.9% 不成交、20% 成交、helper 仅对 unbounded 生效。",
     "rating": null,
     "effective": true,
     "at": "2026-11-22T17:52:28.942Z"
@@ -24,7 +24,7 @@
     {
       "verdict": "good",
       "option": "fixed",
-      "comment": "",
+      "comment": "已实现保守判定（54a3cd8）：astock/backtest.py:239-256 新增 INTRADAY_HALT_AMPLITUDE=0.30 与 _suspected_intraday_halt（仅无涨跌幅窗口生效），并在 :320-328 并入 tradable；README.md:176/182 写明「≥30% 视为可能临停、当日不成交」与残余（<30% 及常规限价日临停不可见）；tests/test_board_rules.py IntradayHaltTests 覆盖 42.9% 不成交、20% 成交、helper 仅对 unbounded 生效。",
       "rating": null,
       "effective": true,
       "at": "2026-11-22T17:52:28.942Z"
