@@ -35,10 +35,11 @@
       "ruff check astock tests => All checks passed",
       "变异测试：注释 app.py:505 接线 => FAILED AssertionError；app.py 注入不存在 import => ERROR ImportError（均非 skip，已还原）",
       "CI run 44890767554 / 44890948780 / 44891236449 / 44891421054: test + png-export 全绿",
-      "合并后 main 复跑：目标 22 passed / 全量 860 passed / mypy 44 files / ruff 通过"
+      "合并后 main 复跑：目标 22 passed / 全量 860 passed / mypy 44 files / ruff 通过",
+      "记录入库 f29d534（评审 r2 产物 + calendar/worklog）CI run 45009845279 => completed/success（test + png-export）"
     ]
   },
   "createdAt": "2026-11-10T08:20:45.845Z",
-  "updatedAt": "2026-11-22T08:32:42.070Z",
+  "updatedAt": "2026-11-22T10:47:29.607Z",
   "devSessionId": "session-d4c01b00-1bac-4b27-8eab-1192501dc281"
 }
