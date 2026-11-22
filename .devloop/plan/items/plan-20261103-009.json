@@ -2,14 +2,14 @@
   "id": "plan-20261103-009",
   "title": "板块/停牌/北交所交易规则补齐",
   "description": "ADR-008 已覆盖 ST 5% 与原始价限价，但不同板块（创业板/科创板 20%、北交所 30%）、IPO 首日无涨跌幅、临时停牌的细则仍未补齐。这些规则会直接影响回测成交与推荐可买性，属于\"看起来对、实际偏乐观\"的风险点。建议先补规则与测试，再谈扩因子。",
-  "status": "doing",
+  "status": "in_review",
   "priority": "P2",
   "milestone": "ms-research",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-26",
   "estimateH": 8,
-  "progress": 5,
+  "progress": 90,
   "acceptance": [
     "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试",
     "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖",
@@ -25,9 +25,20 @@
   "links": {
     "adr": [
       "ADR-008"
+    ],
+    "branch": "feat/plan-20261103-009-board-rules",
+    "commit": "a36d581",
+    "module": "backtest",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "test": [
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q => 30 passed, 26 subtests passed in 0.24s",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider => 901 passed, 3 skipped, 46 subtests passed in 112.03s",
+      ".venv\\Scripts\\ruff.exe check astock tests => All checks passed!",
+      ".venv\\Scripts\\mypy.exe astock app.py => Success: no issues found in 44 source files",
+      "gh run view 45043984007 => CI test pass 1m44s / png-export pass 1m0s (PR #46)"
     ]
   },
   "createdAt": "2026-11-03T12:10:47.673Z",
-  "updatedAt": "2026-11-22T16:03:52.824Z",
+  "updatedAt": "2026-11-22T16:30:00.511Z",
   "devSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613"
 }
