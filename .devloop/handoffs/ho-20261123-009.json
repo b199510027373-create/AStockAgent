@@ -1,0 +1,104 @@
+{
+  "id": "ho-20261123-009",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "板块/停牌/北交所规则补齐：最终 head CI 通过（developer update）",
+  "summary": "交付状态收尾：代码在 54a3cd8 未再变动，最终分支 head c935687 的 PR #46 CI（test + png-export）已全部成功，PR OPEN/MERGEABLE，等待评审复核 rev-20261123-001 的 5 条 issue。本份仅为 devloop 记录同步，不引入代码改动。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试（已覆盖，见 ho-20261123-007）",
+      "source": "plan-20261103-009 acceptance #1"
+    },
+    {
+      "id": "REQ-2",
+      "text": "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖（已覆盖）",
+      "source": "plan-20261103-009 acceptance #2"
+    },
+    {
+      "id": "REQ-3",
+      "text": "临时停牌/全天停牌不产生虚假成交（已覆盖，含 ≥30% 振幅保守近似）",
+      "source": "plan-20261103-009 acceptance #3"
+    },
+    {
+      "id": "REQ-4",
+      "text": "回测与实盘规则差异写进 README（已覆盖）",
+      "source": "plan-20261103-009 acceptance #4"
+    },
+    {
+      "id": "ISS-1 (P1)",
+      "text": "规则接线已修复并有用例",
+      "source": "review rev-20261123-001 iss-mws2ln9l-646d4c"
+    },
+    {
+      "id": "ISS-2 (P2)",
+      "text": "临停保守近似已实现并文档化",
+      "source": "review rev-20261123-001 iss-mws2ltn4-c82470"
+    },
+    {
+      "id": "ISS-3 (P2)",
+      "text": "ST 非 PIT 已登记 README/ADR",
+      "source": "review rev-20261123-001 iss-mws2lto3-f8ab4c"
+    },
+    {
+      "id": "ISS-4 (P2)",
+      "text": "IPO 窗口改工作日计数并补缺口用例",
+      "source": "review rev-20261123-001 iss-mws2ltp0-6b9e10"
+    },
+    {
+      "id": "ISS-5 (P2)",
+      "text": "ST 5%/旧规首日端到端用例已补",
+      "source": "review rev-20261123-001 iss-mws2ltpz-6f6abe"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/, tests/, README.md, .devloop/architecture/",
+      "summary": "评审 rev-20261123-001 的 5 条 issue 修复（同 ho-20261123-007/008，无代码变动）",
+      "commit": "54a3cd8"
+    },
+    {
+      "path": ".devloop/",
+      "summary": "仅 devloop 记录：plan links 补 CI 证据、handoff ho-20261123-008/009",
+      "commit": "c935687"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr view 46 --json headRefOid,state,mergeable,statusCheckRollup",
+      "result": "CI pass",
+      "passed": true,
+      "evidence": "head c935687, OPEN, MERGEABLE, test COMPLETED SUCCESS, png-export COMPLETED SUCCESS"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push / PR #46 更新",
+      "reason": "推送 devloop 记录",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261103-009-board-rules",
+    "commit": "54a3cd8",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "ci": "最终 head c935687：test success / png-export success（以 PR statusCheckRollup 为准）",
+    "merge": "未合并，等评审复核",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261123-008",
+  "next": "评审对 rev-20261123-001 做 diff 复核；通过后合并 main 并置 plan done。",
+  "createdAt": "2026-11-22T17:08:38.683Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-009.md"
+}
