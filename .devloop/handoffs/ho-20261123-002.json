@@ -1,0 +1,146 @@
+{
+  "id": "ho-20261123-002",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-003",
+  "threadId": null,
+  "sessionId": "",
+  "title": "PR #11（真实 PDF 验证）合并后记录修复：worklog 换行恢复 + 证据入库",
+  "summary": "本份为 ho-20261123-001 之后的 update：PR #11 已合并（21ca37a），合并后 main 复跑全绿；随后发现并修复我自己在解决记录冲突时引入的 worklog 换行缺陷（426 条 JSON 被 -NoNewline 拼成 1 行），以 1d00058 恢复逐行格式，main CI run 45043514008 success。相对上一份交付的修改痕迹：新增提交 1d00058（仅 .devloop/worklog/2026-11.jsonl）；plan-20261107-003 links.test 增补 PR #11 合并/复跑/记录修复 4 条证据（工具单次最多保存 10 条，超出部分已手工补入，现 14 条）；新增日历记录 log-1795364696130-8aca14（fix，25 分钟）。代码与测试内容未再改动。",
+  "requirements": [
+    {
+      "id": "REQ-0",
+      "text": "用户：\"你帮忙合并了也\"（m00477）——协助合并 PR #11",
+      "source": "user m00477"
+    },
+    {
+      "id": "REQ-1",
+      "text": "用户：\"先核查\"（m00494）——先核查再合并，不能直接合",
+      "source": "user m00494"
+    },
+    {
+      "id": "REQ-2",
+      "text": "真实 PDF 端到端验证与加密 PDF 识别修复（PR #11 内容，含 pdfplumber 真实夹具）",
+      "source": "PR #11 / 分支 feat/agent-file-ingest-realpdf"
+    },
+    {
+      "id": "REQ-3",
+      "text": "合并前必须跑通目标测试、相关全量测试与静态检查（ADR-015 验收口径）",
+      "source": "devloop-session-protocol 硬规则 / ADR-015"
+    },
+    {
+      "id": "REQ-4",
+      "text": "记录完整性：plan/worklog/handoff 必须是可审计的逐行 JSON，不得因合并破坏格式",
+      "source": "本次发现的缺陷（21ca37a → 1d00058）"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "恢复逐行 JSON：raw_decode 切出 426 条（base 425 + 本次 fix 记录），每行一条、无重复 id、无缺失；169360 bytes / 426 行",
+      "commit": "1d00058"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-003.json",
+      "summary": "links.test 增补 PR #11 follow-up 验证、PR #11 CI/合并、合并后 main 复跑、1d00058 记录修复与 CI 45043514008 共 4 条（现 14 条）",
+      "commit": "未单独提交（随记录提交）"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261123-002.json",
+      "summary": "本份 update handoff（相对 ho-20261123-001 的修改痕迹）",
+      "commit": "随记录提交"
+    },
+    {
+      "path": "tests/test_agent_files.py",
+      "summary": "（上一份交付已含）PDF 表格行 bbox 断言改为整表 pdfplumber 坐标，与 b057da6 起的语义一致",
+      "commit": "8567759"
+    }
+  ],
+  "tests": [
+    {
+      "command": "python - <<'PY' ... raw_decode 解析 c9e3dea:2026-11.jsonl",
+      "result": "c9e3dea entries: 426 / 011efa0 entries: 425 / dup ids: 0 / missing vs base: [] / new: ['log-1795364067552-e2bfa0']",
+      "passed": true,
+      "evidence": "证明换行丢失未造成内容丢失，仅格式被压平"
+    },
+    {
+      "command": "git show origin/main:.devloop/worklog/2026-11.jsonl | python -c \"b=sys.stdin.buffer.read(); print(len(b), b.count(b'\\n'))\"",
+      "result": "169360 426",
+      "passed": true,
+      "evidence": "推送后 origin/main worklog 为 426 行"
+    },
+    {
+      "command": "pytest tests/test_agent_files.py（PR #11 worktree，合并 main 后）",
+      "result": "55 passed",
+      "passed": true,
+      "evidence": "目标测试全绿"
+    },
+    {
+      "command": "pytest tests -q -m \"not png\"（同 worktree）",
+      "result": "866 passed, 3 skipped, 5 deselected, 20 subtests in 91.79s",
+      "passed": true,
+      "evidence": "相关全量测试全绿"
+    },
+    {
+      "command": "mypy astock app.py && ruff check astock tests",
+      "result": "mypy: 44 files no issues；ruff: All checks passed",
+      "passed": true,
+      "evidence": "静态检查通过"
+    },
+    {
+      "command": "合并后 main worktree 独立复跑（21ca37a）",
+      "result": "目标 55 passed (5.48s)；全量 866 passed, 3 skipped, 5 deselected, 20 subtests (83.52s)；mypy 44 files；ruff All checks passed",
+      "passed": true,
+      "evidence": "合并后 main 验证"
+    },
+    {
+      "command": "gh run watch 45042229404（PR #11 head 8567759）",
+      "result": "test SUCCESS / png-export SUCCESS；exit=0",
+      "passed": true,
+      "evidence": "PR #11 CI 全绿后合并"
+    },
+    {
+      "command": "gh run watch 45043514008（main 1d00058 记录修复）",
+      "result": "conclusion=success，exit=0",
+      "passed": true,
+      "evidence": "记录修复提交 CI 全绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "评审豁免合并 PR #11",
+      "reason": "PR #11 无任何评审线程（plan-20261107-003 已随 PR #10 走完 2 轮评审并 done），用户明确要求协助合并",
+      "status": "granted"
+    },
+    {
+      "name": "worktree 验证需 PYTHONPATH 指向仓库根",
+      "reason": "worktree 内无 .venv，venv editable 安装指向主仓库",
+      "status": "granted"
+    },
+    {
+      "name": "提交记录需与主仓 main 同步（rebase/stash）",
+      "reason": "记录提交期间远端 main 已前进到 21ca37a，且工作区有他人未提交改动",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "1d00058",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/11（MERGED，merge commit 21ca37a）",
+    "ci": "PR #11 head 8567759 CI run 45042229404 success；main 21ca37a CI run 45042425772 success；main 1d00058 CI run 45043514008 success",
+    "merge": "21ca37a（2026-11-22T16:11:27Z）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261123-001",
+  "next": "1) 工作区仍有他人未提交改动（ADR-008 / adrs.json / plan-20261103-009 / README.md / astock/backtest.py，未跟踪 font_test.docx、tests/test_board_rules.py）与 stash@{0} foreign-uncommitted，未纳入本次提交，留给对应会话处理；2) 待提交本次记录（plan 证据补录、ho-20261123-002、calendar/worklog 新记录）；3) 若后续再有 main 提交，按需补 update handoff。",
+  "createdAt": "2026-11-22T16:25:04.565Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-002.md"
+}
