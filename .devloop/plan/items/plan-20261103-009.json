@@ -9,7 +9,7 @@
   "start": "2026-11-23",
   "due": "2026-11-26",
   "estimateH": 8,
-  "progress": 90,
+  "progress": 95,
   "acceptance": [
     "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试",
     "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖",
@@ -27,21 +27,25 @@
       "ADR-008"
     ],
     "branch": "feat/plan-20261103-009-board-rules",
-    "commit": "a36d581",
-    "head": "502deb2",
+    "commit": "54a3cd8",
+    "head": "54a3cd8",
     "module": "backtest",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "review": "rev-20261123-001",
     "test": [
-      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q => 30 passed, 26 subtests passed in 0.24s",
-      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider => 901 passed, 3 skipped, 46 subtests passed in 112.03s",
-      ".venv\\Scripts\\ruff.exe check astock tests => All checks passed!",
-      ".venv\\Scripts\\mypy.exe astock app.py => Success: no issues found in 44 source files",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_optimize.py -q -p no:cacheprovider => 50 passed, 26 subtests passed in 10.73s",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py tests/test_optimize.py tests/test_quant.py tests/test_hardening.py tests/test_recommend.py tests/test_contracts.py tests/test_core_paths.py -q => 136 passed, 26 subtests passed in 24.00s",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider => 917 passed, 3 skipped, 46 subtests passed in 112.71s",
+      ".venv\\Scripts\\ruff.exe check astock tests (after review fixes) => All checks passed!",
+      ".venv\\Scripts\\mypy.exe astock app.py (after review fixes) => Success: no issues found in 44 source files",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" => 912 passed, 3 skipped, 5 deselected; coverage report TOTAL 80.19% (fail_under 76.45), exit=0",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q (round 1) => 30 passed, 26 subtests passed in 0.24s",
+      "cd C:\\Users\\b1995\\Documents\\AStockAgent && .venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider (round 1, a36d581) => 901 passed, 3 skipped, 46 subtests passed in 112.03s",
       "gh run view 45043984007 (head a36d581) => test pass 1m44s / png-export pass 1m0s",
-      "gh run view 45044322816 (head 82798bf) => test pass 1m43s / png-export pass 1m11s",
       "gh run view 45044560146 (head 502deb2) => test pass 1m41s / png-export pass 1m9s"
     ]
   },
   "createdAt": "2026-11-03T12:10:47.673Z",
-  "updatedAt": "2026-11-22T16:36:04.097Z",
+  "updatedAt": "2026-11-22T17:02:41.480Z",
   "devSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613"
 }
