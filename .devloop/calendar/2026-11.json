@@ -1174,6 +1174,16 @@
       "notes": "第 2 轮 · request_changes"
     },
     {
+      "id": "cal-rev-20261123-002-r3",
+      "type": "review",
+      "title": "评审：评审：Agent 评测集与离线回归",
+      "start": "2026-11-23T16:49:34.727Z",
+      "end": "2026-11-23T16:51:52.127Z",
+      "planItemId": "plan-20261107-009",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261107-007-planned",
       "type": "planned",
       "title": "Agent 会话 UI：流式 / 步骤 / 附件 / 内嵌图",

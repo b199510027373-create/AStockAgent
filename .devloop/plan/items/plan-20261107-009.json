@@ -2,7 +2,7 @@
   "id": "plan-20261107-009",
   "title": "Agent 评测集与离线回归",
   "description": "依据 ADR-013/017，建立 Agent 评测集与回归：20 条任务，覆盖①PDF 研报问答（带页码引用）②Excel 表格统计图③指定股票+指标的分钟 K 线④边界拒答（扫描件/无数据/超范围）。用 FakeModel + 固定工具桩离线跑，记录工具选择准确率、任务成功率、平均步数/时延；结果落 .devloop/evals 或 tests/fixtures，供 CI 回归。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P2",
   "milestone": "ms-agent",
   "owner": "human",
@@ -32,9 +32,10 @@
       "ADR-017"
     ],
     "branch": "feat/plan-20261107-009-agent-evals",
-    "ci": "PR #48 checks pass: test 1m38s, png-export 1m6s (run 45219066185)",
+    "ci": "PR #48 checks pass: test 1m46s, png-export 1m7s (run 45219521406); merged to main 3956a0d",
     "pr": "48",
     "followup": "plan-20261124-001",
+    "mergeCommit": "3956a0d",
     "test": [
       "python -m astock.agent.evals -> 20/20, tool_selection_accuracy=100.00%, avg_steps=1.30, avg_latency=0.72ms, baseline=passed",
       "python -m pytest tests/test_agent_evals.py tests/test_agent_tools.py -q -m 'not png' -> 60 passed",
@@ -42,10 +43,11 @@
       "python -m ruff check astock tests -> All checks passed",
       "python -m mypy astock app.py -> Success, 45 source files",
       "targeted review-fix tests -> 5 passed",
-      "CI run 45219066185 -> test and png-export passed, including Agent offline eval baseline gate"
+      "CI run 45219066185 -> test and png-export passed, including Agent offline eval baseline gate",
+      "CI run 45219521406 -> test and png-export passed, including Agent offline eval baseline gate"
     ]
   },
   "createdAt": "2026-11-07T14:12:19.320Z",
-  "updatedAt": "2026-11-23T16:41:55.820Z",
+  "updatedAt": "2026-11-23T16:55:47.515Z",
   "devSessionId": "session-16e94b00-18ee-4cbf-9919-f9aae04a91d8"
 }
