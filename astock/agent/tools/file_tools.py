@@ -1,13 +1,15 @@
 """文件检索与表格查询工具（ADR-015 C4）。
 
-五个只读工具：
+六个只读工具：
 
 - ``file_list``：列出 ``data/agent/files`` 下的文件（15 键 meta 摘要）；
 - ``file_search``：FTS5 全文检索文本块，返回 chunk + 页码/工作表引用；
 - ``file_read``：按页码/块号回读 ``extracted.jsonl``；
 - ``table_schema``：列出工作表与列，给出「工作表名 + 单元格范围」引用；
 - ``table_query``：DuckDB 只读查询 parquet，只允许单条 SELECT、强制
-  ``LIMIT``、5 秒超时，且连接不落任何临时文件。
+  ``LIMIT``、5 秒超时，且连接不落任何临时文件；
+- ``table_chart``：按列分组聚合后生成 ChartSpec v1，交给
+  :func:`astock.agent.chart_service.render_chart` 渲染并写审计。
 
 所有基于文件的结论都通过 :mod:`astock.agent.tools.citations` 生成
 ``《文件名》第 N 页`` / ``《文件名》工作表「名」A2:D10`` 形式的引用；没有命中
@@ -36,7 +38,12 @@ from astock.agent.files import (
     load_meta,
     table_path,
 )
-from astock.agent.registry import Permission, ToolRegistry, ToolSpec
+from astock.agent.registry import (
+    Permission,
+    ToolRegistry,
+    ToolSpec,
+    current_tool_context,
+)
 from astock.agent.tools.citations import (
     CITATION_NOT_FOUND,
     citation_for_chunk,
@@ -56,6 +63,7 @@ __all__ = [
     "query_table",
     "read_file",
     "search_files",
+    "table_chart",
 ]
 
 DEFAULT_SEARCH_LIMIT = 8
@@ -544,14 +552,157 @@ def query_table(
     )
 
 
+_TABLE_CHART_AGGS = frozenset({"sum", "avg", "count", "min", "max"})
+
+
+def _quote_identifier(name: str) -> str:
+    """引用 DuckDB 标识符；列名来自用户输入，必须防止引号逃逸。"""
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def table_chart(
+    file_id: str,
+    sheet: str,
+    columns: list[str],
+    group_by: str,
+    metric: str,
+    *,
+    agg: str = "sum",
+    chart_type: str = "bar",
+    title: str | None = None,
+    limit: int = 50,
+    root: str | Path | None = None,
+    audit_db_path: str | Path | None = None,
+    artifact_root: str | Path | None = None,
+    timeout_seconds: float = TABLE_TIMEOUT_SECONDS,
+) -> ToolResult:
+    """按 ``group_by`` 聚合 ``metric``，生成 ChartSpec 并走 chart_service 渲染/审计。
+
+    ``columns`` 是用户声明的可用列白名单；``group_by`` 与 ``metric`` 必须在其
+    中。图表数据以来源表的工作表引用（``《文件》工作表「名」A1:D13``）标注。
+    """
+    columns = [str(column) for column in columns]
+    if not columns:
+        raise ValueError("columns 不能为空")
+    if len(set(columns)) != len(columns):
+        raise ValueError("columns 不能有重复列")
+    if group_by not in columns:
+        raise ValueError(f"group_by {group_by!r} 不在 columns 中")
+    if metric not in columns:
+        raise ValueError(f"metric {metric!r} 不在 columns 中")
+    if agg not in _TABLE_CHART_AGGS:
+        raise ValueError(f"agg 只允许 {sorted(_TABLE_CHART_AGGS)}")
+    if chart_type not in ("bar", "line"):
+        raise ValueError("chart_type 只允许 bar/line")
+    if not 1 <= limit <= MAX_QUERY_LIMIT:
+        raise ValueError(f"limit 必须在 1..{MAX_QUERY_LIMIT}")
+
+    metric_ident = _quote_identifier(metric)
+    metric_expr = (
+        f"COUNT({metric_ident})"
+        if agg == "count"
+        else f"{agg.upper()}(CAST({metric_ident} AS DOUBLE))"
+    )
+    sql = (
+        f"SELECT {_quote_identifier(group_by)} AS category, "
+        f"{metric_expr} AS value FROM t GROUP BY 1 ORDER BY 1"
+    )
+    queried = query_table(
+        file_id,
+        sheet,
+        sql,
+        limit=limit,
+        root=root,
+        timeout_seconds=timeout_seconds,
+    )
+    rows = [
+        {"category": str(row.get("category")), "value": row.get("value")}
+        for row in (queried.table or [])
+    ]
+    citation = str((queried.metadata or {}).get("citation") or "")
+    file_name = str((queried.metadata or {}).get("file") or file_id)
+    if not rows:
+        return ToolResult(
+            text=f"{citation} 查询没有返回可绘制数据。",
+            source=f"file:{file_name}",
+            metadata={"citation": citation, "file_id": file_id, "sheet": sheet},
+        )
+
+    chart_title = (title or f"{metric} 按 {group_by}").strip() or f"{metric} 按 {group_by}"
+    spec = {
+        "version": 1,
+        "kind": chart_type,
+        "title": chart_title[:120],
+        "data": {
+            "source": "inline",
+            "rows": rows,
+            "fields": ["category", "value"],
+            "period": "day",
+            "range": "1y",
+            "adj": "none",
+            "time_semantics": "none",
+        },
+        "encode": {"x": "category", "y": "value"},
+        "transforms": [],
+        "layers": [],
+        "theme": "light",
+        "annotations": [],
+        "meta": {
+            "file_id": file_id,
+            "sheet": sheet,
+            "citation": citation,
+            "group_by": group_by,
+            "metric": metric,
+            "agg": agg,
+        },
+    }
+
+    # 延迟导入：chart_service 只应在真正出图时加载，避免 file_tools 与审计层循环。
+    from astock.agent.chart_service import render_chart
+
+    context = current_tool_context()
+    rendered = render_chart(
+        spec,
+        db_path=audit_db_path,
+        artifact_root=artifact_root,
+        run_id=context.run_id if context is not None else None,
+        step=context.step if context is not None else None,
+        session_id=context.session_id if context is not None else None,
+        include_plotlyjs="inline",
+        export_png=False,
+    )
+    return ToolResult(
+        text=(
+            f"{citation} 已生成{chart_type}图：{len(rows)} 个分类，"
+            f"图表产物 {rendered.artifact_id}。"
+        ),
+        table=rows,
+        figure=rendered.html,
+        source=f"file:{file_name}",
+        metadata={
+            "file_id": file_id,
+            "file": file_name,
+            "sheet": sheet,
+            "citation": citation,
+            "citations": [citation],
+            "chart_spec": rendered.spec,
+            "artifact_id": rendered.artifact_id,
+            "artifact_version": rendered.artifact_version,
+            "artifact_path": rendered.path,
+        },
+    )
+
+
 def build_file_registry(
     *,
     root: str | Path | None = None,
     db_path: str | Path | None = None,
+    audit_db_path: str | Path | None = None,
+    artifact_root: str | Path | None = None,
     timeout_seconds: float = TABLE_TIMEOUT_SECONDS,
     table_row_limit: int = MAX_QUERY_LIMIT,
 ) -> ToolRegistry:
-    """构造只含文件工具的注册表（``file:read`` 权限）。"""
+    """构造只含文件工具的注册表（``file:read`` + 表格图 ``chart:render`` 权限）。"""
     registry = ToolRegistry(table_row_limit=table_row_limit)
     handlers = {
         "file_list": partial(list_files, root=root),
@@ -559,6 +710,13 @@ def build_file_registry(
         "file_read": partial(read_file, root=root),
         "table_schema": partial(describe_table, root=root),
         "table_query": partial(query_table, root=root, timeout_seconds=timeout_seconds),
+        "table_chart": partial(
+            table_chart,
+            root=root,
+            audit_db_path=audit_db_path,
+            artifact_root=artifact_root,
+            timeout_seconds=timeout_seconds,
+        ),
     }
     specs = [
         ToolSpec(
@@ -659,6 +817,49 @@ def build_file_registry(
             },
             handler=handlers["table_query"],
             permissions=frozenset({Permission.FILE_READ}),
+        ),
+        ToolSpec(
+            name="table_chart",
+            description=(
+                "按 group_by 列聚合 metric 列并生成真实图表（ChartSpec v1 → "
+                "chart_service 渲染/审计）；返回图表 HTML、聚合表和表格引用。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "minLength": 1, "maxLength": 64},
+                    "sheet": {"type": "string", "minLength": 1, "maxLength": 64},
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1, "maxLength": 64},
+                        "minItems": 1,
+                        "maxItems": 20,
+                    },
+                    "group_by": {"type": "string", "minLength": 1, "maxLength": 64},
+                    "metric": {"type": "string", "minLength": 1, "maxLength": 64},
+                    "agg": {
+                        "type": "string",
+                        "enum": ["sum", "avg", "count", "min", "max"],
+                        "default": "sum",
+                    },
+                    "chart_type": {
+                        "type": "string",
+                        "enum": ["bar", "line"],
+                        "default": "bar",
+                    },
+                    "title": {"type": "string", "minLength": 1, "maxLength": 120},
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": MAX_QUERY_LIMIT,
+                        "default": 50,
+                    },
+                },
+                "required": ["file_id", "sheet", "columns", "group_by", "metric"],
+                "additionalProperties": False,
+            },
+            handler=handlers["table_chart"],
+            permissions=frozenset({Permission.FILE_READ, Permission.CHART_RENDER}),
         ),
     ]
     for spec in specs:

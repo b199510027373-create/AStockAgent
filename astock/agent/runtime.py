@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import tempfile
 import threading
 import time
 import uuid
@@ -67,6 +68,7 @@ __all__ = [
     "SYSTEM_PROMPT",
     "AgentModel",
     "AgentRuntime",
+    "build_default_registry",
 ]
 
 DEFAULT_MAX_STEPS = 12
@@ -80,24 +82,49 @@ MAX_FIGURE_CHARS = 2000
 
 #: 全部文件类工具（file_list 只返回清单，不产生定位引用）。
 FILE_TOOL_NAMES = frozenset(
-    {"file_list", "file_search", "file_read", "table_schema", "table_query"}
+    {
+        "file_list",
+        "file_search",
+        "file_read",
+        "table_schema",
+        "table_query",
+        "table_chart",
+    }
 )
 #: 会产生「文件名 + 页码/工作表」定位的工具：只有它们的结果需要走引用收口。
 _CITING_FILE_TOOLS = FILE_TOOL_NAMES - {"file_list"}
 
 
-def _default_registry() -> ToolRegistry:
+def build_default_registry(
+    *,
+    audit_db_path: str | Path | None = None,
+    artifact_root: str | Path | None = None,
+) -> ToolRegistry:
     """默认注册表：文件工具（ADR-015 C4）+ 行情/指标工具（ADR-018）。
 
     UI/CLI 未显式传入 registry 时，``AgentRuntime`` 也能直接调用
     ``quote`` / ``kline`` / ``indicator``；这些工具的结果都带
     ``data_as_of`` + ``data_time``，``metadata`` 固定 ``session`` /
     ``freshness`` 两键（ADR-018 C1/C2）。
+
+    评测等旁路也必须复用它，避免生产新增工具时评测注册表漏检。
+    ``audit_db_path`` / ``artifact_root`` 只透传给 ``table_chart``：
+    前者是图表审计库（必须与文件索引库分开），后者是 HTML/数据快照根目录。
     """
     from astock.agent.tools.file_tools import build_file_registry  # 延迟导入，避免循环
     from astock.agent.tools.market_tools import register_market_tools
 
-    return register_market_tools(build_file_registry())
+    return register_market_tools(
+        build_file_registry(
+            audit_db_path=audit_db_path,
+            artifact_root=artifact_root,
+        )
+    )
+
+
+def _default_registry() -> ToolRegistry:
+    """兼容旧调用点；新代码请用 :func:`build_default_registry`。"""
+    return build_default_registry()
 
 
 def _uses_file_tools(steps: Iterable[StepRecord]) -> bool:
@@ -209,6 +236,7 @@ class AgentRuntime:
         spin_limit: int = DEFAULT_SPIN_LIMIT,
         auto_save: bool = True,
         db_path: str | Path | None = None,
+        artifact_root: str | Path | None = None,
         temperature: float | None = None,
         seed: int | None = None,
         code_version: str | None = None,
@@ -224,7 +252,6 @@ class AgentRuntime:
         if spin_limit < 2:
             raise ValueError("spin_limit 必须 >= 2")
         self.model = model
-        self.registry = registry if registry is not None else _default_registry()
         self.session = session if session is not None else AgentSession()
         self.max_steps = max_steps
         self.token_budget = token_budget
@@ -235,6 +262,25 @@ class AgentRuntime:
         # 审计库为可选依赖：不传 db_path 时不落 agent_runs/agent_steps（测试与
         # 纯内存调用无副作用）；生产入口应显式传入 data/astock.db。
         self.db_path = Path(db_path) if db_path is not None else None
+        self.artifact_root = Path(artifact_root) if artifact_root is not None else None
+        # db_path=None 时 table_chart 仍需要审计连接；用内存库 + 临时 artifact
+        # 目录承接，避免把图表写进 DEFAULT_DB_PATH / 默认 artifact 根。
+        self._artifact_tempdir: tempfile.TemporaryDirectory[str] | None = None
+        if registry is None and self.db_path is None and self.artifact_root is None:
+            self._artifact_tempdir = tempfile.TemporaryDirectory(
+                prefix="astock-agent-artifacts-"
+            )
+            self.artifact_root = Path(self._artifact_tempdir.name)
+        # 默认注册表必须在 self.db_path 确定后再建，否则 table_chart 的审计
+        # 连接会指向默认库而不是本次 run 所在的库。
+        self.registry = (
+            registry
+            if registry is not None
+            else build_default_registry(
+                audit_db_path=self.db_path if self.db_path is not None else ":memory:",
+                artifact_root=self.artifact_root,
+            )
+        )
         # run provenance：模型适配器若暴露同名属性则优先，否则用显式参数；都没有时写 NULL。
         self.temperature = temperature
         self.seed = seed

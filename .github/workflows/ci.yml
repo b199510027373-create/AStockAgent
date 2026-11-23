@@ -83,6 +83,15 @@ jobs:
           coverage run -m pytest tests -q -m "not png"
           coverage report -m
 
+      # 20 条 FakeModel + 固定工具桩离线评测；显式加载仓库 baseline，
+      # 防止“测试只和自己比”导致回归门槛失效（review iss-mwtakt0o-5897b8）。
+      - name: Agent offline eval baseline gate
+        run: |
+          python -m astock.agent.evals \
+            --tasks .devloop/evals/agent_eval_tasks.json \
+            --output "$RUNNER_TEMP/agent_eval.json" \
+            --baseline .devloop/evals/agent_eval_baseline.json
+
   # 真实 PNG 导出（非 monkeypatch）：独立 job，失败/超时单独可见，不拖垮主测试流水线。
   # 依赖 Windows 开发机同款组合：plotly/kaleido 由 requirements.txt 锁版本，
   # Chrome 用 ubuntu-latest 预装版本，中文字体用 fonts-noto-cjk（见 docs/AStockAgent_png_export_ops.md）。
