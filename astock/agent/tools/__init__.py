@@ -4,7 +4,8 @@
 
 - 文件检索与表格查询（plan-20261107-004，ADR-015 C4）：
   :mod:`astock.agent.tools.file_tools`（``file_list`` / ``file_search`` /
-  ``file_read`` / ``table_schema`` / ``table_query`` 与 ``build_file_registry``）、
+  ``file_read`` / ``table_schema`` / ``table_query`` / ``table_chart`` 与
+  ``build_file_registry``）、
   :mod:`astock.agent.tools.citations`（强制「文件名 + 页码/工作表」引用）、
   :mod:`astock.agent.tools.sql_guard`（``table_query`` 的只读 SQL 守卫）；
 - 行情与指标（plan-20261107-006，ADR-018）：
@@ -35,6 +36,7 @@ from astock.agent.tools.file_tools import (
     query_table,
     read_file,
     search_files,
+    table_chart,
 )
 from astock.agent.tools.market_tools import (
     DEFAULT_INDICATOR_LIMIT,
@@ -86,5 +88,6 @@ __all__ = [
     "read_file",
     "register_market_tools",
     "search_files",
+    "table_chart",
     "trading_session",
 ]

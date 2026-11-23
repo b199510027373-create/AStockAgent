@@ -6,7 +6,9 @@
 - 每条任务声明 FakeModel 的脚本、固定工具结果与最终回答；
 - 工具注册表复用生产 ``ToolSpec`` 的 schema/权限，只把 handler 换成固定桩，
   因此参数校验、默认值、权限白名单与真实运行时完全一致；
-- 指标包括工具选择准确率、任务成功率、平均步数、平均时延与 P95 时延；
+- 指标包括脚本工具一致率（``tool_selection_accuracy``）、任务成功率、
+  平均步数、平均时延与 P95 时延；FakeModel 按脚本回放，因此该一致率
+  验证“运行时是否按期望工具执行”，不衡量模型自主选择能力；
 - 报告可写入 JSON，并与 baseline 逐任务、逐指标比较。
 
 运行方式::
@@ -68,7 +70,9 @@ CATEGORY_LABELS = {
     "refusal": "边界拒答",
 }
 MARKET_TOOLS = frozenset({"quote", "kline", "indicator"})
-FILE_CITING_TOOLS = frozenset({"file_search", "file_read", "table_schema", "table_query"})
+FILE_CITING_TOOLS = frozenset(
+    {"file_search", "file_read", "table_schema", "table_query", "table_chart"}
+)
 
 
 @dataclass(frozen=True)
@@ -103,6 +107,8 @@ class EvalTask:
     expect_tools: tuple[str, ...]
     answer_contains: tuple[str, ...] = ()
     answer_not_contains: tuple[str, ...] = ()
+    figure_contains: tuple[str, ...] = ()
+    chart_spec: Mapping[str, Any] = field(default_factory=dict)
     stop_reason: str = StopReason.COMPLETED.value
     steps: tuple[StepExpectation, ...] = ()
 
@@ -130,6 +136,8 @@ class EvalTask:
             expect_tools=expect_tools,
             answer_contains=_str_tuple(expect.get("answer_contains")),
             answer_not_contains=_str_tuple(expect.get("answer_not_contains")),
+            figure_contains=_str_tuple(expect.get("figure_contains")),
+            chart_spec=dict(expect.get("chart_spec") or {}),
             stop_reason=str(expect.get("stop_reason") or StopReason.COMPLETED.value),
             steps=tuple(
                 StepExpectation(
@@ -306,10 +314,9 @@ def validate_dataset(
 @lru_cache(maxsize=1)
 def _catalog() -> ToolRegistry:
     """生产工具白名单的 schema 目录；handler 不会被调用。"""
-    from astock.agent.tools.file_tools import build_file_registry
-    from astock.agent.tools.market_tools import register_market_tools
+    from astock.agent.runtime import build_default_registry
 
-    return register_market_tools(build_file_registry())
+    return build_default_registry()
 
 
 def _signature(arguments: Mapping[str, Any]) -> str:
@@ -448,6 +455,22 @@ def run_task(task: EvalTask, *, catalog: ToolRegistry | None = None) -> EvalTask
     )
 
 
+def _contains_subset(actual: Any, expected: Mapping[str, Any]) -> bool:
+    """递归判断 *actual* 是否包含 *expected* 的字段/值（只用于 ChartSpec 断言）。"""
+    if not isinstance(actual, Mapping):
+        return False
+    for key, value in expected.items():
+        if key not in actual:
+            return False
+        candidate = actual[key]
+        if isinstance(value, Mapping):
+            if not _contains_subset(candidate, value):
+                return False
+        elif candidate != value:
+            return False
+    return True
+
+
 def _check_outcome(
     task: EvalTask,
     outcome: Any,
@@ -474,6 +497,22 @@ def _check_outcome(
     for text in task.answer_not_contains:
         if text in outcome.answer:
             failures.append(f"最终回答不应包含 {text!r}")
+    if task.figure_contains:
+        figures = "\n".join(str(step.result.figure or "") for step in outcome.steps)
+        for text in task.figure_contains:
+            if text not in figures:
+                failures.append(f"图表缺少 {text!r}")
+    if task.chart_spec:
+        specs = [
+            (step.result.metadata or {}).get("chart_spec")
+            for step in outcome.steps
+        ]
+        if not any(
+            _contains_subset(spec, dict(task.chart_spec))
+            for spec in specs
+            if isinstance(spec, Mapping)
+        ):
+            failures.append("没有找到匹配的 ChartSpec 断言")
     leftovers = stub.leftovers
     if leftovers:
         failures.append(f"有 {len(leftovers)} 条固定工具结果未被消费：{leftovers}")
@@ -532,6 +571,9 @@ def _result_citations(result: ToolResult) -> list[str]:
 
 
 def _summarize(results: Sequence[EvalTaskResult]) -> dict[str, Any]:
+    # FakeModel 由 task.calls 生成脚本，因此 tool_selection_accuracy 衡量的是
+    # “运行时按脚本命中期望工具”的比例，不是模型自主选择能力；负向单测
+    # test_scripted_wrong_tool_is_reported_as_failure 证明不一致会判失败。
     total = len(results)
     passed = sum(1 for result in results if result.passed)
     expected_calls = sum(result.expected_tool_calls for result in results)

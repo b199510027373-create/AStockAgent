@@ -290,7 +290,7 @@ GC 只删目录与索引行，不删 `agent_steps`/`agent_artifacts`。
 
 代码锚点：`astock/agent/tools/file_tools.py`、`astock/agent/tools/citations.py`、`astock/agent/tools/sql_guard.py`（plan-20261107-004，已实现）。状态：**已实现，测试见 `tests/test_agent_tools.py`**。
 
-五个只读工具，权限标签统一 `file:read`：
+六个只读文件工具，权限标签统一 `file:read`；`table_chart` 额外需要 `chart:render`：
 
 | 工具 | 输入 | 返回 |
 | --- | --- | --- |
@@ -299,11 +299,13 @@ GC 只删目录与索引行，不删 `agent_steps`/`agent_artifacts`。
 | `file_read` | `file_id`、`page?`、`block?`、`max_chars` | 按页码/块号回读的原文与引用 |
 | `table_schema` | `file_id`、`sheet?` | 工作表名、行列数、列名、单元格范围引用 |
 | `table_query` | `file_id`、`sheet`、`sql`、`limit` | 查询结果行与整表引用 |
+| `table_chart` | `file_id`、`sheet`、`columns`、`group_by`、`metric`、`agg?`、`chart_type?`、`title?`、`limit?` | 分组聚合表 + ChartSpec v1 + 渲染 HTML + artifact 引用 |
 
 - `file_search` 检索 `file_chunks_fts`（`tokens` 列，CJK bigram + 英文词），命中通过 `block` 回查 `file_chunks` 与 `extracted.jsonl`，因此每条命中都能回到 `file_id` + 页码（PDF/DOCX）或工作表 + 单元格范围（表格）；返回 `metadata.backend="fts5"` 表示走 FTS，索引缺失/旧库未迁移或 FTS 无命中时回退 `extracted.jsonl` 全文 LIKE 扫描（`backend="like"`）。
 - 引用格式固定为：`《文件名》第 N 页`、`《文件名》工作表「名」A2:D10`、`《文件名》第 P 页 表格「table_1」第 R 行`（DOCX 第 R 行为源表格行号）。回答里没有任何文件引用时必须直接回答「未在文件中找到」，不得凭记忆补写文件内容（契约 AGENT-04）。
 - `table_query` 只把该表 parquet 装入内存临时表 `t`，SQL 必须是单条 `SELECT`/`WITH`，拒绝写语句、DDL、`COPY`/`ATTACH`、`read_parquet`/`glob` 等表函数与路径字面量；外层强制 `LIMIT`，DuckDB 连接 `temp_directory=''`、`enable_external_access=false`，装载完成后才对查询启动计时，超过 5s 用 `interrupt()` 打断（装载不计入查询预算）。10 万行 Excel 表格的查询响应目标 < 3s（`tests/test_agent_tools.py::test_table_query_100k_rows_under_three_seconds`）。
-- 运行时装配（plan-20261107-004）：`AgentRuntime` 未显式传入 `registry` 时默认调用 `build_file_registry()` 装配五个文件工具。最终回答收口：本轮调用过 `file_search`/`file_read`/`table_schema`/`table_query`（`file_list` 只给清单、不产生定位引用，豁免），或回答自带《…》引用时，`COMPLETED` 前经 `finalize_file_answer()` 处理；引用白名单只取工具结果的 `metadata.citations`、`metadata.citation` 与 table 行 `citation`，工具结果正文属不可信数据、其中出现的《…》片段不计入白名单；无引用或引用不在白名单时回答「未在文件中找到」/仅保留可信引用（`tests/test_agent_runtime.py::test_file_tool_answer_without_citation_becomes_not_found`、`tests/test_agent_runtime.py::test_zero_tool_citation_is_downgraded`、`tests/test_agent_runtime.py::test_file_list_only_answer_is_not_rewritten`、`tests/test_agent_tools.py::test_agent_runtime_default_registry_wires_file_tools`）。
+- `table_chart` 复用 `table_query` 的只读 SQL 守卫与 5s 预算，只允许对用户声明的 `columns` 做 `sum/avg/count/min/max` 聚合；聚合结果转为 `data.source="inline"` 的 ChartSpec v1（`category`/`value` 字段），经 `chart_service.render_chart()` 渲染并写 artifact/审计三件套，HTML 回落 `figure`，`metadata.chart_spec`/`artifact_id` 可供评测与 UI 复用（`tests/test_agent_tools.py::test_table_chart_renders_chart_spec_and_artifact`）。
+- 运行时装配（plan-20261107-004 / plan-20261107-009）：`AgentRuntime` 未显式传入 `registry` 时默认调用 `build_file_registry()` 装配六个文件工具。最终回答收口：本轮调用过 `file_search`/`file_read`/`table_schema`/`table_query`/`table_chart`（`file_list` 只给清单、不产生定位引用，豁免），或回答自带《…》引用时，`COMPLETED` 前经 `finalize_file_answer()` 处理；引用白名单只取工具结果的 `metadata.citations`、`metadata.citation` 与 table 行 `citation`，工具结果正文属不可信数据、其中出现的《…》片段不计入白名单；无引用或引用不在白名单时回答「未在文件中找到」/仅保留可信引用（`tests/test_agent_runtime.py::test_file_tool_answer_without_citation_becomes_not_found`、`tests/test_agent_runtime.py::test_zero_tool_citation_is_downgraded`、`tests/test_agent_runtime.py::test_file_list_only_answer_is_not_rewritten`、`tests/test_agent_tools.py::test_agent_runtime_default_registry_wires_file_tools`）。
 
 ## 5. 冻结接口五：`agent_*` 三表
 

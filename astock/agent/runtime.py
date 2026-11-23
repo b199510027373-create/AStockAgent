@@ -67,6 +67,7 @@ __all__ = [
     "SYSTEM_PROMPT",
     "AgentModel",
     "AgentRuntime",
+    "build_default_registry",
 ]
 
 DEFAULT_MAX_STEPS = 12
@@ -80,24 +81,38 @@ MAX_FIGURE_CHARS = 2000
 
 #: 全部文件类工具（file_list 只返回清单，不产生定位引用）。
 FILE_TOOL_NAMES = frozenset(
-    {"file_list", "file_search", "file_read", "table_schema", "table_query"}
+    {
+        "file_list",
+        "file_search",
+        "file_read",
+        "table_schema",
+        "table_query",
+        "table_chart",
+    }
 )
 #: 会产生「文件名 + 页码/工作表」定位的工具：只有它们的结果需要走引用收口。
 _CITING_FILE_TOOLS = FILE_TOOL_NAMES - {"file_list"}
 
 
-def _default_registry() -> ToolRegistry:
+def build_default_registry() -> ToolRegistry:
     """默认注册表：文件工具（ADR-015 C4）+ 行情/指标工具（ADR-018）。
 
     UI/CLI 未显式传入 registry 时，``AgentRuntime`` 也能直接调用
     ``quote`` / ``kline`` / ``indicator``；这些工具的结果都带
     ``data_as_of`` + ``data_time``，``metadata`` 固定 ``session`` /
     ``freshness`` 两键（ADR-018 C1/C2）。
+
+    评测等旁路也必须复用它，避免生产新增工具时评测注册表漏检。
     """
     from astock.agent.tools.file_tools import build_file_registry  # 延迟导入，避免循环
     from astock.agent.tools.market_tools import register_market_tools
 
     return register_market_tools(build_file_registry())
+
+
+def _default_registry() -> ToolRegistry:
+    """兼容旧调用点；新代码请用 :func:`build_default_registry`。"""
+    return build_default_registry()
 
 
 def _uses_file_tools(steps: Iterable[StepRecord]) -> bool:

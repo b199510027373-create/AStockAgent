@@ -1,0 +1,37 @@
+{
+  "id": "plan-20261124-001",
+  "title": "table_chart 表格图表能力：契约、UI 集成与 PNG 导出",
+  "description": "承接 plan-20261107-009 评审 P1：本轮已在 file_tools 增加 table_chart（table_query 聚合 → ChartSpec v1 → chart_service 渲染/审计），并让 xlsx-005 评测断言 figure/ChartSpec。本计划项负责把该能力产品化：补充 ADR/接口冻结文档、UI/会话图表展示与 PNG 导出、真实数据端到端测试及权限/审计边界复核。初始实现随 009 交付，本项跟踪后续硬化，避免能力只存在于评测桩中。",
+  "status": "todo",
+  "priority": "P2",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-12-03",
+  "due": "2026-12-03",
+  "estimateH": 3,
+  "progress": 0,
+  "acceptance": [
+    "table_chart 的权限、审计与引用语义写入 ADR/接口契约",
+    "会话 UI 能展示 table_chart 的 figure 并支持 PNG/HTML 导出",
+    "真实 Excel 数据端到端测试覆盖 table_chart 聚合、渲染和 artifact 审计",
+    "xlsx-005 评测保持 figure/ChartSpec 断言且 CI 通过"
+  ],
+  "tags": [
+    "agent",
+    "chart",
+    "follow-up"
+  ],
+  "deps": [
+    "plan-20261107-009"
+  ],
+  "links": {
+    "adr": [
+      "ADR-013",
+      "ADR-017"
+    ],
+    "module": "agent",
+    "branch": "feat/plan-20261107-009-agent-evals"
+  },
+  "createdAt": "2026-11-23T16:20:29.429Z",
+  "updatedAt": "2026-11-23T16:20:29.429Z"
+}

@@ -361,46 +361,66 @@
     {
       "id": "xlsx-005",
       "category": "table_stats",
-      "question": "把各月销售额整理成柱状图数据表。",
+      "question": "把 2026 年各月销售额画成柱状图。",
       "calls": [
         {
-          "tool": "table_query",
+          "tool": "table_chart",
           "arguments": {
             "file_id": "file_xlsx_sales",
             "sheet": "月度销售",
-            "sql": "SELECT 月份, 销售额 FROM t ORDER BY 月份",
-            "limit": 20
+            "columns": ["月份", "销售额"],
+            "group_by": "月份",
+            "metric": "销售额",
+            "agg": "sum",
+            "chart_type": "bar",
+            "title": "2026 年各月销售额"
           },
           "result": {
-            "text": "《excel_sales.xlsx》工作表「月度销售」A1:D13 查询返回 12 行。",
+            "text": "《excel_sales.xlsx》工作表「月度销售」A1:D13 已生成bar图：12 个分类，图表产物 art_eval_xlsx_005。",
             "table": [
-              {"月份": "2026-01", "销售额": 210000},
-              {"月份": "2026-02", "销售额": 240000},
-              {"月份": "2026-03", "销售额": 560000},
-              {"月份": "2026-04", "销售额": 280000},
-              {"月份": "2026-05", "销售额": 300000},
-              {"月份": "2026-06", "销售额": 260000},
-              {"月份": "2026-07", "销售额": 320000},
-              {"月份": "2026-08", "销售额": 290000},
-              {"月份": "2026-09", "销售额": 250000},
-              {"月份": "2026-10", "销售额": 270000},
-              {"月份": "2026-11", "销售额": 300000},
-              {"月份": "2026-12", "销售额": 300000}
+              {"category": "2026-01", "value": 210000},
+              {"category": "2026-02", "value": 240000},
+              {"category": "2026-03", "value": 560000},
+              {"category": "2026-04", "value": 280000},
+              {"category": "2026-05", "value": 300000},
+              {"category": "2026-06", "value": 260000},
+              {"category": "2026-07", "value": 320000},
+              {"category": "2026-08", "value": 290000},
+              {"category": "2026-09", "value": 250000},
+              {"category": "2026-10", "value": 270000},
+              {"category": "2026-11", "value": 300000},
+              {"category": "2026-12", "value": 300000}
             ],
+            "figure": "<html><body><div id=\"plotly-xlsx-005\">bar 2026 monthly sales</div></body></html>",
             "source": "file:excel_sales.xlsx",
             "metadata": {
               "file_id": "file_xlsx_sales",
               "file": "excel_sales.xlsx",
               "sheet": "月度销售",
-              "citation": "《excel_sales.xlsx》工作表「月度销售」A1:D13"
+              "citation": "《excel_sales.xlsx》工作表「月度销售」A1:D13",
+              "citations": ["《excel_sales.xlsx》工作表「月度销售」A1:D13"],
+              "artifact_id": "art_eval_xlsx_005",
+              "chart_spec": {
+                "version": 1,
+                "kind": "bar",
+                "title": "2026 年各月销售额",
+                "data": {"source": "inline", "fields": ["category", "value"], "time_semantics": "none"},
+                "encode": {"x": "category", "y": "value"}
+              }
             }
           }
         }
       ],
-      "final_answer": "已整理 12 个月的柱状图数据：2026-01 为 210,000 元，2026-03 最高为 560,000 元（《excel_sales.xlsx》工作表「月度销售」A1:D13）。",
+      "final_answer": "已生成 2026 年各月销售额柱状图：2026-01 为 210,000 元，2026-03 最高为 560,000 元（《excel_sales.xlsx》工作表「月度销售」A1:D13）。",
       "expect": {
-        "tools": ["table_query"],
-        "answer_contains": ["柱状图数据", "2026-01", "560,000", "《excel_sales.xlsx》工作表「月度销售」A1:D13"],
+        "tools": ["table_chart"],
+        "answer_contains": ["柱状图", "2026-01", "560,000", "《excel_sales.xlsx》工作表「月度销售」A1:D13"],
+        "figure_contains": ["plotly-xlsx-005", "bar 2026 monthly sales"],
+        "chart_spec": {
+          "kind": "bar",
+          "data": {"source": "inline"},
+          "encode": {"x": "category", "y": "value"}
+        },
         "steps": [{"index": 0, "metadata": {"sheet": "月度销售"}}]
       }
     },
@@ -592,7 +612,8 @@
           }
         }
       ],
-      "final_answer": "该 PDF 是扫描件，没有可检索文本层，无法读取营业收入。",
+      "final_answer": "未在文件中找到",
+      "notes": "本用例只验证扫描件不编造数字；运行时在无可信引用时统一收口为「未在文件中找到」，原因由第 0 步 metadata.scan_suspected 证明。",
       "expect": {
         "tools": ["file_search"],
         "answer_contains": ["未在文件中找到"],
@@ -626,7 +647,8 @@
           }
         }
       ],
-      "final_answer": "PDF 已加密，无法读取营业收入。",
+      "final_answer": "未在文件中找到",
+      "notes": "本用例只验证加密件不编造数字；运行时统一收口为「未在文件中找到」，加密原因由第 0 步 error/metadata.encrypted 证明。",
       "expect": {
         "tools": ["file_search"],
         "answer_contains": ["未在文件中找到"],

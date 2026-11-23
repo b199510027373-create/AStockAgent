@@ -392,12 +392,22 @@ def test_file_answer_rejects_citation_outside_tool_results() -> None:
     assert answer == "引用：《公告.txt》第 1 页"
 
 
-def test_file_tool_registry_exposes_five_read_only_tools(store: Path, db: Path) -> None:
+def test_file_tool_registry_exposes_six_tools_with_chart_permission(
+    store: Path, db: Path
+) -> None:
     registry = T.build_file_registry(root=store, db_path=db)
 
-    assert registry.names() == ("file_list", "file_search", "file_read", "table_schema", "table_query")
+    assert registry.names() == (
+        "file_list",
+        "file_search",
+        "file_read",
+        "table_schema",
+        "table_query",
+        "table_chart",
+    )
     for spec in registry.specs():
-        assert spec.permission_names == ("file:read",)
+        expected = ("chart:render", "file:read") if spec.name == "table_chart" else ("file:read",)
+        assert spec.permission_names == expected
         assert spec.parameters["additionalProperties"] is False
 
     _ingest(_write(store.parent / "公告.txt", "公告正文。"), store, db)
@@ -591,6 +601,56 @@ def test_table_query_multisheet_citation_names_the_sheet(store: Path) -> None:
     assert answer.table is not None and len(answer.table) == 2
 
 
+def test_table_chart_renders_chart_spec_and_artifact(
+    store: Path, db: Path, tmp_path: Path
+) -> None:
+    source = _make_xlsx(
+        store.parent / "月度销售.xlsx",
+        {
+            "月度销售": [
+                ["月份", "销售额"],
+                ["2026-01", 210000],
+                ["2026-02", 240000],
+                ["2026-03", 560000],
+            ]
+        },
+    )
+    ingested = _ingest(source, store, db)
+    audit_db = tmp_path / "audit.db"
+    registry = T.build_file_registry(
+        root=store,
+        db_path=db,
+        audit_db_path=audit_db,
+        artifact_root=tmp_path / "artifacts",
+    )
+
+    result = registry.invoke(
+        "table_chart",
+        {
+            "file_id": ingested.meta["file_id"],  # type: ignore[index]
+            "sheet": "月度销售",
+            "columns": ["月份", "销售额"],
+            "group_by": "月份",
+            "metric": "销售额",
+            "agg": "sum",
+            "chart_type": "bar",
+            "title": "2026 年各月销售额",
+        },
+    )
+
+    assert result.error is None
+    assert result.figure
+    assert "<html" in result.figure.lower()
+    assert result.table is not None
+    assert [row["category"] for row in result.table] == ["2026-01", "2026-02", "2026-03"]
+    assert [row["value"] for row in result.table] == [210000.0, 240000.0, 560000.0]
+    assert result.metadata["chart_spec"]["kind"] == "bar"
+    assert result.metadata["chart_spec"]["data"]["source"] == "inline"
+    assert result.metadata["citation"] == "《月度销售.xlsx》工作表「月度销售」A1:B4"
+    assert result.metadata["artifact_id"]
+    assert (tmp_path / "artifacts" / result.metadata["artifact_path"]).is_file()
+
+
 # ---------------------------------------------------------------------------
 # bbox 两类语义 / DOCX 源行号
 # ---------------------------------------------------------------------------
@@ -714,7 +774,7 @@ def test_file_result_requires_source(store: Path, db: Path) -> None:
 def test_agent_runtime_default_registry_wires_file_tools(
     store: Path, db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """P1：不传 registry 的 AgentRuntime 也必须装配五个文件工具并端到端可用。"""
+    """P1：不传 registry 的 AgentRuntime 也必须装配六个文件工具并端到端可用。"""
     _ingest(_write(store.parent / "公告.txt", "公司A 营业收入 100 万元。"), store, db)
     original = T.build_file_registry
     calls: list[dict[str, Any]] = []
@@ -732,7 +792,14 @@ def test_agent_runtime_default_registry_wires_file_tools(
     result = runtime.run("公告里的营业收入是多少？")
 
     assert calls, "AgentRuntime 默认装配必须调用 build_file_registry"
-    for name in ("file_list", "file_search", "file_read", "table_schema", "table_query"):
+    for name in (
+        "file_list",
+        "file_search",
+        "file_read",
+        "table_schema",
+        "table_query",
+        "table_chart",
+    ):
         assert name in names
     assert result.stop_reason == StopReason.COMPLETED
     assert [step.tool for step in result.steps] == ["file_search"]
