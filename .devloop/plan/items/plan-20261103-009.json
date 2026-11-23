@@ -2,7 +2,7 @@
   "id": "plan-20261103-009",
   "title": "板块/停牌/北交所交易规则补齐",
   "description": "ADR-008 已覆盖 ST 5% 与原始价限价，但不同板块（创业板/科创板 20%、北交所 30%）、IPO 首日无涨跌幅、临时停牌的细则仍未补齐。这些规则会直接影响回测成交与推荐可买性，属于\"看起来对、实际偏乐观\"的风险点。建议先补规则与测试，再谈扩因子。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P2",
   "milestone": "ms-research",
   "owner": "human",
@@ -28,7 +28,8 @@
     ],
     "branch": "feat/plan-20261103-009-board-rules",
     "commit": "e712f9c",
-    "head": "e712f9c",
+    "head": "0c42758",
+    "merge": "de2da60",
     "module": "backtest",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
     "review": "rev-20261123-001",
@@ -37,15 +38,15 @@
       ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider => 925 passed, 3 skipped, 46 subtests passed in 96.90s",
       ".venv\\Scripts\\ruff.exe check astock tests => All checks passed!",
       ".venv\\Scripts\\mypy.exe astock app.py => Success: no issues found in 44 source files",
-      "评审反馈完整性校验：12 条 issue（1×P1 + 11×P2）全部 status=fixed、feedback.comment 非空且与 feedbackHistory[0] 一致（json.load 逐条断言通过）",
-      "gh run view 45054074299 (head e712f9c) => test success / png-export success",
-      "gh run view 45052982182 (head 659003d) => test success / png-export success",
-      "gh run view 45052593250 (head 0b953eb) => test success / png-export success",
-      "gh run view 45052365895 (head 2874e62) => test success / png-export success",
-      ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" => 920 passed, 3 skipped, 5 deselected; TOTAL 80.45% (fail_under 76.45), exit=0（head 2874e62 口径，其后仅 .devloop 记录变更）"
+      "评审反馈完整性校验：12 条 issue 全部 status=fixed、comment 非空且与 feedbackHistory[0] 一致",
+      "gh pr merge 46 --merge => PR #46 MERGED（merge commit de2da60，2026-11-22T18:24:15Z）",
+      "gh run view 45054301098 (PR head 0c42758) => test success / png-export success",
+      "gh run list --branch main => CI run 45054881978 (main de2da60) 触发（合并后验证）",
+      ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" => 920 passed；coverage TOTAL 80.45% (fail_under 76.45)",
+      "gh run view 45054074299 (head e712f9c) => test success / png-export success"
     ]
   },
   "createdAt": "2026-11-03T12:10:47.673Z",
-  "updatedAt": "2026-11-22T18:17:55.813Z",
+  "updatedAt": "2026-11-22T18:24:35.904Z",
   "devSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613"
 }

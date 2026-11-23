@@ -1,56 +1,38 @@
 # PR 评审：评审：板块/停牌/北交所交易规则补齐
 
-> 自动生成于 2026-11-22T18:12:15.346Z；可直接转交开发会话。
+> 自动生成于 2026-11-22T18:22:26.343Z；可直接转交开发会话。
 
 ## 概览
 
 - 线程：`rev-20261123-001`
 - 计划项：`plan-20261103-009`
 - 分支：`feat/plan-20261103-009-board-rules` → `main`
-- 轮次：第 5 轮（diff）
+- 轮次：第 6 轮（diff）
 - 结论：通过（approve）
 - 开发会话：`session-9447de73-dfbd-4553-b66d-68047542f613`
-- 本轮问题：1（P0 0 / P1 0 / P2 1）
-- 线程未闭环：P0 0 / P1 0 / P2 1
+- 本轮问题：0（P0 0 / P1 0 / P2 0）
+- 线程未闭环：P0 0 / P1 0 / P2 0
 
 ## 本轮结论
 
-第 5 轮（scope=diff，复核 ee6b2c3 → fee6c00 代码/测试改动，以及 2874e62 的 issue 反馈回填）结论：approve。本轮 counts P0=0 / P1=0 / P2=1。
+第 6 轮（scope=diff，复核 e712f9c「补齐 4 条空 issue 反馈并关闭第 5 轮 P2」与 0c42758「plan 100% 证据/日历/ho-019」，两者均为 .devloop 记录，无代码或测试改动）结论：approve。本轮 counts P0=0 / P1=0 / P2=0。
 
-一、diff 内改动（fee6c00）逐条核对通过
-- tests/test_board_rules.py:584-608 `test_all_memo_is_refreshed_across_days`：stale `_BASIC_ALL` + `_BASIC_ALL_DAY="20000101"`，断言 `loader.assert_called_once_with("stock_basic_all.parquet", ("L","D","P"), False)`、`events._BASIC_ALL_DAY == events._today_str()`、返回新帧（D 池 600001.SH），与第 4 轮建议的对称写法一致；:610-620 `test_all_memo_reused_within_day` 用 `loader.assert_not_called()` 锁住当日复用分支。这条用例覆盖的正是 `security_meta() → stock_basic_all()`（astock/events.py:252-274）跨天刷新路径，iss-mws4ttve-4b599a 已实质关闭（用例判别力：若删掉 astock/events.py:245 的 `_memo_is_current(_BASIC_ALL_DAY)` 判断，`assert_called_once_with` 会失败）。
-- 其余 diff 均为 .devloop 记录（8f26641 评审第 3 轮入库、28ec190 第 3 轮收尾、2874e62 反馈回填与第 4 轮入库、0b953eb/659003d 第 4 轮收尾与 CI 证据），无未审代码。
+一、第 5 轮唯一 P2 复核通过（iss-mws5m5hj-357746 已关闭）
+- 前一轮 4 条空 comment 已补齐：`.devloop/reviews/rev-20261123-001/issues/` 下 12 个 issue 文件的 `status` 全为 `"fixed"`（iss-mws2ln9l-646d4c.json:13、iss-mws2ltn4-c82470.json:13、iss-mws2lto3-f8ab4c.json:13、iss-mws2ltp0-6b9e10.json:13 等），grep `"comment": ""` 已无命中，即全部 `feedback.comment` 与 `feedbackHistory[0].comment` 非空。
+- 内容与实现逐条对得上：P1 那条写了 `astock/optimize.py:86/178/193-203` 与 `astock/strategy_lab.py:71/136/150-160` 透传、`events.security_meta()` 统一取数、`tests/test_optimize.py:63-122` spy 断言；其余 3 条分别对应 `astock/backtest.py:239-256` 振幅≥30% 临停近似、README 已知差异 + ADR-008 的 ST 非 PIT 登记、`astock/backtest.py:191-210` `np.busday_count` 与 `[0,1,9]` 断言。台账可审计性问题消除。
+- 本轮 begin 返回的 previousIssues 12 条全部 fixed → openP0=0、openP1=0。
 
-二、issue 台账状态
-`.devloop/reviews/rev-20261123-001/issues/` 11 条 issue 已由开发回填为 `status=fixed`（1 条 P1 + 10 条 P2），本轮 begin 返回的 previousIssues 全部为 fixed → openP0=0、openP1=0，ledger 层面已无未闭环的阻断项；我逐条对照了第 2~5 轮的代码/用例复核记录，技术结论与 fixed 一致。
+二、交付与测试证据（执行归开发，本次只审充分性）
+ho-20261123-019 与 plan links.test：test_board_rules 49 passed / 26 subtests、全量 925 passed / 3 skipped、ruff clean、mypy 44 files clean、CI run 45054074299（head e712f9c）与 45052982182（659003d）/45052593250（0b953eb）/45052365895（2874e62）test+png-export success、PR #46 OPEN/MERGEABLE；coverage 80.45% 沿用 2874e62 口径（其后仅 .devloop 记录变更），可接受。四条验收（板块 20%/30%/ST 5% 单测、IPO 首日与 N 日窗口、停牌与上市前 bar 不成交、README 差异登记）均有实现与用例支撑。
 
-三、本轮新增问题（1 条 P2，open，不阻断）
-- iss-mws5m5hj-357746（.devloop/reviews/rev-20261123-001/issues/iss-mws2ln9l-646d4c.json:13-32）：11 条批量回填里 4 条的 `feedback.comment` 为空（含第 1 轮 P1 iss-mws2ln9l-646d4c、iss-mws2ltn4-c82470、iss-mws2lto3-f8ab4c、iss-mws2ltp0-6b9e10），与 ho-20261123-016 自述「comment 含提交号/文件行/测试证据」不符。属闭环记录可审计性问题，不影响功能正确性。
-
-四、测试证据评估（执行归开发，本次只审充分性）
-ho-20261123-016/017 与 plan links.test：test_board_rules 49 passed / 26 subtests（新增 2 条）、5 文件集 133 passed、全量 925 passed / 3 skipped、ruff clean、mypy 44 files clean、coverage 920 passed / 80.45%（fail_under 76.45）、CI run 45052365895（head 2874e62）与 45052593250（head 0b953eb）test+png-export success，PR #46 OPEN/MERGEABLE。四条验收（20%/30%/ST 5% 单测、IPO 首日与 N 日窗口实现、停牌与上市前 bar 不成交、README 差异登记）均有实现与用例支撑，测试充分性满足本次计划项要求。
-
-五、结论与闭环责任
-1. 技术上本线程判定完全解决：openP0=0、openP1=0，第 4 轮唯一 P2 已由 fee6c00 关闭，前三轮全部问题均已修复并复核。
-2. 剩余 1 条 P2（iss-mws5m5hj-357746）由开发会话补 4 条空的 `feedback.comment`（含提交号、文件行、测试证据，feedbackHistory 同步），属台账卫生，不阻断合并；完成后本线程不再有需复核项。
-3. 用户决定 PR #46 是否合并（当前 OPEN/MERGEABLE，head 0b953eb 的 CI 已全绿）；合并后由 plan owner 把 plan-20261103-009 从 in_review 推到 done 并归档本线程交付文档。
-4. 判定标准：本线程已满足「approve 且 openP0=0 且 openP1=0」，标记为完全解决；若后续再有代码改动，需重新开轮次复核。
+三、结论与责任
+1. 本线程完全解决：openP0=0、openP1=0，且本轮无新增问题；历史 12 条 issue 均已修复并带可审计反馈。不再需要开发侧动作。
+2. 用户：PR #46 是否合并由你决定（head e712f9c 的 CI 已全绿）；合并后由 plan owner 把 plan-20261103-009 从 in_review 推到 done，并按需归档本线程 handoff（可用 devloop_handoff archive）。
+3. 判定标准：除非分支再有代码改动需要重新开轮次，本线程后续不再需要复核；若有人改动 astock/ 或 tests/，需按「全量轮次 → diff 轮次」重新评审。
 
 ## 本轮问题
 
-### P2 · 11 条 issue 批量回填 status=fixed，但其中 4 条（含第 1 轮 P1）feedback.comment 为空，与交付文档「comment 含提交号/文件行/测试证据」不符
-
-- 位置：`.devloop/reviews/rev-20261123-001/issues/iss-mws2ln9l-646d4c.json:13-32`
-- 状态：未闭环
-- 置信度：0.7
-
-**证据**
-
-2874e62 把 11 条 issue 批量回填为 `"status": "fixed"` + `feedback.option="fixed"`，但其中 4 条的 `feedback.comment` 与 `feedbackHistory[0].comment` 为空字符串：iss-mws2ln9l-646d4c.json:17/27（第 1 轮 P1）、iss-mws2ltn4-c82470.json:17/27、iss-mws2lto3-f8ab4c.json:17/27、iss-mws2ltp0-6b9e10.json:17/27（grep `"comment":` 共 22 处命中，7 条有实质内容、4 条为空）。ho-20261123-016 的 changes 自述「feedback（option=fixed、comment 含提交号/文件行/测试证据、feedbackHistory 各 1 条）」，与文件实际内容不符。技术修复本身我在第 2~5 轮已逐条复核（security_meta 接线、README 差异登记、工作日计数窗口），因此不影响本轮 approve；缺的是闭环记录的可审计性：后续接手者只看 ledger 时，对这条 P1 只能看到「fixed」而无提交号/文件行/验证证据，无法判断修复口径（是接线还是 README 限定 + 后续项，两者结论不同）。
-
-**建议**
-
-开发会话在 2874e62 的 issues 目录里补 4 条空的 `feedback.comment`（同步 `feedbackHistory[0].comment`）：iss-mws2ln9l-646d4c 写「已接线（54a3cd8）：optimize.py:86/178/193 与 strategy_lab.py:71/136/150 透传 name/list_date，UI 经 events.security_meta() 取数；tests/test_optimize.py RuleWiringTests 覆盖四条入口」，另 3 条按第 1 轮修复提交写清文件行与验证方式（README.md:171-186 口径修订、README.md:182 ST 非 PIT 登记、astock/backtest.py:191-210 np.busday_count + ListingOffsetGapTests）。改完后 `feedback.comment` 非空且含提交号/文件行/测试证据，与 ho-016 的描述一致即可。
+本轮未记录问题。
 
 ## 变更文件
 
