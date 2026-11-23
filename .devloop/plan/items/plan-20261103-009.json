@@ -28,7 +28,7 @@
     ],
     "branch": "main",
     "commit": "ee6b2c3",
-    "head": "a9de2b5",
+    "head": "main@68a0bec",
     "merge": "de2da60 (PR #46) / a9de2b5 (PR #47 devloop 收尾)",
     "module": "backtest",
     "pr": [
@@ -42,14 +42,14 @@
       ".venv\\Scripts\\ruff.exe check astock tests → All checks passed",
       ".venv\\Scripts\\mypy.exe astock app.py → Success: no issues found in 44 source files",
       "coverage run -m pytest tests -q -m \"not png\" → 920 passed, 3 skipped, 5 deselected；coverage report TOTAL 80.45% (fail_under 76.45)",
-      "CI run 45143474253 (PR #47) test pass 1m41s / png-export pass 59s",
+      "CI run 45156207029 (main 68a0bec) success",
       "CI run 45155823437 (main a9de2b5) success",
+      "CI run 45143474253 (PR #47) test pass / png-export pass",
       "CI run 45054074299 (e712f9c) success",
-      "CI run 45054301098 (0c42758) success",
       "CI run 45054881978 (de2da60) success"
     ]
   },
   "createdAt": "2026-11-03T12:10:47.673Z",
-  "updatedAt": "2026-11-23T10:26:23.230Z",
+  "updatedAt": "2026-11-23T10:28:53.345Z",
   "devSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613"
 }
