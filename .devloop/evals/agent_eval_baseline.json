@@ -1,0 +1,796 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-11-23T10:38:30+00:00",
+  "tasks_file": ".devloop/evals/agent_eval_tasks.json",
+  "summary": {
+    "total": 20,
+    "passed": 20,
+    "failed": 0,
+    "task_success_rate": 1.0,
+    "tool_selection_accuracy": 1.0,
+    "tool_sequence_accuracy": 1.0,
+    "avg_steps": 1.3,
+    "avg_latency_ms": 0.586,
+    "p95_latency_ms": 0.967
+  },
+  "categories": {
+    "pdf_qa": {
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "task_success_rate": 1.0,
+      "tool_selection_accuracy": 1.0,
+      "tool_sequence_accuracy": 1.0,
+      "avg_steps": 1.8,
+      "avg_latency_ms": 0.796,
+      "p95_latency_ms": 1.162
+    },
+    "table_stats": {
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "task_success_rate": 1.0,
+      "tool_selection_accuracy": 1.0,
+      "tool_sequence_accuracy": 1.0,
+      "avg_steps": 1.2,
+      "avg_latency_ms": 0.547,
+      "p95_latency_ms": 0.714
+    },
+    "minute_kline": {
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "task_success_rate": 1.0,
+      "tool_selection_accuracy": 1.0,
+      "tool_sequence_accuracy": 1.0,
+      "avg_steps": 1.2,
+      "avg_latency_ms": 0.527,
+      "p95_latency_ms": 0.671
+    },
+    "refusal": {
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "task_success_rate": 1.0,
+      "tool_selection_accuracy": 1.0,
+      "tool_sequence_accuracy": 1.0,
+      "avg_steps": 1.0,
+      "avg_latency_ms": 0.474,
+      "p95_latency_ms": 0.533
+    }
+  },
+  "tasks": [
+    {
+      "id": "pdf-001",
+      "category": "pdf_qa",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "file_search",
+        "file_read"
+      ],
+      "actual_tools": [
+        "file_search",
+        "file_read"
+      ],
+      "expected_tool_calls": 2,
+      "tool_matches": 2,
+      "answer": "2026 年第三季度营业收入为 1,250,000 元（《pdf_text_tables.pdf》第 1 页）。",
+      "stop_reason": "completed",
+      "steps": 2,
+      "tokens_used": 141,
+      "latency_ms": 0.967,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "file_search",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_text_tables",
+            "file": "pdf_text_tables.pdf",
+            "page": 1,
+            "citations": [
+              "《pdf_text_tables.pdf》第 1 页"
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "tool": "file_read",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_text_tables",
+            "file": "pdf_text_tables.pdf",
+            "page": 1,
+            "citation": "《pdf_text_tables.pdf》第 1 页"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pdf-002",
+      "category": "pdf_qa",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "file_search",
+        "file_read"
+      ],
+      "actual_tools": [
+        "file_search",
+        "file_read"
+      ],
+      "expected_tool_calls": 2,
+      "tool_matches": 2,
+      "answer": "云业务收入为 700,000 元（《pdf_text_tables.pdf》第 2 页）。",
+      "stop_reason": "completed",
+      "steps": 2,
+      "tokens_used": 137,
+      "latency_ms": 1.162,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "file_search",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_text_tables",
+            "file": "pdf_text_tables.pdf",
+            "page": 2,
+            "citations": [
+              "《pdf_text_tables.pdf》第 2 页"
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "tool": "file_read",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_text_tables",
+            "file": "pdf_text_tables.pdf",
+            "page": 2,
+            "citation": "《pdf_text_tables.pdf》第 2 页"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pdf-003",
+      "category": "pdf_qa",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "file_search",
+        "file_read"
+      ],
+      "actual_tools": [
+        "file_search",
+        "file_read"
+      ],
+      "expected_tool_calls": 2,
+      "tool_matches": 2,
+      "answer": "营业收入 125.6 亿元，同比增长 12.5%（《pdf_cjk.pdf》第 1 页）。",
+      "stop_reason": "completed",
+      "steps": 2,
+      "tokens_used": 124,
+      "latency_ms": 0.702,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "file_search",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_cjk",
+            "file": "pdf_cjk.pdf",
+            "page": 1,
+            "citations": [
+              "《pdf_cjk.pdf》第 1 页"
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "tool": "file_read",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_cjk",
+            "file": "pdf_cjk.pdf",
+            "page": 1,
+            "citation": "《pdf_cjk.pdf》第 1 页"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pdf-004",
+      "category": "pdf_qa",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "file_search",
+        "file_read"
+      ],
+      "actual_tools": [
+        "file_search",
+        "file_read"
+      ],
+      "expected_tool_calls": 2,
+      "tool_matches": 2,
+      "answer": "第二页零售业务利润为 550,000 元（《pdf_text_tables.pdf》第 2 页）。",
+      "stop_reason": "completed",
+      "steps": 2,
+      "tokens_used": 137,
+      "latency_ms": 0.695,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "file_search",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_text_tables",
+            "file": "pdf_text_tables.pdf",
+            "page": 2,
+            "citations": [
+              "《pdf_text_tables.pdf》第 2 页"
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "tool": "file_read",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_text_tables",
+            "file": "pdf_text_tables.pdf",
+            "page": 2,
+            "citation": "《pdf_text_tables.pdf》第 2 页"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pdf-005",
+      "category": "pdf_qa",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "file_list"
+      ],
+      "actual_tools": [
+        "file_list"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "已导入 2 份 PDF 研报，共 3 页。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 83,
+      "latency_ms": 0.453,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "file_list",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "count": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "xlsx-001",
+      "category": "table_stats",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "table_query"
+      ],
+      "actual_tools": [
+        "table_query"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "各月销售额合计为 3,280,000 元（《excel_sales.xlsx》工作表「月度销售」A1:D13）。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 85,
+      "latency_ms": 0.57,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "table_query",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_xlsx_sales",
+            "file": "excel_sales.xlsx",
+            "sheet": "月度销售",
+            "citation": "《excel_sales.xlsx》工作表「月度销售」A1:D13"
+          }
+        }
+      ]
+    },
+    {
+      "id": "xlsx-002",
+      "category": "table_stats",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "table_schema",
+        "table_query"
+      ],
+      "actual_tools": [
+        "table_schema",
+        "table_query"
+      ],
+      "expected_tool_calls": 2,
+      "tool_matches": 2,
+      "answer": "华东区域销售额最高，为 1,450,000 元（《excel_sales.xlsx》工作表「区域汇总」A1:C5）。",
+      "stop_reason": "completed",
+      "steps": 2,
+      "tokens_used": 194,
+      "latency_ms": 0.714,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "table_schema",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_xlsx_sales",
+            "file": "excel_sales.xlsx",
+            "sheet": "区域汇总",
+            "citation": "《excel_sales.xlsx》工作表「区域汇总」A1:C5"
+          }
+        },
+        {
+          "index": 1,
+          "tool": "table_query",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_xlsx_sales",
+            "file": "excel_sales.xlsx",
+            "sheet": "区域汇总",
+            "citation": "《excel_sales.xlsx》工作表「区域汇总」A1:C5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "xlsx-003",
+      "category": "table_stats",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "table_query"
+      ],
+      "actual_tools": [
+        "table_query"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "区域汇总表共有 18 家门店（《excel_sales.xlsx》工作表「区域汇总」A1:C5）。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 83,
+      "latency_ms": 0.494,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "table_query",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_xlsx_sales",
+            "file": "excel_sales.xlsx",
+            "sheet": "区域汇总",
+            "citation": "《excel_sales.xlsx》工作表「区域汇总」A1:C5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "xlsx-004",
+      "category": "table_stats",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "table_query"
+      ],
+      "actual_tools": [
+        "table_query"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "销售额最高的月份是 2026-03，销售额 560,000 元（《excel_sales.xlsx》工作表「月度销售」A1:D13）。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 90,
+      "latency_ms": 0.473,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "table_query",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_xlsx_sales",
+            "file": "excel_sales.xlsx",
+            "sheet": "月度销售",
+            "citation": "《excel_sales.xlsx》工作表「月度销售」A1:D13"
+          }
+        }
+      ]
+    },
+    {
+      "id": "xlsx-005",
+      "category": "table_stats",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "table_query"
+      ],
+      "actual_tools": [
+        "table_query"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "已整理 12 个月的柱状图数据：2026-01 为 210,000 元，2026-03 最高为 560,000 元（《excel_sales.xlsx》工作表「月度销售」A1:D13）。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 107,
+      "latency_ms": 0.483,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "table_query",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_xlsx_sales",
+            "file": "excel_sales.xlsx",
+            "sheet": "月度销售",
+            "citation": "《excel_sales.xlsx》工作表「月度销售」A1:D13"
+          }
+        }
+      ]
+    },
+    {
+      "id": "kline-001",
+      "category": "minute_kline",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "kline"
+      ],
+      "actual_tools": [
+        "kline"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "贵州茅台（600519.SH）5 分钟 K 线已生成，最新收盘价 1,688.00 元；数据截至 2026-11-21 14:55。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 86,
+      "latency_ms": 0.479,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "kline",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "ts_code": "600519.SH",
+            "period": "5min",
+            "artifact_id": "art-kline-600519"
+          }
+        }
+      ]
+    },
+    {
+      "id": "kline-002",
+      "category": "minute_kline",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "indicator"
+      ],
+      "actual_tools": [
+        "indicator"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "平安银行（000001.SZ）15 分钟 RSI14 为 58.2（2026-11-21 14:45）。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 85,
+      "latency_ms": 0.475,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "indicator",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "ts_code": "000001.SZ",
+            "period": "15min"
+          }
+        }
+      ]
+    },
+    {
+      "id": "kline-003",
+      "category": "minute_kline",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "kline"
+      ],
+      "actual_tools": [
+        "kline"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "已生成宁德时代（300750.SZ）1 分钟 K 线并叠加 MA5，共 60 根，数据截至 2026-11-21 14:59。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 83,
+      "latency_ms": 0.474,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "kline",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "ts_code": "300750.SZ",
+            "period": "1min",
+            "layers": [
+              "ma5"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "kline-004",
+      "category": "minute_kline",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "quote",
+        "kline"
+      ],
+      "actual_tools": [
+        "quote",
+        "kline"
+      ],
+      "expected_tool_calls": 2,
+      "tool_matches": 2,
+      "answer": "中国平安（601318.SH）最新价 48.60 元，60 分钟 K 线已生成；数据截至 2026-11-21 15:00。",
+      "stop_reason": "completed",
+      "steps": 2,
+      "tokens_used": 125,
+      "latency_ms": 0.671,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "quote",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "ts_code": "601318.SH"
+          }
+        },
+        {
+          "index": 1,
+          "tool": "kline",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "ts_code": "601318.SH",
+            "period": "60min"
+          }
+        }
+      ]
+    },
+    {
+      "id": "kline-005",
+      "category": "minute_kline",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "indicator"
+      ],
+      "actual_tools": [
+        "indicator"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "比亚迪（002594.SZ）30 分钟 MACD 为 0.42，signal 为 0.31（2026-11-21 14:30），当前处于多头状态。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 94,
+      "latency_ms": 0.536,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "indicator",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "ts_code": "002594.SZ",
+            "period": "30min"
+          }
+        }
+      ]
+    },
+    {
+      "id": "refusal-001",
+      "category": "refusal",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "file_search"
+      ],
+      "actual_tools": [
+        "file_search"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "未在文件中找到",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 51,
+      "latency_ms": 0.454,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "file_search",
+          "ok": true,
+          "error": null,
+          "metadata": {
+            "file_id": "file_pdf_scan",
+            "file": "pdf_scan_like.pdf",
+            "scan_suspected": true,
+            "citations": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "refusal-002",
+      "category": "refusal",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "file_search"
+      ],
+      "actual_tools": [
+        "file_search"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "未在文件中找到",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 54,
+      "latency_ms": 0.454,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "file_search",
+          "ok": false,
+          "error": "PDF 已加密，无法读取文本层",
+          "metadata": {
+            "file_id": "file_pdf_encrypted",
+            "file": "pdf_encrypted.pdf",
+            "encrypted": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "refusal-003",
+      "category": "refusal",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "quote"
+      ],
+      "actual_tools": [
+        "quote"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "未找到股票 999999.SZ，无法提供行情数据。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 42,
+      "latency_ms": 0.445,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "quote",
+          "ok": false,
+          "error": "未找到股票 999999.SZ 的行情数据",
+          "metadata": {
+            "ts_code": "999999.SZ"
+          }
+        }
+      ]
+    },
+    {
+      "id": "refusal-004",
+      "category": "refusal",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "kline"
+      ],
+      "actual_tools": [
+        "kline"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "无法查询 2020 年 1 月的分钟 K 线：超出最近 5 个交易日范围。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 50,
+      "latency_ms": 0.533,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "kline",
+          "ok": false,
+          "error": "分钟 K 线仅保留最近 5 个交易日，2020 年 1 月的数据已超出范围",
+          "metadata": {
+            "ts_code": "600519.SH",
+            "period": "1min"
+          }
+        }
+      ]
+    },
+    {
+      "id": "refusal-005",
+      "category": "refusal",
+      "passed": true,
+      "failures": [],
+      "expected_tools": [
+        "indicator"
+      ],
+      "actual_tools": [
+        "indicator"
+      ],
+      "expected_tool_calls": 1,
+      "tool_matches": 1,
+      "answer": "无法计算指标 xyz，请改用 ma、rsi、macd、kdj 或 boll。",
+      "stop_reason": "completed",
+      "steps": 1,
+      "tokens_used": 48,
+      "latency_ms": 0.484,
+      "step_evidence": [
+        {
+          "index": 0,
+          "tool": "indicator",
+          "ok": false,
+          "error": "未知指标 xyz；可用指标：ma、rsi、macd、kdj、boll",
+          "metadata": {
+            "ts_code": "600519.SH",
+            "period": "15min"
+          }
+        }
+      ]
+    }
+  ]
+}

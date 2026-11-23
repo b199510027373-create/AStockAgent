@@ -1,0 +1,741 @@
+{
+  "schema_version": 1,
+  "description": "Agent 离线回归评测集：20 条，四类各 5 条；FakeModel + 固定工具桩，不访问网络。",
+  "tasks": [
+    {
+      "id": "pdf-001",
+      "category": "pdf_qa",
+      "question": "2026 年第三季度营业收入是多少？请给出页码引用。",
+      "calls": [
+        {
+          "tool": "file_search",
+          "arguments": {"query": "Revenue", "file_id": "file_pdf_text_tables"},
+          "result": {
+            "text": "《pdf_text_tables.pdf》第 1 页\nRevenue 1250000\nNet profit 230000",
+            "source": "file:pdf_text_tables.pdf",
+            "metadata": {
+              "file_id": "file_pdf_text_tables",
+              "file": "pdf_text_tables.pdf",
+              "page": 1,
+              "citations": ["《pdf_text_tables.pdf》第 1 页"]
+            }
+          }
+        },
+        {
+          "tool": "file_read",
+          "arguments": {"file_id": "file_pdf_text_tables", "page": 1},
+          "result": {
+            "text": "《pdf_text_tables.pdf》第 1 页\nRevenue 1250000\nNet profit 230000",
+            "source": "file:pdf_text_tables.pdf",
+            "metadata": {
+              "file_id": "file_pdf_text_tables",
+              "file": "pdf_text_tables.pdf",
+              "page": 1,
+              "citation": "《pdf_text_tables.pdf》第 1 页"
+            }
+          }
+        }
+      ],
+      "final_answer": "2026 年第三季度营业收入为 1,250,000 元（《pdf_text_tables.pdf》第 1 页）。",
+      "expect": {
+        "tools": ["file_search", "file_read"],
+        "answer_contains": ["1,250,000", "《pdf_text_tables.pdf》第 1 页"],
+        "steps": [
+          {"index": 0, "metadata": {"page": 1}},
+          {"index": 1, "metadata": {"page": 1}}
+        ]
+      }
+    },
+    {
+      "id": "pdf-002",
+      "category": "pdf_qa",
+      "question": "云业务（Cloud）收入是多少？",
+      "calls": [
+        {
+          "tool": "file_search",
+          "arguments": {"query": "Cloud", "file_id": "file_pdf_text_tables"},
+          "result": {
+            "text": "《pdf_text_tables.pdf》第 2 页\nCloud 700000\nRetail 550000",
+            "source": "file:pdf_text_tables.pdf",
+            "metadata": {
+              "file_id": "file_pdf_text_tables",
+              "file": "pdf_text_tables.pdf",
+              "page": 2,
+              "citations": ["《pdf_text_tables.pdf》第 2 页"]
+            }
+          }
+        },
+        {
+          "tool": "file_read",
+          "arguments": {"file_id": "file_pdf_text_tables", "page": 2},
+          "result": {
+            "text": "《pdf_text_tables.pdf》第 2 页\nCloud 700000\nRetail 550000",
+            "source": "file:pdf_text_tables.pdf",
+            "metadata": {
+              "file_id": "file_pdf_text_tables",
+              "file": "pdf_text_tables.pdf",
+              "page": 2,
+              "citation": "《pdf_text_tables.pdf》第 2 页"
+            }
+          }
+        }
+      ],
+      "final_answer": "云业务收入为 700,000 元（《pdf_text_tables.pdf》第 2 页）。",
+      "expect": {
+        "tools": ["file_search", "file_read"],
+        "answer_contains": ["700,000", "《pdf_text_tables.pdf》第 2 页"],
+        "steps": [
+          {"index": 0, "metadata": {"page": 2}},
+          {"index": 1, "metadata": {"page": 2}}
+        ]
+      }
+    },
+    {
+      "id": "pdf-003",
+      "category": "pdf_qa",
+      "question": "中文研报中的营业收入和同比增速分别是多少？",
+      "calls": [
+        {
+          "tool": "file_search",
+          "arguments": {"query": "营业收入", "file_id": "file_pdf_cjk"},
+          "result": {
+            "text": "《pdf_cjk.pdf》第 1 页\n贵州茅台 2026 年三季报\n营业收入 125.6 亿元，同比增长 12.5%",
+            "source": "file:pdf_cjk.pdf",
+            "metadata": {
+              "file_id": "file_pdf_cjk",
+              "file": "pdf_cjk.pdf",
+              "page": 1,
+              "citations": ["《pdf_cjk.pdf》第 1 页"]
+            }
+          }
+        },
+        {
+          "tool": "file_read",
+          "arguments": {"file_id": "file_pdf_cjk", "page": 1},
+          "result": {
+            "text": "《pdf_cjk.pdf》第 1 页\n贵州茅台 2026 年三季报\n营业收入 125.6 亿元，同比增长 12.5%",
+            "source": "file:pdf_cjk.pdf",
+            "metadata": {
+              "file_id": "file_pdf_cjk",
+              "file": "pdf_cjk.pdf",
+              "page": 1,
+              "citation": "《pdf_cjk.pdf》第 1 页"
+            }
+          }
+        }
+      ],
+      "final_answer": "营业收入 125.6 亿元，同比增长 12.5%（《pdf_cjk.pdf》第 1 页）。",
+      "expect": {
+        "tools": ["file_search", "file_read"],
+        "answer_contains": ["125.6 亿元", "12.5%", "《pdf_cjk.pdf》第 1 页"],
+        "steps": [
+          {"index": 0, "metadata": {"page": 1}},
+          {"index": 1, "metadata": {"page": 1}}
+        ]
+      }
+    },
+    {
+      "id": "pdf-004",
+      "category": "pdf_qa",
+      "question": "第二页的零售业务（Retail）利润是多少？",
+      "calls": [
+        {
+          "tool": "file_search",
+          "arguments": {"query": "Retail", "file_id": "file_pdf_text_tables"},
+          "result": {
+            "text": "《pdf_text_tables.pdf》第 2 页\nCloud 700000\nRetail 550000",
+            "source": "file:pdf_text_tables.pdf",
+            "metadata": {
+              "file_id": "file_pdf_text_tables",
+              "file": "pdf_text_tables.pdf",
+              "page": 2,
+              "citations": ["《pdf_text_tables.pdf》第 2 页"]
+            }
+          }
+        },
+        {
+          "tool": "file_read",
+          "arguments": {"file_id": "file_pdf_text_tables", "page": 2},
+          "result": {
+            "text": "《pdf_text_tables.pdf》第 2 页\nCloud 700000\nRetail 550000",
+            "source": "file:pdf_text_tables.pdf",
+            "metadata": {
+              "file_id": "file_pdf_text_tables",
+              "file": "pdf_text_tables.pdf",
+              "page": 2,
+              "citation": "《pdf_text_tables.pdf》第 2 页"
+            }
+          }
+        }
+      ],
+      "final_answer": "第二页零售业务利润为 550,000 元（《pdf_text_tables.pdf》第 2 页）。",
+      "expect": {
+        "tools": ["file_search", "file_read"],
+        "answer_contains": ["550,000", "《pdf_text_tables.pdf》第 2 页"],
+        "steps": [
+          {"index": 0, "metadata": {"page": 2}},
+          {"index": 1, "metadata": {"page": 2}}
+        ]
+      }
+    },
+    {
+      "id": "pdf-005",
+      "category": "pdf_qa",
+      "question": "已导入的 PDF 研报共有几份、几页？",
+      "calls": [
+        {
+          "tool": "file_list",
+          "arguments": {"limit": 20},
+          "result": {
+            "text": "共 2 个文件：pdf_text_tables.pdf（2 页）、pdf_cjk.pdf（1 页）",
+            "table": [
+              {"file": "pdf_text_tables.pdf", "kind": "pdf", "pages": 2},
+              {"file": "pdf_cjk.pdf", "kind": "pdf", "pages": 1}
+            ],
+            "source": "files:local",
+            "metadata": {"count": 2}
+          }
+        }
+      ],
+      "final_answer": "已导入 2 份 PDF 研报，共 3 页。",
+      "expect": {
+        "tools": ["file_list"],
+        "answer_contains": ["2 份", "3 页"],
+        "steps": [{"index": 0, "metadata": {"count": 2}}]
+      }
+    },
+    {
+      "id": "xlsx-001",
+      "category": "table_stats",
+      "question": "Excel 中 2026 年各月销售额合计是多少？",
+      "calls": [
+        {
+          "tool": "table_query",
+          "arguments": {
+            "file_id": "file_xlsx_sales",
+            "sheet": "月度销售",
+            "sql": "SELECT SUM(销售额) AS 总销售额 FROM t",
+            "limit": 200
+          },
+          "result": {
+            "text": "《excel_sales.xlsx》工作表「月度销售」A1:D13 查询返回 1 行。",
+            "table": [{"总销售额": 3280000}],
+            "source": "file:excel_sales.xlsx",
+            "metadata": {
+              "file_id": "file_xlsx_sales",
+              "file": "excel_sales.xlsx",
+              "sheet": "月度销售",
+              "citation": "《excel_sales.xlsx》工作表「月度销售」A1:D13"
+            }
+          }
+        }
+      ],
+      "final_answer": "各月销售额合计为 3,280,000 元（《excel_sales.xlsx》工作表「月度销售」A1:D13）。",
+      "expect": {
+        "tools": ["table_query"],
+        "answer_contains": ["3,280,000", "《excel_sales.xlsx》工作表「月度销售」A1:D13"],
+        "steps": [{"index": 0, "metadata": {"sheet": "月度销售"}}]
+      }
+    },
+    {
+      "id": "xlsx-002",
+      "category": "table_stats",
+      "question": "按区域汇总销售额，哪个区域最高？",
+      "calls": [
+        {
+          "tool": "table_schema",
+          "arguments": {"file_id": "file_xlsx_sales", "sheet": "区域汇总"},
+          "result": {
+            "text": "工作表「区域汇总」共 4 行 3 列：区域、销售额、门店数。",
+            "table": [{"sheet": "区域汇总", "rows": 4, "cols": 3}],
+            "source": "file:excel_sales.xlsx",
+            "metadata": {
+              "file_id": "file_xlsx_sales",
+              "file": "excel_sales.xlsx",
+              "sheet": "区域汇总",
+              "citation": "《excel_sales.xlsx》工作表「区域汇总」A1:C5"
+            }
+          }
+        },
+        {
+          "tool": "table_query",
+          "arguments": {
+            "file_id": "file_xlsx_sales",
+            "sheet": "区域汇总",
+            "sql": "SELECT 区域, SUM(销售额) AS 销售额 FROM t GROUP BY 区域 ORDER BY 销售额 DESC",
+            "limit": 20
+          },
+          "result": {
+            "text": "《excel_sales.xlsx》工作表「区域汇总」A1:C5 查询返回 3 行。",
+            "table": [
+              {"区域": "华东", "销售额": 1450000},
+              {"区域": "华南", "销售额": 980000},
+              {"区域": "华北", "销售额": 850000}
+            ],
+            "source": "file:excel_sales.xlsx",
+            "metadata": {
+              "file_id": "file_xlsx_sales",
+              "file": "excel_sales.xlsx",
+              "sheet": "区域汇总",
+              "citation": "《excel_sales.xlsx》工作表「区域汇总」A1:C5"
+            }
+          }
+        }
+      ],
+      "final_answer": "华东区域销售额最高，为 1,450,000 元（《excel_sales.xlsx》工作表「区域汇总」A1:C5）。",
+      "expect": {
+        "tools": ["table_schema", "table_query"],
+        "answer_contains": ["华东", "1,450,000", "《excel_sales.xlsx》工作表「区域汇总」A1:C5"],
+        "steps": [
+          {"index": 0, "metadata": {"sheet": "区域汇总"}},
+          {"index": 1, "metadata": {"sheet": "区域汇总"}}
+        ]
+      }
+    },
+    {
+      "id": "xlsx-003",
+      "category": "table_stats",
+      "question": "Excel 区域汇总表中门店总数是多少？",
+      "calls": [
+        {
+          "tool": "table_query",
+          "arguments": {
+            "file_id": "file_xlsx_sales",
+            "sheet": "区域汇总",
+            "sql": "SELECT SUM(门店数) AS 门店数 FROM t",
+            "limit": 20
+          },
+          "result": {
+            "text": "《excel_sales.xlsx》工作表「区域汇总」A1:C5 查询返回 1 行。",
+            "table": [{"门店数": 18}],
+            "source": "file:excel_sales.xlsx",
+            "metadata": {
+              "file_id": "file_xlsx_sales",
+              "file": "excel_sales.xlsx",
+              "sheet": "区域汇总",
+              "citation": "《excel_sales.xlsx》工作表「区域汇总」A1:C5"
+            }
+          }
+        }
+      ],
+      "final_answer": "区域汇总表共有 18 家门店（《excel_sales.xlsx》工作表「区域汇总」A1:C5）。",
+      "expect": {
+        "tools": ["table_query"],
+        "answer_contains": ["18 家", "《excel_sales.xlsx》工作表「区域汇总」A1:C5"],
+        "steps": [{"index": 0, "metadata": {"sheet": "区域汇总"}}]
+      }
+    },
+    {
+      "id": "xlsx-004",
+      "category": "table_stats",
+      "question": "2026 年销售额最高的月份是哪个月？",
+      "calls": [
+        {
+          "tool": "table_query",
+          "arguments": {
+            "file_id": "file_xlsx_sales",
+            "sheet": "月度销售",
+            "sql": "SELECT 月份, 销售额 FROM t ORDER BY 销售额 DESC LIMIT 1",
+            "limit": 20
+          },
+          "result": {
+            "text": "《excel_sales.xlsx》工作表「月度销售」A1:D13 查询返回 1 行。",
+            "table": [{"月份": "2026-03", "销售额": 560000}],
+            "source": "file:excel_sales.xlsx",
+            "metadata": {
+              "file_id": "file_xlsx_sales",
+              "file": "excel_sales.xlsx",
+              "sheet": "月度销售",
+              "citation": "《excel_sales.xlsx》工作表「月度销售」A1:D13"
+            }
+          }
+        }
+      ],
+      "final_answer": "销售额最高的月份是 2026-03，销售额 560,000 元（《excel_sales.xlsx》工作表「月度销售」A1:D13）。",
+      "expect": {
+        "tools": ["table_query"],
+        "answer_contains": ["2026-03", "560,000", "《excel_sales.xlsx》工作表「月度销售」A1:D13"],
+        "steps": [{"index": 0, "metadata": {"sheet": "月度销售"}}]
+      }
+    },
+    {
+      "id": "xlsx-005",
+      "category": "table_stats",
+      "question": "把各月销售额整理成柱状图数据表。",
+      "calls": [
+        {
+          "tool": "table_query",
+          "arguments": {
+            "file_id": "file_xlsx_sales",
+            "sheet": "月度销售",
+            "sql": "SELECT 月份, 销售额 FROM t ORDER BY 月份",
+            "limit": 20
+          },
+          "result": {
+            "text": "《excel_sales.xlsx》工作表「月度销售」A1:D13 查询返回 12 行。",
+            "table": [
+              {"月份": "2026-01", "销售额": 210000},
+              {"月份": "2026-02", "销售额": 240000},
+              {"月份": "2026-03", "销售额": 560000},
+              {"月份": "2026-04", "销售额": 280000},
+              {"月份": "2026-05", "销售额": 300000},
+              {"月份": "2026-06", "销售额": 260000},
+              {"月份": "2026-07", "销售额": 320000},
+              {"月份": "2026-08", "销售额": 290000},
+              {"月份": "2026-09", "销售额": 250000},
+              {"月份": "2026-10", "销售额": 270000},
+              {"月份": "2026-11", "销售额": 300000},
+              {"月份": "2026-12", "销售额": 300000}
+            ],
+            "source": "file:excel_sales.xlsx",
+            "metadata": {
+              "file_id": "file_xlsx_sales",
+              "file": "excel_sales.xlsx",
+              "sheet": "月度销售",
+              "citation": "《excel_sales.xlsx》工作表「月度销售」A1:D13"
+            }
+          }
+        }
+      ],
+      "final_answer": "已整理 12 个月的柱状图数据：2026-01 为 210,000 元，2026-03 最高为 560,000 元（《excel_sales.xlsx》工作表「月度销售」A1:D13）。",
+      "expect": {
+        "tools": ["table_query"],
+        "answer_contains": ["柱状图数据", "2026-01", "560,000", "《excel_sales.xlsx》工作表「月度销售」A1:D13"],
+        "steps": [{"index": 0, "metadata": {"sheet": "月度销售"}}]
+      }
+    },
+    {
+      "id": "kline-001",
+      "category": "minute_kline",
+      "question": "贵州茅台（600519.SH）最近 5 分钟 K 线，画图并说明最新收盘价。",
+      "calls": [
+        {
+          "tool": "kline",
+          "arguments": {
+            "ts_code": "600519.SH",
+            "period": "5min",
+            "chart": true,
+            "limit": 60,
+            "title": "贵州茅台 5 分钟 K 线"
+          },
+          "result": {
+            "text": "贵州茅台 600519.SH 5 分钟 K 线，最新收盘价 1688.00，数据截至 2026-11-21 14:55。",
+            "figure": "<html><body>plotly 600519.SH 5min</body></html>",
+            "data_as_of": "2026-11-21",
+            "data_time": "2026-11-21 14:55",
+            "source": "market:600519.SH",
+            "metadata": {"ts_code": "600519.SH", "period": "5min", "artifact_id": "art-kline-600519"}
+          }
+        }
+      ],
+      "final_answer": "贵州茅台（600519.SH）5 分钟 K 线已生成，最新收盘价 1,688.00 元；数据截至 2026-11-21 14:55。",
+      "expect": {
+        "tools": ["kline"],
+        "answer_contains": ["5 分钟", "1,688.00", "2026-11-21 14:55"],
+        "steps": [{"index": 0, "metadata": {"period": "5min"}}]
+      }
+    },
+    {
+      "id": "kline-002",
+      "category": "minute_kline",
+      "question": "平安银行（000001.SZ）15 分钟 RSI14 当前是多少？",
+      "calls": [
+        {
+          "tool": "indicator",
+          "arguments": {
+            "ts_code": "000001.SZ",
+            "period": "15min",
+            "indicators": ["rsi14"],
+            "limit": 30
+          },
+          "result": {
+            "text": "平安银行 000001.SZ 15 分钟 RSI14 为 58.2。",
+            "table": [{"time": "2026-11-21 14:45", "rsi14": 58.2}],
+            "data_as_of": "2026-11-21",
+            "data_time": "2026-11-21 14:45",
+            "source": "market:000001.SZ",
+            "metadata": {"ts_code": "000001.SZ", "period": "15min"}
+          }
+        }
+      ],
+      "final_answer": "平安银行（000001.SZ）15 分钟 RSI14 为 58.2（2026-11-21 14:45）。",
+      "expect": {
+        "tools": ["indicator"],
+        "answer_contains": ["15 分钟", "RSI14", "58.2", "2026-11-21 14:45"],
+        "steps": [{"index": 0, "metadata": {"period": "15min"}}]
+      }
+    },
+    {
+      "id": "kline-003",
+      "category": "minute_kline",
+      "question": "宁德时代（300750.SZ）1 分钟 K 线叠加 MA5，最近 60 根。",
+      "calls": [
+        {
+          "tool": "kline",
+          "arguments": {
+            "ts_code": "300750.SZ",
+            "period": "1min",
+            "limit": 60,
+            "layers": ["ma5"],
+            "chart": true,
+            "title": "宁德时代 1 分钟 K 线 + MA5"
+          },
+          "result": {
+            "text": "宁德时代 300750.SZ 1 分钟 K 线叠加 MA5，共 60 根，数据截至 2026-11-21 14:59。",
+            "figure": "<html><body>plotly 300750.SZ 1min ma5</body></html>",
+            "data_as_of": "2026-11-21",
+            "data_time": "2026-11-21 14:59",
+            "source": "market:300750.SZ",
+            "metadata": {"ts_code": "300750.SZ", "period": "1min", "layers": ["ma5"]}
+          }
+        }
+      ],
+      "final_answer": "已生成宁德时代（300750.SZ）1 分钟 K 线并叠加 MA5，共 60 根，数据截至 2026-11-21 14:59。",
+      "expect": {
+        "tools": ["kline"],
+        "answer_contains": ["1 分钟", "MA5", "2026-11-21 14:59"],
+        "steps": [{"index": 0, "metadata": {"period": "1min"}}]
+      }
+    },
+    {
+      "id": "kline-004",
+      "category": "minute_kline",
+      "question": "中国平安（601318.SH）最新价和 60 分钟 K 线。",
+      "calls": [
+        {
+          "tool": "quote",
+          "arguments": {"ts_code": "601318.SH"},
+          "result": {
+            "text": "中国平安 601318.SH 最新价 48.60 元。",
+            "data_as_of": "2026-11-21",
+            "data_time": "2026-11-21 15:00",
+            "source": "market:601318.SH",
+            "metadata": {"ts_code": "601318.SH"}
+          }
+        },
+        {
+          "tool": "kline",
+          "arguments": {
+            "ts_code": "601318.SH",
+            "period": "60min",
+            "limit": 120,
+            "chart": true,
+            "title": "中国平安 60 分钟 K 线"
+          },
+          "result": {
+            "text": "中国平安 601318.SH 60 分钟 K 线，数据截至 2026-11-21 15:00。",
+            "figure": "<html><body>plotly 601318.SH 60min</body></html>",
+            "data_as_of": "2026-11-21",
+            "data_time": "2026-11-21 15:00",
+            "source": "market:601318.SH",
+            "metadata": {"ts_code": "601318.SH", "period": "60min"}
+          }
+        }
+      ],
+      "final_answer": "中国平安（601318.SH）最新价 48.60 元，60 分钟 K 线已生成；数据截至 2026-11-21 15:00。",
+      "expect": {
+        "tools": ["quote", "kline"],
+        "answer_contains": ["48.60", "60 分钟", "2026-11-21 15:00"],
+        "steps": [
+          {"index": 0, "metadata": {"ts_code": "601318.SH"}},
+          {"index": 1, "metadata": {"period": "60min"}}
+        ]
+      }
+    },
+    {
+      "id": "kline-005",
+      "category": "minute_kline",
+      "question": "比亚迪（002594.SZ）30 分钟 MACD 最近状态如何？",
+      "calls": [
+        {
+          "tool": "indicator",
+          "arguments": {
+            "ts_code": "002594.SZ",
+            "period": "30min",
+            "indicators": ["macd"],
+            "limit": 60
+          },
+          "result": {
+            "text": "比亚迪 002594.SZ 30 分钟 MACD 为 0.42，signal 为 0.31。",
+            "table": [{"time": "2026-11-21 14:30", "macd": 0.42, "signal": 0.31}],
+            "data_as_of": "2026-11-21",
+            "data_time": "2026-11-21 14:30",
+            "source": "market:002594.SZ",
+            "metadata": {"ts_code": "002594.SZ", "period": "30min"}
+          }
+        }
+      ],
+      "final_answer": "比亚迪（002594.SZ）30 分钟 MACD 为 0.42，signal 为 0.31（2026-11-21 14:30），当前处于多头状态。",
+      "expect": {
+        "tools": ["indicator"],
+        "answer_contains": ["30 分钟", "MACD", "0.42", "0.31"],
+        "steps": [{"index": 0, "metadata": {"period": "30min"}}]
+      }
+    },
+    {
+      "id": "refusal-001",
+      "category": "refusal",
+      "question": "扫描版研报 pdf_scan_like.pdf 的营业收入是多少？",
+      "calls": [
+        {
+          "tool": "file_search",
+          "arguments": {"query": "营业收入", "file_id": "file_pdf_scan"},
+          "result": {
+            "text": "未在文件中找到",
+            "source": "file:pdf_scan_like.pdf",
+            "metadata": {
+              "file_id": "file_pdf_scan",
+              "file": "pdf_scan_like.pdf",
+              "scan_suspected": true,
+              "citations": []
+            }
+          }
+        }
+      ],
+      "final_answer": "该 PDF 是扫描件，没有可检索文本层，无法读取营业收入。",
+      "expect": {
+        "tools": ["file_search"],
+        "answer_contains": ["未在文件中找到"],
+        "answer_not_contains": ["125,000", "1250000"],
+        "steps": [
+          {
+            "index": 0,
+            "metadata": {"scan_suspected": true},
+            "require_citation": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "refusal-002",
+      "category": "refusal",
+      "question": "加密研报 pdf_encrypted.pdf 的营业收入是多少？",
+      "calls": [
+        {
+          "tool": "file_search",
+          "arguments": {"query": "营业收入", "file_id": "file_pdf_encrypted"},
+          "result": {
+            "text": "未在文件中找到",
+            "error": "PDF 已加密，无法读取文本层",
+            "source": "file:pdf_encrypted.pdf",
+            "metadata": {
+              "file_id": "file_pdf_encrypted",
+              "file": "pdf_encrypted.pdf",
+              "encrypted": true
+            }
+          }
+        }
+      ],
+      "final_answer": "PDF 已加密，无法读取营业收入。",
+      "expect": {
+        "tools": ["file_search"],
+        "answer_contains": ["未在文件中找到"],
+        "answer_not_contains": ["125,000", "1250000"],
+        "steps": [
+          {
+            "index": 0,
+            "ok": false,
+            "error_contains": "加密",
+            "metadata": {"encrypted": true},
+            "require_citation": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "refusal-003",
+      "category": "refusal",
+      "question": "查询股票 999999.SZ 的最新价。",
+      "calls": [
+        {
+          "tool": "quote",
+          "arguments": {"ts_code": "999999.SZ"},
+          "result": {
+            "text": "未找到股票 999999.SZ 的行情数据",
+            "error": "未找到股票 999999.SZ 的行情数据",
+            "source": "market:999999.SZ",
+            "metadata": {"ts_code": "999999.SZ"}
+          }
+        }
+      ],
+      "final_answer": "未找到股票 999999.SZ，无法提供行情数据。",
+      "expect": {
+        "tools": ["quote"],
+        "answer_contains": ["未找到股票", "无法提供行情"],
+        "answer_not_contains": ["1,688.00", "1688.00"],
+        "steps": [
+          {
+            "index": 0,
+            "ok": false,
+            "error_contains": "未找到股票"
+          }
+        ]
+      }
+    },
+    {
+      "id": "refusal-004",
+      "category": "refusal",
+      "question": "查询贵州茅台（600519.SH）2020 年 1 月的 1 分钟 K 线。",
+      "calls": [
+        {
+          "tool": "kline",
+          "arguments": {"ts_code": "600519.SH", "period": "1min", "limit": 200},
+          "result": {
+            "text": "无法查询 2020 年 1 月的分钟 K 线",
+            "error": "分钟 K 线仅保留最近 5 个交易日，2020 年 1 月的数据已超出范围",
+            "source": "market:600519.SH",
+            "metadata": {"ts_code": "600519.SH", "period": "1min"}
+          }
+        }
+      ],
+      "final_answer": "无法查询 2020 年 1 月的分钟 K 线：超出最近 5 个交易日范围。",
+      "expect": {
+        "tools": ["kline"],
+        "answer_contains": ["超出", "最近 5 个交易日"],
+        "answer_not_contains": ["2020-01-02 收盘"],
+        "steps": [
+          {
+            "index": 0,
+            "ok": false,
+            "error_contains": "超出范围"
+          }
+        ]
+      }
+    },
+    {
+      "id": "refusal-005",
+      "category": "refusal",
+      "question": "计算贵州茅台（600519.SH）的 xyz 指标。",
+      "calls": [
+        {
+          "tool": "indicator",
+          "arguments": {
+            "ts_code": "600519.SH",
+            "period": "15min",
+            "indicators": ["xyz"],
+            "limit": 30
+          },
+          "result": {
+            "text": "无法计算未知指标 xyz",
+            "error": "未知指标 xyz；可用指标：ma、rsi、macd、kdj、boll",
+            "source": "market:600519.SH",
+            "metadata": {"ts_code": "600519.SH", "period": "15min"}
+          }
+        }
+      ],
+      "final_answer": "无法计算指标 xyz，请改用 ma、rsi、macd、kdj 或 boll。",
+      "expect": {
+        "tools": ["indicator"],
+        "answer_contains": ["无法计算指标 xyz", "ma"],
+        "answer_not_contains": ["RSI14", "58.2"],
+        "steps": [
+          {
+            "index": 0,
+            "ok": false,
+            "error_contains": "未知指标"
+          }
+        ]
+      }
+    }
+  ]
+}
