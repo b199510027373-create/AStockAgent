@@ -31,6 +31,8 @@
       "ADR-013",
       "ADR-017"
     ],
+    "branch": "feat/plan-20261107-009-agent-evals",
+    "pr": "48",
     "test": [
       "python -m astock.agent.evals -> 20/20, tool_selection_accuracy=100.00%, avg_steps=1.30, avg_latency=0.57ms, baseline=passed",
       "python -m pytest tests/test_agent_evals.py -q -> 6 passed",
@@ -40,6 +42,6 @@
     ]
   },
   "createdAt": "2026-11-07T14:12:19.320Z",
-  "updatedAt": "2026-11-23T11:06:03.614Z",
+  "updatedAt": "2026-11-23T11:06:55.462Z",
   "devSessionId": "session-16e94b00-18ee-4cbf-9919-f9aae04a91d8"
 }
