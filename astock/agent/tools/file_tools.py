@@ -668,7 +668,7 @@ def table_chart(
         run_id=context.run_id if context is not None else None,
         step=context.step if context is not None else None,
         session_id=context.session_id if context is not None else None,
-        include_plotlyjs="cdn",
+        include_plotlyjs="inline",
         export_png=False,
     )
     return ToolResult(

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sqlite3
 import tempfile
 import time
 import uuid
@@ -641,6 +642,11 @@ def test_table_chart_renders_chart_spec_and_artifact(
     assert result.error is None
     assert result.figure
     assert "<html" in result.figure.lower()
+    # include_plotlyjs="inline" 会把 plotly.js 整体内嵌；其源码里含有
+    # topojsonURL 默认值 "https://cdn.plot.ly/un/"，但不会产生外部 <script src>。
+    # 因此断言“没有外链脚本”，而不是简单禁止 cdn.plot.ly 子串。
+    assert "<script src" not in result.figure.lower()
+    assert "plotly" in result.figure.lower()
     assert result.table is not None
     assert [row["category"] for row in result.table] == ["2026-01", "2026-02", "2026-03"]
     assert [row["value"] for row in result.table] == [210000.0, 240000.0, 560000.0]
@@ -806,6 +812,142 @@ def test_agent_runtime_default_registry_wires_file_tools(
     assert result.steps[0].result is not None
     assert "《公告.txt》第 1 页" in result.answer
     assert result.answer == answer
+
+
+def test_runtime_custom_audit_db_routes_table_chart_artifact(
+    store: Path,
+    db: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """默认注册表必须把 runtime.db_path 作为 table_chart 的审计库。"""
+    source = _make_xlsx(
+        store.parent / "月度销售.xlsx",
+        {
+            "月度销售": [
+                ["月份", "销售额"],
+                ["2026-01", 210000],
+                ["2026-02", 240000],
+                ["2026-03", 560000],
+            ]
+        },
+    )
+    ingested = _ingest(source, store, db)
+    audit_db = tmp_path / "audit.db"
+    artifact_root = tmp_path / "artifacts"
+    original = T.build_file_registry
+    captured: dict[str, Any] = {}
+
+    def spy(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return original(
+            root=store,
+            db_path=db,
+            audit_db_path=kwargs.get("audit_db_path"),
+            artifact_root=kwargs.get("artifact_root"),
+        )
+
+    monkeypatch.setattr(T, "build_file_registry", spy)
+    answer = "《月度销售.xlsx》工作表「月度销售」A1:B4 已生成柱状图。"
+    model = FakeModel(
+        [
+            ToolCall(
+                "table_chart",
+                {
+                    "file_id": ingested.meta["file_id"],  # type: ignore[index]
+                    "sheet": "月度销售",
+                    "columns": ["月份", "销售额"],
+                    "group_by": "月份",
+                    "metric": "销售额",
+                },
+            ),
+            answer,
+        ]
+    )
+
+    runtime = AgentRuntime(model, db_path=audit_db, artifact_root=artifact_root)
+    result = runtime.run("把月度销售额画成柱状图")
+
+    assert result.stop_reason == StopReason.COMPLETED
+    assert result.answer == answer
+    assert captured["audit_db_path"] == audit_db
+    assert captured["artifact_root"] == artifact_root
+    assert len(result.steps) == 1
+    step = result.steps[0]
+    assert step.result is not None
+    assert step.result.error is None
+    assert step.result.figure
+    with sqlite3.connect(audit_db) as conn:
+        run = conn.execute("SELECT run_id FROM agent_runs").fetchone()
+        assert run is not None
+        linked = conn.execute(
+            "SELECT COUNT(*) FROM agent_run_artifacts WHERE run_id = ?", (run[0],)
+        ).fetchone()
+        assert linked is not None and linked[0] >= 1
+    assert (artifact_root / step.result.metadata["artifact_path"]).is_file()
+
+
+def test_runtime_without_db_path_does_not_write_default_audit_db(
+    store: Path,
+    db: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """db_path=None 时 table_chart 用内存审计库，不污染 DEFAULT_DB_PATH。"""
+    source = _make_xlsx(
+        store.parent / "月度销售.xlsx",
+        {
+            "月度销售": [
+                ["月份", "销售额"],
+                ["2026-01", 210000],
+                ["2026-02", 240000],
+            ]
+        },
+    )
+    ingested = _ingest(source, store, db)
+    default_db = tmp_path / "default-audit.db"
+    from astock.agent import store as agent_store
+
+    monkeypatch.setattr(agent_store, "DEFAULT_DB_PATH", default_db)
+    original = T.build_file_registry
+    captured: dict[str, Any] = {}
+
+    def spy(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return original(
+            root=store,
+            db_path=db,
+            audit_db_path=kwargs.get("audit_db_path"),
+            artifact_root=kwargs.get("artifact_root"),
+        )
+
+    monkeypatch.setattr(T, "build_file_registry", spy)
+    answer = "《月度销售.xlsx》工作表「月度销售」A1:B3 已生成柱状图。"
+    model = FakeModel(
+        [
+            ToolCall(
+                "table_chart",
+                {
+                    "file_id": ingested.meta["file_id"],  # type: ignore[index]
+                    "sheet": "月度销售",
+                    "columns": ["月份", "销售额"],
+                    "group_by": "月份",
+                    "metric": "销售额",
+                },
+            ),
+            answer,
+        ]
+    )
+
+    runtime = AgentRuntime(model, artifact_root=tmp_path / "artifacts")
+    result = runtime.run("把月度销售额画成柱状图")
+
+    assert result.stop_reason == StopReason.COMPLETED
+    assert captured["audit_db_path"] == ":memory:"
+    assert not default_db.exists()
+    assert result.steps[0].result is not None
+    assert result.steps[0].result.error is None
+    assert result.steps[0].result.figure
 
 
 # ---------------------------------------------------------------------------

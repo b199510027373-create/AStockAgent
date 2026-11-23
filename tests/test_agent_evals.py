@@ -195,3 +195,55 @@ def test_cli_writes_report_without_baseline():
         assert load_report(output)["summary"]["passed"] == 20
     finally:
         output.unlink(missing_ok=True)
+
+
+def test_cli_matching_baseline_returns_zero():
+    output = _report_path()
+    try:
+        exit_code = main(
+            [
+                "--tasks",
+                str(TASKS_PATH),
+                "--output",
+                str(output),
+                "--baseline",
+                str(BASELINE_PATH),
+            ]
+        )
+
+        assert exit_code == 0
+    finally:
+        output.unlink(missing_ok=True)
+
+
+def test_cli_baseline_regression_returns_one():
+    baseline = json.loads(
+        json.dumps(
+            run_evaluation(_tasks(), tasks_file=str(TASKS_PATH)).to_dict(),
+            ensure_ascii=False,
+        )
+    )
+    # 平均步数低于当前值：baseline 方向为 lower，当前值更高即应判回归。
+    baseline["summary"]["avg_steps"] = 0.0
+    baseline_path = _report_path()
+    output = _report_path()
+    try:
+        baseline_path.write_text(
+            json.dumps(baseline, ensure_ascii=False), encoding="utf-8"
+        )
+        exit_code = main(
+            [
+                "--tasks",
+                str(TASKS_PATH),
+                "--output",
+                str(output),
+                "--baseline",
+                str(baseline_path),
+            ]
+        )
+
+        assert exit_code == 1
+        assert load_report(output)["summary"]["passed"] == 20
+    finally:
+        baseline_path.unlink(missing_ok=True)
+        output.unlink(missing_ok=True)
