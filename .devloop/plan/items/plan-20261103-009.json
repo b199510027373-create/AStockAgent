@@ -26,27 +26,30 @@
     "adr": [
       "ADR-008"
     ],
-    "branch": "feat/plan-20261103-009-board-rules",
-    "commit": "e712f9c",
-    "head": "0c42758",
-    "merge": "de2da60",
+    "branch": "main",
+    "commit": "ee6b2c3",
+    "head": "a9de2b5",
+    "merge": "de2da60 (PR #46) / a9de2b5 (PR #47 devloop 收尾)",
     "module": "backtest",
-    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46",
+    "pr": [
+      "https://github.com/b199510027373-create/AStockAgent/pull/46",
+      "https://github.com/b199510027373-create/AStockAgent/pull/47"
+    ],
     "review": "rev-20261123-001",
     "test": [
-      ".venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q -p no:cacheprovider => 49 passed, 26 subtests passed in 0.39s",
-      ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider => 925 passed, 3 skipped, 46 subtests passed in 96.90s",
-      ".venv\\Scripts\\ruff.exe check astock tests => All checks passed!",
-      ".venv\\Scripts\\mypy.exe astock app.py => Success: no issues found in 44 source files",
-      "评审反馈完整性校验：12 条 issue 全部 status=fixed、comment 非空且与 feedbackHistory[0] 一致",
-      "gh pr merge 46 --merge => PR #46 MERGED（merge commit de2da60，2026-11-22T18:24:15Z）",
-      "gh run view 45054301098 (PR head 0c42758) => test success / png-export success",
-      "gh run list --branch main => CI run 45054881978 (main de2da60) 触发（合并后验证）",
-      ".venv\\Scripts\\python.exe -m coverage run -m pytest tests -q -m \"not png\" => 920 passed；coverage TOTAL 80.45% (fail_under 76.45)",
-      "gh run view 45054074299 (head e712f9c) => test success / png-export success"
+      ".venv\\Scripts\\python.exe -m pytest tests/test_board_rules.py -q -p no:cacheprovider → 49 passed, 26 subtests passed (0.40s)",
+      ".venv\\Scripts\\python.exe -m pytest tests -q -p no:cacheprovider → 925 passed, 3 skipped, 46 subtests passed (109.63s)",
+      ".venv\\Scripts\\ruff.exe check astock tests → All checks passed",
+      ".venv\\Scripts\\mypy.exe astock app.py → Success: no issues found in 44 source files",
+      "coverage run -m pytest tests -q -m \"not png\" → 920 passed, 3 skipped, 5 deselected；coverage report TOTAL 80.45% (fail_under 76.45)",
+      "CI run 45143474253 (PR #47) test pass 1m41s / png-export pass 59s",
+      "CI run 45155823437 (main a9de2b5) success",
+      "CI run 45054074299 (e712f9c) success",
+      "CI run 45054301098 (0c42758) success",
+      "CI run 45054881978 (de2da60) success"
     ]
   },
   "createdAt": "2026-11-03T12:10:47.673Z",
-  "updatedAt": "2026-11-22T18:24:35.904Z",
+  "updatedAt": "2026-11-23T10:26:23.230Z",
   "devSessionId": "session-9447de73-dfbd-4553-b66d-68047542f613"
 }

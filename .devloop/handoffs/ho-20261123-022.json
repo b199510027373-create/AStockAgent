@@ -1,0 +1,85 @@
+{
+  "id": "ho-20261123-022",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261103-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "板块/停牌/北交所交易规则补齐",
+  "summary": "合并后收尾：PR #47（仅 devloop 记录）已合并，merge commit a9de2b5（2026-11-23T10:24:32Z），其 CI run 45143474253 test/png-export 均 pass；main CI run 45155823437（head a9de2b5）success。plan-20261103-009 保持 done/100%，评审第 6 轮 approve、P0/P1/P2=0。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "创业板/科创板 20%、北交所 30%、ST 5% 各有单元测试",
+      "source": "plan-20261103-009 acceptance"
+    },
+    {
+      "id": "REQ-2",
+      "text": "IPO 首日无涨跌幅与后续 N 日规则有明确实现或显式标注未覆盖",
+      "source": "plan-20261103-009 acceptance"
+    },
+    {
+      "id": "REQ-3",
+      "text": "临时停牌/全天停牌不产生虚假成交",
+      "source": "plan-20261103-009 acceptance"
+    },
+    {
+      "id": "REQ-4",
+      "text": "回测与实盘规则差异写进 README",
+      "source": "plan-20261103-009 acceptance"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/",
+      "summary": "收尾记录入库（PR #47）：plan done/100% + merge=de2da60、合并后 calendar/worklog、评审第 6 轮记录、ho-20261123-020（评审）/021（开发）。",
+      "commit": "d71953e"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261123-022.json",
+      "summary": "本 handoff（developer update，previous ho-021）：记录 PR #47 合并与 main CI。",
+      "commit": "a9de2b5"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 47 --watch",
+      "result": "test/png-export pass",
+      "passed": true,
+      "evidence": "run 45143474253：test pass 1m41s、png-export pass 59s"
+    },
+    {
+      "command": "gh run list --branch main --limit 3",
+      "result": "main CI success",
+      "passed": true,
+      "evidence": "run 45155823437 headSha a9de2b5… conclusion=success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub PR 合并权限",
+      "reason": "按用户指示合并 PR #46/#47",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "a9de2b5",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/46（已合并）；https://github.com/b199510027373-create/AStockAgent/pull/47（已合并）",
+    "ci": "main run 45155823437 (a9de2b5): success；PR #47 run 45143474253: test/png-export success",
+    "merge": "PR #46 → de2da60（2026-11-22T18:24:15Z）；PR #47（devloop 收尾记录）→ a9de2b5（2026-11-23T10:24:32Z）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261123-021",
+  "next": "无待办：两条 PR 均已合并，main CI 全绿，plan-20261103-009 为 done/100%，第 6 轮评审 approve 且 P0/P1/P2=0。",
+  "createdAt": "2026-11-23T10:26:17.299Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-022.md"
+}
