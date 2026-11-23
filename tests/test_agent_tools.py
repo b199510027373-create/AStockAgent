@@ -655,6 +655,80 @@ def test_table_chart_renders_chart_spec_and_artifact(
     assert result.metadata["citation"] == "《月度销售.xlsx》工作表「月度销售」A1:B4"
     assert result.metadata["artifact_id"]
     assert (tmp_path / "artifacts" / result.metadata["artifact_path"]).is_file()
+    # PNG 走 auto 降级：本机可用时必须真实落盘；CI 主 job 无 Chrome 时允许仅 HTML，
+    # 但必须留下 warnings，真实 PNG 文件由 ``@pytest.mark.png`` 用例与独立 job 验证。
+    png_path = result.metadata["png_path"]
+    if png_path:
+        assert Path(png_path).is_file()
+        assert Path(png_path).read_bytes().startswith(b"\x89PNG")
+    else:
+        assert result.metadata["warnings"]
+
+    # artifact 审计：agent_artifacts + 版本 + run/step link 都可回查。
+    with sqlite3.connect(audit_db) as conn:
+        artifact = conn.execute(
+            "SELECT kind, path FROM agent_artifacts WHERE artifact_id = ?",
+            (result.metadata["artifact_id"],),
+        ).fetchone()
+        assert artifact is not None
+        assert artifact[0] == "chart"
+        version = conn.execute(
+            "SELECT version, meta_json FROM agent_artifact_versions "
+            "WHERE artifact_id = ? ORDER BY version",
+            (result.metadata["artifact_id"],),
+        ).fetchall()
+        assert [row[0] for row in version] == [1]
+        meta = json.loads(version[0][1])
+        assert (meta.get("png_path") or "") == png_path
+        assert meta["data_time"] == result.metadata["data_time"]
+        links = conn.execute(
+            "SELECT source, run_id, step FROM agent_run_artifacts "
+            "WHERE artifact_id = ?",
+            (result.metadata["artifact_id"],),
+        ).fetchall()
+        assert links == [("render", None, None)]
+
+
+@pytest.mark.png
+def test_table_chart_exports_real_png(store: Path, db: Path, tmp_path: Path) -> None:
+    """真实 Excel → table_chart → kaleido PNG（CI png-export job 执行）。"""
+    source = _make_xlsx(
+        store.parent / "月度销售.xlsx",
+        {
+            "月度销售": [
+                ["月份", "销售额"],
+                ["2026-01", 210000],
+                ["2026-02", 240000],
+                ["2026-03", 560000],
+            ]
+        },
+    )
+    ingested = _ingest(source, store, db)
+    registry = T.build_file_registry(
+        root=store,
+        db_path=db,
+        audit_db_path=tmp_path / "audit.db",
+        artifact_root=tmp_path / "artifacts",
+    )
+    result = registry.invoke(
+        "table_chart",
+        {
+            "file_id": ingested.meta["file_id"],  # type: ignore[index]
+            "sheet": "月度销售",
+            "columns": ["月份", "销售额"],
+            "group_by": "月份",
+            "metric": "销售额",
+            "chart_type": "bar",
+        },
+    )
+    assert result.error is None
+    # time_semantics=none 会带「视图时点未知」说明，但不得有 PNG 降级 warning。
+    assert not any("PNG" in warning for warning in result.metadata["warnings"])
+    png_path = result.metadata["png_path"]
+    assert png_path
+    png = Path(png_path)
+    assert png.is_file()
+    assert png.read_bytes().startswith(b"\x89PNG")
 
 
 # ---------------------------------------------------------------------------
@@ -877,13 +951,27 @@ def test_runtime_custom_audit_db_routes_table_chart_artifact(
     assert step.result is not None
     assert step.result.error is None
     assert step.result.figure
+    assert step.result.metadata["chart_spec"]["kind"] == "bar"
+    png_path = step.result.metadata["png_path"]
+    if png_path:
+        assert Path(png_path).is_file()
+    else:
+        assert step.result.metadata["warnings"]
     with sqlite3.connect(audit_db) as conn:
         run = conn.execute("SELECT run_id FROM agent_runs").fetchone()
         assert run is not None
         linked = conn.execute(
-            "SELECT COUNT(*) FROM agent_run_artifacts WHERE run_id = ?", (run[0],)
+            "SELECT source FROM agent_run_artifacts WHERE run_id = ?", (run[0],)
+        ).fetchall()
+        assert linked and linked[0][0] == "agent"
+        version = conn.execute(
+            "SELECT meta_json FROM agent_artifact_versions WHERE artifact_id = ?",
+            (step.result.metadata["artifact_id"],),
         ).fetchone()
-        assert linked is not None and linked[0] >= 1
+        assert version is not None
+        version_meta = json.loads(version[0])
+        assert (version_meta.get("png_path") or "") == png_path
+        assert version_meta["data_as_of"] == step.result.metadata["data_as_of"]
     assert (artifact_root / step.result.metadata["artifact_path"]).is_file()
 
 

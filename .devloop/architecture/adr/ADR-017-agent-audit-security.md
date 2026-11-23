@@ -124,3 +124,31 @@ Agent 会读用户文件、查行情、画图、调用多个工具。一旦没�
 - **meta 摘要校验**：`ArtifactRecord.meta_digest` 取自库内版本行；回放时校验
   `meta_digest(meta_json) == meta_digest`，不一致抛 `ArtifactReplayUnavailable`（绕过 correction 改库可被发现）。
   验收：`tests/test_agent_chart_render.py::test_replay_verifies_stored_meta_digest_and_rejects_tampering`。
+
+
+## 评审回填（2026-11-24，plan-20261124-001 / table_chart 产品化）
+- **权限边界不变**：`table_chart` 只申请 `file:read` + `chart:render`，不新增
+  `file:write`/`ledger:write`；读取范围仍受文件清单与 `columns` 白名单约束，
+  聚合 SQL 由 `sql_guard` 强制 SELECT + 自动 LIMIT + 5s 超时。权限矩阵与接口见
+  `docs/AStockAgent_interface_freeze_v2.md` §3.5。
+- **审计入口唯一**：`table_chart` 不自己写 artifact，只把聚合结果组装成 ChartSpec v1
+  后调用 `chart_service.render_chart`；由后者写 `agent_artifacts` /
+  `agent_artifact_versions` / `agent_run_artifacts`，并经 `ToolContext` 把
+  link 挂到真实 `run_id`/`step`（`source='agent'`）；无 run 上下文时保持
+  `source='render'`、`run_id=NULL`。`db_path=None` 时用 `:memory:`，不污染
+  `DEFAULT_DB_PATH`。
+- **引用语义**：metadata 必带 `citation`（`《文件名》工作表「sheet」A1:Bn`）与
+  `citations` 列表；`source` 为 `file:<文件名>`，`file_id`/`sheet`/`group_by`/
+  `metric`/`agg` 一并入库，回答可回查聚合口径。空结果不生成 figure/artifact。
+- **PNG 降级**：`table_chart` 以 `export_png=True, png_mode="auto"` 调用渲染；
+  有 kaleido/Chrome 时 metadata 带真实 `png_path` 并写入版本 meta（含
+  `png_digest`）；不可用时仅 HTML + `warnings`，工具不失败、artifact 仍可审计。
+  会话 UI 的下载区只展示真实存在的 PNG，缺失时在状态栏说明降级原因；
+  HTML/PNG 统一写入 `%TEMP%/astock-agent-exports`，启动时经
+  `agent_export_allowed_paths()` 加入 Gradio `allowed_paths`，避免 `/file=` 端点
+  因路径不在白名单而 403（`tests/test_agent_chat.py::test_export_dir_is_configured_for_gradio_downloads`）。
+- **验收**：`tests/test_agent_tools.py::test_table_chart_renders_chart_spec_and_artifact`
+  （聚合/引用/artifact/版本/link 审计）、`::test_runtime_custom_audit_db_routes_table_chart_artifact`
+  （真实 Excel → runtime → run link）、`::test_table_chart_exports_real_png`
+  （`png` marker，独立 CI job）、`tests/test_agent_chat.py` 的 table_chart figure /
+  PNG 导出 / UI 下载区用例。

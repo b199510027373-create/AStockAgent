@@ -669,12 +669,17 @@ def table_chart(
         step=context.step if context is not None else None,
         session_id=context.session_id if context is not None else None,
         include_plotlyjs="inline",
-        export_png=False,
+        # 会话 UI 需要直接下载 PNG；``auto`` 在 kaleido/Chrome 不可用时降级为仅 HTML，
+        # 不把一次表格绘图打成工具失败（ADR-016 / 接口冻结 v2 §3.5）。
+        export_png=True,
+        png_mode="auto",
     )
+    warnings = [str(item) for item in rendered.warnings]
     return ToolResult(
         text=(
             f"{citation} 已生成{chart_type}图：{len(rows)} 个分类，"
             f"图表产物 {rendered.artifact_id}。"
+            + (f"；{'；'.join(warnings)}" if warnings else "")
         ),
         table=rows,
         figure=rendered.html,
@@ -685,10 +690,15 @@ def table_chart(
             "sheet": sheet,
             "citation": citation,
             "citations": [citation],
+            "title": chart_title,
             "chart_spec": rendered.spec,
             "artifact_id": rendered.artifact_id,
             "artifact_version": rendered.artifact_version,
             "artifact_path": rendered.path,
+            "png_path": rendered.png_path or "",
+            "data_as_of": rendered.data_as_of,
+            "data_time": rendered.data_time,
+            "warnings": warnings,
         },
     )
 

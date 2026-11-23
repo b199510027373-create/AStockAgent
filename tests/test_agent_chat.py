@@ -41,6 +41,7 @@ from astock.agent.chat import (
     attachment_summary,
     collect_citations,
     collect_figures,
+    export_figures,
     figure_embed_html,
     ingest_attachments,
     iter_answer_chunks,
@@ -361,6 +362,71 @@ class FigureTests(unittest.TestCase):
         self.assertIn("数据截至 时点未知", figure.caption)
         self.assertIn("数据时间 时点未知", figure.caption)
         self.assertIn("本轮回答还没有图表", render_figures_html([]))
+
+    def _table_chart_step(self, png_path: str = "") -> StepRecord:
+        """table_chart 的 metadata 形状：chart_spec / png_path，无 ``chart`` 包装。"""
+        result = ToolResult(
+            text="已生成柱状图",
+            figure='<html><body><div id="plotly-table"></div></body></html>',
+            source="file:月度销售.xlsx",
+            data_as_of="2026-03-31",
+            data_time="2026-03-31 00:00",
+            metadata={
+                "title": "月度销售",
+                "chart_spec": {
+                    "version": 1,
+                    "kind": "bar",
+                    "data": {"source": "inline"},
+                },
+                "artifact_id": "art_table",
+                "artifact_path": "data/agent/artifacts/art_table.html",
+                "png_path": png_path,
+                "warnings": ["PNG 导出失败：Chrome 不可用"],
+            },
+        )
+        return step_with(result, tool="table_chart")
+
+    def test_collect_figures_reads_table_chart_metadata(self) -> None:
+        figure = collect_figures([self._table_chart_step("/tmp/art_table.png")])[0]
+        self.assertEqual(figure.tool, "table_chart")
+        self.assertEqual(figure.title, "月度销售")
+        self.assertEqual(figure.spec["kind"], "bar")
+        self.assertEqual(figure.png_path, "/tmp/art_table.png")
+        self.assertEqual(figure.data_as_of, "2026-03-31")
+        self.assertIn("PNG 导出失败", figure.warnings[0])
+
+    def test_export_figures_writes_html_and_reuses_png(self) -> None:
+        with _tempdir() as tmp:
+            png = Path(tmp) / "art_table.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+            figure = collect_figures([self._table_chart_step(str(png))])[0]
+            paths, notes = export_figures([figure], out_dir=Path(tmp) / "exports")
+            self.assertEqual(notes, [])
+            html_path = Path(tmp) / "exports" / "art_table.html"
+            self.assertIn(str(html_path), paths)
+            png_export = Path(tmp) / "exports" / "art_table.png"
+            self.assertIn(str(png_export), paths)
+            self.assertEqual(png_export.read_bytes(), png.read_bytes())
+            self.assertIn('id="plotly-table"', html_path.read_text(encoding="utf-8"))
+
+    def test_export_figures_reports_missing_png(self) -> None:
+        with _tempdir() as tmp:
+            figure = collect_figures([self._table_chart_step("")])[0]
+            paths, notes = export_figures([figure], out_dir=Path(tmp) / "exports")
+            self.assertEqual(len(paths), 1)
+            self.assertTrue(paths[0].endswith("art_table.html"))
+            self.assertIn("未生成 PNG", notes[0])
+
+    def test_embed_shows_png_availability(self) -> None:
+        with _tempdir() as tmp:
+            png = Path(tmp) / "art_table.png"
+            png.write_bytes(b"\x89PNG")
+            markup = figure_embed_html(
+                collect_figures([self._table_chart_step(str(png))])[0]
+            )
+            self.assertIn("PNG：art_table.png", markup)
+        missing = figure_embed_html(collect_figures([self._table_chart_step()])[0])
+        self.assertIn("PNG：未生成", missing)
 
 
 class CitationTests(unittest.TestCase):
@@ -867,6 +933,96 @@ class UiBuilderTests(unittest.TestCase):
             with gr.Blocks():
                 components = build_agent_chat_tab(db_path=db)
         self.assertEqual(components["controller"].db_path, db)
+
+    def test_table_chart_figure_and_exports_reach_ui(self) -> None:
+        """table_chart 的 figure/spec 必须显示，HTML/PNG 必须出现在下载区。"""
+        import gradio as gr
+
+        from astock.agent_chat_ui import build_agent_chat_tab
+
+        with _tempdir() as tmp:
+            png = Path(tmp) / "art_ui_table.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+            result = ToolResult(
+                text="已生成柱状图",
+                figure=(
+                    '<html><body><div id="plotly-ui-table">'
+                    "月度销售</div></body></html>"
+                ),
+                source="file:月度销售.xlsx",
+                data_as_of="2026-03-31",
+                data_time="2026-03-31 00:00",
+                metadata={
+                    "title": "月度销售",
+                    "chart_spec": {"version": 1, "kind": "bar"},
+                    "artifact_id": "art_ui_table",
+                    "artifact_path": "artifacts/art_ui_table.html",
+                    "png_path": str(png),
+                    "warnings": [],
+                },
+            )
+            step = step_with(result, tool="table_chart")
+
+            class TableController:
+                def model_banner(self) -> str:
+                    return "离线桩"
+
+                def ask(self, text: str, attachments: Any = (), files: Any = ()):
+                    yield ChatEvent(kind="step", step=step, text="")
+                    yield ChatEvent(kind="answer", text="已生成图表。")
+                    yield ChatEvent(
+                        kind="done",
+                        text="已完成。",
+                        result=AgentRunResult(
+                            answer="已生成图表。",
+                            stop_reason=StopReason.COMPLETED,
+                            steps=[step],
+                            tokens_used=1,
+                            elapsed_seconds=0.1,
+                            session_id="s",
+                        ),
+                    )
+
+                def interrupt(self) -> str:
+                    return "已中断"
+
+                def new_session(self) -> None:
+                    return None
+
+            with gr.Blocks():
+                components = build_agent_chat_tab(controller=TableController())
+            frames = list(components["respond"]("画月度销售", [], [], []))
+        final = frames[-1]
+        self.assertIn("plotly-ui-table", final[3])
+        self.assertIn("查看图表 spec / 来源", final[3])
+        self.assertIn("PNG：art_ui_table.png", final[3])
+        self.assertEqual(len(final), 7)
+        exported = final[6]
+        self.assertTrue(any(str(item).endswith("art_ui_table.html") for item in exported))
+        self.assertTrue(any(str(item).endswith("art_ui_table.png") for item in exported))
+        self.assertEqual(components["export_files"].file_count, "multiple")
+
+    def test_export_dir_is_configured_for_gradio_downloads(self) -> None:
+        """导出文件必须落在 Gradio allowed_paths 内，否则 /file= 下载 403。"""
+        from gradio import utils as gradio_utils
+
+        from astock.agent_chat_ui import AGENT_EXPORT_DIR, agent_export_allowed_paths
+
+        allowed_paths = agent_export_allowed_paths()
+        self.assertEqual(allowed_paths, [str(AGENT_EXPORT_DIR)])
+        allowed, reason = gradio_utils.is_allowed_file(
+            AGENT_EXPORT_DIR / "art_table.html",
+            blocked_paths=[],
+            allowed_paths=allowed_paths,
+            created_paths=[],
+        )
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "allowed")
+        # app.py 的 launch() 在 __main__ 下执行，单测无法启动服务；用静态断言锁住接线。
+        app_source = (Path(__file__).resolve().parents[1] / "app.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("allowed_paths=agent_export_allowed_paths()", app_source)
 
     def test_structured_history_is_not_stringified_as_repr(self) -> None:
         """Gradio 6 回传的 text block 列表必须还原成纯文本，不能显示成 dict 的 repr。"""

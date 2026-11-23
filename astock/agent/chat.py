@@ -15,6 +15,8 @@ import contextlib
 import html
 import json
 import queue
+import re
+import shutil
 import threading
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -45,6 +47,7 @@ __all__ = [
     "attachment_summary",
     "collect_citations",
     "collect_figures",
+    "export_figures",
     "figure_embed_html",
     "ingest_attachments",
     "iter_answer_chunks",
@@ -299,6 +302,8 @@ class Figure:
     data_time: str = ""
     artifact_id: str = ""
     artifact_path: str = ""
+    #: chart_service 真实导出的 PNG 绝对路径；``auto`` 降级或旧产物为空。
+    png_path: str = ""
     warnings: tuple[str, ...] = ()
 
     @property
@@ -311,7 +316,11 @@ class Figure:
 
 
 def collect_figures(steps: Sequence[StepRecord]) -> list[Figure]:
-    """从工具步骤里收集内嵌图表；没有图表的步骤自动跳过。"""
+    """从工具步骤里收集内嵌图表；没有图表的步骤自动跳过。
+
+    兼容两代工具 metadata：``kline`` 把 spec 放在 ``metadata["chart"]``，
+    ``table_chart`` 直接给 ``metadata["chart_spec"]``（ADR-016 / 接口冻结 v2 §3.5）。
+    """
     figures: list[Figure] = []
     for step in steps:
         result = step.result
@@ -320,7 +329,7 @@ def collect_figures(steps: Sequence[StepRecord]) -> list[Figure]:
             continue
         metadata = _mapping(getattr(result, "metadata", None))
         chart = _mapping(metadata.get("chart"))
-        spec = chart.get("spec") or metadata.get("spec")
+        spec = chart.get("spec") or metadata.get("chart_spec") or metadata.get("spec")
         warnings = chart.get("warnings") or metadata.get("warnings") or ()
         figures.append(
             Figure(
@@ -353,10 +362,59 @@ def collect_figures(steps: Sequence[StepRecord]) -> list[Figure]:
                 artifact_path=str(
                     metadata.get("artifact_path") or chart.get("artifact_path") or ""
                 ),
+                png_path=str(
+                    metadata.get("png_path") or chart.get("png_path") or ""
+                ),
                 warnings=tuple(str(item) for item in warnings),
             )
         )
     return figures
+
+
+def _export_stem(figure: Figure) -> str:
+    """导出文件名：artifact_id 优先；缺省时用 step/tool，去掉路径不安全字符。"""
+    raw = figure.artifact_id or f"step-{figure.step}-{figure.tool}"
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", raw).strip("-") or "chart"
+
+
+def export_figures(
+    figures: Sequence[Figure], *, out_dir: str | Path
+) -> tuple[list[str], list[str]]:
+    """把图表导出成可下载文件：HTML 从内存写盘，PNG 复制 artifact 产物。
+
+    返回 ``(可用文件绝对路径列表, 降级说明列表)``。所有文件都落在 ``out_dir``，
+    便于 Gradio 只放行该目录；PNG 依赖 chart_service 的真实导出结果，缺失时
+    只给说明，不让整次回答失败。
+    """
+    base = Path(out_dir)
+    base.mkdir(parents=True, exist_ok=True)
+    paths: list[str] = []
+    notes: list[str] = []
+    for figure in figures:
+        stem = _export_stem(figure)
+        html_path = base / f"{stem}.html"
+        try:
+            html_path.write_text(figure.html, encoding="utf-8")
+        except OSError as exc:
+            notes.append(f"图表 {stem} 的 HTML 导出失败：{exc}")
+        else:
+            paths.append(str(html_path))
+        if not figure.png_path:
+            notes.append(f"图表 {stem} 未生成 PNG（kaleido/Chrome 不可用时仅 HTML）")
+            continue
+        png_path = Path(figure.png_path)
+        if not png_path.is_file():
+            notes.append(f"图表 {stem} 的 PNG 文件不存在：{png_path.name}")
+            continue
+        png_export = base / f"{stem}.png"
+        try:
+            shutil.copyfile(png_path, png_export)
+        except OSError as exc:
+            notes.append(f"图表 {stem} 的 PNG 导出失败：{exc}")
+            continue
+        paths.append(str(png_export))
+    return paths, notes
+
 
 
 def _embed_div_id() -> str:
@@ -392,6 +450,9 @@ def figure_embed_html(figure: Figure, *, div_id: str | None = None) -> str:
         # 旧版 artifact 的 HTML 自带 astock-chart-<hash> id，无法再替换；iframe 各自
         # 独立文档，不会跨图撞 id，保持原样即可（新渲染的图都走 embed_html）。
         html = figure.html
+    png_note = (
+        f"PNG：{_esc(Path(figure.png_path).name)}" if figure.png_path else "PNG：未生成"
+    )
     return (
         f'<figure class="astock-figure" data-tool="{_esc(figure.tool)}">'
         f'<iframe class="astock-figure-frame" title="{_esc(figure.caption)}" '
@@ -400,7 +461,8 @@ def figure_embed_html(figure: Figure, *, div_id: str | None = None) -> str:
         f"<details><summary>查看图表 spec / 来源</summary>{spec_block}"
         f"<p class=\"astock-muted\">来源：{_esc(figure.source or '未标注')}"
         f"｜artifact：{_esc(figure.artifact_id or '未生成')}"
-        f"｜路径：{_esc(figure.artifact_path or '—')}</p>{warnings}</details>"
+        f"｜路径：{_esc(figure.artifact_path or '—')}"
+        f"｜{png_note}</p>{warnings}</details>"
         "</figure>"
     )
 
@@ -408,8 +470,9 @@ def figure_embed_html(figure: Figure, *, div_id: str | None = None) -> str:
 def render_figures_html(figures: Sequence[Figure]) -> str:
     if not figures:
         return (
-            '<p class="astock-muted">本轮回答还没有图表。让助手画 K 线/指标图后，'
-            "图会内嵌在这里，并可展开查看 ChartSpec 与数据来源。</p>"
+            '<p class="astock-muted">本轮回答还没有图表。让助手画 K 线/指标图，'
+            "或对 Excel 表执行 table_chart 聚合后，图会内嵌在这里；"
+            "可展开查看 ChartSpec 与数据来源，并在下方下载 HTML/PNG。</p>"
         )
     return "".join(figure_embed_html(item) for item in figures)
 

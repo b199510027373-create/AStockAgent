@@ -24,7 +24,7 @@ from astock.strategy_ui import build_strategy_lab_tab
 from astock.scheduler import start_background as start_recommend_scheduler
 from astock.events import build_ai_context
 from astock.llm import chat as llm_chat
-from astock.agent_chat_ui import build_agent_chat_tab
+from astock.agent_chat_ui import agent_export_allowed_paths, build_agent_chat_tab
 from astock.agent.store import DEFAULT_DB_PATH as AGENT_DB_PATH
 
 # >>>>>>>>>>>> 配置区 <<<<<<<<<<<<<
@@ -511,7 +511,12 @@ if __name__ == "__main__":
     port = 7861
     for candidate in range(port, port + 10):
         try:
-            app.launch(server_port=candidate, share=False, theme="soft")
+            app.launch(
+                server_port=candidate,
+                share=False,
+                theme="soft",
+                allowed_paths=agent_export_allowed_paths(),
+            )
             break
         except OSError:
             print(f"端口{candidate}被占，试{candidate + 1}")
