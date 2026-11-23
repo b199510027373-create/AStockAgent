@@ -32,19 +32,20 @@
       "ADR-017"
     ],
     "branch": "feat/plan-20261107-009-agent-evals",
-    "ci": "PR #48 checks pass: test, png-export (run 45215627062)",
+    "ci": "PR #48 checks pass: test 1m38s, png-export 1m6s (run 45219066185)",
     "pr": "48",
     "followup": "plan-20261124-001",
     "test": [
-      "python -m astock.agent.evals -> 20/20, tool_selection_accuracy=100.00%, avg_steps=1.30, avg_latency=0.74ms, baseline=passed",
-      "python -m pytest tests/test_agent_evals.py tests/test_agent_tools.py -q -m 'not png' -> 56 passed",
-      "python -m pytest tests -q -m 'not png' -> 931 passed, 3 skipped, 5 deselected, 46 subtests passed",
+      "python -m astock.agent.evals -> 20/20, tool_selection_accuracy=100.00%, avg_steps=1.30, avg_latency=0.72ms, baseline=passed",
+      "python -m pytest tests/test_agent_evals.py tests/test_agent_tools.py -q -m 'not png' -> 60 passed",
+      "python -m pytest tests -q -m 'not png' -> 935 passed, 3 skipped, 5 deselected, 46 subtests passed (92.15s)",
       "python -m ruff check astock tests -> All checks passed",
       "python -m mypy astock app.py -> Success, 45 source files",
-      "CI run 45215627062 -> test and png-export passed, including Agent offline eval baseline gate"
+      "targeted review-fix tests -> 5 passed",
+      "CI run 45219066185 -> test and png-export passed, including Agent offline eval baseline gate"
     ]
   },
   "createdAt": "2026-11-07T14:12:19.320Z",
-  "updatedAt": "2026-11-23T16:23:56.262Z",
+  "updatedAt": "2026-11-23T16:41:55.820Z",
   "devSessionId": "session-16e94b00-18ee-4cbf-9919-f9aae04a91d8"
 }
