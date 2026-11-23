@@ -9,7 +9,7 @@
   "start": "2026-11-23",
   "due": "2026-11-26",
   "estimateH": 10,
-  "progress": 95,
+  "progress": 100,
   "acceptance": [
     "20 条评测任务覆盖文件问答/表格图/K线指标/拒答四类",
     "离线 FakeModel 可回归，CI 不依赖网络",
@@ -32,16 +32,18 @@
       "ADR-017"
     ],
     "branch": "feat/plan-20261107-009-agent-evals",
+    "ci": "PR #48 checks pass: test, png-export (run 45162715227)",
     "pr": "48",
     "test": [
       "python -m astock.agent.evals -> 20/20, tool_selection_accuracy=100.00%, avg_steps=1.30, avg_latency=0.57ms, baseline=passed",
       "python -m pytest tests/test_agent_evals.py -q -> 6 passed",
       "python -m pytest tests/test_agent_evals.py tests/test_agent_runtime.py tests/test_agent_tools.py -q -m 'not png' -> 104 passed",
+      "python -m pytest tests/test_ci_quality_gates.py::test_mypy_exclude_matches_frozen_ui_whitelist tests/test_agent_evals.py -q -> 7 passed",
       "python -m ruff check astock tests -> All checks passed",
       "python -m mypy astock app.py -> Success, 45 source files"
     ]
   },
   "createdAt": "2026-11-07T14:12:19.320Z",
-  "updatedAt": "2026-11-23T11:06:55.462Z",
+  "updatedAt": "2026-11-23T11:12:47.863Z",
   "devSessionId": "session-16e94b00-18ee-4cbf-9919-f9aae04a91d8"
 }
