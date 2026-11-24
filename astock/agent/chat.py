@@ -18,6 +18,7 @@ import queue
 import re
 import shutil
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
@@ -304,6 +305,10 @@ class Figure:
     artifact_path: str = ""
     #: chart_service 真实导出的 PNG 绝对路径；``auto`` 降级或旧产物为空。
     png_path: str = ""
+    #: 该工具是否请求过 PNG。K 线固定 ``export_png=False``，不能把「不导出」
+    #: 误报成「PNG 降级」。
+    png_requested: bool = False
+    png_mode: str = ""
     warnings: tuple[str, ...] = ()
 
     @property
@@ -331,6 +336,19 @@ def collect_figures(steps: Sequence[StepRecord]) -> list[Figure]:
         chart = _mapping(metadata.get("chart"))
         spec = chart.get("spec") or metadata.get("chart_spec") or metadata.get("spec")
         warnings = chart.get("warnings") or metadata.get("warnings") or ()
+        png_path = str(metadata.get("png_path") or chart.get("png_path") or "")
+        png_mode = str(metadata.get("png_mode") or chart.get("png_mode") or "")
+        # ``png_path`` 字段存在（即使为空）就说明工具请求过 PNG；K 线不写这个
+        # 字段，因此不会被误判为导出降级。``export_png``/``png_mode`` 兼容旧
+        # metadata 形状。
+        png_requested = (
+            "png_path" in metadata
+            or "png_path" in chart
+            or png_mode in {"auto", "require"}
+            or bool(metadata.get("export_png") or chart.get("export_png"))
+        )
+        if png_mode == "off":
+            png_requested = False
         figures.append(
             Figure(
                 step=step.index,
@@ -362,9 +380,9 @@ def collect_figures(steps: Sequence[StepRecord]) -> list[Figure]:
                 artifact_path=str(
                     metadata.get("artifact_path") or chart.get("artifact_path") or ""
                 ),
-                png_path=str(
-                    metadata.get("png_path") or chart.get("png_path") or ""
-                ),
+                png_path=png_path,
+                png_requested=png_requested,
+                png_mode=png_mode,
                 warnings=tuple(str(item) for item in warnings),
             )
         )
@@ -375,6 +393,33 @@ def _export_stem(figure: Figure) -> str:
     """导出文件名：artifact_id 优先；缺省时用 step/tool，去掉路径不安全字符。"""
     raw = figure.artifact_id or f"step-{figure.step}-{figure.tool}"
     return re.sub(r"[^A-Za-z0-9._-]+", "-", raw).strip("-") or "chart"
+
+
+def _prune_exports(base: Path, *, keep: int = 50, max_age_days: int = 7) -> None:
+    """清理导出目录：只保留最近 ``keep`` 个、``max_age_days`` 内的 HTML/PNG。
+
+    导出目录是跨会话共享的临时目录；不清理会长期累积。清理失败不影响本轮
+    导出（Gradio 仍可下载刚写入的文件）。
+    """
+    candidates = [path for path in base.glob("*.html") if path.is_file()]
+    candidates.extend(path for path in base.glob("*.png") if path.is_file())
+    now = time.time()
+    max_age = max_age_days * 86400
+    fresh: list[tuple[float, Path]] = []
+    for path in candidates:
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if now - mtime > max_age:
+            with contextlib.suppress(OSError):
+                path.unlink()
+            continue
+        fresh.append((mtime, path))
+    fresh.sort(key=lambda item: item[0], reverse=True)
+    for _, path in fresh[keep:]:
+        with contextlib.suppress(OSError):
+            path.unlink()
 
 
 def export_figures(
@@ -388,6 +433,7 @@ def export_figures(
     """
     base = Path(out_dir)
     base.mkdir(parents=True, exist_ok=True)
+    _prune_exports(base)
     paths: list[str] = []
     notes: list[str] = []
     for figure in figures:
@@ -399,6 +445,8 @@ def export_figures(
             notes.append(f"图表 {stem} 的 HTML 导出失败：{exc}")
         else:
             paths.append(str(html_path))
+        if not figure.png_requested:
+            continue
         if not figure.png_path:
             notes.append(f"图表 {stem} 未生成 PNG（kaleido/Chrome 不可用时仅 HTML）")
             continue
@@ -414,7 +462,6 @@ def export_figures(
             continue
         paths.append(str(png_export))
     return paths, notes
-
 
 
 def _embed_div_id() -> str:
@@ -451,7 +498,13 @@ def figure_embed_html(figure: Figure, *, div_id: str | None = None) -> str:
         # 独立文档，不会跨图撞 id，保持原样即可（新渲染的图都走 embed_html）。
         html = figure.html
     png_note = (
-        f"PNG：{_esc(Path(figure.png_path).name)}" if figure.png_path else "PNG：未生成"
+        f"PNG：{_esc(Path(figure.png_path).name)}"
+        if figure.png_path
+        else (
+            "PNG：未生成"
+            if figure.png_requested
+            else "PNG：不适用（该工具不导出 PNG）"
+        )
     )
     return (
         f'<figure class="astock-figure" data-tool="{_esc(figure.tool)}">'

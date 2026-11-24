@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
@@ -38,7 +39,12 @@ from astock.agent.chat import (
 )
 from astock.agent.types import AgentRunResult, StepRecord
 
-__all__ = ["AGENT_EXPORT_DIR", "agent_export_allowed_paths", "build_agent_chat_tab"]
+__all__ = [
+    "AGENT_EXPORT_DIR",
+    "agent_export_allowed_paths",
+    "agent_export_dir",
+    "build_agent_chat_tab",
+]
 
 #: Chatbot 初始值（Gradio 6 的 messages 格式；键名固定为 role/content）。
 _EMPTY_HISTORY: list[Any] = []
@@ -48,8 +54,17 @@ _FILE_TYPES = [".pdf", ".docx", ".xlsx", ".xls", ".csv", ".txt", ".md"]
 _EMPTY_FIGURES = render_figures_html([])
 _EMPTY_CITATIONS = render_citations_html([])
 #: 图表导出目录：只放本轮可下载的 HTML/PNG；同一 artifact 重绘时覆盖同名文件。
-#: app.py 启动时把该目录加入 Gradio allowed_paths，否则 /file= 下载会被 403。
-AGENT_EXPORT_DIR = Path(tempfile.gettempdir()) / "astock-agent-exports"
+#: 可用 ``ASTOCK_AGENT_EXPORT_DIR`` 覆盖（测试/部署隔离），默认在系统临时目录。
+_DEFAULT_EXPORT_DIR = Path(tempfile.gettempdir()) / "astock-agent-exports"
+AGENT_EXPORT_DIR = _DEFAULT_EXPORT_DIR
+
+
+def agent_export_dir() -> Path:
+    """返回当前图表导出目录；环境变量在每次调用时生效，便于测试隔离。"""
+    override = os.environ.get("ASTOCK_AGENT_EXPORT_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return _DEFAULT_EXPORT_DIR
 
 
 def agent_export_allowed_paths() -> list[str]:
@@ -58,7 +73,7 @@ def agent_export_allowed_paths() -> list[str]:
     Gradio 的 ``/file=`` 端点只服务上传目录、缓存目录和显式允许的路径；
     不配置时浏览器下载导出文件会得到 403。
     """
-    return [str(AGENT_EXPORT_DIR)]
+    return [str(agent_export_dir())]
 
 
 def _paths(value: Any) -> list[str]:
@@ -249,10 +264,13 @@ def build_agent_chat_tab(
                     # 收尾时把本轮图表落成可下载文件；PNG 缺失只记降级说明，
                     # 不让整轮回答失败（接口冻结 v2 §3.5 / ADR-016）。
                     exports_list, export_notes = export_figures(
-                        figures, out_dir=AGENT_EXPORT_DIR
+                        figures, out_dir=agent_export_dir()
                     )
                     if export_notes:
-                        status_text = f"{status_text}（{'；'.join(export_notes)}）"
+                        note = "；".join(export_notes)
+                        status_text = (
+                            f"{status_text}；{note}" if status_text else note
+                        )
                 else:  # pragma: no cover - 控制器只产出上述四类
                     continue
                 yield (

@@ -720,6 +720,10 @@ def test_freeze_v2_and_adr17_document_table_chart_contract() -> None:
         "A1:B<n>",
         "xlsx-005",
         "allowed_paths",
+        "png_mode",
+        "(空)",
+        "ASTOCK_AGENT_EXPORT_DIR",
+        "/gradio_api/file=",
     ):
         assert marker in doc, marker
 
@@ -731,4 +735,8 @@ def test_freeze_v2_and_adr17_document_table_chart_contract() -> None:
     assert "source='render'" in adr
     assert "png_mode=\"auto\"" in adr
     assert "agent_export_allowed_paths()" in adr
+    assert "png_requested" in adr
+    assert "(空)" in adr
+    assert "ASTOCK_AGENT_EXPORT_DIR" in adr
+    assert "test_gradio_serves_exported_html_and_png" in adr
 

@@ -72,13 +72,17 @@
   `columns` 必须 1–20 个、`group_by`/`metric` 必须在 `columns` 内；`agg` ∈
   `sum|avg|count|min|max`，`chart_type` ∈ `bar|line`，`limit` ∈ 1..`MAX_QUERY_LIMIT`。
 - **聚合 SQL**：只允许 SELECT，强制 `LIMIT` 与 5s 超时（`sql_guard`）；聚合表达式为
-  `agg(CAST(metric AS DOUBLE))`，按 `group_by` 分组并按分类升序，输出
-  `[{"category": str, "value": float|int|None}]`；空结果返回成功但不生成 figure/artifact，
-  文案明确「没有可绘制的数据」。
+  `agg(CAST(metric AS DOUBLE))`，按 `group_by` 分组；分类排序用数字前缀自然序
+  （`1月,2月,…,10月,11月,12月`，日期字符串按字典序），空分类归一为 `(空)` 而不是
+  字面量 `None`，输出 `[{"category": str, "value": float|int|None}]`；空结果返回成功但
+  不生成 figure/artifact，文案明确「没有返回可绘制数据」，metadata 仍保持本节冻结字段
+  （`chart_spec=None`、`artifact_id=""`、`artifact_version=0`、`png_path=""`、
+  `warnings=["没有可绘制的数据"]`）。
 - **ChartSpec**：内联 `data.source="inline"`，`data.rows` 即聚合结果，`encode={"x":"category",
   "y":"value"}`，`data.period="day"`、`data.range="1y"`、`data.adj="none"`、
   `data.time_semantics="none"`（分类轴不是时间轴），`annotations=[]`、`meta` 记录
-  `file_id`/`sheet`/`citation`/`group_by`/`metric`/`agg`。`title` 截断到 120 字符。
+  `file_id`/`sheet`/`citation`/`group_by`/`metric`/`agg`。`title` 只截断一次到 120 字符，
+  `chart_spec.title` 与 `metadata.title` 必须相同。
 - **引用**：`citation` 固定为 `《文件名》工作表「sheet」A1:B<n>`（含表头与全部数据行），
   `citations=[citation]`，`source="file:<文件名>"`；回答必须原样带该引用，审计可回查
   `file_id`/`sheet`/聚合口径。
@@ -93,12 +97,18 @@
   `png_path=""` 且 `warnings` 说明降级，工具仍成功、HTML artifact 仍可审计。
 - **ToolResult.metadata 冻结字段**：`file_id`、`file`、`sheet`、`citation`、`citations`、
   `title`、`chart_spec`、`artifact_id`、`artifact_version`、`artifact_path`、`png_path`、
-  `data_as_of`、`data_time`、`warnings`。`figure` 为 chart_service 产出的完整 HTML。
+  `png_mode`、`data_as_of`、`data_time`、`warnings`。`figure` 为 chart_service 产出的完整 HTML。
 - **会话 UI**：`collect_figures` 同时识别 `metadata["chart"]`（K 线）与
-  `metadata["chart_spec"]`（table_chart）；图表区展示 iframe、spec/来源/PNG 名称；
-  「图表导出」区提供本轮每个 figure 的 HTML（从内存写入 `%TEMP%/astock-agent-exports`）与真实 PNG 文件下载；
-  该目录必须通过 `agent_export_allowed_paths()` 加入 Gradio `allowed_paths`，否则 `/file=` 下载返回 403；
-  PNG 缺失时只给降级说明，不让整轮回答失败。
+  `metadata["chart_spec"]`（table_chart）；图注展示 iframe、spec/来源/PNG 名称。
+  `png_requested` 由 `png_path` 字段是否存在（或 `png_mode`/`export_png`）推导：
+  table_chart 请求 PNG（`auto`），K 线固定不请求 PNG，图注显示「PNG：不适用」，
+  不得误报成 kaleido/Chrome 降级。
+  「图表导出」区提供本轮每个 figure 的 HTML（从内存写入导出目录）与真实 PNG 文件；
+  导出目录默认 `%TEMP%/astock-agent-exports`，可用 `ASTOCK_AGENT_EXPORT_DIR` 覆盖，
+  写入前清理 7 天前或超过最近 50 个的旧文件。该目录必须通过
+  `agent_export_allowed_paths()` 加入 Gradio `allowed_paths`，否则 `/file=` 下载返回 403；
+  自动化用例启动本地 Gradio 服务并实际 GET `/gradio_api/file=...` HTML/PNG，不能只做
+  源码字符串断言。PNG 缺失时只给一次降级说明，不让整轮回答失败。
 - **评测**：xlsx-005 保持 `figure_contains`（`plotly-xlsx-005`、`bar 2026 monthly sales`）
   与 `chart_spec`（`kind=bar`、`data.source=inline`、`encode.x=category`、
   `encode.y=value`）断言，不得退化为纯文本断言。
