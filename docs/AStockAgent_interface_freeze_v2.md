@@ -3,7 +3,8 @@
 > 范围：在 v1（`docs/AStockAgent_interface_freeze_v1.md`）之上，冻结 2026-11-14 裁决的
 > 图表时点语义（Q1）、meta/provenance 与 correction（Q2）、artifact 逻辑身份与 `div_id`（Q3）、
 > 别名收口（Q4）、审计写入唯一入口（Q5/D9）、集合竞价与盘后 bar（Q7）、
-> 时间列契约（D10）与 transforms 统计口径（D11）。
+> 时间列契约（D10）、transforms 统计口径（D11），以及 `table_chart` 表格图表的
+> 权限/引用/PNG/UI 导出契约（§3.5，plan-20261124-001）。
 > 设计全文：`docs/AStockAgent_chart_audit_v2_change_spec.md`（724 行）。
 > 性质：本文件自 2026-11-19 起是图表/审计链路的**实现依据**；v1 正文对未涉及条目继续有效。
 > 任何签名、字段、枚举、表结构、目录布局的改动必须提新 ADR 并推进到 v3。
@@ -56,6 +57,61 @@
   回放 `as_recorded` 与 `recomputed` 分离：不一致只给 warning，不静默覆盖记录；
   回放同时用库内 `meta_digest` 校验 `meta_json`（绕过 correction 直接改库会被发现并拒绝回放，
   抛 `ArtifactReplayUnavailable`）。
+
+## 3.5 `table_chart` 表格图表契约（plan-20261124-001，2026-11-24 冻结）
+
+> 性质：`table_chart` 的权限、聚合口径、引用、artifact 审计与 UI 导出语义以本节为准；
+> v1 §3.4 的权限表继续有效，但 metadata 以本节字段为准（新增 `png_path`/`warnings`/`title`）。
+
+- **签名**：`astock/agent/tools/file_tools.py::table_chart(file_id, sheet, columns,
+  group_by, metric, *, agg="sum", chart_type="bar", title=None, limit=50, root=None,
+  audit_db_path=None, artifact_root=None, timeout_seconds=TABLE_TIMEOUT_SECONDS)
+  -> ToolResult`。
+- **权限**：只申请 `file:read` + `chart:render`（`build_file_registry` 的 ToolSpec 冻结），
+  不新增写权限；工具不能写 Excel 源文件，也不能绕过 `ArtifactReader` 读其他文件。
+  `columns` 必须 1–20 个、`group_by`/`metric` 必须在 `columns` 内；`agg` ∈
+  `sum|avg|count|min|max`，`chart_type` ∈ `bar|line`，`limit` ∈ 1..`MAX_QUERY_LIMIT`。
+- **聚合 SQL**：只允许 SELECT，强制 `LIMIT` 与 5s 超时（`sql_guard`）；聚合表达式为
+  `agg(CAST(metric AS DOUBLE))`，按 `group_by` 分组；分类排序用数字前缀自然序
+  （`1月,2月,…,10月,11月,12月`，日期字符串按字典序），空分类归一为 `(空)` 而不是
+  字面量 `None`，输出 `[{"category": str, "value": float|int|None}]`；空结果返回成功但
+  不生成 figure/artifact，文案明确「没有返回可绘制数据」，metadata 仍保持本节冻结字段
+  （`chart_spec=None`、`artifact_id=""`、`artifact_version=0`、`png_path=""`、
+  `warnings=["没有可绘制的数据"]`）。
+- **ChartSpec**：内联 `data.source="inline"`，`data.rows` 即聚合结果，`encode={"x":"category",
+  "y":"value"}`，`data.period="day"`、`data.range="1y"`、`data.adj="none"`、
+  `data.time_semantics="none"`（分类轴不是时间轴），`annotations=[]`、`meta` 记录
+  `file_id`/`sheet`/`citation`/`group_by`/`metric`/`agg`。`title` 只截断一次到 120 字符，
+  `chart_spec.title` 与 `metadata.title` 必须相同。
+- **引用**：`citation` 固定为 `《文件名》工作表「sheet」A1:B<n>`（含表头与全部数据行），
+  `citations=[citation]`，`source="file:<文件名>"`；回答必须原样带该引用，审计可回查
+  `file_id`/`sheet`/聚合口径。
+- **审计**：`table_chart` 只调用 `chart_service.render_chart` 落 artifact；meta 走
+  `chart_meta_v2`，`agent_artifacts` / `agent_artifact_versions` / `agent_run_artifacts`
+  由 chart_service 写。Agent 循环内经 `ToolContext` 落 `source="agent"` + 真实
+  `run_id`/`step`；直接调用落 `source="render"`、`run_id=NULL`。`db_path=None` 时用
+  `:memory:`，不触碰 `DEFAULT_DB_PATH`。artifact 行 append-only，修正只走
+  `tools/artifact_admin.py correct`。
+- **PNG**：固定 `export_png=True, png_mode="auto"`；有 kaleido/Chrome 时 metadata
+  `png_path` 为真实绝对路径、版本 meta 带 `png_path`/`png_digest`；不可用时
+  `png_path=""` 且 `warnings` 说明降级，工具仍成功、HTML artifact 仍可审计。
+- **ToolResult.metadata 冻结字段**：`file_id`、`file`、`sheet`、`citation`、`citations`、
+  `title`、`chart_spec`、`artifact_id`、`artifact_version`、`artifact_path`、`png_path`、
+  `png_mode`、`data_as_of`、`data_time`、`warnings`。`figure` 为 chart_service 产出的完整 HTML。
+- **会话 UI**：`collect_figures` 同时识别 `metadata["chart"]`（K 线）与
+  `metadata["chart_spec"]`（table_chart）；图注展示 iframe、spec/来源/PNG 名称。
+  `png_requested` 由 `png_path` 字段是否存在（或 `png_mode`/`export_png`）推导：
+  table_chart 请求 PNG（`auto`），K 线固定不请求 PNG，图注显示「PNG：不适用」，
+  不得误报成 kaleido/Chrome 降级。
+  「图表导出」区提供本轮每个 figure 的 HTML（从内存写入导出目录）与真实 PNG 文件；
+  导出目录默认 `%TEMP%/astock-agent-exports`，可用 `ASTOCK_AGENT_EXPORT_DIR` 覆盖，
+  写入前清理 7 天前或超过最近 50 个的旧文件。该目录必须通过
+  `agent_export_allowed_paths()` 加入 Gradio `allowed_paths`，否则 `/file=` 下载返回 403；
+  自动化用例启动本地 Gradio 服务并实际 GET `/gradio_api/file=...` HTML/PNG，不能只做
+  源码字符串断言。PNG 缺失时只给一次降级说明，不让整轮回答失败。
+- **评测**：xlsx-005 保持 `figure_contains`（`plotly-xlsx-005`、`bar 2026 monthly sales`）
+  与 `chart_spec`（`kind=bar`、`data.source=inline`、`encode.x=category`、
+  `encode.y=value`）断言，不得退化为纯文本断言。
 
 ## 5. `agent_*` 表结构口径（v2 实现口径，plan-20261107-008 已落地）
 

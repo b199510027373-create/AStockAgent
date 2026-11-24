@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+import os
 import shutil
+import socket
 import sqlite3
 import tempfile
 import threading
@@ -19,6 +21,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest import mock
+from urllib import parse as urlparse
+from urllib import request as urlrequest
 
 from astock.agent import (
     AgentRuntime,
@@ -37,10 +41,12 @@ from astock.agent.chat import (
     Attachment,
     ChatEvent,
     Citation,
+    Figure,
     attachment_note,
     attachment_summary,
     collect_citations,
     collect_figures,
+    export_figures,
     figure_embed_html,
     ingest_attachments,
     iter_answer_chunks,
@@ -327,7 +333,7 @@ class FigureTests(unittest.TestCase):
                 "chart": {
                     "title": "600519.SH 日线",
                     "spec": {"version": 1, "kind": "line", "data": {"source": "market"}},
-                    "warnings": ["PNG 导出失败"],
+                    "warnings": ["指标窗口不足"],
                 },
             },
         )
@@ -352,8 +358,10 @@ class FigureTests(unittest.TestCase):
         self.assertIn("查看图表 spec / 来源", markup)
         self.assertIn("&quot;version&quot;: 1", markup)
         self.assertIn("market://kline", markup)
-        self.assertIn("PNG 导出失败", markup)
+        self.assertIn("指标窗口不足", markup)
         self.assertIn("数据截至 2026-11-18", markup)
+        self.assertIn("PNG：不适用（该工具不导出 PNG）", markup)
+        self.assertNotIn("PNG：未生成", markup)
 
     def test_missing_time_points_write_unknown(self) -> None:
         result = ToolResult(figure="<html></html>", source="market://x")
@@ -361,6 +369,96 @@ class FigureTests(unittest.TestCase):
         self.assertIn("数据截至 时点未知", figure.caption)
         self.assertIn("数据时间 时点未知", figure.caption)
         self.assertIn("本轮回答还没有图表", render_figures_html([]))
+
+    def _table_chart_step(self, png_path: str = "") -> StepRecord:
+        """table_chart 的 metadata 形状：chart_spec / png_path，无 ``chart`` 包装。"""
+        result = ToolResult(
+            text="已生成柱状图",
+            figure='<html><body><div id="plotly-table"></div></body></html>',
+            source="file:月度销售.xlsx",
+            data_as_of="2026-03-31",
+            data_time="2026-03-31 00:00",
+            metadata={
+                "title": "月度销售",
+                "chart_spec": {
+                    "version": 1,
+                    "kind": "bar",
+                    "data": {"source": "inline"},
+                },
+                "artifact_id": "art_table",
+                "artifact_path": "data/agent/artifacts/art_table.html",
+                "png_path": png_path,
+                "png_mode": "auto",
+                "warnings": ["PNG 导出失败：Chrome 不可用"],
+            },
+        )
+        return step_with(result, tool="table_chart")
+
+    def test_collect_figures_reads_table_chart_metadata(self) -> None:
+        figure = collect_figures([self._table_chart_step("/tmp/art_table.png")])[0]
+        self.assertEqual(figure.tool, "table_chart")
+        self.assertEqual(figure.title, "月度销售")
+        self.assertEqual(figure.spec["kind"], "bar")
+        self.assertEqual(figure.png_path, "/tmp/art_table.png")
+        self.assertTrue(figure.png_requested)
+        self.assertEqual(figure.png_mode, "auto")
+        self.assertEqual(figure.data_as_of, "2026-03-31")
+        self.assertIn("PNG 导出失败", figure.warnings[0])
+
+    def test_export_figures_does_not_report_png_degradation_for_kline(self) -> None:
+        """K 线固定不导出 PNG，不能把设计选择写成 kaleido/Chrome 降级。"""
+        with _tempdir() as tmp:
+            figure = collect_figures([self._figure_step()])[0]
+            self.assertFalse(figure.png_requested)
+            paths, notes = export_figures([figure], out_dir=Path(tmp) / "exports")
+            self.assertEqual(len(paths), 1)
+            self.assertEqual(notes, [])
+
+    def test_export_figures_prunes_stale_files(self) -> None:
+        with _tempdir() as tmp:
+            exports = Path(tmp) / "exports"
+            exports.mkdir()
+            stale = exports / "stale.html"
+            stale.write_text("old", encoding="utf-8")
+            old = time.time() - 8 * 86400
+            os.utime(stale, (old, old))
+            figure = collect_figures([self._table_chart_step()])[0]
+            paths, _ = export_figures([figure], out_dir=exports)
+            self.assertFalse(stale.exists())
+            self.assertIn(str(exports / "art_table.html"), paths)
+
+    def test_export_figures_writes_html_and_reuses_png(self) -> None:
+        with _tempdir() as tmp:
+            png = Path(tmp) / "art_table.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+            figure = collect_figures([self._table_chart_step(str(png))])[0]
+            paths, notes = export_figures([figure], out_dir=Path(tmp) / "exports")
+            self.assertEqual(notes, [])
+            html_path = Path(tmp) / "exports" / "art_table.html"
+            self.assertIn(str(html_path), paths)
+            png_export = Path(tmp) / "exports" / "art_table.png"
+            self.assertIn(str(png_export), paths)
+            self.assertEqual(png_export.read_bytes(), png.read_bytes())
+            self.assertIn('id="plotly-table"', html_path.read_text(encoding="utf-8"))
+
+    def test_export_figures_reports_missing_png(self) -> None:
+        with _tempdir() as tmp:
+            figure = collect_figures([self._table_chart_step("")])[0]
+            paths, notes = export_figures([figure], out_dir=Path(tmp) / "exports")
+            self.assertEqual(len(paths), 1)
+            self.assertTrue(paths[0].endswith("art_table.html"))
+            self.assertIn("未生成 PNG", notes[0])
+
+    def test_embed_shows_png_availability(self) -> None:
+        with _tempdir() as tmp:
+            png = Path(tmp) / "art_table.png"
+            png.write_bytes(b"\x89PNG")
+            markup = figure_embed_html(
+                collect_figures([self._table_chart_step(str(png))])[0]
+            )
+            self.assertIn("PNG：art_table.png", markup)
+        missing = figure_embed_html(collect_figures([self._table_chart_step()])[0])
+        self.assertIn("PNG：未生成", missing)
 
 
 class CitationTests(unittest.TestCase):
@@ -867,6 +965,277 @@ class UiBuilderTests(unittest.TestCase):
             with gr.Blocks():
                 components = build_agent_chat_tab(db_path=db)
         self.assertEqual(components["controller"].db_path, db)
+
+    def test_table_chart_figure_and_exports_reach_ui(self) -> None:
+        """table_chart 的 figure/spec 必须显示，HTML/PNG 必须出现在下载区。"""
+        import gradio as gr
+
+        from astock.agent_chat_ui import build_agent_chat_tab
+
+        with _tempdir() as tmp:
+            png = Path(tmp) / "art_ui_table.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+            export_root = Path(tmp) / "exports"
+            result = ToolResult(
+                text="已生成柱状图",
+                figure=(
+                    '<html><body><div id="plotly-ui-table">'
+                    "月度销售</div></body></html>"
+                ),
+                source="file:月度销售.xlsx",
+                data_as_of="2026-03-31",
+                data_time="2026-03-31 00:00",
+                metadata={
+                    "title": "月度销售",
+                    "chart_spec": {"version": 1, "kind": "bar"},
+                    "artifact_id": "art_ui_table",
+                    "artifact_path": "artifacts/art_ui_table.html",
+                    "png_path": str(png),
+                    "warnings": [],
+                },
+            )
+            step = step_with(result, tool="table_chart")
+
+            class TableController:
+                def model_banner(self) -> str:
+                    return "离线桩"
+
+                def ask(self, text: str, attachments: Any = (), files: Any = ()):
+                    yield ChatEvent(kind="step", step=step, text="")
+                    yield ChatEvent(kind="answer", text="已生成图表。")
+                    yield ChatEvent(
+                        kind="done",
+                        text="已完成。",
+                        result=AgentRunResult(
+                            answer="已生成图表。",
+                            stop_reason=StopReason.COMPLETED,
+                            steps=[step],
+                            tokens_used=1,
+                            elapsed_seconds=0.1,
+                            session_id="s",
+                        ),
+                    )
+
+                def interrupt(self) -> str:
+                    return "已中断"
+
+                def new_session(self) -> None:
+                    return None
+
+            with mock.patch.dict(
+                os.environ, {"ASTOCK_AGENT_EXPORT_DIR": str(export_root)}
+            ):
+                with gr.Blocks():
+                    components = build_agent_chat_tab(controller=TableController())
+                frames = list(components["respond"]("画月度销售", [], [], []))
+            self.assertTrue((export_root / "art_ui_table.html").is_file())
+            self.assertTrue((export_root / "art_ui_table.png").is_file())
+        final = frames[-1]
+        self.assertIn("plotly-ui-table", final[3])
+        self.assertIn("查看图表 spec / 来源", final[3])
+        self.assertIn("PNG：art_ui_table.png", final[3])
+        self.assertEqual(len(final), 7)
+        exported = final[6]
+        self.assertTrue(any(str(item).endswith("art_ui_table.html") for item in exported))
+        self.assertTrue(any(str(item).endswith("art_ui_table.png") for item in exported))
+        self.assertEqual(components["export_files"].file_count, "multiple")
+
+    def test_missing_png_status_does_not_double_parentheses(self) -> None:
+        """PNG 缺失说明只带一对括号，不能被状态栏再包一层。"""
+        import gradio as gr
+
+        from astock.agent_chat_ui import build_agent_chat_tab
+
+        step = FigureTests()._table_chart_step("")
+
+        class MissingPngController:
+            def model_banner(self) -> str:
+                return "离线桩"
+
+            def ask(self, text: str, attachments: Any = (), files: Any = ()):
+                yield ChatEvent(kind="step", step=step, text="")
+                yield ChatEvent(kind="answer", text="已生成图表。")
+                yield ChatEvent(
+                    kind="done",
+                    text="已完成。",
+                    result=AgentRunResult(
+                        answer="已生成图表。",
+                        stop_reason=StopReason.COMPLETED,
+                        steps=[step],
+                        tokens_used=1,
+                        elapsed_seconds=0.1,
+                        session_id="s",
+                    ),
+                )
+
+            def interrupt(self) -> str:
+                return "已中断"
+
+            def new_session(self) -> None:
+                return None
+
+        with _tempdir() as tmp:
+            export_root = Path(tmp) / "exports"
+            with mock.patch.dict(
+                os.environ, {"ASTOCK_AGENT_EXPORT_DIR": str(export_root)}
+            ):
+                with gr.Blocks():
+                    components = build_agent_chat_tab(controller=MissingPngController())
+                final = list(components["respond"]("画月度销售", [], [], []))[-1]
+
+        self.assertIn("未生成 PNG", final[5])
+        self.assertEqual(final[5].count("（"), 1)
+        self.assertEqual(final[5].count("）"), 1)
+
+    def test_kline_without_png_is_not_reported_as_export_degradation(self) -> None:
+        """K 线不请求 PNG；状态栏/图注不能误报 kaleido/Chrome 降级。"""
+        import gradio as gr
+
+        from astock.agent_chat_ui import build_agent_chat_tab
+
+        with _tempdir() as tmp:
+            export_root = Path(tmp) / "exports"
+            result = ToolResult(
+                text="K 线已生成",
+                figure='<html><body><div id="plotly-kline">K</div></body></html>',
+                source="market://kline",
+                data_as_of="2026-11-18",
+                data_time="2026-11-18 15:00",
+                metadata={
+                    "artifact_id": "art_kline",
+                    "artifact_path": "artifacts/art_kline.html",
+                    "chart": {
+                        "title": "600519.SH 日线",
+                        "spec": {"version": 1, "kind": "line"},
+                    },
+                },
+            )
+            step = step_with(result, tool="kline")
+
+            class KlineController:
+                def model_banner(self) -> str:
+                    return "离线桩"
+
+                def ask(self, text: str, attachments: Any = (), files: Any = ()):
+                    yield ChatEvent(kind="step", step=step, text="")
+                    yield ChatEvent(kind="answer", text="K 线已生成。")
+                    yield ChatEvent(
+                        kind="done",
+                        text="已完成。",
+                        result=AgentRunResult(
+                            answer="K 线已生成。",
+                            stop_reason=StopReason.COMPLETED,
+                            steps=[step],
+                            tokens_used=1,
+                            elapsed_seconds=0.1,
+                            session_id="s",
+                        ),
+                    )
+
+                def interrupt(self) -> str:
+                    return "已中断"
+
+                def new_session(self) -> None:
+                    return None
+
+            with mock.patch.dict(
+                os.environ, {"ASTOCK_AGENT_EXPORT_DIR": str(export_root)}
+            ):
+                with gr.Blocks():
+                    components = build_agent_chat_tab(controller=KlineController())
+                final = list(components["respond"]("画 K 线", [], [], []))[-1]
+
+        self.assertIn("PNG：不适用（该工具不导出 PNG）", final[3])
+        self.assertNotIn("PNG：未生成", final[3])
+        self.assertNotIn("kaleido", final[5])
+        self.assertNotIn("Chrome", final[5])
+        self.assertNotIn("未生成 PNG", final[5])
+        self.assertTrue(any(str(item).endswith("art_kline.html") for item in final[6]))
+        self.assertFalse(any(str(item).endswith(".png") for item in final[6]))
+
+    def test_export_dir_is_configured_for_gradio_downloads(self) -> None:
+        """导出目录可配置，且必须落在 Gradio allowed_paths 内，否则下载 403。"""
+        from gradio import utils as gradio_utils
+
+        from astock.agent_chat_ui import (
+            agent_export_allowed_paths,
+            agent_export_dir,
+        )
+
+        with _tempdir() as tmp:
+            export_root = Path(tmp) / "exports"
+            with mock.patch.dict(
+                os.environ, {"ASTOCK_AGENT_EXPORT_DIR": str(export_root)}
+            ):
+                self.assertEqual(agent_export_dir(), export_root)
+                allowed_paths = agent_export_allowed_paths()
+                self.assertEqual(allowed_paths, [str(export_root)])
+                allowed, reason = gradio_utils.is_allowed_file(
+                    export_root / "art_table.html",
+                    blocked_paths=[],
+                    allowed_paths=allowed_paths,
+                    created_paths=[],
+                )
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "allowed")
+        # app.py 的 launch() 在 __main__ 下执行，单测无法启动服务；用静态断言锁住接线。
+        app_source = (Path(__file__).resolve().parents[1] / "app.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("allowed_paths=agent_export_allowed_paths()", app_source)
+
+    def test_gradio_serves_exported_html_and_png(self) -> None:
+        """启动真实 Gradio 服务，验证导出文件可通过 /file= 下载（AC-2 运行证据）。"""
+        import gradio as gr
+
+        from astock.agent_chat_ui import (
+            agent_export_allowed_paths,
+            agent_export_dir,
+        )
+
+        with _tempdir() as tmp:
+            png = Path(tmp) / "art_dl.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+            export_root = Path(tmp) / "exports"
+            figure = Figure(
+                step=1,
+                tool="table_chart",
+                html='<html><body><div id="plotly-download">下载</div></body></html>',
+                artifact_id="art_dl",
+                png_path=str(png),
+                png_requested=True,
+            )
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                port = sock.getsockname()[1]
+            with mock.patch.dict(
+                os.environ, {"ASTOCK_AGENT_EXPORT_DIR": str(export_root)}
+            ):
+                paths, notes = export_figures([figure], out_dir=agent_export_dir())
+                self.assertEqual(notes, [])
+                demo = gr.Blocks()
+                with demo:
+                    gr.File(value=paths, file_count="multiple", interactive=False)
+                demo.launch(
+                    server_name="127.0.0.1",
+                    server_port=port,
+                    prevent_thread_lock=True,
+                    allowed_paths=agent_export_allowed_paths(),
+                    quiet=True,
+                )
+                self.addCleanup(demo.close)
+                self.assertEqual(len(paths), 2)
+                for path in paths:
+                    url = f"{demo.local_api_url}file={urlparse.quote(path)}"
+                    with urlrequest.urlopen(url, timeout=10) as response:
+                        self.assertEqual(response.status, 200)
+                        content_type = response.headers.get_content_type()
+                        if path.endswith(".html"):
+                            self.assertEqual(content_type, "text/html")
+                            self.assertIn("plotly-download", response.read().decode())
+                        else:
+                            self.assertEqual(content_type, "image/png")
+                            self.assertTrue(response.read().startswith(b"\x89PNG"))
 
     def test_structured_history_is_not_stringified_as_repr(self) -> None:
         """Gradio 6 回传的 text block 列表必须还原成纯文本，不能显示成 dict 的 repr。"""

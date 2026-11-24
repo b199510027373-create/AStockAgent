@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -25,9 +27,11 @@ from astock.agent.chat import (
     AgentChatController,
     Attachment,
     Citation,
+    Figure,
     attachment_summary,
     collect_citations,
     collect_figures,
+    export_figures,
     ingest_attachments,
     render_citations_html,
     render_figures_html,
@@ -35,7 +39,12 @@ from astock.agent.chat import (
 )
 from astock.agent.types import AgentRunResult, StepRecord
 
-__all__ = ["build_agent_chat_tab"]
+__all__ = [
+    "AGENT_EXPORT_DIR",
+    "agent_export_allowed_paths",
+    "agent_export_dir",
+    "build_agent_chat_tab",
+]
 
 #: Chatbot 初始值（Gradio 6 的 messages 格式；键名固定为 role/content）。
 _EMPTY_HISTORY: list[Any] = []
@@ -44,6 +53,27 @@ _FILE_TYPES = [".pdf", ".docx", ".xlsx", ".xls", ".csv", ".txt", ".md"]
 
 _EMPTY_FIGURES = render_figures_html([])
 _EMPTY_CITATIONS = render_citations_html([])
+#: 图表导出目录：只放本轮可下载的 HTML/PNG；同一 artifact 重绘时覆盖同名文件。
+#: 可用 ``ASTOCK_AGENT_EXPORT_DIR`` 覆盖（测试/部署隔离），默认在系统临时目录。
+_DEFAULT_EXPORT_DIR = Path(tempfile.gettempdir()) / "astock-agent-exports"
+AGENT_EXPORT_DIR = _DEFAULT_EXPORT_DIR
+
+
+def agent_export_dir() -> Path:
+    """返回当前图表导出目录；环境变量在每次调用时生效，便于测试隔离。"""
+    override = os.environ.get("ASTOCK_AGENT_EXPORT_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return _DEFAULT_EXPORT_DIR
+
+
+def agent_export_allowed_paths() -> list[str]:
+    """返回启动 Gradio 时必须加入 ``allowed_paths`` 的导出目录。
+
+    Gradio 的 ``/file=`` 端点只服务上传目录、缓存目录和显式允许的路径；
+    不配置时浏览器下载导出文件会得到 403。
+    """
+    return [str(agent_export_dir())]
 
 
 def _paths(value: Any) -> list[str]:
@@ -116,6 +146,11 @@ def build_agent_chat_tab(
                 render_markdown=True,
             )
             figures_html = gr.HTML(value=_EMPTY_FIGURES)
+            export_files = gr.File(
+                label="图表导出（HTML / PNG，可多选下载）",
+                file_count="multiple",
+                interactive=False,
+            )
             with gr.Row():
                 message = gr.Textbox(
                     label="问题",
@@ -158,12 +193,21 @@ def build_agent_chat_tab(
         chat = _normalise_history(history)
         text = str(message or "").strip()
         if not text:
-            yield chat, "", gr.skip(), gr.skip(), gr.skip(), "请先输入问题。"
+            yield (
+                chat,
+                "",
+                gr.skip(),
+                gr.skip(),
+                gr.skip(),
+                "请先输入问题。",
+                gr.skip(),
+            )
             return
         chat.append({"role": "user", "content": text})
         chat.append({"role": "assistant", "content": ""})
         steps: list[StepRecord] = []
-        figures: list[Any] = []
+        figures: list[Figure] = []
+        exports_list: list[str] = []
         citations: list[Citation] = []
         # 引用定位要读盘/扫目录，只在引用集合变化时重算（评审 iss-mwmtt39d）。
         cite_key: tuple[tuple[Any, ...], ...] | None = None
@@ -187,6 +231,7 @@ def build_agent_chat_tab(
             render_figures_html([]),
             citations_block(),
             "正在分析问题…",
+            [],
         )
         try:
             for event in controller.ask(
@@ -216,6 +261,16 @@ def build_agent_chat_tab(
                             chat[-1]["content"] = result.answer
                     timeline = render_steps_html(steps)
                     status_text = event.text
+                    # 收尾时把本轮图表落成可下载文件；PNG 缺失只记降级说明，
+                    # 不让整轮回答失败（接口冻结 v2 §3.5 / ADR-016）。
+                    exports_list, export_notes = export_figures(
+                        figures, out_dir=agent_export_dir()
+                    )
+                    if export_notes:
+                        note = "；".join(export_notes)
+                        status_text = (
+                            f"{status_text}；{note}" if status_text else note
+                        )
                 else:  # pragma: no cover - 控制器只产出上述四类
                     continue
                 yield (
@@ -225,6 +280,7 @@ def build_agent_chat_tab(
                     render_figures_html(figures),
                     citations_block(),
                     status_text,
+                    exports_list,
                 )
         except Exception as exc:  # noqa: BLE001 - 页面不能因为一轮对话而白屏
             yield (
@@ -234,9 +290,18 @@ def build_agent_chat_tab(
                 render_figures_html(figures),
                 citations_block(),
                 f"⚠️ 本轮出错：{type(exc).__name__}: {exc}",
+                exports_list,
             )
 
-    outputs = [chatbot, message, steps_html, figures_html, citations_html, status]
+    outputs = [
+        chatbot,
+        message,
+        steps_html,
+        figures_html,
+        citations_html,
+        status,
+        export_files,
+    ]
 
     send.click(respond, [message, chatbot, attachments_state, uploader], outputs)
     message.submit(respond, [message, chatbot, attachments_state, uploader], outputs)
@@ -257,6 +322,7 @@ def build_agent_chat_tab(
             render_figures_html([]),
             render_citations_html([]),
             "已清空对话与上下文。",
+            [],
         ),
         None,
         outputs,
@@ -278,6 +344,7 @@ def build_agent_chat_tab(
         "steps_html": steps_html,
         "figures_html": figures_html,
         "citations_html": citations_html,
+        "export_files": export_files,
         "respond": respond,
         "handle_uploads": handle_uploads,
     }

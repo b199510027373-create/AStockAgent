@@ -154,7 +154,7 @@ jobs:
           ASTOCK_PNG_SAMPLE_DIR: ${{ github.workspace }}/png-artifacts
         run: |
           mkdir -p png-artifacts
-          python -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py -q -m png --timeout=180
+          python -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180
 
       - name: Upload PNG artifacts
         if: always()

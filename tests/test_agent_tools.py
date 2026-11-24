@@ -34,6 +34,7 @@ from astock import data as market
 from astock.agent import AgentRuntime, FakeModel, StopReason, ToolCall
 from astock.agent import files as F
 from astock.agent.registry import Permission, ToolArgumentError
+from astock.agent.store import PNG_DEGRADED_WARNING_PREFIX
 from astock.agent.tools import citations as C
 from astock.agent.tools import file_tools as T
 from astock.agent.tools import market_tools as M
@@ -655,6 +656,215 @@ def test_table_chart_renders_chart_spec_and_artifact(
     assert result.metadata["citation"] == "《月度销售.xlsx》工作表「月度销售」A1:B4"
     assert result.metadata["artifact_id"]
     assert (tmp_path / "artifacts" / result.metadata["artifact_path"]).is_file()
+    # PNG 走 auto 降级：本机可用时必须真实落盘；CI 主 job 无 Chrome 时允许仅 HTML，
+    # 但必须留下 warnings，真实 PNG 文件由 ``@pytest.mark.png`` 用例与独立 job 验证。
+    png_path = result.metadata["png_path"]
+    if png_path:
+        assert Path(png_path).is_file()
+        assert Path(png_path).read_bytes().startswith(b"\x89PNG")
+    else:
+        assert png_path == ""
+        assert any(
+            warning.startswith(PNG_DEGRADED_WARNING_PREFIX)
+            for warning in result.metadata["warnings"]
+        )
+
+    # artifact 审计：agent_artifacts + 版本 + run/step link 都可回查。
+    with sqlite3.connect(audit_db) as conn:
+        artifact = conn.execute(
+            "SELECT kind, path FROM agent_artifacts WHERE artifact_id = ?",
+            (result.metadata["artifact_id"],),
+        ).fetchone()
+        assert artifact is not None
+        assert artifact[0] == "chart"
+        version = conn.execute(
+            "SELECT version, meta_json FROM agent_artifact_versions "
+            "WHERE artifact_id = ? ORDER BY version",
+            (result.metadata["artifact_id"],),
+        ).fetchall()
+        assert [row[0] for row in version] == [1]
+        meta = json.loads(version[0][1])
+        assert (meta.get("png_path") or "") == png_path
+        assert meta["data_time"] == result.metadata["data_time"]
+        links = conn.execute(
+            "SELECT source, run_id, step FROM agent_run_artifacts "
+            "WHERE artifact_id = ?",
+            (result.metadata["artifact_id"],),
+        ).fetchall()
+        assert links == [("render", None, None)]
+
+
+def test_table_chart_empty_result_keeps_frozen_metadata_shape(
+    store: Path, db: Path, tmp_path: Path
+) -> None:
+    """空结果不生成 figure，但 metadata 必须与 §3.5 冻结字段一致。"""
+    source = _make_xlsx(
+        store.parent / "空表.xlsx",
+        {"空表": [["月份", "销售额"]]},
+    )
+    ingested = _ingest(source, store, db)
+    registry = T.build_file_registry(
+        root=store,
+        db_path=db,
+        audit_db_path=tmp_path / "audit.db",
+        artifact_root=tmp_path / "artifacts",
+    )
+    result = registry.invoke(
+        "table_chart",
+        {
+            "file_id": ingested.meta["file_id"],  # type: ignore[index]
+            "sheet": "空表",
+            "columns": ["月份", "销售额"],
+            "group_by": "月份",
+            "metric": "销售额",
+        },
+    )
+
+    assert result.error is None
+    assert result.figure is None
+    assert not result.table
+    assert "没有返回可绘制数据" in result.text
+    metadata = result.metadata
+    assert set(metadata) == {
+        "file_id",
+        "file",
+        "sheet",
+        "citation",
+        "citations",
+        "title",
+        "chart_spec",
+        "artifact_id",
+        "artifact_version",
+        "artifact_path",
+        "png_path",
+        "png_mode",
+        "data_as_of",
+        "data_time",
+        "warnings",
+    }
+    assert metadata["file"] == "空表.xlsx"
+    assert metadata["citations"] == [metadata["citation"]]
+    assert metadata["chart_spec"] is None
+    assert metadata["artifact_id"] == ""
+    assert metadata["artifact_version"] == 0
+    assert metadata["artifact_path"] == ""
+    assert metadata["png_path"] == ""
+    assert metadata["png_mode"] == "auto"
+    assert metadata["warnings"] == ["没有可绘制的数据"]
+
+
+def test_table_chart_truncates_title_once(
+    store: Path, db: Path, tmp_path: Path
+) -> None:
+    """spec 与 metadata 必须共享同一个 120 字截断结果。"""
+    source = _make_xlsx(
+        store.parent / "长标题.xlsx",
+        {"销售": [["月份", "销售额"], ["1月", 1]]},
+    )
+    ingested = _ingest(source, store, db)
+    # 直接调用工具函数：registry 的 JSON schema 先限 120 字，覆盖不到「默认标题
+    # 派生后超长」的截断路径；这里验证实现只截一次、spec 与 metadata 同源。
+    result = T.table_chart(
+        str(ingested.meta["file_id"]),  # type: ignore[index]
+        "销售",
+        ["月份", "销售额"],
+        "月份",
+        "销售额",
+        title="长" * 200,
+        root=store,
+        audit_db_path=tmp_path / "audit.db",
+        artifact_root=tmp_path / "artifacts",
+    )
+
+    assert result.error is None
+    title = result.metadata["title"]
+    assert len(title) == 120
+    assert result.metadata["chart_spec"]["title"] == title
+
+
+def test_table_chart_natural_orders_month_text_and_normalizes_null(
+    store: Path, db: Path, tmp_path: Path
+) -> None:
+    """文本月份按数字自然排序，空分类归一为 ``(空)`` 而不是 ``None``。"""
+    months = [12, 1, 10, 2, 11, 3, 9, 4, 8, 5, 7, 6]
+    source = _make_xlsx(
+        store.parent / "月份.xlsx",
+        {
+            "月度": [["月份", "销售额"]]
+            + [[f"{month}月", month] for month in months]
+            + [[None, 0]]
+        },
+    )
+    ingested = _ingest(source, store, db)
+    registry = T.build_file_registry(
+        root=store,
+        db_path=db,
+        audit_db_path=tmp_path / "audit.db",
+        artifact_root=tmp_path / "artifacts",
+    )
+    result = registry.invoke(
+        "table_chart",
+        {
+            "file_id": ingested.meta["file_id"],  # type: ignore[index]
+            "sheet": "月度",
+            "columns": ["月份", "销售额"],
+            "group_by": "月份",
+            "metric": "销售额",
+            "agg": "sum",
+        },
+    )
+
+    assert result.error is None
+    assert result.table is not None
+    categories = [row["category"] for row in result.table]
+    assert categories == [f"{month}月" for month in range(1, 13)] + ["(空)"]
+    assert all(category != "None" for category in categories)
+    assert result.metadata["chart_spec"]["data"]["rows"] == result.table
+
+
+@pytest.mark.png
+def test_table_chart_exports_real_png(store: Path, db: Path, tmp_path: Path) -> None:
+    """真实 Excel → table_chart → kaleido PNG（CI png-export job 执行）。"""
+    source = _make_xlsx(
+        store.parent / "月度销售.xlsx",
+        {
+            "月度销售": [
+                ["月份", "销售额"],
+                ["2026-01", 210000],
+                ["2026-02", 240000],
+                ["2026-03", 560000],
+            ]
+        },
+    )
+    ingested = _ingest(source, store, db)
+    registry = T.build_file_registry(
+        root=store,
+        db_path=db,
+        audit_db_path=tmp_path / "audit.db",
+        artifact_root=tmp_path / "artifacts",
+    )
+    result = registry.invoke(
+        "table_chart",
+        {
+            "file_id": ingested.meta["file_id"],  # type: ignore[index]
+            "sheet": "月度销售",
+            "columns": ["月份", "销售额"],
+            "group_by": "月份",
+            "metric": "销售额",
+            "chart_type": "bar",
+        },
+    )
+    assert result.error is None
+    # time_semantics=none 会带「视图时点未知」说明，但不得有 PNG 降级 warning。
+    assert not any(
+        warning.startswith(PNG_DEGRADED_WARNING_PREFIX)
+        for warning in result.metadata["warnings"]
+    )
+    png_path = result.metadata["png_path"]
+    assert png_path
+    png = Path(png_path)
+    assert png.is_file()
+    assert png.read_bytes().startswith(b"\x89PNG")
 
 
 # ---------------------------------------------------------------------------
@@ -877,13 +1087,31 @@ def test_runtime_custom_audit_db_routes_table_chart_artifact(
     assert step.result is not None
     assert step.result.error is None
     assert step.result.figure
+    assert step.result.metadata["chart_spec"]["kind"] == "bar"
+    png_path = step.result.metadata["png_path"]
+    if png_path:
+        assert Path(png_path).is_file()
+    else:
+        assert png_path == ""
+        assert any(
+            warning.startswith(PNG_DEGRADED_WARNING_PREFIX)
+            for warning in step.result.metadata["warnings"]
+        )
     with sqlite3.connect(audit_db) as conn:
         run = conn.execute("SELECT run_id FROM agent_runs").fetchone()
         assert run is not None
         linked = conn.execute(
-            "SELECT COUNT(*) FROM agent_run_artifacts WHERE run_id = ?", (run[0],)
+            "SELECT source FROM agent_run_artifacts WHERE run_id = ?", (run[0],)
+        ).fetchall()
+        assert linked and linked[0][0] == "agent"
+        version = conn.execute(
+            "SELECT meta_json FROM agent_artifact_versions WHERE artifact_id = ?",
+            (step.result.metadata["artifact_id"],),
         ).fetchone()
-        assert linked is not None and linked[0] >= 1
+        assert version is not None
+        version_meta = json.loads(version[0])
+        assert (version_meta.get("png_path") or "") == png_path
+        assert version_meta["data_as_of"] == step.result.metadata["data_as_of"]
     assert (artifact_root / step.result.metadata["artifact_path"]).is_file()
 
 

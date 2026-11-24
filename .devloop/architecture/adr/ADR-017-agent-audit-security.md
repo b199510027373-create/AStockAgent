@@ -124,3 +124,42 @@ Agent 会读用户文件、查行情、画图、调用多个工具。一旦没�
 - **meta 摘要校验**：`ArtifactRecord.meta_digest` 取自库内版本行；回放时校验
   `meta_digest(meta_json) == meta_digest`，不一致抛 `ArtifactReplayUnavailable`（绕过 correction 改库可被发现）。
   验收：`tests/test_agent_chart_render.py::test_replay_verifies_stored_meta_digest_and_rejects_tampering`。
+
+
+## 评审回填（2026-11-24，plan-20261124-001 / table_chart 产品化）
+- **权限边界不变**：`table_chart` 只申请 `file:read` + `chart:render`，不新增
+  `file:write`/`ledger:write`；读取范围仍受文件清单与 `columns` 白名单约束，
+  聚合 SQL 由 `sql_guard` 强制 SELECT + 自动 LIMIT + 5s 超时。权限矩阵与接口见
+  `docs/AStockAgent_interface_freeze_v2.md` §3.5。
+- **审计入口唯一**：`table_chart` 不自己写 artifact，只把聚合结果组装成 ChartSpec v1
+  后调用 `chart_service.render_chart`；由后者写 `agent_artifacts` /
+  `agent_artifact_versions` / `agent_run_artifacts`，并经 `ToolContext` 把
+  link 挂到真实 `run_id`/`step`（`source='agent'`）；无 run 上下文时保持
+  `source='render'`、`run_id=NULL`。`db_path=None` 时用 `:memory:`，不污染
+  `DEFAULT_DB_PATH`。
+- **引用语义**：metadata 必带 `citation`（`《文件名》工作表「sheet」A1:Bn`）与
+  `citations` 列表；`source` 为 `file:<文件名>`，`file_id`/`sheet`/`group_by`/
+  `metric`/`agg` 一并入库，回答可回查聚合口径。空结果不生成 figure/artifact，但
+  metadata 仍返回 §3.5 冻结的完整字段集（`chart_spec=None`、`artifact_id=""`、
+  `artifact_version=0`、`png_path=""` 等），避免调用方按字段存在性判断产物类型。
+  分类聚合对文本数字前缀做自然序（`1月…12月`），SQL `NULL` 归一为 `(空)`，不把
+  `"None"` 当分类；`title` 只截断一次到 120 字符，spec 与 metadata 同源。
+- **PNG 降级**：`table_chart` 以 `export_png=True, png_mode="auto"` 调用渲染；
+  有 kaleido/Chrome 时 metadata 带真实 `png_path` 并写入版本 meta（含
+  `png_digest`）；不可用时仅 HTML + `warnings`（前缀 `PNG 导出降级`），工具不失败、
+  artifact 仍可审计。会话 UI 以 `png_requested` 区分「请求了但降级」与「该工具本就
+  不导出 PNG」（K 线 `export_png=False`，图注显示「PNG：不适用」，不得误报
+  kaleido/Chrome 失败）。下载区只展示真实存在的 PNG，缺失时状态栏只追加一次降级说明；
+  HTML/PNG 统一写入 `agent_export_dir()`（默认 `%TEMP%/astock-agent-exports`，可用
+  `ASTOCK_AGENT_EXPORT_DIR` 覆盖，写入前清理 7 天前或最近 50 个之外的旧文件），
+  启动时经 `agent_export_allowed_paths()` 加入 Gradio `allowed_paths`，避免 `/file=`
+  端点因路径不在白名单而 403。验收不只做源码字符串断言：
+  `tests/test_agent_chat.py::test_gradio_serves_exported_html_and_png` 启动本地
+  Gradio，实际 GET `/gradio_api/file=...` 断言 HTML/PNG 200 与 content-type。
+- **验收**：`tests/test_agent_tools.py::test_table_chart_renders_chart_spec_and_artifact`
+  （聚合/引用/artifact/版本/link 审计）、`::test_runtime_custom_audit_db_routes_table_chart_artifact`
+  （真实 Excel → runtime → run link）、`::test_table_chart_exports_real_png`
+  （`png` marker，独立 CI job）、`::test_table_chart_empty_result_keeps_frozen_metadata_shape`、
+  `::test_table_chart_natural_orders_month_text_and_normalizes_null`、
+  `::test_table_chart_truncates_title_once`，以及 `tests/test_agent_chat.py` 的
+  table_chart figure / PNG 导出 / K 线不误报 / UI 下载区与真实 HTTP 下载用例。

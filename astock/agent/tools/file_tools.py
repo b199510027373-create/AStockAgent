@@ -603,9 +603,15 @@ def table_chart(
         if agg == "count"
         else f"{agg.upper()}(CAST({metric_ident} AS DOUBLE))"
     )
+    group_ident = _quote_identifier(group_by)
+    # Excel 空分类会变成 SQL NULL；直接 str() 会得到字面量 "None"。
+    # 文本月份（1月..12月）按数字前缀自然排序，避免 1,10,11,12,2… 的字典序。
+    category_expr = f"COALESCE(CAST({group_ident} AS VARCHAR), '(空)')"
+    natural_key = f"TRY_CAST(regexp_extract({category_expr}, '^[0-9]+', 0) AS BIGINT)"
     sql = (
-        f"SELECT {_quote_identifier(group_by)} AS category, "
-        f"{metric_expr} AS value FROM t GROUP BY 1 ORDER BY 1"
+        f"SELECT {category_expr} AS category, "
+        f"{metric_expr} AS value FROM t GROUP BY 1 "
+        f"ORDER BY {natural_key} NULLS LAST, {category_expr}"
     )
     queried = query_table(
         file_id,
@@ -616,23 +622,43 @@ def table_chart(
         timeout_seconds=timeout_seconds,
     )
     rows = [
-        {"category": str(row.get("category")), "value": row.get("value")}
+        {
+            "category": "(空)" if row.get("category") is None else str(row.get("category")),
+            "value": row.get("value"),
+        }
         for row in (queried.table or [])
     ]
     citation = str((queried.metadata or {}).get("citation") or "")
     file_name = str((queried.metadata or {}).get("file") or file_id)
+    chart_title = (title or f"{metric} 按 {group_by}").strip() or f"{metric} 按 {group_by}"
+    chart_title = chart_title[:120]
     if not rows:
         return ToolResult(
             text=f"{citation} 查询没有返回可绘制数据。",
             source=f"file:{file_name}",
-            metadata={"citation": citation, "file_id": file_id, "sheet": sheet},
+            metadata={
+                "file_id": file_id,
+                "file": file_name,
+                "sheet": sheet,
+                "citation": citation,
+                "citations": [citation],
+                "title": chart_title,
+                "chart_spec": None,
+                "artifact_id": "",
+                "artifact_version": 0,
+                "artifact_path": "",
+                "png_path": "",
+                "png_mode": "auto",
+                "data_as_of": "",
+                "data_time": "",
+                "warnings": ["没有可绘制的数据"],
+            },
         )
 
-    chart_title = (title or f"{metric} 按 {group_by}").strip() or f"{metric} 按 {group_by}"
     spec = {
         "version": 1,
         "kind": chart_type,
-        "title": chart_title[:120],
+        "title": chart_title,
         "data": {
             "source": "inline",
             "rows": rows,
@@ -669,12 +695,17 @@ def table_chart(
         step=context.step if context is not None else None,
         session_id=context.session_id if context is not None else None,
         include_plotlyjs="inline",
-        export_png=False,
+        # 会话 UI 需要直接下载 PNG；``auto`` 在 kaleido/Chrome 不可用时降级为仅 HTML，
+        # 不把一次表格绘图打成工具失败（ADR-016 / 接口冻结 v2 §3.5）。
+        export_png=True,
+        png_mode="auto",
     )
+    warnings = [str(item) for item in rendered.warnings]
     return ToolResult(
         text=(
             f"{citation} 已生成{chart_type}图：{len(rows)} 个分类，"
             f"图表产物 {rendered.artifact_id}。"
+            + (f"；{'；'.join(warnings)}" if warnings else "")
         ),
         table=rows,
         figure=rendered.html,
@@ -685,10 +716,16 @@ def table_chart(
             "sheet": sheet,
             "citation": citation,
             "citations": [citation],
+            "title": chart_title,
             "chart_spec": rendered.spec,
             "artifact_id": rendered.artifact_id,
             "artifact_version": rendered.artifact_version,
             "artifact_path": rendered.path,
+            "png_path": rendered.png_path or "",
+            "png_mode": "auto",
+            "data_as_of": rendered.data_as_of,
+            "data_time": rendered.data_time,
+            "warnings": warnings,
         },
     )
 

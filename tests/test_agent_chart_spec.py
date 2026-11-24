@@ -702,3 +702,41 @@ def test_freeze_v1_doc_documents_both_bbox_classes() -> None:
     assert "row_start" not in draft
     assert "x0,y0,x1,y1" not in draft
 
+
+def test_freeze_v2_and_adr17_document_table_chart_contract() -> None:
+    """table_chart 的权限/审计/引用/PNG 语义必须写进冻结文档与 ADR-017。"""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    doc = (root / "docs" / "AStockAgent_interface_freeze_v2.md").read_text(encoding="utf-8")
+    assert "## 3.5 `table_chart` 表格图表契约" in doc
+    for marker in (
+        "file:read",
+        "chart:render",
+        "chart_spec",
+        "png_path",
+        "export_png=True",
+        "agent_artifact_versions",
+        "A1:B<n>",
+        "xlsx-005",
+        "allowed_paths",
+        "png_mode",
+        "(空)",
+        "ASTOCK_AGENT_EXPORT_DIR",
+        "/gradio_api/file=",
+    ):
+        assert marker in doc, marker
+
+    adr = (
+        root / ".devloop" / "architecture" / "adr" / "ADR-017-agent-audit-security.md"
+    ).read_text(encoding="utf-8")
+    assert "plan-20261124-001" in adr
+    assert "table_chart" in adr
+    assert "source='render'" in adr
+    assert "png_mode=\"auto\"" in adr
+    assert "agent_export_allowed_paths()" in adr
+    assert "png_requested" in adr
+    assert "(空)" in adr
+    assert "ASTOCK_AGENT_EXPORT_DIR" in adr
+    assert "test_gradio_serves_exported_html_and_png" in adr
+
