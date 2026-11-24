@@ -1,0 +1,135 @@
+{
+  "id": "ho-20261124-012",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261114-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "2026-11-24 现有数据试跑：11-23/11-24 连续 success，旧窗口失败仍阻断 report 5",
+  "summary": "按用户要求用现有数据试跑收盘流水线。2026-11-24 close job 于 16:58:21 第 1 次尝试、16:59:44 success（attempts=1，late_by_min=18.3，run_id rec_20261124T165821_552f72ac）；11-23 close 于 18:31:51 第 2 次尝试 success（attempts=2，late_by_min=110.8）。--report 1 退出 0、all_success=true；--heartbeat 退出 0、streak=0、last_success=11-24；--once --slot close 再次执行被幂等跳过（exit 0）。--report 5 仍为 false（passed=3/5），因为窗口内仍含 11-18、11-20 两个修复前 failed；11-27 收盘后窗口才会完全覆盖 11-23..11-27。计划任务 AStockAgent-Plan007-CloseJob 正常运行（LastTaskResult=0，NextRun 11-24 19:15）。",
+  "requirements": [
+    {
+      "id": "REQ-004-01",
+      "text": "先修复 EventFrame 空 code 导致的推荐 job 失败，补至少 1 条回归用例",
+      "source": "plan-20261114-004 acceptance[0]；已由 plan-20261121-001 / PR #43 / 442fbb9 完成"
+    },
+    {
+      "id": "REQ-004-02",
+      "text": "最新 main 上 tests/test_scheduler_ledger.py + tests/test_hardening.py 通过",
+      "source": "plan-20261114-004 acceptance[1]；main 已验证 837 passed"
+    },
+    {
+      "id": "REQ-004-03",
+      "text": "修复后连续 5 个交易日 python -m astock.jobs --report 5 全 success，留存报告",
+      "source": "plan-20261114-004 acceptance[2]；当前 11-23、11-24 已 success，11-25..11-27 待跑"
+    },
+    {
+      "id": "REQ-004-04",
+      "text": "心跳告警在阈值 2 个交易日未 success 时触发，1 日不触发，签名去重有效",
+      "source": "plan-20261114-004 acceptance[3]；单测覆盖，线上 streak=0"
+    },
+    {
+      "id": "REQ-004-05",
+      "text": "jobs 表 running 超时恢复 failed、到期未跑登记 pending、late_by_min 计算正确",
+      "source": "plan-20261114-004 acceptance[4]；11-23/24 的 attempts/late_by_min 已落库"
+    },
+    {
+      "id": "REQ-004-06",
+      "text": "异常场景（空台账、长期停摆）不误报；验收结果写回 plan-20261103-007 或新 issue",
+      "source": "plan-20261114-004 acceptance[5]；单测覆盖，结果回写 plan-20261114-004"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/events.py",
+      "summary": "本轮无新增代码；研报空 ts_code 过滤已由 plan-20261121-001 合入 main（442fbb9）",
+      "commit": "442fbb9"
+    },
+    {
+      "path": "tests/test_data_pit_events.py",
+      "summary": "研报空 code 回归测试已合入 main，本轮仅复跑验证",
+      "commit": "442fbb9"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-004.json",
+      "summary": "验收进度更新为 doing/40%，links.test 写入 4 条现场命令与结果",
+      "commit": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": ".\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --report 1",
+      "result": "exit 0; 2026-11-24 success, all_success=true",
+      "passed": true,
+      "evidence": "rows: 2026-11-24 success attempts=1 late_by_min=18.3 as_of=2026-11-24"
+    },
+    {
+      "command": ".\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --heartbeat",
+      "result": "exit 0; ok=true, initialized=true, streak=0, missed_days=[], last_success=2026-11-24, alerted=false",
+      "passed": true,
+      "evidence": "heartbeat JSON on 2026-11-24 19:14"
+    },
+    {
+      "command": ".\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --report 5",
+      "result": "exit 1; all_success=false, passed=3/5",
+      "passed": false,
+      "evidence": "11-18 failed(7), 11-19 success(4), 11-20 failed(11), 11-23 success(2), 11-24 success(1); 旧窗口失败，非新回归"
+    },
+    {
+      "command": ".\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --once --slot close",
+      "result": "exit 0; 2026-11-24 已完成，幂等跳过，未重复执行",
+      "passed": true,
+      "evidence": "attempts 仍为 1，latest.json 写时间仍为 16:59:44"
+    },
+    {
+      "command": "pytest tests/test_data_pit_events.py -q（main 442fbb9）",
+      "result": "29 passed",
+      "passed": true,
+      "evidence": "研报空 code 回归用例已包含"
+    },
+    {
+      "command": "pytest tests -q（main 442fbb9）",
+      "result": "837 passed, 3 skipped, 18 subtests passed",
+      "passed": true,
+      "evidence": "全量回归"
+    },
+    {
+      "command": ".\\\\.venv\\\\Scripts\\\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 44 source files",
+      "passed": true,
+      "evidence": "类型检查"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "local-scheduler-run",
+      "reason": "本机运行 astock.jobs 与 Windows 计划任务 AStockAgent-Plan007-CloseJob",
+      "status": "granted"
+    },
+    {
+      "name": "market-data-access",
+      "reason": "收盘 job 读取现有行情/研报数据并生成 latest.json",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "442fbb9",
+    "pr": "#43",
+    "ci": "passed (44882349342 test/png; main 44884766645 等)",
+    "merge": "442fbb9",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "继续观察 2026-11-25、11-26、11-27 三个交易日：每日 16:45 计划任务自动跑 close；每日可用 --report 1 与 --heartbeat 抽查。11-27 收盘后运行 python -m astock.jobs --report 5，确认 exit 0、all_success=true、5 行均为 success，并确认 data/recommendations/acceptance_5d.ok 生成；若任一日失败，需重开 5 日窗口。完成后把 plan-20261114-004 置 done 并补最终 handoff。",
+  "createdAt": "2026-11-24T11:15:36.908Z",
+  "markdownPath": ".devloop/handoffs/ho-20261124-012.md"
+}

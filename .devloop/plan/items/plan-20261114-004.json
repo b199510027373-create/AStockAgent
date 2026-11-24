@@ -2,14 +2,14 @@
   "id": "plan-20261114-004",
   "title": "PR #9 调度 5 日生产验收与心跳告警观察",
   "description": "PR #9（plan-20261103-007）已合并 a9c1248，jobs 表状态机与心跳告警进入 main；合并时仅完成 50 个自动化测试，真实交易日 5 日全 success 验收需在产线执行。2026-11-21 复核 `python -m astock.jobs --report 5`：11/16 failed、11/17 failed、11/18 failed、11/19 success、11/20 failed，仅 1/5 通过；失败原因是推荐流水线抛 ContractError: [EventFrame] 列 code 存在空值（例如公告/研报映射缺失），不是调度状态机失败。目标改为：先修复 EventFrame 空 code 的根因并补回归，再从修复后的交易日重新累计连续 5 个交易日（11/23–11/27），确认 pending/running/success、attempts、late_by_min、heartbeat 告警与去重均符合预期。",
-  "status": "todo",
+  "status": "doing",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
   "start": "2026-11-23",
   "due": "2026-11-27",
   "estimateH": 4,
-  "progress": 0,
+  "progress": 40,
   "acceptance": [
     "先修复 EventFrame 空 code 导致的推荐 job 失败，补至少 1 条回归用例（空 code 事件被过滤/补齐，不再打断整批）",
     "最新 main 上 tests/test_scheduler_ledger.py + tests/test_hardening.py 通过",
@@ -35,8 +35,15 @@
     "module": [
       "jobs",
       "scheduler"
+    ],
+    "branch": "main",
+    "test": [
+      "`.\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --report 1` → exit 0; 2026-11-24 success, all_success=true",
+      "`.\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --heartbeat` → exit 0; ok=true, streak=0, last_success=2026-11-24, alerted=false",
+      "`.\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --report 5` → exit 1; passed=3/5 (11-23 success, 11-24 success; 11-18/11-20 旧窗口 failed)",
+      "`.\\\\.venv\\\\Scripts\\\\python.exe -m astock.jobs --once --slot close` → exit 0; 已完成跳过，未重复执行"
     ]
   },
   "createdAt": "2026-11-13T19:08:42.795Z",
-  "updatedAt": "2026-11-21T07:39:46.983Z"
+  "updatedAt": "2026-11-24T11:15:18.385Z"
 }
