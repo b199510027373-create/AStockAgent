@@ -9,7 +9,7 @@
   "start": "2026-12-03",
   "due": "2026-12-03",
   "estimateH": 3,
-  "progress": 95,
+  "progress": 97,
   "acceptance": [
     "table_chart 的权限、审计与引用语义写入 ADR/接口契约",
     "会话 UI 能展示 table_chart 的 figure 并支持 PNG/HTML 导出",
@@ -33,15 +33,19 @@
     "branch": "feat/plan-20261124-001-table-chart",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/49",
     "test": [
-      "1) .venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_chart_spec.py tests/test_agent_tools.py -q --basetemp=.tmp-tests/pytest-run-<stamp> → 151 passed, 1 warning",
-      "2) .venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" --basetemp=.tmp-tests/pytest-run-<stamp> → 942 passed, 3 skipped, 6 deselected, 46 subtests passed",
-      "3) .venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 → 6 passed, 48 deselected",
-      "4) .venv\\Scripts\\python.exe -m ruff check astock tests → All checks passed",
-      "5) .venv\\Scripts\\python.exe -m mypy astock app.py → Success, no issues in 45 source files",
-      "6) PR #49 CI run 45228173131：test + png-export 均 SUCCESS；head 0161ed6"
+      "1) 评审修复后 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_tools.py tests/test_agent_chart_spec.py -q --basetemp=.tmp-tests/pytest-run-review4 → 159 passed, 3 warnings（含 test_gradio_serves_exported_html_and_png：真实 Gradio 启动后 GET /gradio_api/file= HTML/PNG 均 200）",
+      "2) 评审修复后 .venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" --timeout=120 --basetemp=.tmp-tests/pytest-run-final2 → 950 passed, 3 skipped, 6 deselected, 46 subtests passed",
+      "3) 评审修复后 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 --basetemp=.tmp-tests/pytest-run-reviewpng → 6 passed, 51 deselected",
+      "4) .venv\\Scripts\\ruff.exe check astock tests → All checks passed；.venv\\Scripts\\mypy.exe astock app.py → Success, no issues in 45 source files",
+      "5) 评审修复提交 d62d59d 的 PR #49 CI run 45346904939：test (2m22s) + png-export (1m4s) 均 SUCCESS",
+      "6) 首轮 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_chart_spec.py tests/test_agent_tools.py -q → 151 passed；首轮全量 tests -m \"not png\" → 942 passed",
+      "7) 首轮 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 → 6 passed, 48 deselected",
+      "8) 首轮 ruff check astock tests → All checks passed；mypy astock app.py → Success, 45 source files",
+      "9) 首轮 PR #49 CI run 45228173131：test + png-export 均 SUCCESS；head 0161ed6",
+      "10) 注入目标：test_table_chart_empty_result_keeps_frozen_metadata_shape / test_table_chart_natural_orders_month_text_and_normalizes_null / test_table_chart_truncates_title_once / test_kline_without_png_is_not_reported_as_export_degradation / test_missing_png_status_does_not_double_parentheses 全部包含在 159 passed 内"
     ]
   },
   "createdAt": "2026-11-23T16:20:29.429Z",
-  "updatedAt": "2026-11-24T05:06:30.558Z",
+  "updatedAt": "2026-11-24T07:20:35.276Z",
   "devSessionId": "session-a91f4e33-41ee-46f5-89e2-ac5e6a097d9e"
 }
