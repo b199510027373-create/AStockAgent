@@ -2,14 +2,14 @@
   "id": "plan-20261124-001",
   "title": "table_chart 表格图表能力：契约、UI 集成与 PNG 导出",
   "description": "承接 plan-20261107-009 评审 P1：本轮已在 file_tools 增加 table_chart（table_query 聚合 → ChartSpec v1 → chart_service 渲染/审计），并让 xlsx-005 评测断言 figure/ChartSpec。本计划项负责把该能力产品化：补充 ADR/接口冻结文档、UI/会话图表展示与 PNG 导出、真实数据端到端测试及权限/审计边界复核。初始实现随 009 交付，本项跟踪后续硬化，避免能力只存在于评测桩中。",
-  "status": "doing",
+  "status": "in_review",
   "priority": "P2",
   "milestone": "ms-agent",
   "owner": "human",
   "start": "2026-12-03",
   "due": "2026-12-03",
   "estimateH": 3,
-  "progress": 5,
+  "progress": 95,
   "acceptance": [
     "table_chart 的权限、审计与引用语义写入 ADR/接口契约",
     "会话 UI 能展示 table_chart 的 figure 并支持 PNG/HTML 导出",
@@ -30,9 +30,18 @@
       "ADR-017"
     ],
     "module": "agent",
-    "branch": "feat/plan-20261107-009-agent-evals"
+    "branch": "feat/plan-20261124-001-table-chart",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/49",
+    "test": [
+      "1) .venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_chart_spec.py tests/test_agent_tools.py -q --basetemp=.tmp-tests/pytest-run-<stamp> → 151 passed, 1 warning",
+      "2) .venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" --basetemp=.tmp-tests/pytest-run-<stamp> → 942 passed, 3 skipped, 6 deselected, 46 subtests passed",
+      "3) .venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 → 6 passed, 48 deselected",
+      "4) .venv\\Scripts\\python.exe -m ruff check astock tests → All checks passed",
+      "5) .venv\\Scripts\\python.exe -m mypy astock app.py → Success, no issues in 45 source files",
+      "6) PR #49 CI run 45228173131：test + png-export 均 SUCCESS；head 0161ed6"
+    ]
   },
   "createdAt": "2026-11-23T16:20:29.429Z",
-  "updatedAt": "2026-11-23T17:02:04.618Z",
+  "updatedAt": "2026-11-24T05:06:30.558Z",
   "devSessionId": "session-a91f4e33-41ee-46f5-89e2-ac5e6a097d9e"
 }
