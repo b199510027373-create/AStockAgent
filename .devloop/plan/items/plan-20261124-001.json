@@ -9,7 +9,7 @@
   "start": "2026-12-03",
   "due": "2026-12-03",
   "estimateH": 3,
-  "progress": 97,
+  "progress": 98,
   "acceptance": [
     "table_chart 的权限、审计与引用语义写入 ADR/接口契约",
     "会话 UI 能展示 table_chart 的 figure 并支持 PNG/HTML 导出",
@@ -37,7 +37,7 @@
       "2) 评审修复后 .venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" --timeout=120 --basetemp=.tmp-tests/pytest-run-final2 → 950 passed, 3 skipped, 6 deselected, 46 subtests passed",
       "3) 评审修复后 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 --basetemp=.tmp-tests/pytest-run-reviewpng → 6 passed, 51 deselected",
       "4) .venv\\Scripts\\ruff.exe check astock tests → All checks passed；.venv\\Scripts\\mypy.exe astock app.py → Success, no issues in 45 source files",
-      "5) 评审修复提交 d62d59d 的 PR #49 CI run 45346904939：test (2m22s) + png-export (1m4s) 均 SUCCESS",
+      "5) 代码修复提交 d62d59d：PR #49 CI run 45346904939 test (2m24s) + png-export (1m4s) 均 SUCCESS；计划证据提交 63326cd：CI run 45347288366 双绿",
       "6) 首轮 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_chart_spec.py tests/test_agent_tools.py -q → 151 passed；首轮全量 tests -m \"not png\" → 942 passed",
       "7) 首轮 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 → 6 passed, 48 deselected",
       "8) 首轮 ruff check astock tests → All checks passed；mypy astock app.py → Success, 45 source files",
@@ -46,6 +46,6 @@
     ]
   },
   "createdAt": "2026-11-23T16:20:29.429Z",
-  "updatedAt": "2026-11-24T07:20:35.276Z",
+  "updatedAt": "2026-11-24T07:59:37.245Z",
   "devSessionId": "session-a91f4e33-41ee-46f5-89e2-ac5e6a097d9e"
 }
