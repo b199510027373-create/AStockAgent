@@ -2,14 +2,14 @@
   "id": "plan-20261109-001",
   "title": "backfill 推荐 JSON 接入 RecommendationRun 契约，ledger 拒绝无 schema_version 的入库",
   "description": "评审 rev-20261108-001 第 3 轮 P2（iss-mw81x690-cbec5c）：astock/backfill.py:120-130 写出的 recommend_*.json 缺 schema_version/run_id/data_as_of/tradable_from/diagnostics，ledger.py:346-353 sync_json_dir 仍以 legacy run_id 收进 SQLite，导致 schema_version/tradable_from 为 NULL，DATA-01 无法自证。修复方向：(1) backfill 组装 payload 后调用 validate_recommendation_run，补齐 schema_version=2、run_id=backfill_YYYYMMDD、data_as_of、tradable_from（next_open_date 推导）、diagnostics；(2) ledger.sync_json_dir 跳过或显式标注无 schema_version 的文件，补测试。",
-  "status": "backlog",
+  "status": "in_review",
   "priority": "P2",
   "milestone": "ms-contracts",
   "owner": "human",
   "start": "2026-12-21",
   "due": "2026-12-22",
   "estimateH": 4,
-  "progress": 0,
+  "progress": 90,
   "acceptance": [
     "backfill 写出的 JSON 带 schema_version=2/run_id/data_as_of/tradable_from/diagnostics 且过 validate_recommendation_run",
     "ledger.sync_json_dir 对无 schema_version 的文件有显式处理（跳过或标 legacy）并有测试",
@@ -29,8 +29,17 @@
     ],
     "module": "contracts",
     "review": "rev-20261108-001",
-    "issue": "iss-mw81x690-cbec5c"
+    "issue": "iss-mw81x690-cbec5c",
+    "branch": "feat/plan-20261109-001-backfill-contract",
+    "test": [
+      "pytest tests/test_backfill_ledger_contract.py tests/test_contracts.py tests/test_research_semantics.py tests/test_scheduler_ledger.py -q => 91 passed",
+      "pytest tests -q -m \"not png\" => 958 passed, 3 skipped, 6 deselected in 276.60s",
+      "ruff check astock tests => All checks passed",
+      "mypy astock app.py => Success: no issues found in 45 source files",
+      "coverage (local, tests -m not png) => TOTAL 81.34% (fail_under 80.56)"
+    ]
   },
   "createdAt": "2026-11-08T16:42:55.179Z",
-  "updatedAt": "2026-11-21T07:38:12.952Z"
+  "updatedAt": "2026-11-27T20:05:51.052Z",
+  "devSessionId": "session-b33a5664-99c6-4f2d-b2c1-2e55ce110763"
 }

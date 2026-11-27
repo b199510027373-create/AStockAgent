@@ -6,6 +6,8 @@ from datetime import datetime
 import pandas as pd
 
 from .config import BASE_DIR
+from .contracts import validate_recommendation_run
+from .data import next_open_date
 from .events import stock_basic
 from .recommend import (
     _action,
@@ -124,8 +126,19 @@ def backfill_technical(
                     "理由": r["reason"],
                 }
             )
+        next_open = next_open_date(date)
+        tradable_from = (
+            pd.Timestamp(next_open).strftime("%Y-%m-%d")
+            if next_open is not None
+            else (date + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+        )
+        generated_at = datetime.now().isoformat(timespec="seconds")
         payload = {
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "schema_version": 2,
+            "run_id": f"backfill_{date:%Y%m%d}",
+            "generated_at": generated_at,
+            "data_as_of": key,
+            "tradable_from": tradable_from,
             "as_of": key,
             "source": "backfill_technical",
             "market": (
@@ -134,6 +147,9 @@ def backfill_technical(
             ),
             "params": {"candidate_n": int(candidate_n), "pool_size": pool_n},
             "diagnostics": {
+                "generated_at": generated_at,
+                "data_as_of": key,
+                "tradable_from": tradable_from,
                 "candidate_n": pool_n,
                 "percentile_basis": "candidate_pool",
                 "candidate_pool": [
@@ -144,8 +160,12 @@ def backfill_technical(
             "table": table,
             "evidence": {},
         }
+        payload = validate_recommendation_run(payload, source="backfill_technical")
         path = REC_DIR / f"recommend_{date:%Y%m%d}_backfill.json"
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False),
+            encoding="utf-8",
+        )
         created += 1
         existing.add(key)
         if progress is not None:
