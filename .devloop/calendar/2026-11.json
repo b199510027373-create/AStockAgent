@@ -1226,6 +1226,16 @@
       "notes": "由计划项自动生成"
     },
     {
+      "id": "cal-rev-20261128-001-r1",
+      "type": "review",
+      "title": "评审：评审：PR #9 调度 5 日生产验收与心跳告警观察",
+      "start": "2026-11-27T16:00:27.541Z",
+      "end": "2026-11-27T16:03:20.377Z",
+      "planItemId": "plan-20261114-004",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · request_changes"
+    },
+    {
       "id": "cal-plan-20261114-002-planned",
       "type": "planned",
       "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
