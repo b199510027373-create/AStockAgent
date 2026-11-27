@@ -33,6 +33,7 @@
     "branch": "feat/plan-20261124-001-table-chart",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/49",
     "merge": "PR #49 merged 2026-11-24T08:35:53Z as 9fe4a47ce9475d7ec66a3548bedfa005ab2bfe83; CI run 45352310856 test+png-export SUCCESS",
+    "review": "rev-20261124-001: 7/7 fixed, 0 open; thread status pending reviewer finish",
     "test": [
       "1) 评审修复后 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_tools.py tests/test_agent_chart_spec.py -q --basetemp=.tmp-tests/pytest-run-review4 → 159 passed, 3 warnings（含 test_gradio_serves_exported_html_and_png：真实 Gradio 启动后 GET /gradio_api/file= HTML/PNG 均 200）",
       "2) 评审修复后 .venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" --timeout=120 --basetemp=.tmp-tests/pytest-run-final2 → 950 passed, 3 skipped, 6 deselected, 46 subtests passed",
@@ -43,10 +44,14 @@
       "7) 首轮 .venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 → 6 passed, 48 deselected",
       "8) 首轮 ruff check astock tests → All checks passed；mypy astock app.py → Success, 45 source files",
       "9) 首轮 PR #49 CI run 45228173131：test + png-export 均 SUCCESS；head 0161ed6",
-      "10) 注入目标：test_table_chart_empty_result_keeps_frozen_metadata_shape / test_table_chart_natural_orders_month_text_and_normalizes_null / test_table_chart_truncates_title_once / test_kline_without_png_is_not_reported_as_export_degradation / test_missing_png_status_does_not_double_parentheses 全部包含在 159 passed 内"
+      "10) 注入目标：test_table_chart_empty_result_keeps_frozen_metadata_shape / test_table_chart_natural_orders_month_text_and_normalizes_null / test_table_chart_truncates_title_once / test_kline_without_png_is_not_reported_as_export_degradation / test_missing_png_status_does_not_double_parentheses 全部包含在 159 passed 内",
+      "11) 2026-11-28 复核：.venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_tools.py tests/test_agent_chart_spec.py -q --basetemp=.tmp-tests/pytest-run-ledger → 159 passed, 3 warnings（workspace-write 首跑因沙箱 ACL 写 .tmp-tests/*/index.html 假失败 6 例 PermissionError；同一命令 danger-full-access 重跑通过，含真实 Gradio /file= 下载用例）",
+      "12) 2026-11-28 复核：.venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" --timeout=120 --basetemp=.tmp-tests/pytest-run-final3 → 950 passed, 3 skipped, 6 deselected, 46 subtests passed in 305.92s",
+      "13) 2026-11-28 复核：png 套件首跑 5 passed / 1 failed（test_chinese_candlestick_png_renders_glyphs 报 ReferenceError: kaleido_scopes is not defined，kaleido 1.5.1+Chrome 首帧竞态；astock/agent/chart_render.py:1450-1452 已注释并按 _try_png 重试一次）；同命令 --basetemp=.tmp-tests/pytest-run-png-final2 复跑 → 6 passed, 51 deselected in 51.91s。CI run 45352310856（head 17822de）png-export SUCCESS，判为本地抖动，残余风险见 developer handoff",
+      "14) 2026-11-28 复核：.venv\\Scripts\\ruff.exe check astock tests → All checks passed!（RUFF_EXIT=0）；.venv\\Scripts\\mypy.exe astock app.py → Success: no issues found in 45 source files（MYPY_EXIT=0）"
     ]
   },
   "createdAt": "2026-11-23T16:20:29.429Z",
-  "updatedAt": "2026-11-24T08:36:58.402Z",
-  "devSessionId": "session-a91f4e33-41ee-46f5-89e2-ac5e6a097d9e"
+  "updatedAt": "2026-11-27T16:15:55.867Z",
+  "devSessionId": "session-c86122e0-e51c-46a7-8dfc-5896f2eef8ea"
 }
