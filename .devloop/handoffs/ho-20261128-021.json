@@ -1,0 +1,110 @@
+{
+  "id": "ho-20261128-021",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261117-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "收口更新：main bda93f5 绿，plan done，评审线程 approved",
+  "summary": "收口交付：在 ho-20261128-018（PR #51 → adace9d）基础上，把 post-merge 第 3 轮复核（approve，openP0/P1/P2=0）与评审交付文档写入仓库并推到 main —— ①提交 bda93f5 记录 rounds/3.{json,md}、ho-20261128-020、thread.json（approved）与 worklog/calendar；②main CI run 46057831095 (bda93f5) success；③plan-20261117-001 已 done(100)，评审线程 rev-20261128-002 approved。至此本任务无未决项，PR/CI/main 状态稳定。",
+  "requirements": [
+    {
+      "id": "A1",
+      "text": "Ruff 无 per-file-ignores 且 check 0 —— done（ruff.toml 无该节，test_ruff_config_has_no_per_file_exemptions 守护）",
+      "source": "plan-20261117-001 acceptance[0]"
+    },
+    {
+      "id": "A2",
+      "text": "22 条存量逐条审计 —— done（实测 23 条：8 收窄 / 5 suppress / 15 边界保留且带理由，审计表见 ho-20261128-018）",
+      "source": "plan-20261117-001 acceptance[1]"
+    },
+    {
+      "id": "A3",
+      "text": "5 文档正向断言、改错必红 —— done（含 mypy 文件数、passed、覆盖率；变异自证 8 条）",
+      "source": "plan-20261117-001 acceptance[2]"
+    },
+    {
+      "id": "A4",
+      "text": "stale 标记去裸 50% —— done（「覆盖率门槛 50%」等上下文标记 + 两条语义用例）",
+      "source": "plan-20261117-001 acceptance[3]"
+    },
+    {
+      "id": "A5",
+      "text": "全量 pytest / mypy 45 files / ruff 0 / CI 绿 —— done（本地 953 passed，CI 952 passed，TOTAL 80.56%）",
+      "source": "plan-20261117-001 acceptance[4]"
+    },
+    {
+      "id": "A6",
+      "text": "更新 rev-20261117-001 与 handoff、plan-20261103-012 链接本项 —— done（rev-20261117-001 两条 P2 fixed；plan-20261103-012 links.followup 含本项）",
+      "source": "plan-20261117-001 acceptance[5]"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/scheduler.py",
+      "summary": "（同 ho-20261128-018）无变化",
+      "commit": "adace9d"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "（同 ho-20261128-018）5 文件正向断言 + mypy 文件数/CI passed 断言 + 8 条变异自证 + astock 全量 BLE001 理由守护",
+      "commit": "adace9d"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261117-001.json",
+      "summary": "in_review（95）→ 由收口流程置 done（100），links 记录 PR #50/#51、两 commit、两 review 线程、handoff 012/013/014/018/020",
+      "commit": "56f6e63"
+    },
+    {
+      "path": ".devloop/reviews/rev-20261128-002/thread.json",
+      "summary": "评审线程置 approved（post-merge 第 3 轮复核），归档旧 handoff",
+      "commit": "3944256"
+    },
+    {
+      "path": ".devloop/reviews/rev-20261128-002/rounds/3.json",
+      "summary": "第 3 轮 full 复核 approve：openP0=0/P1=0/P2=0；记录 ho-20261128-020（reviewer）与 worklog/calendar",
+      "commit": "bda93f5"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 46057831095",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "收口记录提交（仅 .devloop）触发 main 全量 CI"
+    },
+    {
+      "command": "gh run list --branch main --limit 5",
+      "result": "main 连续四次绿",
+      "passed": true,
+      "evidence": "46056739376 adace9d / 46057174799 56f6e63 / 46057588539 3944256 / 46057831095 bda93f5 均 success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI 写权限",
+      "reason": "gh 已登录；push 需绕过失效本地代理 127.0.0.1:7890",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main（工作分支 feat/plan-20261117-001-* 均已 squash 合并删除）",
+    "commit": "adace9d（代码）→ 56f6e63 / 3944256 / bda93f5（DevLoop 记录）",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/51（已 merged）",
+    "ci": "PR run 46056498460 success；main run 46056739376 (adace9d) success；main run 46057174799 (56f6e63) success；main run 46057588539 (3944256) success；main run 46057831095 (bda93f5) success",
+    "merge": "PR #51 squash 合并 adace9d；收口记录 3944256、bda93f5 直接推 main",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-018",
+  "next": "本项已收口：plan-20261117-001 = done(100)，评审线程 rev-20261128-002 = approved。可归档 handoff/评审轮次；后续可选新计划项：ruff format 纳入门禁、P3 族（RUF001-003/B905）。",
+  "createdAt": "2026-11-27T19:38:13.888Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-021.md"
+}
