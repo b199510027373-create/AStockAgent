@@ -6,8 +6,8 @@
   "priority": "P2",
   "milestone": "ms-contracts",
   "owner": "human",
-  "start": "2026-12-21",
-  "due": "2026-12-22",
+  "start": "2026-11-29",
+  "due": "2026-11-30",
   "estimateH": 4,
   "progress": 100,
   "acceptance": [
@@ -18,7 +18,8 @@
   "tags": [
     "contracts",
     "backfill",
-    "ledger"
+    "ledger",
+    "wave-0"
   ],
   "deps": [
     "plan-20261103-001"
@@ -28,14 +29,7 @@
       "ADR-002"
     ],
     "branch": "feat/plan-20261109-001-backfill-contract",
-    "ci": "PR run 46063703330 success; main run 46064470258 success (5b47503); closeout run 46064880414 success (54730bf)",
-    "files": [
-      "astock/backfill.py",
-      "astock/ledger.py",
-      "tests/test_backfill_ledger_contract.py",
-      "tests/test_contracts.py",
-      "tests/test_research_semantics.py"
-    ],
+    "ci": "PR run 46063703330 success; main run 46064470258 success (5b47503); closeout run 46064880414 success (54730bf); closeout recheck run 46065248812 success (7d383a9)",
     "issue": "iss-mw81x690-cbec5c",
     "merge": "5b47503 (squash, PR #53, main 2026-11-28)",
     "module": "contracts",
@@ -43,15 +37,23 @@
     "review": "rev-20261128-004",
     "test": [
       "pytest tests/test_backfill_ledger_contract.py -q => 7 passed in 6.04s",
-      "pytest tests -q -m \"not png\" => 961 passed, 3 skipped, 6 deselected, 46 subtests passed in 282.38s",
-      "ruff check astock tests => All checks passed",
-      "mypy astock app.py => Success: no issues found in 45 source files",
+      "pytest tests/test_backfill_ledger_contract.py tests/test_contracts.py -q => 49 passed in 28.24s (2026-11-28 recheck on main 7d383a9)",
+      "pytest tests -q -m \"not png\" => 961 passed, 3 skipped, 6 deselected, 46 subtests passed in 259.86s (2026-11-28 recheck on main 7d383a9)",
+      "ruff check astock tests => All checks passed (2026-11-28 recheck)",
+      "mypy astock app.py => Success: no issues found in 45 source files (2026-11-28 recheck)",
       "PR #53 CI run 46063703330 => test pass 2m22s, png-export pass 55s",
       "main CI run 46064470258 (5b47503) => test pass 1m58s, png-export pass 1m16s",
-      "main CI run 46064880414 (54730bf closeout) => test pass, png-export pass"
+      "main CI run 46064880414 (54730bf closeout) => test pass, png-export pass",
+      "main CI run 46065248812 (7d383a9 closeout) => success, 1m55s"
+    ],
+    "files": [
+      "astock/backfill.py",
+      "astock/ledger.py",
+      "tests/test_backfill_ledger_contract.py",
+      "tests/test_contracts.py"
     ]
   },
   "createdAt": "2026-11-08T16:42:55.179Z",
-  "updatedAt": "2026-11-27T20:39:33.797Z",
-  "devSessionId": "session-b33a5664-99c6-4f2d-b2c1-2e55ce110763"
+  "updatedAt": "2026-11-27T21:04:27.049Z",
+  "devSessionId": "session-07430863-8683-4229-9c1b-3188e42c476e"
 }
