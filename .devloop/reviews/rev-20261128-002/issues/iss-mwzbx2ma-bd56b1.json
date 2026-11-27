@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwzbx2ma-bd56b1",
+  "threadId": "rev-20261128-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "documentation",
+  "file": ".coveragerc",
+  "lines": "15-24,41,44",
+  "title": "文档/守护基线仍锁 2026-11-17 快照，与本项自己 CI 实测矛盾（覆盖率 76.45% vs 80.56%、mypy 36 vs 45 files、610 vs 952 passed），且 A3 点名的 architecture:107 里 mypy 数字未被守护",
+  "evidence": ".coveragerc:16「本 PR CI Linux（2026-11-17, run 43935079016）：9248 stmts / 2178 miss = 76.45%（门禁权威值）」、:17「本地 Windows（…610 passed）：9248 / 2157 = 76.68%」、:41「P1（当前）：76.45% —— 等于 CI 实测显示值」、:44 fail_under = 76.45，全部是 2026-11-17 的数字。而本项交付 handoff ho-20261128-012 记录的 CI run 46047574586（同一分支）：952 passed / 4 skipped、coverage TOTAL 12474 stmts / 2425 miss = 80.56%，mypy「Success 45 source files」，本地 953 passed。\n由此 5 个受守护文档全部与实测脱节：docs/AStockAgent_architecture_v1.3.md:107「覆盖全部非 UI 模块（36 个源文件 Success）…覆盖率门槛 76.45%（=CI Linux 实测显示值，本地 76.68%）」；docs/AStockAgent_CI_work_calendar.md:11、:144「610 passed, 1 skipped, 5 deselected」、:146「Success: no issues found in 36 source files」、:187「CI Linux 76.45%（9248/2178）本地 76.68%（9248/2157）」；docs/AStockAgent_development_status_2026-11-08.md:142/:145；docs/AStockAgent_product_snapshot_v1.3.md:51；README.md:23。\n事实核对：astock 下 53 个 .py，mypy.ini:4 exclude 9 个 UI 模块 ⇒ 44 受检 + app.py = 45，与 handoff 的「45 files」自洽；docs 的「36 个源文件」是 plan-20261103-012 时期的旧计数。tests/test_ci_quality_gates.py 的 _doc_baseline_problems 只断言从 .coveragerc 注释解析出来的 (stmts, miss, pct, passed)，因此：(a) 谁按实测把 docs 改成 952 passed / 80.56% / 45 files，守护立刻变红；(b) architecture_v1.3.md:107 恰好是 A3 点名要守的行，而这一行的「36 个源文件」不在任何 required 片段里，改错也不会红（同行的「覆盖率门槛 76.45%」「本地 76.68%」才被守）。另 tests/test_ci_quality_gates.py 的 EXPECTED_CHECKED_MODULES=44 上方注释写「astock 下共 52 个 .py…= 43 个受检 + app.py = CI 日志里的 44 files」，52/43/44 三个数与实测 53/44/45 全部对不上。",
+  "suggestion": "由开发在同一个 PR 内三件事一起做：(1) 用本项 CI run 46047574586 的真实值重写 .coveragerc:15-28 的基线注释（CI 12474/2425=80.56%、952 passed；本地 953 passed 及本地覆盖率实测值），并按 .coveragerc:28「以 CI 实测为准、只升不降」处理 fail_under：要么升到 80.56，要么在 :41 显式写「本项未同步 ratchet，保留 76.45 的理由 + 下次复核时点」——现在 :41 的「等于 CI 实测显示值」已是假命题，不能两种都不做；(2) 同步 5 个文档里被守护的数字（mypy 45 files、952 passed、80.56%），尤其把 architecture_v1.3.md:107、CI_work_calendar.md:146 的「36 个源文件」改为与 CI 日志一致的 45 files；(3) 把 mypy 文件数与 pytest 用例数也纳入 _doc_baseline_problems（mypy 数从 EXPECTED_CHECKED_MODULES+1 推导、用例数从 .coveragerc 解析），并修正 EXPECTED_CHECKED_MODULES 上方 52/43/44 的注释。判定完全解决：`grep -rn \"36 个源文件\" docs/ README.md` 为空；docs 里任一受守护数字（含 mypy 文件数、passed 数、覆盖率）被改错时 test_docs_baseline_guard_goes_red_on_wrong_numbers 变红；ruff/mypy/pytest 仍全绿。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "fixed in adace9d (PR #51, squash-merged): .coveragerc 以 CI run 46047574586 为权威数据源重写（CI Linux 12474/2425=80.56%、952 passed；本地 12474/2395=80.80%、953 passed，旧值仅作对照），fail_under 与 MIN_COVERAGE_FLOOR 同步 76.45→80.56（评审选项 1）；5 文档 + README 同步 45 source files / 953 passed / 80.56%，architecture:107「36 个源文件」已改 45；_doc_baseline_problems 新增 mypy 文件数（EXPECTED_CHECKED_MODULES+1）与 CI passed 正向断言，52/43/44 注释改 53/44/45；变异自证扩到 8 个数字（arch 45→46、日历 952→951 等均变红）。CI run 46056498460 全绿：ruff 0、mypy 45 files、952 passed、TOTAL 80.56%。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-27T19:30:00.000Z"
+  },
+  "createdAt": "2026-11-27T18:42:59.842Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "fixed in adace9d (PR #51, squash-merged): .coveragerc 以 CI run 46047574586 为权威数据源重写（CI Linux 12474/2425=80.56%、952 passed；本地 12474/2395=80.80%、953 passed，旧值仅作对照），fail_under 与 MIN_COVERAGE_FLOOR 同步 76.45→80.56（评审选项 1）；5 文档 + README 同步 45 source files / 953 passed / 80.56%，architecture:107「36 个源文件」已改 45；_doc_baseline_problems 新增 mypy 文件数（EXPECTED_CHECKED_MODULES+1）与 CI passed 正向断言，52/43/44 注释改 53/44/45；变异自证扩到 8 个数字（arch 45→46、日历 952→951 等均变红）。CI run 46056498460 全绿：ruff 0、mypy 45 files、952 passed、TOTAL 80.56%。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-27T19:30:00.000Z"
+    }
+  ]
+}

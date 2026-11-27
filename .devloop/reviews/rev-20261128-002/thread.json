@@ -1,0 +1,13 @@
+{
+  "id": "rev-20261128-002",
+  "title": "评审：观察期后收口：Ruff 豁免移除与文档基线守护加固",
+  "planItemId": "plan-20261117-001",
+  "sourceDevSessionId": "session-c468f8e2-c39d-4e4d-a7fb-ebb0adfeb569",
+  "branch": "feat/plan-20261117-001-ruff-docs-guard (merged)",
+  "base": "main",
+  "files": [],
+  "status": "changes_requested",
+  "createdAt": "2026-11-27T18:40:12.337Z",
+  "updatedAt": "2026-11-27T18:43:16.504Z",
+  "reviewSessionId": "session-ca03fb8f-f642-48b1-9757-2fbb85d347b9"
+}

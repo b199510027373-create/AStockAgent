@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwzbx2no-cbaa41",
+  "threadId": "rev-20261128-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test-coverage",
+  "file": "ruff.toml",
+  "lines": "16-19",
+  "title": "ruff.toml 新写的「BLE001 必须写理由」策略句声称由测试守护，但该用例只扫 scheduler.py/jobs.py，全仓 11 处无理由 noqa 未被覆盖",
+  "evidence": "ruff.toml 新增的策略段（:16-19）把约定写成全仓规则：「BLE001 只允许出现在兜底处且必须写理由」「tests/test_ci_quality_gates.py::test_blind_except_exemptions_carry_reasons 守护这条约定」。但该用例的 FILES 只含 (\"astock/scheduler.py\", \"astock/jobs.py\")（tests/test_ci_quality_gates.py:349），全仓另有 11 处 `# noqa: BLE001` 完全不带理由：astock/ui.py:217、astock/backtest_ui.py:57、astock/factor_ui.py:29、astock/optimize_ui.py:113、astock/strategy_ui.py:66、astock/track_ui.py:13、astock/llm.py:72、astock/recommend.py:125、astock/recommend.py:148、astock/agent/runtime.py:703、astock/use_cases.py:773。策略句与守护范围不一致，读 ruff.toml 的人会误以为「noqa 一定有理由」已被 CI 强制。",
+  "suggestion": "二选一，二选一后必须自洽：(a) 把 ruff.toml:16-19 的策略句限定为实际范围——「调度/任务边界（astock/scheduler.py、astock/jobs.py）的 BLE001 必须写理由，其余模块暂不强制」；(b) 把 test_blind_except_exemptions_carry_reasons 的遍历范围扩到 astock/ 全量（rglob(\"astock/**/*.py\")），接受上述 11 处立即转红，逐条补「 - 理由」或删除多余 noqa（UI 模块的理由可按「UI 事件回调边界，异常不应打断界面」统一模板）。判定完全解决：ruff.toml 的策略措辞与用例实际扫描范围一致，`ruff check astock tests` 仍为 0，且人为删掉 scheduler.py 任一 noqa 理由时用例变红。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "fixed in adace9d (PR #51): 选方案 b——test_blind_except_exemptions_carry_reasons 扫描范围扩到 astock/**/*.py，11 处无理由 noqa 全部补语义理由（UI 事件回调边界 ×6、llm 模式探活、recommend 单票加载 ×2、agent/runtime 写 failed 兜底、use_cases 净值图降级），运行时行为未变；ruff.toml 策略段改为全仓措辞并注明守护范围。删掉 scheduler.py 任一 BLE001 理由时用例变红（变异自证实测 3 failed）。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-27T19:30:00.000Z"
+  },
+  "createdAt": "2026-11-27T18:42:59.892Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "fixed in adace9d (PR #51): 选方案 b——test_blind_except_exemptions_carry_reasons 扫描范围扩到 astock/**/*.py，11 处无理由 noqa 全部补语义理由（UI 事件回调边界 ×6、llm 模式探活、recommend 单票加载 ×2、agent/runtime 写 failed 兜底、use_cases 净值图降级），运行时行为未变；ruff.toml 策略段改为全仓措辞并注明守护范围。删掉 scheduler.py 任一 BLE001 理由时用例变红（变异自证实测 3 failed）。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-27T19:30:00.000Z"
+    }
+  ]
+}

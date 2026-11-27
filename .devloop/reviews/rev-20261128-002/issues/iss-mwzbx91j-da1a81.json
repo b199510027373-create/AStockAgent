@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwzbx91j-da1a81",
+  "threadId": "rev-20261128-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "evidence",
+  "file": ".devloop/handoffs/ho-20261128-012.md",
+  "lines": "22,52",
+  "title": "A2 交付证据与代码不符：handoff 称「保留 6 处 BLE001」，astock/scheduler.py 实测 15 处，另外 9 处是否经过逐条审计无从查证",
+  "evidence": "handoff ho-20261128-012 两处写「保留的 6 处 BLE001 边界兜底（_is_trading_day、startup_maintenance×3、run_once 外层、_acquire_lock）全部补写理由」（.devloop/handoffs/ho-20261128-012.md:22），并把评审动作写成「复核 A2 的 6 处保留 BLE001」（.devloop/handoffs/ho-20261128-012.md:52）。实测 `grep -n \"noqa: BLE001\" astock/scheduler.py` 返回 15 处：scheduler.py:80、:162、:419、:424、:429、:434、:473、:514、:528、:548、:606、:610、:618、:632、:661（每条理由均非空，代码本身没问题）。差额 9 处（162 迁移单条脏数据、514 台账预检、528 读 job 状态、548 写 running、606 跟踪结算、618 写 failed 状态、632 loop 启动自检、661 loop 单轮异常）不在 handoff 清单里，无法据交付文档判断这些站点是否经过 A2 要求的「逐条审计、能收窄则收窄」判断，评审只能重新做一遍审计。",
+  "suggestion": "下一份 update handoff 里把 A2 的审计表补全为 scheduler.py 全部 15 处 noqa: BLE001 的逐条清单：行号 + 站点 + 结论（保留/收窄/改 suppress）+ 保留理由是否已在代码注释里。同时注明 8 处收窄与 3 处 suppress 改写的对应行（_log/_recent_trading_days/_release_lock），以及 heartbeat_check 告警写盘由 Exception 收窄为 OSError 的语义变化。判定完全解决：handoff 清单行号与 `grep -n \"noqa: BLE001\" astock/scheduler.py` 输出一一对应，且 scheduler.py:462 附近 migrate/read/write 各站点的收窄理由与代码注释一致（不接受「6 处」这类与实测不符的计数）。",
+  "confidence": 0.88,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "addressed in ho-20261128-018 (update handoff, kind=update, previous=ho-20261128-014): 补全 scheduler.py 15 处 BLE001 逐条审计表（:80/:162/:419/:424/:429/:434/:473/:514/:528/:548/:606/:610/:618/:632/:661，均保留且已有理由），并列出 8 处收窄（:47/:67/:104/:179/:237/:244/:257/:357）、5 处 suppress（:38/:119/:474/:485/:495）与 heartbeat 写盘 Exception→OSError 的语义变化；原 ho-20261128-012 的「6 处」计数已更正为 15。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-27T19:30:00.000Z"
+  },
+  "createdAt": "2026-11-27T18:43:08.167Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "addressed in ho-20261128-018 (update handoff, kind=update, previous=ho-20261128-014): 补全 scheduler.py 15 处 BLE001 逐条审计表（:80/:162/:419/:424/:429/:434/:473/:514/:528/:548/:606/:610/:618/:632/:661，均保留且已有理由），并列出 8 处收窄（:47/:67/:104/:179/:237/:244/:257/:357）、5 处 suppress（:38/:119/:474/:485/:495）与 heartbeat 写盘 Exception→OSError 的语义变化；原 ho-20261128-012 的「6 处」计数已更正为 15。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-27T19:30:00.000Z"
+    }
+  ]
+}

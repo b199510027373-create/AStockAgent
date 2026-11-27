@@ -30,34 +30,52 @@
     "plan-20261114-004"
   ],
   "links": {
-    "branch": "feat/plan-20261117-001-ruff-docs-guard (merged)",
-    "commit": "e73c49c",
+    "branch": [
+      "feat/plan-20261117-001-ruff-docs-guard (merged #50)",
+      "feat/plan-20261117-001-baseline-refresh (merged #51)"
+    ],
+    "commit": [
+      "e73c49c",
+      "adace9d"
+    ],
     "docs": [
       "docs/AStockAgent_CI_work_calendar.md",
       "docs/AStockAgent_architecture_v1.3.md",
       "docs/AStockAgent_product_snapshot_v1.3.md",
+      "docs/AStockAgent_development_status_2026-11-08.md",
       "tests/test_ci_quality_gates.py",
-      "ruff.toml"
+      "ruff.toml",
+      ".coveragerc"
     ],
     "handoff": [
       "ho-20261128-012",
       "ho-20261128-013",
-      "ho-20261128-014"
+      "ho-20261128-014",
+      "ho-20261128-018"
     ],
     "module": "ci",
-    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/50",
-    "review": "rev-20261117-001",
+    "pr": [
+      "https://github.com/b199510027373-create/AStockAgent/pull/50",
+      "https://github.com/b199510027373-create/AStockAgent/pull/51"
+    ],
+    "review": [
+      "rev-20261117-001",
+      "rev-20261128-002"
+    ],
     "test": [
-      "ruff check astock tests → All checks passed!（0 条，无文件级豁免）",
-      "mypy astock app.py → Success: no issues found in 45 source files（CI 同报 45）",
-      "pytest tests -q -m \"not png\" → 953 passed, 3 skipped, 6 deselected, 46 subtests passed in 277.11s",
-      "pytest tests/test_ci_quality_gates.py -q → 17 passed",
-      "变异自证：architecture_v1.3 76.45%→75.45%、product_snapshot 本地覆盖率 76.68%→75.45% → 2 failed（用例按预期变红），随后 git restore 复原",
-      "CI PR run 46047574586 success（952 passed / 4 skipped / coverage 80.56% / ruff All checks passed / mypy 45 files）",
-      "CI main runs 46038545567 (801aa6c) / 46048029684 (e73c49c) / 46048643343 (4d02fec) / 46049387833 (1d81656) 均 success ⇒ main 连续绿"
+      "pytest tests -q -m \"not png\" → 953 passed, 3 skipped, 6 deselected, 46 subtests passed in 277.11s（首轮）",
+      "pytest tests/test_ci_quality_gates.py -q → 17 passed（首轮）",
+      "变异自证（首轮）：architecture_v1.3 76.45%→75.45%、product_snapshot 本地覆盖率 76.68%→75.45% → 2 failed，随后复原",
+      "CI PR run 46047574586 success（952 passed / 4 skipped / coverage 80.56% / ruff 0 / mypy 45 files）",
+      "CI main runs 46038545567 / 46048029684 / 46048643343 / 46049387833 均 success ⇒ main 连续绿",
+      "基线刷新：ruff check astock tests → All checks passed!（0 条）",
+      "基线刷新：mypy astock app.py → Success: no issues found in 45 source files",
+      "基线刷新：coverage run -m pytest tests -q -m \"not png\" → 953 passed, 3 skipped, 6 deselected, 46 subtests（368.81s）；coverage report → TOTAL 12474 2395 80.80%",
+      "变异自证（第二轮）：arch 45 个源文件→46、snapshot 80.80%→79.56%、删 scheduler BLE001 理由 → 3 failed，随后复原",
+      "CI PR run 46056498460 success（ruff 0 / mypy 45 files / 952 passed / TOTAL 12474 2425 80.56%）；main run 46056739376 (adace9d) success"
     ]
   },
   "createdAt": "2026-11-16T19:45:31.506Z",
-  "updatedAt": "2026-11-27T18:29:07.107Z",
+  "updatedAt": "2026-11-27T19:30:07.849Z",
   "devSessionId": "session-c468f8e2-c39d-4e4d-a7fb-ebb0adfeb569"
 }
