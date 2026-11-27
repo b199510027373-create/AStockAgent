@@ -374,5 +374,362 @@ class SiteWideVocabularyTests(unittest.TestCase):
         self.assertGreaterEqual(source.count("不给出买卖"), 3)
 
 
+class FactorContributionTests(unittest.TestCase):
+    """因子贡献必须能逐条复算技术分，而不是只给一个总分。"""
+
+    @staticmethod
+    def _frame(*, rsi: float = 60.0, vol_ratio: float = 1.5) -> pd.DataFrame:
+        n = 130
+        close = pd.Series([10.0 + i * 0.1 for i in range(n)])
+        return pd.DataFrame(
+            {
+                "close": close,
+                "high": close,
+                "vol": 1000.0 * vol_ratio,
+                "ma20": close.rolling(20).mean(),
+                "ma60": close.rolling(60).mean(),
+                "ma120": close.rolling(120).mean(),
+                "rsi14": rsi,
+                "dif": 0.5,
+                "dea": 0.2,
+                "macd_hist": 0.3,
+                "atr14": close * 0.01,
+                "vol_ma20": 1000.0,
+            }
+        )
+
+    def test_contributions_replay_score_and_clip(self):
+        result = recommend.technical_score(self._frame())
+        self.assertIsNotNone(result)
+        # 50 + 8 + 8 + 5 + 4 + 7 + 3 + 5 + 4 + 5 + 3 = 102 → 截断到 100。
+        self.assertEqual(result["score_before_clip"], 102.0)
+        self.assertEqual(result["technical_score"], 100.0)
+        self.assertEqual(
+            round(sum(c["delta"] for c in result["contributions"]), 1), 100.0
+        )
+        clip = [c for c in result["contributions"] if c["factor"] == "clip"]
+        self.assertEqual(len(clip), 1)
+        self.assertEqual(clip[0]["delta"], -2.0)
+
+    def test_no_clip_when_score_inside_band(self):
+        result = recommend.technical_score(self._frame(rsi=85.0, vol_ratio=1.0))
+        self.assertIsNotNone(result)
+        self.assertEqual(result["score_before_clip"], 85.0)
+        self.assertEqual(result["technical_score"], 85.0)
+        self.assertFalse(
+            any(c["factor"] == "clip" for c in result["contributions"])
+        )
+        self.assertEqual(
+            round(sum(c["delta"] for c in result["contributions"]), 1), 85.0
+        )
+
+
+class EvidenceIdTests(unittest.TestCase):
+    def test_id_is_deterministic_and_traceable(self):
+        ev = {
+            "kind": "announcement",
+            "pub_time": "2026-11-27 09:00:00",
+            "title": "关于回购的公告",
+        }
+        first = recommend.make_evidence_id("rec_1", "600519.SH", ev)
+        second = recommend.make_evidence_id("rec_1", "600519.SH", dict(ev))
+        self.assertEqual(first, second)
+        self.assertTrue(first.startswith("ev_"))
+        self.assertEqual(len(first), 15)
+        self.assertNotEqual(
+            first, recommend.make_evidence_id("rec_2", "600519.SH", ev)
+        )
+        self.assertNotEqual(
+            first, recommend.make_evidence_id("rec_1", "000001.SZ", ev)
+        )
+
+
+class _EvidenceChainFixtures(unittest.TestCase):
+    @staticmethod
+    def _run() -> dict:
+        items = [
+            {
+                "rank": 1, "code": "600519.SH", "name": "贵州茅台", "industry": "白酒",
+                "composite": 82.0, "percentile": 92.0, "technical": 80.0,
+                "event": 86.0, "action": "技术面强", "close": 1500.0,
+                "ret20": 0.032, "rsi": 58.0, "reason": "趋势向上",
+            },
+            {
+                "rank": 2, "code": "000001.SZ", "name": "平安银行", "industry": "银行",
+                "composite": 74.0, "percentile": 61.0, "technical": 70.0,
+                "event": 81.0, "action": "技术面中性", "close": 11.0,
+                "ret20": 0.01, "rsi": 55.0, "reason": "震荡偏多",
+            },
+            {
+                "rank": 3, "code": "600036.SH", "name": "招商银行", "industry": "银行",
+                "composite": 70.0, "percentile": 40.0, "technical": 68.0,
+                "event": 74.0, "action": "技术面中性", "close": 35.0,
+                "ret20": -0.01, "rsi": 48.0, "reason": "震荡",
+            },
+        ]
+        return {
+            "run_id": "rec_demo",
+            "data_as_of": "2026-11-27",
+            "tradable_from": "2026-11-30",
+            "generated_at": "2026-11-27T18:00:00",
+            "source": "live",
+            "items": items,
+            "items_detail": {
+                "600519.SH": {
+                    "scores": {
+                        "composite": 82.0, "technical": 80.0, "technical_raw": 78.0,
+                        "technical_rank": 90.0, "score_before_clip": 80.0,
+                        "event": 86.0, "percentile": 92.0,
+                    },
+                    "weights": {"technical": 0.65, "event": 0.35},
+                    "factor_contributions": [
+                        {"factor": "base", "label": "基础分", "delta": 50.0,
+                         "value": None, "unit": "", "detail": "起始 50 分"},
+                        {"factor": "ma20", "label": "站上MA20", "delta": 8.0,
+                         "value": 0.02, "unit": "ratio", "detail": "收盘 / MA20"},
+                    ],
+                    "signals": {"close": 1500.0, "trend": "多头"},
+                    "event_stats": {"n": 2},
+                }
+            },
+            "evidence": [
+                {"code": "600519.SH", "kind": "announcement",
+                 "pub_time": "2026-11-27T09:00:00", "title": "回购公告",
+                 "source": "交易所", "url": "", "content": "",
+                 "evidence_id": "ev_abc123456789"},
+            ],
+            "tracking": [
+                {"code": "600519.SH", "rank": 1, "horizon": 5, "ret": 0.03,
+                 "excess": 0.01, "entry_date": "2026-11-30",
+                 "exit_date": "2026-12-05"},
+            ],
+        }
+
+
+class RecommendationDetailTests(_EvidenceChainFixtures):
+    def test_detail_exposes_data_as_of_factors_evidence_and_peers(self):
+        detail = recommend.recommendation_detail(self._run(), "600519.SH")
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail["data_as_of"], "2026-11-27")
+        self.assertEqual(detail["tradable_from"], "2026-11-30")
+        self.assertEqual(detail["rank"], 1)
+        self.assertEqual(detail["batch_size"], 3)
+        self.assertEqual(detail["peer"]["n"], 3)
+        self.assertEqual(detail["peer"]["same_industry_rank"], 1)
+        self.assertEqual(detail["peer"]["same_industry_count"], 1)
+        self.assertEqual(len(detail["peer"]["top"]), 3)
+        self.assertEqual(
+            [c["factor"] for c in detail["factor_contributions"]], ["base", "ma20"]
+        )
+        self.assertEqual(detail["evidence"][0]["evidence_id"], "ev_abc123456789")
+        self.assertEqual(detail["tracking"]["5"]["ret"], 0.03)
+
+        markdown = recommend.recommendation_detail_markdown(
+            self._run(), "600519.SH"
+        )
+        self.assertIn("rec_demo", markdown)
+        self.assertIn("2026-11-27", markdown)
+        self.assertIn("因子贡献", markdown)
+        self.assertIn("ev_abc123456789", markdown)
+        self.assertIn("同批入选对比", markdown)
+
+    def test_old_batch_degrades_without_fake_factors(self):
+        run = self._run()
+        run.pop("items_detail")
+        old = {
+            "code": "600519.SH", "kind": "news",
+            "pub_time": "2026-11-27T08:00:00", "title": "旧新闻", "source": "媒体",
+        }
+        run["evidence"] = [old]
+        detail = recommend.recommendation_detail(run, "600519.SH")
+        self.assertEqual(detail["factor_contributions"], [])
+        self.assertTrue(detail["notes"])
+        self.assertTrue(detail["evidence"][0]["evidence_id"].startswith("ev_"))
+        self.assertIsNone(detail["scores"]["score_before_clip"])
+
+    def test_missing_code_returns_none(self):
+        self.assertIsNone(recommend.recommendation_detail(self._run(), "999999.SZ"))
+        self.assertIsNone(recommend.recommendation_detail(None, "600519.SH"))
+        self.assertIn("未找到", recommend.recommendation_detail_markdown(
+            self._run(), "999999.SZ"
+        ))
+
+
+class BatchReviewTests(_EvidenceChainFixtures):
+    def _tracking(self) -> list[dict]:
+        rows = []
+        for code, rank, horizon, ret, excess in (
+            ("600519.SH", 1, 1, 0.02, 0.01),
+            ("000001.SZ", 2, 1, 0.00, -0.01),
+            ("600519.SH", 1, 5, 0.03, 0.01),
+            ("000001.SZ", 2, 5, -0.01, -0.02),
+            ("600519.SH", 1, 20, -0.03, -0.04),
+            ("000001.SZ", 2, 20, 0.02, 0.01),
+            ("600036.SH", 3, 5, 0.10, 0.09),  # TopN 之外，不参与
+        ):
+            rows.append(
+                {"code": code, "rank": rank, "horizon": horizon, "ret": ret,
+                 "excess": excess, "entry_date": "2026-11-30",
+                 "exit_date": "2026-12-05"}
+            )
+        return rows
+
+    def test_topn_metrics_and_settled_horizon_drawdown(self):
+        review = recommend.batch_review(
+            self._run(), tracking=self._tracking(), top_n=2, price_frames={}
+        )
+        self.assertEqual(review["topn_size"], 2)
+        self.assertEqual(review["settled_total"], 6)
+        by_horizon = {row["horizon"]: row for row in review["horizons"]}
+        self.assertEqual(by_horizon[5]["samples"], 2)
+        self.assertAlmostEqual(by_horizon[5]["mean_ret"], 0.01)
+        self.assertAlmostEqual(by_horizon[5]["mean_excess"], -0.005)
+        self.assertAlmostEqual(by_horizon[5]["hit_rate"], 0.5)
+        self.assertEqual(by_horizon[5]["coverage"], 1.0)
+        self.assertEqual(review["drawdown"]["caliber"], "settled_horizons")
+        self.assertAlmostEqual(review["drawdown"]["value"], -0.0149, places=4)
+
+    def test_daily_nav_drawdown_from_price_frames(self):
+        dates = pd.to_datetime(["2026-11-30", "2026-12-01", "2026-12-02"])
+        frames = {
+            "A": pd.DataFrame(
+                {"trade_date": dates, "open": [100.0, 101.0, 102.0],
+                 "close": [100.0, 110.0, 90.0]}
+            ),
+            "B": pd.DataFrame(
+                {"trade_date": dates, "open": [50.0, 51.0, 52.0],
+                 "close": [50.0, 55.0, 45.0]}
+            ),
+        }
+        review = recommend.batch_review(
+            self._run(), tracking=self._tracking(), top_n=2, price_frames=frames
+        )
+        drawdown = review["drawdown"]
+        self.assertEqual(drawdown["caliber"], "daily_nav")
+        self.assertEqual(drawdown["n_codes"], 2)
+        self.assertAlmostEqual(drawdown["value"], -0.1818, places=4)
+
+    def test_review_markdown_lists_topn_and_hit_rate(self):
+        review = recommend.batch_review(
+            self._run(), tracking=self._tracking(), top_n=2, price_frames={}
+        )
+        markdown = recommend.batch_review_markdown(self._run(), review)
+        self.assertIn("批次复盘", markdown)
+        self.assertIn("T+5", markdown)
+        self.assertIn("命中率", markdown)
+        self.assertIn("回撤", markdown)
+        self.assertIn("不构成 alpha 声明", markdown)
+
+
+class BriefExportTests(_EvidenceChainFixtures):
+    def test_brief_contains_traceable_ids_and_topn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = recommend.export_batch_brief(self._run(), out_dir=tmp)
+            self.assertTrue(Path(path).exists())
+            text = Path(path).read_text(encoding="utf-8")
+        self.assertIn("单批简报", text)
+        self.assertIn("rec_demo", text)
+        self.assertIn("2026-11-27", text)
+        self.assertIn("因子贡献", text)
+        self.assertIn("ev_abc123456789", text)
+        self.assertIn("T+5", text)
+        self.assertIn("run_id", text)
+        self.assertIn("evidence_id", text)
+
+
+class SaveRoundtripTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.patches = [
+            patch.object(recommend, "REC_DIR", self.dir),
+            patch.object(ledger, "DB_PATH", self.dir / "ledger.db"),
+        ]
+        for item in self.patches:
+            item.start()
+
+    def tearDown(self):
+        for item in self.patches:
+            item.stop()
+        self.tmp.cleanup()
+
+    def _rows(self) -> list[dict]:
+        return [
+            {
+                "code": "600519.SH", "name": "贵州茅台", "industry": "白酒",
+                "composite": 82.0, "technical_score": 80.0, "technical_raw": 78.0,
+                "technical_rank": 90.0, "score_before_clip": 80.0,
+                "event_score": 86.0, "percentile": 92.0, "close": 1500.0,
+                "ret20": 0.032, "ret60": 0.05, "rsi": 58.0, "vol_ratio": 1.3,
+                "atr_pct": 0.02, "drawdown": -0.05, "trend": "多头",
+                "action": "技术面强", "reason": "趋势向上",
+                "contributions": [
+                    {"factor": "base", "label": "基础分", "delta": 50.0,
+                     "value": None, "unit": "", "detail": "起始 50 分"},
+                    {"factor": "ma20", "label": "站上MA20", "delta": 8.0,
+                     "value": 0.02, "unit": "ratio", "detail": "收盘 / MA20"},
+                ],
+                "stats": {"n": 2}, "confidence": 0.8,
+            }
+        ]
+
+    def _evidence(self) -> dict:
+        return {
+            "600519.SH": [
+                {"kind": "announcement", "pub_time": "2026-11-27T09:00:00",
+                 "title": "回购公告", "source": "交易所", "url": "",
+                 "content": ""}
+            ]
+        }
+
+    def test_json_and_ledger_keep_evidence_ids_and_items_detail(self):
+        csv_path, json_path = recommend._save(
+            self._rows(), "A股", {}, self._evidence(),
+            "2026-11-27", "2026-11-30", "rec_roundtrip_001",
+            "2026-11-27T18:00:00", diagnostics={"candidate_n": 3},
+        )
+        self.assertTrue(Path(csv_path).exists())
+        payload = json.loads(Path(json_path).read_text(encoding="utf-8"))
+        evidence_id = payload["evidence"]["600519.SH"][0]["evidence_id"]
+        self.assertTrue(evidence_id.startswith("ev_"))
+        self.assertEqual(
+            payload["items_detail"]["600519.SH"]["evidence_ids"], [evidence_id]
+        )
+
+        run = ledger.get_run("rec_roundtrip_001")
+        self.assertIsNotNone(run)
+        self.assertEqual(run["evidence"][0]["evidence_id"], evidence_id)
+        self.assertEqual(
+            run["items_detail"]["600519.SH"]["factor_contributions"][1]["factor"],
+            "ma20",
+        )
+        self.assertEqual(run["tracking"], [])
+
+        detail = recommend.recommendation_detail(run, "600519.SH")
+        self.assertEqual(detail["evidence"][0]["evidence_id"], evidence_id)
+        self.assertEqual(detail["data_as_of"], "2026-11-27")
+
+
+class UIEvidenceChainTests(unittest.TestCase):
+    def test_context_outputs_extend_without_breaking_six_tuple(self):
+        from astock import recommend_ui
+
+        payload = {
+            "run_id": "rec_ui",
+            "table": pd.DataFrame([{"代码": "600519.SH"}, {"代码": "000001.SZ"}]),
+            "status_text": "ok", "report": "", "evidence_md": "", "files": None,
+            "batch_md": "",
+        }
+        result = use_cases.RunResult(
+            run_id="rec_ui", status="success", payload=payload, diagnostics={}
+        )
+        outputs = recommend_ui._context_outputs(result)
+        self.assertEqual(len(outputs), 8)
+        self.assertEqual(outputs[0], "ok")
+        self.assertEqual(outputs[6], "rec_ui")
+        self.assertEqual(outputs[7]["choices"], ["600519.SH", "000001.SZ"])
+        self.assertEqual(recommend_ui._outputs(result), outputs[:6])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
 import re
+import statistics
 import threading
 import time
 import uuid
@@ -156,6 +158,31 @@ def load_many(
     return out
 
 
+def _contribution(
+    factor: str,
+    label: str,
+    delta: float,
+    value=None,
+    unit: str = "",
+    detail: str = "",
+) -> dict:
+    """One auditable technical-score delta.
+
+    ``value`` is the indicator value that triggered the rule; ``unit`` tells the
+    detail page how to format it (``pct``/``ratio``/``raw``).  Keeping the deltas
+    next to the score changes means the arithmetic can be replayed from the JSON
+    archive without re-reading prices.
+    """
+    return {
+        "factor": factor,
+        "label": label,
+        "delta": round(float(delta), 4),
+        "value": None if value is None else round(float(value), 6),
+        "unit": unit,
+        "detail": detail,
+    }
+
+
 def technical_score(df: pd.DataFrame) -> dict | None:
     if df is None or len(df) < 60:
         return None
@@ -181,59 +208,123 @@ def technical_score(df: pd.DataFrame) -> dict | None:
     atr_pct = atr / close if close and math.isfinite(atr) else np.nan
 
     score = 50.0
+    contributions = [_contribution("base", "基础分", 50.0, detail="起始 50 分")]
     reasons: list[str] = []
 
     if math.isfinite(ma20):
         if close > ma20:
             score += 8
+            contributions.append(
+                _contribution(
+                    "ma20", "站上MA20", 8, close / ma20 - 1 if ma20 else None,
+                    "ratio", f"收盘 {close:.2f} / MA20 {ma20:.2f}",
+                )
+            )
             reasons.append("站上MA20")
         if math.isfinite(ma60) and ma20 > ma60:
             score += 8
+            contributions.append(
+                _contribution(
+                    "ma20_ma60", "MA20>MA60", 8, (ma20 - ma60) / ma60 if ma60 else None,
+                    "ratio", f"MA20 {ma20:.2f} / MA60 {ma60:.2f}",
+                )
+            )
             reasons.append("MA20>MA60")
         if math.isfinite(ma60) and close > ma60:
             score += 5
+            contributions.append(
+                _contribution(
+                    "ma60", "站上MA60", 5, close / ma60 - 1 if ma60 else None,
+                    "ratio", f"收盘 {close:.2f} / MA60 {ma60:.2f}",
+                )
+            )
             reasons.append("站上MA60")
         if math.isfinite(ma120) and ma20 > ma120:
             score += 4
+            contributions.append(
+                _contribution(
+                    "ma20_ma120", "MA20>MA120", 4, (ma20 - ma120) / ma120 if ma120 else None,
+                    "ratio", f"MA20 {ma20:.2f} / MA120 {ma120:.2f}",
+                )
+            )
             reasons.append("MA20>MA120")
     if math.isfinite(hist):
         if hist > 0:
             score += 7
+            contributions.append(
+                _contribution("macd_hist", "MACD柱为正", 7, hist, "raw", f"MACD柱 {hist:+.4f}")
+            )
             reasons.append("MACD柱为正")
         if math.isfinite(dif) and math.isfinite(dea) and dif > dea:
             score += 3
+            contributions.append(
+                _contribution("dif_dea", "DIF>DEA", 3, dif - dea, "raw", f"DIF {dif:.4f} / DEA {dea:.4f}")
+            )
     if math.isfinite(rsi):
         if 45 <= rsi <= 70:
             score += 5
+            contributions.append(
+                _contribution("rsi", "RSI健康", 5, rsi, "raw", f"RSI {rsi:.1f} 位于 45–70")
+            )
             reasons.append("RSI健康")
         elif rsi > 80:
             score -= 8
+            contributions.append(
+                _contribution("rsi", "RSI超买", -8, rsi, "raw", f"RSI {rsi:.1f} > 80")
+            )
             reasons.append("RSI超买")
         elif rsi < 30:
             score -= 3
+            contributions.append(
+                _contribution("rsi", "RSI超卖", -3, rsi, "raw", f"RSI {rsi:.1f} < 30")
+            )
             reasons.append("RSI超卖")
     if math.isfinite(vol_ratio):
         if 1.1 <= vol_ratio <= 2.5:
             score += 4
+            contributions.append(
+                _contribution("vol_ratio", "温和放量", 4, vol_ratio, "raw", f"量比 {vol_ratio:.2f}")
+            )
             reasons.append("温和放量")
         elif vol_ratio > 3:
             score -= 5
+            contributions.append(
+                _contribution("vol_ratio", "量能过热", -5, vol_ratio, "raw", f"量比 {vol_ratio:.2f} > 3")
+            )
             reasons.append("量能过热")
     if math.isfinite(ret20):
-        if ret20 > 0:
-            score += 5
-        else:
-            score -= 3
+        delta = 5 if ret20 > 0 else -3
+        score += delta
+        contributions.append(
+            _contribution("ret20", "20日动量为正" if delta > 0 else "20日动量为负", delta, ret20, "pct", f"20日收益 {ret20:+.2%}")
+        )
     if math.isfinite(ret60) and ret60 > 0:
         score += 3
+        contributions.append(
+            _contribution("ret60", "60日动量为正", 3, ret60, "pct", f"60日收益 {ret60:+.2%}")
+        )
     if math.isfinite(atr_pct) and atr_pct > 0.07:
         score -= 5
+        contributions.append(
+            _contribution("atr_pct", "波动偏高", -5, atr_pct, "pct", f"ATR/收盘 {atr_pct:.2%} > 7%")
+        )
         reasons.append("波动偏高")
     if math.isfinite(drawdown) and drawdown < -0.25:
         score -= 5
+        contributions.append(
+            _contribution("drawdown", "距高点回撤大", -5, drawdown, "pct", f"距250日高点 {drawdown:.2%}")
+        )
         reasons.append("距高点回撤大")
 
+    raw_score = score
     score = max(0.0, min(100.0, score))
+    if score != raw_score:
+        contributions.append(
+            _contribution(
+                "clip", "0–100 截断", score - raw_score, raw_score, "raw",
+                f"截断前 {raw_score:.1f}",
+            )
+        )
     if math.isfinite(ma20) and math.isfinite(ma60):
         if close > ma20 > ma60:
             trend = "多头"
@@ -249,6 +340,8 @@ def technical_score(df: pd.DataFrame) -> dict | None:
         trend = "震荡"
     return {
         "technical_score": round(score, 1),
+        "score_before_clip": round(raw_score, 1),
+        "contributions": contributions,
         "close": round(close, 2),
         "ret20": ret20,
         "ret60": ret60,
@@ -566,6 +659,26 @@ def _atomic_write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def make_evidence_id(run_id: str, code: str, ev: dict) -> str:
+    """Stable evidence id shared by JSON, ledger and the detail page.
+
+    The id is derived from the run/code/evidence identity rather than a random
+    UUID, so a re-saved batch keeps the same ids and an old ledger row (written
+    before the column existed) can still be rendered with a matching id.
+    """
+    raw = "|".join(
+        str(part or "")
+        for part in (
+            run_id,
+            code,
+            ev.get("kind"),
+            ev.get("pub_time"),
+            ev.get("title"),
+        )
+    )
+    return "ev_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
 def _save(
     result_rows: list[dict],
     market: str,
@@ -605,6 +718,52 @@ def _save(
     suffix = run_id[-8:] if run_id else uuid.uuid4().hex[:8]
     csv_path = REC_DIR / f"recommend_{stamp}_{suffix}.csv"
 
+    weights = dict(
+        (params or {}).get("composite_weights")
+        or {"technical": 0.65, "event": 0.35}
+    )
+    # 证据链落盘：单条推荐的因子贡献、信号快照与 evidence_id 必须能脱离
+    # 页面从 JSON/台账复算；旧批次没有该字段时读取侧降级，不伪造贡献。
+    items_detail = {}
+    for i, row in enumerate(result_rows, 1):
+        code = str(row["code"])
+        evs = evidence_map.get(code) or []
+        items_detail[code] = {
+            "rank": i,
+            "code": code,
+            "name": row.get("name", ""),
+            "industry": row.get("industry", ""),
+            "run_id": run_id,
+            "data_as_of": data_as_of,
+            "tradable_from": tradable_from,
+            "generated_at": generated_at,
+            "source": source,
+            "scores": {
+                "composite": round(row["composite"], 1),
+                "technical": round(row["technical_score"], 1),
+                "technical_raw": round(row.get("technical_raw", row["technical_score"]), 1),
+                "technical_rank": row.get("technical_rank"),
+                "score_before_clip": row.get("score_before_clip"),
+                "event": round(row["event_score"], 1),
+                "percentile": row.get("percentile"),
+            },
+            "weights": weights,
+            "factor_contributions": row.get("contributions") or [],
+            "signals": {
+                key: row.get(key)
+                for key in (
+                    "close", "ret20", "ret60", "rsi", "vol_ratio",
+                    "atr_pct", "drawdown", "trend",
+                )
+            },
+            "event_stats": row.get("stats") or {},
+            "evidence_ids": [make_evidence_id(run_id, code, ev) for ev in evs],
+            "reason": row.get("reason", ""),
+            "catalysts": row.get("catalysts") or [],
+            "risks": row.get("risks") or [],
+            "confidence": row.get("confidence"),
+        }
+
     payload = {
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
@@ -620,9 +779,11 @@ def _save(
         "report_md": report_md,
         "status_line": status_line,
         "table": table.to_dict("records"),
+        "items_detail": items_detail,
         "evidence": {
             code: [
                 {
+                    "evidence_id": make_evidence_id(run_id, code, ev),
                     "kind": ev.get("kind", ""),
                     "pub_time": pd.Timestamp(ev.get("pub_time")).isoformat() if ev.get("pub_time") is not None else "",
                     "title": ev.get("title", ""),
@@ -950,3 +1111,671 @@ def generate_recommendation(
         run_id=run_id,
         diagnostics=diagnostics,
     )
+
+
+# ---------------------------------------------------------------------------
+# 证据链：单条详情 / 批次复盘 / 单批简报
+# 所有函数只读推荐结果（JSON payload 或 ledger.get_run 的 dict），不重算推荐
+# 排序、不改 alpha 声明；因此页面和导出共用同一套可追溯口径。
+# ---------------------------------------------------------------------------
+
+
+def _num(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _fmt_pct(value) -> str:
+    number = _num(value)
+    return "—" if number is None else f"{number * 100:+.2f}%"
+
+
+def _fmt_score(value) -> str:
+    number = _num(value)
+    return "—" if number is None else f"{number:.1f}"
+
+
+def _fmt_contribution_value(item: dict) -> str:
+    value = _num(item.get("value"))
+    if value is None:
+        return "—"
+    unit = item.get("unit") or ""
+    if unit == "pct":
+        return f"{value * 100:+.2f}%"
+    if unit == "ratio":
+        return f"{value:+.4f}"
+    if abs(value) >= 10:
+        return f"{value:.2f}"
+    return f"{value:+.4f}"
+
+
+def recommendation_detail(run: dict | None, code: str) -> dict | None:
+    """Assemble one recommendation's auditable detail from a persisted run."""
+    if not run:
+        return None
+    code = str(code or "").strip()
+    items = list(run.get("items") or [])
+    item = next((x for x in items if str(x.get("code")) == code), None)
+    if item is None:
+        return None
+
+    run_id = str(run.get("run_id") or "")
+    details = run.get("items_detail")
+    stored = details.get(code) if isinstance(details, dict) else None
+    stored = stored or {}
+
+    scores: list[float] = []
+    for row in items:
+        number = _num(row.get("composite"))
+        if number is not None:
+            scores.append(number)
+    batch_size = len(items)
+    mean = sum(scores) / len(scores) if scores else None
+    median = float(statistics.median(scores)) if scores else None
+    top_score = max(scores) if scores else None
+
+    industry = item.get("industry")
+    same = [x for x in items if x.get("industry") == industry]
+    same_sorted = sorted(
+        same, key=lambda x: (x.get("rank") is None, x.get("rank") or 0)
+    )
+    same_rank = next(
+        (i for i, x in enumerate(same_sorted, 1) if str(x.get("code")) == code), None
+    )
+    ranked = sorted(items, key=lambda x: (x.get("rank") is None, x.get("rank") or 0))
+
+    evidence = []
+    for ev in run.get("evidence") or []:
+        if str(ev.get("code")) != code:
+            continue
+        entry = dict(ev)
+        entry["evidence_id"] = entry.get("evidence_id") or make_evidence_id(
+            run_id, code, entry
+        )
+        evidence.append(entry)
+    evidence.sort(key=lambda x: str(x.get("pub_time") or ""), reverse=True)
+
+    tracking = {}
+    for row in run.get("tracking") or []:
+        if str(row.get("code")) != code:
+            continue
+        horizon = int(row.get("horizon") or 0)
+        tracking[str(horizon)] = {
+            "horizon": horizon,
+            "entry_date": row.get("entry_date"),
+            "exit_date": row.get("exit_date"),
+            "ret": _num(row.get("ret")),
+            "excess": _num(row.get("excess")),
+        }
+
+    contributions = list(stored.get("factor_contributions") or [])
+    notes = []
+    if not stored:
+        notes.append("该批次未落盘因子贡献（旧批次），仅保留技术分/事件分与规则理由。")
+    elif not contributions:
+        notes.append("该批次未记录逐条因子贡献。")
+
+    stored_scores = stored.get("scores") or {}
+    return {
+        "run_id": run_id,
+        "data_as_of": run.get("data_as_of") or run.get("as_of") or "",
+        "tradable_from": run.get("tradable_from") or "",
+        "generated_at": run.get("generated_at") or "",
+        "source": run.get("source") or "",
+        "item": {
+            key: item.get(key)
+            for key in (
+                "rank", "code", "name", "industry", "composite", "technical",
+                "event", "percentile", "close", "ret20", "rsi", "action", "reason",
+            )
+        },
+        "rank": item.get("rank"),
+        "batch_size": batch_size,
+        "peer": {
+            "rank": item.get("rank"),
+            "n": batch_size,
+            "mean": mean,
+            "median": median,
+            "max": top_score,
+            "percentile": _num(item.get("percentile")),
+            "same_industry": industry,
+            "same_industry_count": len(same),
+            "same_industry_rank": same_rank,
+            "top": [
+                {
+                    "rank": x.get("rank"),
+                    "code": x.get("code"),
+                    "name": x.get("name"),
+                    "composite": _num(x.get("composite")),
+                    "technical": _num(x.get("technical")),
+                    "event": _num(x.get("event")),
+                    "percentile": _num(x.get("percentile")),
+                }
+                for x in ranked[:10]
+            ],
+        },
+        "scores": {
+            "composite": _num(item.get("composite")),
+            "technical": _num(item.get("technical")),
+            "technical_raw": _num(stored_scores.get("technical_raw")),
+            "technical_rank": _num(stored_scores.get("technical_rank")),
+            "score_before_clip": _num(stored_scores.get("score_before_clip")),
+            "event": _num(item.get("event")),
+            "percentile": _num(item.get("percentile")),
+        },
+        "weights": stored.get("weights") or {"technical": 0.65, "event": 0.35},
+        "factor_contributions": contributions,
+        "signals": stored.get("signals") or {},
+        "event_stats": stored.get("event_stats") or {},
+        "evidence": evidence,
+        "evidence_ids": [e["evidence_id"] for e in evidence],
+        "tracking": tracking,
+        "notes": notes,
+    }
+
+
+def recommendation_detail_markdown(run: dict | None, code: str) -> str:
+    detail = recommendation_detail(run, code)
+    if detail is None:
+        return f"⚠️ 未找到 {code or '该代码'} 的推荐详情；请确认批次与代码是否匹配。"
+
+    item = detail["item"]
+    peer = detail["peer"]
+    lines = [
+        f"### 推荐详情：{item.get('name') or item.get('code')}（`{item.get('code')}`）",
+        "",
+        "> 研究候选，不是交易指令。以下每个数字都能回到 run_id / evidence_id。",
+        "",
+        (
+            f"- **批次**：`{detail['run_id']}` ｜ data_as_of {detail['data_as_of'] or '—'} ｜ "
+            f"tradable_from {detail['tradable_from'] or '—'} ｜ generated_at {detail['generated_at'] or '—'} ｜ "
+            f"source {detail['source'] or '—'}"
+        ),
+        (
+            f"- **技术面**：{item.get('action') or '—'} ｜ 收盘 {_fmt_score(item.get('close'))} ｜ "
+            f"20日 {_fmt_pct(item.get('ret20'))} ｜ RSI {_fmt_score(item.get('rsi'))}"
+        ),
+    ]
+
+    same_text = ""
+    if peer.get("same_industry_count"):
+        same_text = (
+            f"；同业 {peer['same_industry']} {peer['same_industry_count']} 只中第 "
+            f"{peer['same_industry_rank'] or '—'}"
+        )
+    lines.append(
+        f"- **同批对比**：第 {peer['rank'] or '—'}/{peer['n']} 名；综合分 "
+        f"{_fmt_score(detail['scores']['composite'])}（均值 {_fmt_score(peer['mean'])} / "
+        f"中位 {_fmt_score(peer['median'])} / 最高 {_fmt_score(peer['max'])}）；"
+        f"技术分位 {_fmt_score(peer['percentile'])}%{same_text}"
+    )
+
+    tech = detail["scores"]["technical"]
+    event = detail["scores"]["event"]
+    weight = detail["weights"]
+    lines.append(
+        f"- **打分拆解**：综合 {_fmt_score(detail['scores']['composite'])} = "
+        f"{weight.get('technical', 0.65):.2f}×技术 {_fmt_score(tech)} + "
+        f"{weight.get('event', 0.35):.2f}×事件 {_fmt_score(event)}"
+    )
+
+    lines += ["", "#### 因子贡献（技术分规则逐条）", ""]
+    if detail["factor_contributions"]:
+        lines += ["| 因子 | 贡献 | 指标值 | 说明 |", "|---|---:|---|---|"]
+        for contribution in detail["factor_contributions"]:
+            lines.append(
+                f"| {contribution.get('label') or contribution.get('factor')} | "
+                f"{float(contribution.get('delta') or 0):+.1f} | "
+                f"{_fmt_contribution_value(contribution)} | "
+                f"{contribution.get('detail') or '—'} |"
+            )
+        before_clip = detail["scores"].get("score_before_clip")
+        if before_clip is not None:
+            lines.append(
+                f"| **截断前合计** | **{before_clip:.1f}** | — | 技术分最终 "
+                f"{_fmt_score(tech)} |"
+            )
+    else:
+        lines.append("- 该批次未记录逐条因子贡献（旧批次）；技术分/事件分仍可追溯。")
+
+    lines += ["", f"#### 事件证据（{len(detail['evidence'])} 条，pub_time ≤ generated_at）", ""]
+    if detail["evidence"]:
+        lines += ["| evidence_id | 发布时间 | 类型 | 标题 | 来源 |", "|---|---|---|---|---|"]
+        for ev in detail["evidence"]:
+            title = str(ev.get("title") or "").replace("|", "\\|")
+            lines.append(
+                f"| `{ev['evidence_id']}` | {str(ev.get('pub_time') or '')[:19]} | "
+                f"{ev.get('kind') or '—'} | {title} | {ev.get('source') or '—'} |"
+            )
+    else:
+        lines.append("- 暂无匹配的公告/研报/新闻/政策证据。")
+
+    lines += ["", "#### 同批入选对比", ""]
+    lines += ["| 排名 | 代码 | 名称 | 综合分 | 技术分 | 事件分 | 分位 |", "|---:|---|---|---:|---:|---:|---:|"]
+    for row in peer["top"]:
+        marker = "→ " if str(row.get("code")) == item.get("code") else ""
+        lines.append(
+            f"| {row.get('rank') or '—'} | {marker}`{row.get('code')}` | {row.get('name') or ''} | "
+            f"{_fmt_score(row.get('composite'))} | {_fmt_score(row.get('technical'))} | "
+            f"{_fmt_score(row.get('event'))} | {_fmt_score(row.get('percentile'))}% |"
+        )
+
+    lines += ["", "#### 后续表现（ledger.tracking，已结算记录）", ""]
+    if detail["tracking"]:
+        lines += ["| 期限 | 收益 | 超额 | 入场日 | 结算日 |", "|---|---:|---:|---|---|"]
+        for horizon in (1, 5, 20):
+            row = detail["tracking"].get(str(horizon))
+            if not row:
+                lines.append(f"| T+{horizon} | 待结算 | 待结算 | — | — |")
+                continue
+            lines.append(
+                f"| T+{horizon} | {_fmt_pct(row.get('ret'))} | {_fmt_pct(row.get('excess'))} | "
+                f"{row.get('entry_date') or '—'} | {row.get('exit_date') or '—'} |"
+            )
+    else:
+        lines.append("- 该批次尚无 T+N 跟踪记录（尚未结算）。")
+
+    lines += ["", "#### 追溯", ""]
+    lines.append(f"- run_id：`{detail['run_id']}`")
+    lines.append(f"- data_as_of：{detail['data_as_of'] or '—'}；tradable_from：{detail['tradable_from'] or '—'}")
+    lines.append(
+        "- evidence_id：" + ("、".join(f"`{x}`" for x in detail["evidence_ids"]) or "—")
+    )
+    for note in detail["notes"]:
+        lines.append(f"- 口径提示：{note}")
+    return "\n".join(lines)
+
+
+def run_detail_markdown(run_id: str, code: str) -> str:
+    """UI 只传 run_id/code；读取台账与渲染口径留在本模块。"""
+    from .ledger import get_run
+
+    run = get_run(str(run_id or "").strip())
+    if not run:
+        return f"⚠️ 未找到批次 `{run_id}`。"
+    return recommendation_detail_markdown(run, code)
+
+
+def _review_price_frames(codes: list[str], entry: pd.Timestamp) -> dict[str, pd.DataFrame]:
+    start = (entry - pd.Timedelta(days=10)).strftime("%Y%m%d")
+    end = datetime.now().strftime("%Y%m%d")
+    frames: dict[str, pd.DataFrame] = {}
+    for code in codes:
+        try:
+            frame = load_daily(code, start=start, end=end, adj="qfq")
+        except Exception:  # noqa: BLE001, S112 - 单票日线缺失只降低回撤覆盖率，不阻断复盘
+            continue
+        if frame is not None and not frame.empty:
+            frames[code] = frame
+    return frames
+
+
+def _drawdown_from_prices(
+    frames: dict[str, pd.DataFrame], entry: pd.Timestamp
+) -> dict | None:
+    closes = {}
+    entry_price = {}
+    for code, frame in (frames or {}).items():
+        if frame is None or frame.empty or not {"trade_date", "open", "close"} <= set(frame.columns):
+            continue
+        daily = frame.copy()
+        daily["trade_date"] = pd.to_datetime(daily["trade_date"], errors="coerce").dt.normalize()
+        daily = (
+            daily.dropna(subset=["trade_date"])
+            .sort_values("trade_date")
+            .drop_duplicates("trade_date", keep="last")
+            .set_index("trade_date")
+        )
+        if entry not in daily.index:
+            continue
+        base = _num(daily.loc[entry, "open"])
+        if base is None or base <= 0:
+            continue
+        close = pd.to_numeric(daily["close"], errors="coerce")
+        close = close[close > 0]
+        if close.empty:
+            continue
+        closes[code] = close
+        entry_price[code] = base
+    if not closes:
+        return None
+
+    prices = pd.DataFrame(closes).sort_index()
+    prices = prices[prices.index >= entry].ffill()
+    nav = (prices / pd.Series(entry_price, dtype=float)).mean(axis=1).dropna()
+    if len(nav) < 2:
+        return None
+    drawdown = float((nav / nav.cummax() - 1.0).min())
+    return {
+        "value": round(drawdown, 4),
+        "caliber": "daily_nav",
+        "start": nav.index[0].date().isoformat(),
+        "end": nav.index[-1].date().isoformat(),
+        "observations": len(nav),
+        "n_codes": len(closes),
+        "codes": sorted(closes),
+    }
+
+
+def _drawdown_from_horizons(horizons: list[dict]) -> dict:
+    points = [
+        (int(row["horizon"]), 1.0 + float(row["mean_ret"]))
+        for row in horizons
+        if row.get("mean_ret") is not None
+    ]
+    if not points:
+        return {"value": None, "caliber": "unavailable", "observations": 0, "horizons": []}
+    nav = pd.Series([value for _, value in points], index=[h for h, _ in points], dtype=float)
+    nav = nav.sort_index()
+    drawdown = float((nav / nav.cummax() - 1.0).min())
+    return {
+        "value": round(drawdown, 4),
+        "caliber": "settled_horizons",
+        "start": f"T+{nav.index[0]}",
+        "end": f"T+{nav.index[-1]}",
+        "observations": len(nav),
+        "horizons": [int(x) for x in nav.index],
+    }
+
+
+def batch_review(
+    run: dict | None,
+    tracking: list[dict] | None = None,
+    top_n: int = 5,
+    price_frames: dict[str, pd.DataFrame] | None = None,
+) -> dict:
+    """Aggregate a batch's TopN forward returns from ledger tracking rows.
+
+    ``price_frames`` is for tests/offline callers: ``None`` loads qfq daily
+    bars for the daily-NAV drawdown, ``{}`` forces the settled-horizon fallback
+    (no I/O).  No new empirical run and no re-ranking happens here.
+    """
+    if not run:
+        return {
+            "run_id": "", "data_as_of": "", "tradable_from": "", "source": "",
+            "top_n": top_n, "batch_size": 0, "topn_size": 0,
+            "horizons": [], "drawdown": {"value": None, "caliber": "unavailable"},
+            "settled_total": 0,
+        }
+
+    items = list(run.get("items") or [])
+    tracked = list(tracking) if tracking is not None else list(run.get("tracking") or [])
+    top_items = [
+        x for x in items
+        if x.get("rank") is not None and int(x["rank"]) <= int(top_n)
+    ]
+    expected = len(top_items)
+
+    horizons = []
+    for horizon in (1, 5, 20):
+        rows = []
+        for row in tracked:
+            if int(row.get("horizon") or 0) != horizon:
+                continue
+            rank = row.get("rank")
+            if rank is None or int(rank) > int(top_n):
+                continue
+            rows.append(row)
+        settled = []
+        rets: list[float] = []
+        excess: list[float] = []
+        for row in rows:
+            ret = _num(row.get("ret"))
+            exc = _num(row.get("excess"))
+            if ret is None or exc is None:
+                continue
+            settled.append(row)
+            rets.append(ret)
+            excess.append(exc)
+        count = len(settled)
+        horizons.append(
+            {
+                "horizon": horizon,
+                "samples": count,
+                "expected": expected,
+                "coverage": round(count / expected, 4) if expected else None,
+                "mean_ret": round(sum(rets) / count, 6) if count else None,
+                "mean_excess": round(sum(excess) / count, 6) if count else None,
+                "hit_rate": round(sum(1 for x in excess if x > 0) / count, 4) if count else None,
+                "win_rate": round(sum(1 for x in rets if x > 0) / count, 4) if count else None,
+                "entry_date": min((str(row.get("entry_date")) for row in settled), default=None),
+                "exit_date": max((str(row.get("exit_date")) for row in settled), default=None),
+            }
+        )
+
+    drawdown = None
+    entry_raw = run.get("tradable_from") or run.get("data_as_of")
+    try:
+        entry = pd.Timestamp(entry_raw).normalize() if entry_raw else None
+    except (TypeError, ValueError):
+        entry = None
+    if price_frames is None and entry is not None and top_items:
+        price_frames = _review_price_frames(
+            [str(x.get("code")) for x in top_items], entry
+        )
+    if price_frames and entry is not None:
+        drawdown = _drawdown_from_prices(price_frames, entry)
+    if drawdown is None:
+        drawdown = _drawdown_from_horizons(horizons)
+
+    return {
+        "run_id": str(run.get("run_id") or ""),
+        "data_as_of": run.get("data_as_of") or run.get("as_of") or "",
+        "tradable_from": run.get("tradable_from") or "",
+        "generated_at": run.get("generated_at") or "",
+        "source": run.get("source") or "",
+        "top_n": int(top_n),
+        "batch_size": len(items),
+        "topn_size": expected,
+        "horizons": horizons,
+        "primary_horizon": 5,
+        "drawdown": drawdown,
+        "settled_total": sum(row["samples"] for row in horizons),
+        "caveat": "样本为已结算的 T+N 跟踪记录；回撤口径见 drawdown.caliber；仅作研究记录，不构成 alpha 声明。",
+    }
+
+
+def batch_review_markdown(run: dict | None, review: dict | None = None) -> str:
+    review = review or batch_review(run)
+    lines = [
+        f"### 批次复盘 · `{review.get('run_id') or '—'}`",
+        "",
+        (
+            f"- data_as_of {review.get('data_as_of') or '—'} ｜ tradable_from "
+            f"{review.get('tradable_from') or '—'} ｜ source {review.get('source') or '—'}"
+        ),
+        (
+            f"- 批内 {review.get('batch_size', 0)} 只，TopN {review.get('topn_size', 0)} 只；"
+            f"已结算跟踪记录 {review.get('settled_total', 0)} 条"
+        ),
+        "",
+        "| 期限 | 样本数 | TopN 平均收益 | 平均超额 | 命中率（超额>0） | 胜率（收益>0） |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for row in review.get("horizons") or []:
+        lines.append(
+            f"| T+{row['horizon']} | {row['samples']}/{row['expected']} | "
+            f"{_fmt_pct(row.get('mean_ret'))} | {_fmt_pct(row.get('mean_excess'))} | "
+            f"{_fmt_score(row.get('hit_rate') * 100 if row.get('hit_rate') is not None else None)}% | "
+            f"{_fmt_score(row.get('win_rate') * 100 if row.get('win_rate') is not None else None)}% |"
+        )
+    if not review.get("settled_total"):
+        lines.append("")
+        lines.append("- 暂无已结算的 T+N 记录；请先在跟踪页刷新结算后再复盘。")
+
+    drawdown = review.get("drawdown") or {}
+    value = _num(drawdown.get("value"))
+    lines += ["", "#### 回撤", ""]
+    if value is None:
+        lines.append("- 回撤：暂不可算（无已结算期限）。")
+    elif drawdown.get("caliber") == "daily_nav":
+        lines.append(
+            f"- 回撤：**{value * 100:.2f}%**（口径：TopN 等权日净值，"
+            f"{drawdown.get('start')} 至 {drawdown.get('end')}，"
+            f"{drawdown.get('observations')} 个交易日，{drawdown.get('n_codes')} 只成分）"
+        )
+    else:
+        lines.append(
+            f"- 回撤：**{value * 100:.2f}%**（口径：已结算 T+N 等权净值路径，"
+            f"{drawdown.get('observations')} 个观测点；仅作期限结构参考）"
+        )
+
+    lines += ["", f"> {review.get('caveat') or '仅作研究记录，不构成 alpha 声明。'}"]
+    return "\n".join(lines)
+
+
+def run_review_markdown(run_id: str) -> str:
+    from .ledger import get_run
+
+    run = get_run(str(run_id or "").strip())
+    if not run:
+        return f"⚠️ 未找到批次 `{run_id}`。"
+    return batch_review_markdown(run)
+
+
+def _tracking_lookup(run: dict) -> dict[tuple[str, int], dict]:
+    lookup = {}
+    for row in run.get("tracking") or []:
+        try:
+            horizon = int(row.get("horizon") or 0)
+        except (TypeError, ValueError):
+            continue
+        lookup[(str(row.get("code")), horizon)] = row
+    return lookup
+
+
+def export_batch_brief(
+    run: dict,
+    review: dict | None = None,
+    out_dir: Path | str | None = None,
+) -> str:
+    """Write a single-batch Markdown brief and return its path.
+
+    The brief embeds the same run_id/data_as_of/evidence_id values as the UI so
+    a PDF/email copy can still be traced back to the ledger.
+    """
+    if not run:
+        raise ValueError("run is required")
+    review = review or batch_review(run)
+    run_id = str(run.get("run_id") or "latest")
+    tracking = _tracking_lookup(run)
+    ranked = sorted(
+        (x for x in run.get("items") or [] if x.get("rank") is not None),
+        key=lambda x: int(x["rank"]),
+    )
+    top_items = [x for x in ranked if int(x["rank"]) <= int(review.get("top_n") or 5)]
+    details = [recommendation_detail(run, str(x.get("code"))) for x in top_items]
+
+    lines = [
+        f"# 单批简报 · `{run_id}`",
+        "",
+        "> 研究候选，不是交易指令。本简报中的每个数字都能回到 run_id / evidence_id。",
+        "",
+        "## 批次信息",
+        "",
+        f"- data_as_of：{review.get('data_as_of') or '—'}",
+        f"- tradable_from：{review.get('tradable_from') or '—'}",
+        f"- generated_at：{review.get('generated_at') or '—'}",
+        f"- source：{review.get('source') or '—'}",
+        f"- 批内 {review.get('batch_size', 0)} 只，TopN {review.get('topn_size', 0)} 只",
+        f"- JSON 归档：`{run.get('json_path') or '—'}`",
+        "",
+        batch_review_markdown(run, review),
+        "",
+        "## TopN 明细与后续",
+        "",
+        "| 排名 | 代码 | 名称 | 综合分 | 技术分 | 事件分 | 技术分位 | T+5 | 超额T+5 | 证据数 |",
+        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for item in top_items:
+        code = str(item.get("code"))
+        row5 = tracking.get((code, 5)) or {}
+        row_detail = recommendation_detail(run, code) or {}
+        lines.append(
+            f"| {item.get('rank')} | `{code}` | {item.get('name') or ''} | "
+            f"{_fmt_score(item.get('composite'))} | {_fmt_score(item.get('technical'))} | "
+            f"{_fmt_score(item.get('event'))} | {_fmt_score(item.get('percentile'))}% | "
+            f"{_fmt_pct(row5.get('ret'))} | {_fmt_pct(row5.get('excess'))} | "
+            f"{len(row_detail.get('evidence') or [])} |"
+        )
+
+    lines += ["", "## 因子贡献与证据", ""]
+    for index, detail in enumerate(details, 1):
+        if not detail:
+            continue
+        item = detail["item"]
+        lines.append(f"### {index}. {item.get('code')} {item.get('name') or ''}")
+        lines.append("")
+        lines.append(
+            f"- 打分：综合 {_fmt_score(detail['scores']['composite'])} = "
+            f"0.65×技术 {_fmt_score(detail['scores']['technical'])} + "
+            f"0.35×事件 {_fmt_score(detail['scores']['event'])}；"
+            f"截断前技术分 {_fmt_score(detail['scores'].get('score_before_clip'))}"
+        )
+        contributions = detail.get("factor_contributions") or []
+        if contributions:
+            parts = [
+                f"{c.get('label')} {float(c.get('delta') or 0):+.1f}"
+                for c in contributions
+            ]
+            lines.append("- 因子贡献：" + "；".join(parts))
+        else:
+            lines.append("- 因子贡献：未记录（旧批次）")
+        evidence = detail.get("evidence") or []
+        if evidence:
+            lines.append(f"- 事件证据（{len(evidence)} 条）：")
+            for ev in evidence:
+                lines.append(
+                    f"  - `{ev['evidence_id']}` {str(ev.get('pub_time') or '')[:19]} "
+                    f"{ev.get('kind') or '—'} · {ev.get('title') or ''}"
+                    f"（{ev.get('source') or '—'}）"
+                )
+        else:
+            lines.append("- 事件证据：无")
+        lines.append("")
+
+    evidence_ids = sorted(
+        {
+            e.get("evidence_id")
+            for d in details
+            if d
+            for e in d.get("evidence") or []
+            if e.get("evidence_id")
+        }
+    )
+    lines += [
+        "## 追溯口径",
+        "",
+        f"- run_id：`{run_id}`",
+        (
+            f"- data_as_of / tradable_from：{review.get('data_as_of') or '—'} / "
+            f"{review.get('tradable_from') or '—'}"
+        ),
+        f"- evidence_id：{len(evidence_ids)} 个"
+        + ("：" + "、".join(f"`{x}`" for x in evidence_ids) if evidence_ids else ""),
+        f"- 回撤口径：{review.get('drawdown', {}).get('caliber') or '—'}",
+        (
+            "- 研究语义：复用现有推荐结果与 ledger.tracking，不另跑实证；"
+            "不改变推荐排序，不声明 alpha。"
+        ),
+        "",
+    ]
+
+    folder = Path(out_dir or REC_DIR)
+    folder.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", run_id) or "latest"
+    path = folder / f"brief_{safe}.md"
+    _atomic_write_text(path, "\n".join(lines))
+    return str(path)
+
+
+def export_run_brief(run_id: str) -> str:
+    from .ledger import get_run
+
+    run = get_run(str(run_id or "").strip())
+    if not run:
+        raise ValueError(f"未找到批次 `{run_id}`")
+    return export_batch_brief(run)
