@@ -172,34 +172,128 @@ def test_coveragerc_baseline_arithmetic_is_self_consistent() -> None:
         assert computed == pct, f"{stmts}/{miss} 算出来是 {computed}%，.coveragerc 注释写的是 {pct}%"
 
 
-def test_docs_baseline_matches_measured_numbers() -> None:
-    """四处文档与 README 的基线数字必须等于 .coveragerc 实测（评审 iss-mwjnea54-cbaf29）。
+# 旧基线残留标记必须是「带上下文」的完整短语：裸 "50%" 会把 README 里正常的
+# 「单票仓位上限 50%」误判成覆盖率门槛残留（评审 iss-mwjo3fur-2f386a）。
+STALE_MARKERS = (
+    "9247 statements",
+    "2155 miss",
+    "9247/2155",
+    "606 passed",
+    "606 个",
+    "覆盖率门槛 50%",
+)
 
-    此前的缺陷是「4 份文档同步」实际漏了一行：development_status 仍写 9247/2155，
-    README 仍写 606 passed，读者按文档复算会得到与门禁不一致的数。
+
+def _stale_markers_found(text: str) -> list[str]:
+    return [marker for marker in STALE_MARKERS if marker in text]
+
+
+def _doc_baseline_problems(texts: dict[str, str]) -> list[str]:
+    """5 个文档各自必须正向写出的实测基线；返回缺失项（空列表表示全部命中）。
+
+    以 .coveragerc 注释为唯一数据源：文档里的语句数/未覆盖数/百分比/用例数/门槛
+    一旦被改成别的值或漏改，对应片段就匹配不上（评审 iss-mwjo3ftq-d5ea0b）。
     """
     local, ci, local_passed = _coverage_comment_baselines()
     local_stmts, local_miss, local_pct = local
     ci_stmts, ci_miss, ci_pct = ci
+    floor = MIN_COVERAGE_FLOOR
 
+    required = {
+        "AStockAgent_development_status_2026-11-08.md": (
+            f"{local_stmts} statements / {local_miss} miss = {local_pct:.2f}%",
+            f"{ci_stmts}/{ci_miss} = {ci_pct:.2f}%",
+            f"覆盖率门槛 {floor:.2f}%",
+            f"{local_passed} passed",
+        ),
+        "AStockAgent_CI_work_calendar.md": (
+            f"{ci_stmts}/{ci_miss}",
+            f"{local_stmts}/{local_miss}",
+            f"{ci_pct:.2f}%",
+            f"{local_pct:.2f}%",
+            f"{local_passed} passed",
+        ),
+        "AStockAgent_architecture_v1.3.md": (
+            f"覆盖率门槛 {floor:.2f}%",
+            f"本地 {local_pct:.2f}%",
+        ),
+        "AStockAgent_product_snapshot_v1.3.md": (
+            f"本地覆盖率 {local_pct:.2f}%",
+            f"CI Linux {ci_pct:.2f}%",
+            f"门槛 {floor:.2f}%",
+            f"{local_passed} passed",
+        ),
+        "README.md": (f"{local_passed} passed",),
+    }
+
+    problems: list[str] = []
+    for name, snippets in required.items():
+        text = texts.get(name)
+        if text is None:
+            problems.append(f"缺少文档 {name}")
+            continue
+        problems.extend(f"{name} 缺少基线表述 {snippet!r}" for snippet in snippets if snippet not in text)
+    return problems
+
+
+def test_docs_baseline_matches_measured_numbers() -> None:
+    """5 个文档的基线数字必须等于 .coveragerc 实测，且不得残留旧的错误表述。
+
+    此前只对 3 个文件做正向断言，architecture_v1.3:107 与 product_snapshot:51
+    改错数字仍绿（评审 iss-mwjo3ftq-d5ea0b）；裸 "50%" 标记会把 README 里正常的
+    业务百分比误判成旧基线（评审 iss-mwjo3fur-2f386a）。
+    """
     texts = {path.name: path.read_text(encoding="utf-8") for path in DOCS_WITH_BASELINE}
-    stale = ("9247 statements", "2155 miss", "9247/2155", "606 passed", "606 个", "50%")
+
     for name, text in texts.items():
-        for marker in stale:
-            assert marker not in text, f"{name} 仍残留旧基线表述 {marker!r}"
+        found = _stale_markers_found(text)
+        assert not found, f"{name} 仍残留旧基线表述 {found}"
 
-    dev = texts["AStockAgent_development_status_2026-11-08.md"]
-    assert f"{local_stmts} statements / {local_miss} miss = {local_pct:.2f}%" in dev, (
-        "development_status 的本地实测行必须与 .coveragerc 注释一致"
-    )
+    problems = _doc_baseline_problems(texts)
+    assert not problems, "文档基线数字与 .coveragerc 实测不一致：" + "；".join(problems)
 
-    calendar = texts["AStockAgent_CI_work_calendar.md"]
-    assert f"{ci_stmts}/{ci_miss}" in calendar, "CI 日历缺少 CI 实测语句数/未覆盖数"
-    assert f"{local_stmts}/{local_miss}" in calendar, "CI 日历缺少本地实测语句数/未覆盖数"
-    assert f"{ci_pct:.2f}%" in calendar and f"{local_pct:.2f}%" in calendar
 
-    readme = texts["README.md"]
-    assert f"{local_passed} passed" in readme, "README 的用例数必须与 .coveragerc 记录的实测一致"
+def test_stale_markers_require_context_around_percentage() -> None:
+    """「50%」只有带上下文时才算旧基线：仓位上限、涨跌幅这类业务百分比不能误报。"""
+    assert _stale_markers_found("单票仓位上限 50%") == []
+    assert _stale_markers_found("涨跌幅限制 150%，单票上限 20%") == []
+    assert _stale_markers_found("旧门槛：覆盖率门槛 50%") == ["覆盖率门槛 50%"]
+
+
+def test_docs_baseline_guard_goes_red_on_wrong_numbers() -> None:
+    """守护测试自证：改错 5 个文档里任一基线数字都必须让校验报错。
+
+    「真实文档当前是绿的」不足以证明守护有效，评审要求的正是「改错必红」，
+    这里用变异副本逐一验证（含 architecture_v1.3:107 与 product_snapshot:51）。
+    """
+    texts = {path.name: path.read_text(encoding="utf-8") for path in DOCS_WITH_BASELINE}
+    assert _doc_baseline_problems(texts) == [], "真实文档当前已不一致，应先修文档"
+
+    local, ci, local_passed = _coverage_comment_baselines()
+    local_pct = local[2]
+    ci_stmts, ci_miss, _ = ci
+    wrong_pct = f"{MIN_COVERAGE_FLOOR - 1:.2f}%"
+    mutations = {
+        "AStockAgent_architecture_v1.3.md": (f"{MIN_COVERAGE_FLOOR:.2f}%", wrong_pct),
+        "AStockAgent_product_snapshot_v1.3.md": (
+            f"本地覆盖率 {local_pct:.2f}%",
+            f"本地覆盖率 {wrong_pct}",
+        ),
+        "AStockAgent_development_status_2026-11-08.md": (
+            f"{local_passed} passed",
+            f"{local_passed + 1} passed",
+        ),
+        "AStockAgent_CI_work_calendar.md": (f"{ci_stmts}/{ci_miss}", f"{ci_stmts + 1}/{ci_miss}"),
+        "README.md": (f"{local_passed} passed", f"{local_passed + 1} passed"),
+    }
+    for name, (before, after) in mutations.items():
+        mutated = texts[name].replace(before, after)
+        assert mutated != texts[name], f"{name} 里找不到 {before!r}，守护断言已失效"
+        assert _doc_baseline_problems({**texts, name: mutated}), f"把 {name} 的 {before!r} 改错后守护仍绿"
+
+    dirty = dict(texts)
+    dirty["README.md"] = texts["README.md"] + "\n旧门槛：覆盖率门槛 50%\n"
+    assert _stale_markers_found(dirty["README.md"]) == ["覆盖率门槛 50%"]
 
 
 def _ruff_config() -> dict[str, Any]:
@@ -231,25 +325,39 @@ def test_ruff_config_documents_ignored_families() -> None:
     assert "B905" in ignore
 
 
-def test_ruff_config_keeps_scheduler_observation_window_exemption() -> None:
-    """PR #9 五日观察（至 2026-11-21）期间不得动调度运行时代码。"""
-    per_file = _ruff_config()["lint"]["per-file-ignores"]
+def test_ruff_config_has_no_per_file_exemptions() -> None:
+    """观察期结束（2026-11-21）后不得再用 per-file-ignores 豁免整份文件。
 
-    for path in ("astock/scheduler.py", "astock/jobs.py"):
-        assert path in per_file, f"{path} 的观察期豁免丢失，等于提前改动调度样本"
-        assert {"BLE001", "S110", "S112"} <= set(per_file[path])
+    plan-20261117-001：scheduler.py / jobs.py 的存量已按规则清理完，新增问题只能改代码；
+    文件级豁免一旦回潮，等于把「全仓 ruff 0 条」悄悄退回基线豁免。
+    """
+    lint = _ruff_config()["lint"]
 
-    # scheduler.py 保持 92f5e47 原文（历史 noqa + try/except pass 未清理），
-    # 因此还豁免 RUF100 / SIM105；观察期结束必须连同这一段一起删除。
-    scheduler_exempt = set(per_file["astock/scheduler.py"])
-    assert {"RUF100", "SIM105"} <= scheduler_exempt, "观察期需保留 scheduler.py 原文，缺失 RUF100/SIM105 豁免会逼人改代码"
+    per_file = lint.get("per-file-ignores") or {}
+    assert per_file == {}, f"ruff.toml 又出现文件级豁免：{per_file}"
 
-    # 14 处 BLE001 的审计结论必须可查（评审 iss-mwjmhnq7-9a1c07 的判定条件之一）。
-    ruff_text = RUFF_PATH.read_text(encoding="utf-8")
-    assert "BLE001 审计结论" in ruff_text, "ruff.toml 应集中记录 scheduler.py 的 BLE001 审计理由"
-    markers = (":165", ":360", ":422", ":427", ":432", ":437", ":522", ":536", ":556", ":614", ":618", ":626", ":640", ":669")
-    for marker in markers:
-        assert marker in ruff_text, f"ruff.toml 审计结论缺少 {marker} 站点"
+
+def test_blind_except_exemptions_carry_reasons() -> None:
+    """BLE001 只能留在真正的边界兜底处，且每处 noqa 必须写明理由（审计可查）。
+
+    第 3 轮评审要求「逐条审计」：能用具体异常收窄的一律收窄（本项已把 8 处
+    Exception 收窄为 ValueError/OSError/TypeError 等），保留的 noqa 必须自带理由，
+    否则下一次没人知道它为什么不能收窄。
+    """
+    pattern = re.compile(r"#\s*noqa:\s*(?P<codes>[A-Z0-9]+(?:\s*,\s*[A-Z0-9]+)*)(?P<rest>.*)$")
+    missing: list[str] = []
+    for relative in ("astock/scheduler.py", "astock/jobs.py"):
+        path = ROOT / relative
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "noqa" not in line:
+                continue
+            match = pattern.search(line)
+            assert match, f"{relative}:{lineno} 的 noqa 写法无法解析：{line.strip()}"
+            codes = {code.strip() for code in match.group("codes").split(",")}
+            reason = match.group("rest").strip()
+            if "BLE001" in codes and not (reason.startswith("-") and len(reason) > 1):
+                missing.append(f"{relative}:{lineno}")
+    assert not missing, f"以下 BLE001 豁免缺少理由：{missing}"
 
 
 def test_mypy_exclude_matches_frozen_ui_whitelist() -> None:
