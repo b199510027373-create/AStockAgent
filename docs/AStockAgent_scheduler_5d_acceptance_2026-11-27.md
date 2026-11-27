@@ -121,8 +121,12 @@ traceback，`run_daily_job.py` 的 subprocess 也没有 exit 行）；18:30:39 �
 - 16:45 的 maintenance 因同一异常返回 `heartbeat_failed`（L3882-L3890），该次心跳
   没有评估、也没有告警；随后 17:16 之前的 maintenance 正常。
 - report 在 16:45 的 `JSONDecodeError` 来自 `run_daily_job.py` 对空 stdout 做
-  `json.loads`（close 已崩），不是 `--report` 自身缺陷；17:17/17:45 的
-  `report 5 exit=2` 是窗口仍含 11-18/11-20 旧失败（预期），11-27 窗口干净后 exit 0。
+  `json.loads`（close 已崩），不是 `--report` 自身缺陷。17:17/17:45 的
+  `report 5 exit=2` 是窗口内仍含 **11-20** 的旧失败：`scheduler.py:114-127`
+  `_recent_trading_days()` 以 `reference_trade_date=11-25` 向前取 5 个交易日，
+  窗口为 11-19..11-25（11-21/22 为周末）；其中 11-19 已 success、11-18 不在窗口内，
+  5 行中仅 11-20 failed → 4/5。11-27 收盘后窗口 11-23..11-27 全 success，
+  00:06 快照 `exit 0`。（当次 `--report 5` stdout 已被半小时任务覆盖，未单独留存。）
 - token 在 17:16 前已恢复（17:16:00 重跑 success），根因是外部凭证过期并已续期，
   不属于本任务代码缺陷；本次 `--report 5`（2026-11-28T00:06:01）再次成功，token 当前有效。
 - 验收结论不变：5 个交易日的 close job 均为 success。但暴露两个观察盲区：
