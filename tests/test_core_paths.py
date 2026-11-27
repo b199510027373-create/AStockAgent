@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -225,6 +226,35 @@ class TrackerCorePathTests(unittest.TestCase):
         self.assertIn("T+1", detail.columns)
         self.assertIn("全部", set(summary["分组"]))
         self.assertIn("跟踪口径", status)
+
+    def test_tracker_write_failure_keeps_table_and_warns(self):
+        daily = synthetic_daily(40, "2025-01-02")
+        batch = {
+            "path": None,
+            "run_id": "r1",
+            "as_of": pd.Timestamp("2025-01-10"),
+            "tradable_from": pd.Timestamp("2025-01-13"),
+            "generated_at": "2025-01-10T18:00:00",
+            "source": "live",
+            "rows": [
+                {"排名": 1, "代码": "600519.SH", "名称": "贵州茅台", "综合分": 80, "建议": "技术面强"},
+                {"排名": 2, "代码": "000001.SZ", "名称": "平安银行", "综合分": 70, "建议": "技术面中性"},
+            ],
+        }
+        with (
+            patch.object(track, "_load_batches", return_value=[batch]),
+            patch.object(track, "load_daily", return_value=daily),
+            patch.object(track, "load_index_daily", return_value=daily),
+            patch(
+                "astock.ledger.save_tracking",
+                side_effect=sqlite3.OperationalError("database is locked"),
+            ),
+        ):
+            detail, summary, status = track.compute_tracking()
+
+        self.assertEqual(len(detail), 2)
+        self.assertIn("全部", set(summary["分组"]))
+        self.assertIn("⚠️ 跟踪结果未写入 ledger（OperationalError），本次仅页面展示。", status)
 
 
 if __name__ == "__main__":

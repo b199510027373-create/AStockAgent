@@ -1171,7 +1171,12 @@ def compute_tracking() -> tuple[pd.DataFrame, pd.DataFrame, str]:
     status += " 跟踪口径：T+1 起从 tradable_from（下一交易日）开盘买入，持有到第 N 个交易日收盘；超额=个股收益-沪深300。"
     status += " 数据源：SQLite ledger（缺失时回退 JSON）。"
     detail = detail.sort_values(["推荐日", "排名"], ascending=[False, True]).reset_index(drop=True)
-    _save_tracking_rows(detail)
+    try:
+        _save_tracking_rows(detail)
+    except Exception as exc:  # noqa: BLE001 - 写库失败只丢持久化，不能清空本次页面结果
+        status += (
+            f" ⚠️ 跟踪结果未写入 ledger（{type(exc).__name__}），本次仅页面展示。"
+        )
     return detail, summary, status
 
 
