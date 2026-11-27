@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwz67nky-ab84ba",
+  "threadId": "rev-20261128-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "doc-code-mismatch",
+  "file": "docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md",
+  "lines": "77",
+  "title": "心跳去重描述“24h 内只落一条”与实现不符：仅比较最后一条签名，无时间窗口",
+  "evidence": "astock/scheduler.py:344 为 `if signature != _last_alert_signature():`；`_last_alert_signature()`（L236-262）只读取最后一条 scheduler_heartbeat 的 signature，没有任何时间比较；签名由 L232-233 `f\\\"{reference}:{streak}:{threshold}\\\"` 生成。若中间插入另一条签名，旧签名仍会再次写入，因此不存在“24h 内去重”。tests/test_scheduler_ledger.py:418 的 test_heartbeat_dedup_uses_persisted_alert_file 也只覆盖“最后一条为同签名”的场景。",
+  "suggestion": "二选一：①把文档 L77 改为“与最后一条 scheduler_heartbeat 签名相同则跳过（无 24h 时间窗口）”，并同步 §3/§5 措辞；②实现真正的 24h 去重，并补一条“写入其他签名后再次出现旧签名”的测试用例。改动后在 handoff 中指出对应代码/测试行号，评审复核文档与实现一致即关闭。",
+  "confidence": 0.88,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "fixed in d27f936（方案①改文档）: §3（L151-160）改为「只与最后一条 scheduler_heartbeat 记录的 signature 比较（astock/scheduler.py:344），相同则跳过，没有 24h 时间窗口」，引用 _last_alert_signature() scheduler.py:236-262 与签名格式 scheduler.py:232-233，并注明 tests/test_scheduler_ledger.py:418 只覆盖最后一条同签名、L268 覆盖 1 日不告警/2 日告警。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-27T16:58:00.000Z"
+  },
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "fixed in d27f936: §3 L151-160 对齐 scheduler.py:344，无 24h 窗口。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-27T16:58:00.000Z"
+    }
+  ],
+  "createdAt": "2026-11-27T16:03:15.874Z"
+}

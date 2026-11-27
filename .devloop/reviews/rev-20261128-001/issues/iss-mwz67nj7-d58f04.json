@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwz67nj7-d58f04",
+  "threadId": "rev-20261128-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "evidence-traceability",
+  "file": "docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md",
+  "lines": "13, 19-21, 36",
+  "title": "留存报告时间与文档转录不一致，且 acceptance_5d.json/.ok 每 30 分钟被计划任务重写",
+  "evidence": "实际 data/recommendations/acceptance_5d.json 的 generated_at 为 `2026-11-27T23:47:05`，acceptance_5d.ok 内容为 `2026-11-27 23:47:05`；文档 L19-21 称 .ok 为 23:17:05、L36 称 JSON generated_at 为 `2026-11-27T23:23:43`。文档提交 5cc6c24 时间为 23:44:45，早于留存件的 23:47:05。scheduler_task.log 显示 11-27 19:18:34 起约每 30 分钟出现一次 `report 5 exit=0` + `ACCEPTANCE PASS`（19:18:34、19:47:14、20:17:10、20:47:08、21:17:11、21:47:04、22:17:03、22:47:03、23:17:05、23:47:05），run_daily_job.py 每次先删 MARKER 再重写 REPORT/MARKER，故留存件会持续被覆盖；L13“23:17 由收盘计划任务执行”也易误读——11-27 的 jobs 行由 19:16:52 的 close 运行产生，23:17 只是半小时任务幂等跳过 close 后重跑 report。",
+  "suggestion": "把文档时间改为留存件实际 generated_at（23:47:05），或明确写“以 23:47:05 留存件为准，23:17/23:23 为更早的等价运行”；同时说明 acceptance_5d.json/.ok 每约 30 分钟被计划任务重写，建议在 docs 中固化当次 `--report 5` 的 stdout 摘要或文件 sha256，避免用易变文件的 mtime/内容作为验收锚点；L13 需区分“产生 jobs 行的 close 运行”与“后续重跑 report 的运行”。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "fixed in d27f936: §1（L21-35）改为 11-27 jobs 行由 19:16:52 close 产生、19:18:34 起每约 30 分钟幂等重跑 report，并说明 run_daily_job.py 先 unlink MARKER 再写 REPORT 导致文件被覆盖；以 2026-11-28T00:06:01 手工快照为锚点，固化 sha256：report E21FD988F785FD0EEE64CE4340B8BB0949C50FC6B56B518F05CEAEBDE898D121（docs/AStockAgent_scheduler_5d_report_2026-11-28.json）、heartbeat 13098E3F316925A6B643EFBD8CBAB5CDF761B8715BB34D0C7E83E1BDC7A9AEE7（docs/AStockAgent_scheduler_5d_heartbeat_2026-11-28.json）；JSON generated_at 已改 2026-11-28T00:06:01。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-27T16:58:00.000Z"
+  },
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "fixed in d27f936: §1 L21-35 快照锚点 + sha256，说明留存件每 30 分钟重写。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-27T16:58:00.000Z"
+    }
+  ],
+  "createdAt": "2026-11-27T16:03:15.811Z"
+}

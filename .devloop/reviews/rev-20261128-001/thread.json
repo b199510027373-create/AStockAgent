@@ -1,0 +1,13 @@
+{
+  "id": "rev-20261128-001",
+  "title": "评审：PR #9 调度 5 日生产验收与心跳告警观察",
+  "planItemId": "plan-20261114-004",
+  "sourceDevSessionId": "session-26fd9368-10b9-4097-8e89-204c2931b1c4",
+  "branch": "main",
+  "base": "main",
+  "files": [],
+  "status": "changes_requested",
+  "createdAt": "2026-11-27T16:00:27.442Z",
+  "updatedAt": "2026-11-27T16:33:17.061Z",
+  "reviewSessionId": "session-e13d2b66-2589-4b96-b480-7094f0deb01c"
+}

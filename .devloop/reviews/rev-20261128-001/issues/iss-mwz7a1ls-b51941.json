@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwz7a1ls-b51941",
+  "threadId": "rev-20261128-001",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "acceptance-evidence",
+  "file": "docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md",
+  "lines": "125",
+  "title": "§2.1 对 11-25 report 5 失败窗口的说明不准确：11-18 不在窗口内，11-19 已 success",
+  "evidence": "doc L125 称「17:17/17:45 的 report 5 exit=2 是窗口仍含 11-18/11-20 旧失败」。但 `astock/scheduler.py:114-127` 的 `_recent_trading_days(now, 5)` 以 `last_completed_trade_date(_due_reference(now))` 为 reference；`astock/data.py:87-101` 在 15:00 后返回当天，故 11-25 17:17 的 reference=11-25，窗口为 11-19..11-25，不含 11-18。又据同一文档 §3 表 L148「11-20 上一成功 11-19，streak=1」，11-19 已在盘后补跑成功；窗口内旧失败只有 11-20，不是 11-18/11-20。该错误只影响对 17:17/17:45 exit=2 原因的解释，不改变 11-23..11-27 5/5 success 的结论。",
+  "suggestion": "将 L125 改为「窗口仍含 11-20 旧失败（11-19 已于盘后补跑成功）」，或直接引用 17:17/17:45 两次 `--report 5` 的 stdout 中 5 行 status 作为证据；不要写 11-18。若无法取回当次 stdout，则用 `_recent_trading_days` 的窗口推导 + §3 的 heartbeat 表说明，并注明 11-18 不在窗口内。",
+  "confidence": 0.86,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "fixed in 9a853fc: §2.1 L123-129 改为「17:17/17:45 的 report 5 exit=2 是窗口内仍含 11-20 的旧失败；scheduler.py:114-127 _recent_trading_days 以 reference_trade_date=11-25 取 11-19..11-25（11-21/22 周末），11-19 已 success、11-18 不在窗口，5 行仅 11-20 failed → 4/5」，并注明当次 stdout 已被半小时任务覆盖、未单独留存。旁证：jobs 表 2026-11-19:close success、2026-11-20:close failed（attempts=11）。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-27T16:58:00.000Z"
+  },
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "fixed in 9a853fc: §2.1 L123-129 更正为仅 11-20 旧失败。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-27T16:58:00.000Z"
+    }
+  ],
+  "createdAt": "2026-11-27T16:33:06.976Z"
+}
