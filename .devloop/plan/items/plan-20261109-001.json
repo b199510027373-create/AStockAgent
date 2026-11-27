@@ -29,7 +29,7 @@
       "ADR-002"
     ],
     "branch": "feat/plan-20261109-001-backfill-contract",
-    "ci": "PR run 46063703330 success; main run 46064470258 success (5b47503); closeout run 46064880414 success (54730bf); closeout recheck run 46065248812 success (7d383a9)",
+    "ci": "PR run 46063703330 success; main run 46064470258 success (5b47503); closeout run 46064880414 success (54730bf); closeout run 46065248812 success (7d383a9); recheck closeout run 46067951677 success (f86c4d2); recheck closeout run 46068285863 success (e295c5a)",
     "issue": "iss-mw81x690-cbec5c",
     "merge": "5b47503 (squash, PR #53, main 2026-11-28)",
     "module": "contracts",
@@ -44,7 +44,8 @@
       "PR #53 CI run 46063703330 => test pass 2m22s, png-export pass 55s",
       "main CI run 46064470258 (5b47503) => test pass 1m58s, png-export pass 1m16s",
       "main CI run 46064880414 (54730bf closeout) => test pass, png-export pass",
-      "main CI run 46065248812 (7d383a9 closeout) => success, 1m55s"
+      "main CI run 46065248812 (7d383a9 closeout) => success, 1m55s",
+      "main CI run 46067951677 (f86c4d2 closeout) => success: test, png-export"
     ],
     "files": [
       "astock/backfill.py",
@@ -54,6 +55,6 @@
     ]
   },
   "createdAt": "2026-11-08T16:42:55.179Z",
-  "updatedAt": "2026-11-27T21:04:27.049Z",
+  "updatedAt": "2026-11-27T21:10:35.072Z",
   "devSessionId": "session-07430863-8683-4229-9c1b-3188e42c476e"
 }
