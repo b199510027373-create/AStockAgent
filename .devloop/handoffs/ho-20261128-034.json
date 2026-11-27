@@ -1,0 +1,108 @@
+{
+  "id": "ho-20261128-034",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261109-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "backfill 推荐 JSON 接入 RecommendationRun 契约，ledger 拒绝无 schema_version 的入库",
+  "summary": "收口完成并已合并到 main：3b8d56c（plan-20261109-001 done/100 + 2026-11-28 复核证据）与 f86c4d2（handoff ho-20261128-033）已推 main（7d383a9..f86c4d2），main CI run 46067951677 全绿（test success、png-export success）。复核证据：目标测试 49 passed、全量 961 passed、ruff/mypy 通过；实现本体为已合并的 5b47503（PR #53，评审 rev-20261128-004 approve）。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "backfill 写出的 JSON 带 schema_version=2/run_id/data_as_of/tradable_from/diagnostics 且过 validate_recommendation_run",
+      "source": "plan-20261109-001 acceptance #1"
+    },
+    {
+      "id": "REQ-2",
+      "text": "ledger.sync_json_dir 对无 schema_version 的文件有显式处理（跳过或标 legacy）并有测试",
+      "source": "plan-20261109-001 acceptance #2"
+    },
+    {
+      "id": "REQ-3",
+      "text": "全量 pytest 通过",
+      "source": "plan-20261109-001 acceptance #3"
+    },
+    {
+      "id": "REQ-4",
+      "text": "把计划里剩下百分之十完成并合并",
+      "source": "用户会话消息 m00010"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261109-001.json",
+      "summary": "plan 置 done/100，links.test 补 2026-11-28 复核证据",
+      "commit": "3b8d56c"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261128-033.json",
+      "summary": "收口复核 update handoff",
+      "commit": "f86c4d2"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "收口复核与推送日历事件",
+      "commit": "f86c4d2"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_backfill_ledger_contract.py tests/test_contracts.py -q",
+      "result": "49 passed, 1 warning in 28.24s",
+      "passed": true,
+      "evidence": "2026-11-28 在 main 7d383a9 上重跑"
+    },
+    {
+      "command": "pytest tests -q -m \"not png\"",
+      "result": "961 passed, 3 skipped, 6 deselected, 46 subtests passed in 259.86s",
+      "passed": true,
+      "evidence": "首轮仅他人未提交 ADR-0019 状态大小写漂移失败 1 条，本地修正后全绿"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "2026-11-28 复核"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": "2026-11-28 复核"
+    },
+    {
+      "command": "gh run view 46067951677",
+      "result": "success: test success, png-export success",
+      "passed": true,
+      "evidence": "main f86c4d2 收口提交 CI"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push main (devloop 元数据)",
+      "reason": "推送 plan 收口、handoff 与日历记录",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "f86c4d2",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/53",
+    "ci": "main run 46067951677 (f86c4d2) success: test success, png-export success",
+    "merge": "5b47503 squash-merged (PR #53, main 2026-11-28)",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-033",
+  "next": "本任务无开发者待办，plan-20261109-001 已 done(100) 且收口提交 CI 全绿。环境备注：本机 git 配置 http.https://github.com.proxy=http://127.0.0.1:7890，该本地代理当时不可达，本次用 `git -c \"http.https://github.com.proxy=\" push` 直连推送成功；未改动用户的全局/仓库代理配置，后续代理恢复或另择其一即可。",
+  "createdAt": "2026-11-27T21:08:04.083Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-034.md"
+}
