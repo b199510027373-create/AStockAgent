@@ -797,8 +797,14 @@ class DailyDatasetTests(unittest.TestCase):
             first = self.scan()
             build = self.read_meta()["build"]
             data._DAILY_MEM.clear()
-            with patch.object(data, "_fetch_daily", side_effect=AssertionError("热路径不应联网")):
+            # 热路径既不该联网，也不该逐股 load 拼面板（验收 2：横截面直接 scan）。
+            no_per_code = patch.object(data, "load_daily", side_effect=AssertionError("热路径不应逐股 load"))
+            with (
+                patch.object(data, "_fetch_daily", side_effect=AssertionError("热路径不应联网")),
+                no_per_code,
+            ):
                 second = self.scan()
+                data.load_daily_panel(list(self.CODES), start=self.START, end=self.END)
             status = data.dataset_status("qfq")
         self.assertEqual(len(first), len(second))
         self.assertEqual(self.read_meta()["build"], build)  # 没有重建
