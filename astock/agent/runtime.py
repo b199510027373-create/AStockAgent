@@ -700,7 +700,7 @@ class AgentRuntime:
                     step_count=len(steps) + 1,
                     error=final_error,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - 写 run 失败状态是最后兜底：异常类型不稳定，但 run 必须被标成 failed
                 with contextlib.suppress(Exception):
                     conn.execute(
                         "UPDATE agent_runs SET status='failed', finished_at=?, error=? "

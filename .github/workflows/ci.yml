@@ -73,9 +73,10 @@ jobs:
           mypy astock app.py
 
       # 覆盖率门槛来自 .coveragerc（fail_under），这里不再重复 --fail-under，避免两处数字打架。
-      # 分阶段目标：P1 76.45%（=CI Linux 实测显示值 / 本地 Windows 76.68%）→ P2 80% → P3 85%。
+      # 分阶段目标：P2（当前）80.56%（=CI Linux 实测显示值 / 本地 Windows 80.80%）→ P3 85%。
+      # 原 P1 目标 80% 已随 2026-11-27 实测（run 46047574586）达成，不再是下一步门槛。
       # 提升路径见 .coveragerc 注释；每次上调都在 PR 里附 coverage report 的 Missing 列。
-      - name: Run tests with coverage gate (P1 76.45% → 80% → 85%)
+      - name: Run tests with coverage gate (current 80.56% → P3 85%; P1 80% achieved)
         run: |
           # 显式传 tests，避免收集非测试目录；release/ 已忽略且不再是发布源。
           # 真实 PNG 导出（marker=png）需要 Chrome/字体，只在独立 png-export job 里跑，

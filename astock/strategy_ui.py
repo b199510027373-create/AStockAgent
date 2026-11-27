@@ -63,7 +63,7 @@ def run_lab(
         status = result.status
         progress(1.0, desc="完成")
         return status, summary, result.per_stock, result.windows, portfolio_figure(result)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - UI 事件回调边界：策略实验室异常转成页面错误提示，不能打断界面
         return f"❌ 策略实验室失败：{exc}", "", pd.DataFrame(), pd.DataFrame(), None
 
 

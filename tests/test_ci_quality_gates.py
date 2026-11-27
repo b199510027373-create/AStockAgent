@@ -23,12 +23,13 @@ RUFF_PATH = ROOT / "ruff.toml"
 COVERAGE_PATH = ROOT / ".coveragerc"
 MYPY_PATH = ROOT / "mypy.ini"
 
-# 实测基线（plan-20261103-012）：CI Linux 76.45%（run 43935079016，门禁权威值）、
-# 本地 Windows 76.68%。比 PR #21 的 76.47% 低 0.02pp：scheduler.py 为守住 PR #9 观察期
-# 回退到 92f5e47 原文，恢复的两处 try/except 分支在 Linux 上未被覆盖（+1 stmt / +2 miss）。
-# 门槛等于 CI 实测显示值 76.45（评审 iss-mwjmi7bw-9b664c：常量若低于实测值，
+# 实测基线（plan-20261117-001 复核，2026-11-27）：CI Linux 12474/2425 = 80.56%
+# （run 46047574586，门禁权威值）、本地 Windows 12474/2395 = 80.80%（953 passed）。
+# 旧基线 76.45%（run 43935079016，plan-20261103-012）已被取代：观察期结束后
+# scheduler.py 恢复正常实现，覆盖率随存量清理与新增测试升到 80.56%。
+# 门槛等于 CI 实测显示值 80.56（评审 iss-mwjmi7bw-9b664c：常量若低于实测值，
 # 门槛可被静默下调而用例仍绿）。调整门槛必须同步改本断言并过评审。
-MIN_COVERAGE_FLOOR = 76.45
+MIN_COVERAGE_FLOOR = 80.56
 
 # mypy 只排除 UI / 图表模块；这个白名单是「覆盖全部非 UI 模块」的唯一定义处。
 MYPY_UI_WHITELIST = {
@@ -45,7 +46,7 @@ MYPY_UI_WHITELIST = {
         "recommend_ui",
     )
 }
-# astock 下共 52 个 .py，排除上述 9 个 → 43 个受检 + app.py = CI 日志里的 44 files。
+# astock 下共 53 个 .py，排除上述 9 个 → 44 个受检 + app.py = CI 日志里的 45 files。
 # plan-20261107-006 新增 astock/agent/tools/market_tools.py（非 UI，必须受 mypy 检查）。
 # plan-20261107-007 新增 astock/agent/chat.py 与 astock/agent_chat_ui.py：都不在 UI
 # 白名单里，因此同样受 mypy 检查（UI 白名单只豁免历史 Gradio 模块）。
@@ -151,21 +152,27 @@ DOCS_WITH_BASELINE = (
 )
 
 
-def _coverage_comment_baselines() -> tuple[tuple[int, int, float], tuple[int, int, float], int]:
-    """从 .coveragerc 注释里取出本地实测、CI 实测与本地用例数（唯一数据源）。"""
+def _coverage_comment_baselines() -> tuple[tuple[int, int, float], tuple[int, int, float], int, int]:
+    """从 .coveragerc 注释里取出本地/CI 实测与两边用例数（唯一数据源）。"""
     text = COVERAGE_PATH.read_text(encoding="utf-8")
     local = re.search(r"本地 Windows[^：]*：(\d+) / (\d+) = ([\d.]+)%", text)
     ci = re.search(r"本 PR CI Linux[^：]*：(\d+) stmts / (\d+) miss = ([\d.]+)%", text)
     passed = re.search(r"本地 Windows[^：]*?(\d+) passed", text)
-    assert local and ci and passed, "无法从 .coveragerc 注释解析实测基线"
+    ci_passed = re.search(r"本 PR CI Linux[^：]*：[^\n]*?(\d+) passed", text)
+    assert local and ci and passed and ci_passed, "无法从 .coveragerc 注释解析实测基线"
     local_baseline = (int(local.group(1)), int(local.group(2)), float(local.group(3)))
     ci_baseline = (int(ci.group(1)), int(ci.group(2)), float(ci.group(3)))
-    return local_baseline, ci_baseline, int(passed.group(1))
+    return local_baseline, ci_baseline, int(passed.group(1)), int(ci_passed.group(1))
+
+
+def _mypy_files() -> int:
+    """CI 日志里 mypy 的受检文件数：受检模块 + app.py。"""
+    return EXPECTED_CHECKED_MODULES + 1
 
 
 def test_coveragerc_baseline_arithmetic_is_self_consistent() -> None:
     """语句数、未覆盖数与百分比必须自洽：9247/2155 配 76.68% 这类拼接错误要能变红。"""
-    local, ci, _ = _coverage_comment_baselines()
+    local, ci, _, _ = _coverage_comment_baselines()
 
     for stmts, miss, pct in (local, ci):
         computed = round((stmts - miss) / stmts * 100, 2)
@@ -194,10 +201,11 @@ def _doc_baseline_problems(texts: dict[str, str]) -> list[str]:
     以 .coveragerc 注释为唯一数据源：文档里的语句数/未覆盖数/百分比/用例数/门槛
     一旦被改成别的值或漏改，对应片段就匹配不上（评审 iss-mwjo3ftq-d5ea0b）。
     """
-    local, ci, local_passed = _coverage_comment_baselines()
+    local, ci, local_passed, ci_passed = _coverage_comment_baselines()
     local_stmts, local_miss, local_pct = local
     ci_stmts, ci_miss, ci_pct = ci
     floor = MIN_COVERAGE_FLOOR
+    mypy_files = _mypy_files()
 
     required = {
         "AStockAgent_development_status_2026-11-08.md": (
@@ -205,6 +213,7 @@ def _doc_baseline_problems(texts: dict[str, str]) -> list[str]:
             f"{ci_stmts}/{ci_miss} = {ci_pct:.2f}%",
             f"覆盖率门槛 {floor:.2f}%",
             f"{local_passed} passed",
+            f"{mypy_files} source files",
         ),
         "AStockAgent_CI_work_calendar.md": (
             f"{ci_stmts}/{ci_miss}",
@@ -212,10 +221,13 @@ def _doc_baseline_problems(texts: dict[str, str]) -> list[str]:
             f"{ci_pct:.2f}%",
             f"{local_pct:.2f}%",
             f"{local_passed} passed",
+            f"{ci_passed} passed",
+            f"{mypy_files} source files",
         ),
         "AStockAgent_architecture_v1.3.md": (
             f"覆盖率门槛 {floor:.2f}%",
             f"本地 {local_pct:.2f}%",
+            f"{mypy_files} 个源文件",
         ),
         "AStockAgent_product_snapshot_v1.3.md": (
             f"本地覆盖率 {local_pct:.2f}%",
@@ -269,24 +281,26 @@ def test_docs_baseline_guard_goes_red_on_wrong_numbers() -> None:
     texts = {path.name: path.read_text(encoding="utf-8") for path in DOCS_WITH_BASELINE}
     assert _doc_baseline_problems(texts) == [], "真实文档当前已不一致，应先修文档"
 
-    local, ci, local_passed = _coverage_comment_baselines()
+    local, ci, local_passed, ci_passed = _coverage_comment_baselines()
     local_pct = local[2]
     ci_stmts, ci_miss, _ = ci
+    mypy_files = _mypy_files()
     wrong_pct = f"{MIN_COVERAGE_FLOOR - 1:.2f}%"
-    mutations = {
-        "AStockAgent_architecture_v1.3.md": (f"{MIN_COVERAGE_FLOOR:.2f}%", wrong_pct),
-        "AStockAgent_product_snapshot_v1.3.md": (
+    mutations = [
+        ("AStockAgent_architecture_v1.3.md", f"{MIN_COVERAGE_FLOOR:.2f}%", wrong_pct),
+        ("AStockAgent_architecture_v1.3.md", f"{mypy_files} 个源文件", f"{mypy_files + 1} 个源文件"),
+        (
+            "AStockAgent_product_snapshot_v1.3.md",
             f"本地覆盖率 {local_pct:.2f}%",
             f"本地覆盖率 {wrong_pct}",
         ),
-        "AStockAgent_development_status_2026-11-08.md": (
-            f"{local_passed} passed",
-            f"{local_passed + 1} passed",
-        ),
-        "AStockAgent_CI_work_calendar.md": (f"{ci_stmts}/{ci_miss}", f"{ci_stmts + 1}/{ci_miss}"),
-        "README.md": (f"{local_passed} passed", f"{local_passed + 1} passed"),
-    }
-    for name, (before, after) in mutations.items():
+        ("AStockAgent_development_status_2026-11-08.md", f"{local_passed} passed", f"{local_passed + 1} passed"),
+        ("AStockAgent_development_status_2026-11-08.md", f"{mypy_files} source files", f"{mypy_files + 1} source files"),
+        ("AStockAgent_CI_work_calendar.md", f"{ci_stmts}/{ci_miss}", f"{ci_stmts + 1}/{ci_miss}"),
+        ("AStockAgent_CI_work_calendar.md", f"{ci_passed} passed", f"{ci_passed - 1} passed"),
+        ("README.md", f"{local_passed} passed", f"{local_passed + 1} passed"),
+    ]
+    for name, before, after in mutations:
         mutated = texts[name].replace(before, after)
         assert mutated != texts[name], f"{name} 里找不到 {before!r}，守护断言已失效"
         assert _doc_baseline_problems({**texts, name: mutated}), f"把 {name} 的 {before!r} 改错后守护仍绿"
@@ -338,16 +352,17 @@ def test_ruff_config_has_no_per_file_exemptions() -> None:
 
 
 def test_blind_except_exemptions_carry_reasons() -> None:
-    """BLE001 只能留在真正的边界兜底处，且每处 noqa 必须写明理由（审计可查）。
+    """astock 全量：BLE001 只能留在真正的边界兜底处，且每处 noqa 必须写明理由。
 
     第 3 轮评审要求「逐条审计」：能用具体异常收窄的一律收窄（本项已把 8 处
     Exception 收窄为 ValueError/OSError/TypeError 等），保留的 noqa 必须自带理由，
-    否则下一次没人知道它为什么不能收窄。
+    否则下一次没人知道它为什么不能收窄。评审 iss-mwzbx2no-cbaa41：ruff.toml 的
+    措辞是全仓规则，守护范围也必须覆盖 astock/**/*.py，不能只盯 scheduler/jobs。
     """
     pattern = re.compile(r"#\s*noqa:\s*(?P<codes>[A-Z0-9]+(?:\s*,\s*[A-Z0-9]+)*)(?P<rest>.*)$")
     missing: list[str] = []
-    for relative in ("astock/scheduler.py", "astock/jobs.py"):
-        path = ROOT / relative
+    for path in sorted((ROOT / "astock").rglob("*.py")):
+        relative = path.relative_to(ROOT).as_posix()
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if "noqa" not in line:
                 continue
@@ -372,7 +387,7 @@ def test_mypy_exclude_matches_frozen_ui_whitelist() -> None:
     regex = re.compile(pattern)
 
     # mypy 递归检查 astock 包（含 astock/agent/*.py），exclude 正则只作用于顶层模块：
-    # 52 个 .py - 9 个 UI 白名单 = 43 个受检模块，加 app.py 即 CI 日志的 44 files。
+    # 53 个 .py - 9 个 UI 白名单 = 44 个受检模块，加 app.py 即 CI 日志的 45 files。
     package_files = {path.relative_to(ROOT).as_posix() for path in (ROOT / "astock").rglob("*.py")}
     excluded = {path for path in package_files if regex.fullmatch(path)}
 

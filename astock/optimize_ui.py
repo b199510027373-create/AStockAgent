@@ -110,7 +110,7 @@ def run_optimize(
             wf.walk,
             oos_figure(wf.equity, f"{code} Walk-forward 样本外净值"),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - UI 事件回调边界：参数优化异常转成页面错误提示，不能打断界面
         return f"❌ 参数优化失败：{exc}", "", pd.DataFrame(), None, pd.DataFrame(), None
 
 

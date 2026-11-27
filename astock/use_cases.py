@@ -770,7 +770,7 @@ def run_tracking() -> RunResult:
 
     try:
         excess_chart = track_figure(summary)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 净值图是展示增强，失败只降级为无图并记 diagnostics
         excess_chart = None
         diagnostics["figure_error"] = f"{type(exc).__name__}: {exc}"
 
