@@ -37,7 +37,8 @@
     ],
     "handoff": [
       "ho-20261117-014",
-      "ho-20261128-012"
+      "ho-20261128-012",
+      "ho-20261128-013"
     ],
     "module": [
       "ci"
@@ -75,10 +76,10 @@
       "文档守护变异验证：development_status 改回 9247/2155 -> test_docs_baseline_matches_measured_numbers 变红（已恢复）",
       "GitHub CI PR #26 run 43939394936: attempt1+attempt2 全绿；609 passed / TOTAL 9248 2178 76.45% / ruff 0 / mypy 36 files",
       "GitHub CI main run 43939999492 (merge 3078048): success",
-      "GitHub CI PR #27 43940445367: 两次全 pass；main run 43941051281: success；后续收口 PR #50 (e73c49c, PR run 46047574586 + main run 46048029684 均绿)"
+      "GitHub CI PR #27 43940445367: 两次全 pass；main run 43941051281: success；后续收口 PR #50 (e73c49c, PR run 46047574586 + main run 46048029684/46048643343 均绿)"
     ]
   },
   "createdAt": "2026-11-03T12:10:57.134Z",
-  "updatedAt": "2026-11-27T18:19:35.178Z",
+  "updatedAt": "2026-11-27T18:25:32.581Z",
   "devSessionId": "session-73d90b4d-a2d4-4a72-a16d-9ad17246fe67"
 }
