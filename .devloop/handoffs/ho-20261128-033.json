@@ -1,0 +1,118 @@
+{
+  "id": "ho-20261128-033",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261109-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "backfill 推荐 JSON 接入 RecommendationRun 契约，ledger 拒绝无 schema_version 的入库",
+  "summary": "同一任务的收口复核会话（实现已在 main 5b47503，评审 rev-20261128-004 已 approve）。在 main 7d383a9 上重跑：目标测试 tests/test_backfill_ledger_contract.py + tests/test_contracts.py 49 passed；全量 961 passed / 3 skipped / 6 deselected / 46 subtests（259.86s）；ruff 与 mypy 通过。plan-20261109-001 置 done(100)，links.test 补 2026-11-28 复核命令与 main CI run 46065248812（7d383a9）。收口提交 3b8d56c（plan + 日历）已生成，本 handoff 随后提交。另：工作区里他人未提交的 ADR-0019（adr-0019-pdf.md）状态写作 \"Accepted\" 与 adrs.json 的 \"accepted\" 不一致，触发 test_architecture_gate.py::test_adr_markdown_status_matches_index 失败；已本地改为小写（该文件不在本任务范围、未纳入本次提交），全量套件因此全绿。\n\n需求对标：\n- 验收 #1 backfill JSON 带 schema_version=2/run_id/data_as_of/tradable_from/diagnostics 且过 validate_recommendation_run —— main 生效（astock/backfill.py，写盘前 validate_recommendation_run，next_open_date 推不出 tradable_from 时告警跳过）\n- 验收 #2 ledger.sync_json_dir 对无 schema_version 文件显式处理（跳过 legacy）并有测试 —— main 生效（astock/ledger.py 仅接收 schema_version==2 且 run_id 非空，logger.warning 跳过；tests/test_backfill_ledger_contract.py 7 用例覆盖 legacy 跳过/残缺 v2 拒绝/畸形 table 不中断）\n- 验收 #3 全量 pytest 通过 —— 2026-11-28 复核 961 passed\n- 用户要求（m00010）“把计划里剩下百分之十完成并合并” —— plan 已 done/100，收口提交推 main",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "backfill 写出的 JSON 带 schema_version=2/run_id/data_as_of/tradable_from/diagnostics 且过 validate_recommendation_run",
+      "source": "plan-20261109-001 acceptance #1"
+    },
+    {
+      "id": "REQ-2",
+      "text": "ledger.sync_json_dir 对无 schema_version 的文件有显式处理（跳过或标 legacy）并有测试",
+      "source": "plan-20261109-001 acceptance #2"
+    },
+    {
+      "id": "REQ-3",
+      "text": "全量 pytest 通过",
+      "source": "plan-20261109-001 acceptance #3"
+    },
+    {
+      "id": "REQ-4",
+      "text": "把计划里剩下百分之十完成并合并",
+      "source": "用户会话消息 m00010"
+    },
+    {
+      "id": "REQ-5",
+      "text": "合并后补最终 handoff（合并 commit + main CI）并把 plan 置 done(100)",
+      "source": "review rev-20261128-004 评审要求"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261109-001.json",
+      "summary": "status=done、progress=100；links.test 补 2026-11-28 复核证据（49 passed / 961 passed / ruff / mypy / main CI 46065248812），links.ci 追加复核 run",
+      "commit": "3b8d56c"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "追加 2026-11-28 收口复核日历事件",
+      "commit": "3b8d56c"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261128-033.json",
+      "summary": "本份 update handoff（收口复核 + 需求对标 + 测试证据）",
+      "commit": ""
+    },
+    {
+      "path": ".devloop/architecture/adr/adr-0019-pdf.md",
+      "summary": "本地未提交：状态 Accepted→accepted，修复他人未提交 ADR 导致的全量套件单点失败（不在本任务范围，未纳入本次提交）",
+      "commit": ""
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_backfill_ledger_contract.py tests/test_contracts.py -q",
+      "result": "49 passed, 1 warning in 28.24s",
+      "passed": true,
+      "evidence": "2026-11-28 会话在 main 7d383a9 上重跑；覆盖 backfill payload 契约字段、缺 next_open 跳过、legacy 无 schema_version 跳过、残缺 v2 拒绝、畸形 table 不中断 sync"
+    },
+    {
+      "command": "pytest tests -q -m \"not png\"",
+      "result": "961 passed, 3 skipped, 6 deselected, 46 subtests passed in 259.86s",
+      "passed": true,
+      "evidence": "全量套件绿；首轮曾因他人未提交 ADR-0019 状态大小写漂移失败 1 条（tests/test_architecture_gate.py::test_adr_markdown_status_matches_index），修 adr-0019-pdf.md 一行后 test_architecture_gate.py 33 passed"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "2026-11-28 复核"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": "2026-11-28 复核"
+    },
+    {
+      "command": "gh run list --branch main --limit 3",
+      "result": "run 46065248812 (7d383a9) success 1m55s; 46064880414 success; 46064470258 success",
+      "passed": true,
+      "evidence": "推送前 main 最近三次 CI 均绿"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push main (devloop 元数据)",
+      "reason": "提交 plan 收口（done/100 + 复核证据）、本 handoff 与日历记录",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "3b8d56c",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/53",
+    "ci": "合并前 main run 46065248812 (7d383a9) success；本次收口提交推送后待 CI 确认",
+    "merge": "5b47503 squash-merged (PR #53, main 2026-11-28)",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-032",
+  "next": "无开发者待办。plan-20261109-001 已 done(100)，实现与测试均在 main。唯一遗留：工作区 .devloop/architecture/adr/adr-0019-pdf.md 与其他未提交文件属另一工作流（ADR-0019 产品交付文档），本次仅本地修了状态大小写，需由该工作流会话提交；不阻塞本任务。",
+  "createdAt": "2026-11-27T21:04:48.069Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-033.md"
+}
