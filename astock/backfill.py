@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 import pandas as pd
@@ -20,6 +21,8 @@ from .recommend import (
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
 REC_DIR.mkdir(parents=True, exist_ok=True)
+
+logger = logging.getLogger(__name__)
 
 
 def _existing_as_of() -> set[str]:
@@ -127,11 +130,15 @@ def backfill_technical(
                 }
             )
         next_open = next_open_date(date)
-        tradable_from = (
-            pd.Timestamp(next_open).strftime("%Y-%m-%d")
-            if next_open is not None
-            else (date + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-        )
+        if next_open is None:
+            # 没有晚于 data_as_of 的开市日 = 交易日历缺失/已到末尾；臆造 data_as_of+1
+            # 可能落到周末或节假日，DATA-03 会让该批次永远没有跟踪结果。
+            logger.warning(
+                "无法从交易日历推导 %s 的 tradable_from，跳过该回填批次", key
+            )
+            skipped += 1
+            continue
+        tradable_from = pd.Timestamp(next_open).strftime("%Y-%m-%d")
         generated_at = datetime.now().isoformat(timespec="seconds")
         payload = {
             "schema_version": 2,
@@ -172,7 +179,8 @@ def backfill_technical(
             progress(min(0.95, 0.1 + 0.8 * created / max(1, int(days))), desc=f"回填 {created}/{days}")
 
     status = (
-        f"技术分回填完成：新增 {created} 个批次，跳过已存在的 {skipped} 个日期。"
+        f"技术分回填完成：新增 {created} 个批次，跳过 {skipped} 个日期"
+        "（已存在或无法从交易日历推导 tradable_from）。"
         "事件分固定 50，结果只用于检验技术分排序，不等同于完整每日推荐。"
     )
     return created, status

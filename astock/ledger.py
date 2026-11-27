@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import BASE_DIR
-from .contracts import normalize_action
+from .contracts import normalize_action, validate_recommendation_run
 
 logger = logging.getLogger(__name__)
 
@@ -518,9 +518,11 @@ def save_tracking(run_id: str, rows: list[dict]) -> None:
 def sync_json_dir(path: Path | str | None = None) -> int:
     """One-shot import of existing recommendation JSON files.
 
-    只接收 ``schema_version == 2`` 的批次（DATA-01）。旧文件没有该字段时不再补
-    ``legacy_*`` run_id 入账——那样会写入 schema_version/tradable_from 为 NULL 的行，
-    ledger 无法自证数据口径；这里显式跳过并逐条告警。
+    只接收通过 ``RecommendationRun`` 契约校验的 ``schema_version == 2`` 批次
+    （DATA-01）。旧文件没有该字段时不再补 ``legacy_*`` run_id 入账——那样会写入
+    schema_version/tradable_from 为 NULL 的行，ledger 无法自证数据口径；残缺的 v2
+    文件（缺 tradable_from/diagnostics、table/evidence 形状不对）同理拒在库外，
+    逐条告警后跳过，不影响其余文件迁移。
     """
     folder = Path(path or REC_DIR)
     if not folder.exists():
@@ -543,9 +545,11 @@ def sync_json_dir(path: Path | str | None = None) -> int:
             if not str(payload.get("run_id") or "").strip():
                 logger.warning("skip recommendation JSON without run_id: %s", file)
                 continue
+            # 完整契约校验：缺字段/形状不对的文件不能以 NULL 口径入库。
+            payload = validate_recommendation_run(payload, source=str(file))
             if save_run(payload, json_path=str(file)):
                 count += 1
-        except (OSError, ValueError, TypeError, sqlite3.Error) as exc:
+        except (OSError, ValueError, TypeError, AttributeError, sqlite3.Error) as exc:
             # 单个历史 JSON 损坏/写库失败（磁盘、约束）跳过，不影响其余迁移
             logger.warning("skip unreadable recommendation JSON %s: %s", file, exc)
             continue

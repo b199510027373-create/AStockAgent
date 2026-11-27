@@ -59,27 +59,49 @@ def _basic() -> pd.DataFrame:
     )
 
 
-def _run_backfill(rec_dir: Path) -> tuple[int, dict]:
+def _run_backfill(
+    rec_dir: Path, *, next_open: str | None = "2026-09-14"
+) -> tuple[int, str, dict | None]:
     daily = {code: _daily(offset) for offset, code in enumerate(CODES)}
+    next_open_ts = None if next_open is None else pd.Timestamp(next_open)
     with (
         patch.object(backfill, "REC_DIR", rec_dir),
         patch.object(backfill, "parse_universe", return_value=CODES),
         patch.object(backfill, "load_many", return_value=daily),
         patch.object(backfill, "stock_basic", return_value=_basic()),
-        patch.object(backfill, "next_open_date", return_value=pd.Timestamp("2026-09-14")),
+        patch.object(backfill, "next_open_date", return_value=next_open_ts),
     ):
-        created, _status = backfill.backfill_technical(days=1, top_n=2, candidate_n=3)
+        created, status = backfill.backfill_technical(days=1, top_n=2, candidate_n=3)
     files = sorted(rec_dir.glob("recommend_*_backfill.json"))
-    assert len(files) == 1, files
-    return created, json.loads(files[0].read_text(encoding="utf-8"))
+    payload = json.loads(files[0].read_text(encoding="utf-8")) if files else None
+    return created, status, payload
+
+
+def _valid_payload(**overrides) -> dict:
+    payload = {
+        "schema_version": 2,
+        "run_id": "rec_contract",
+        "generated_at": "2026-01-06T18:00:00",
+        "data_as_of": "2026-01-06",
+        "tradable_from": "2026-01-07",
+        "source": "test",
+        "market": "测试批次",
+        "params": {},
+        "diagnostics": {},
+        "table": [],
+        "evidence": {},
+    }
+    payload.update(overrides)
+    return payload
 
 
 class BackfillContractTests(unittest.TestCase):
     def test_backfill_payload_carries_contract_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
             rec_dir = Path(tmp)
-            created, payload = _run_backfill(rec_dir)
+            created, _status, payload = _run_backfill(rec_dir)
 
+        assert payload is not None
         self.assertEqual(created, 1)
         self.assertEqual(payload["schema_version"], 2)
         self.assertTrue(payload["run_id"].startswith("backfill_"))
@@ -98,7 +120,8 @@ class BackfillContractTests(unittest.TestCase):
     def test_backfill_payload_imports_into_ledger_with_schema_version(self):
         with tempfile.TemporaryDirectory() as tmp:
             rec_dir = Path(tmp)
-            _created, payload = _run_backfill(rec_dir)
+            _created, _status, payload = _run_backfill(rec_dir)
+            assert payload is not None
             with patch.object(ledger, "DB_PATH", Path(tmp) / "ledger.db"):
                 imported = ledger.sync_json_dir(rec_dir)
                 run = ledger.get_run(payload["run_id"])
@@ -108,6 +131,20 @@ class BackfillContractTests(unittest.TestCase):
         self.assertEqual(run["schema_version"], 2)
         self.assertEqual(run["data_as_of"], payload["data_as_of"])
         self.assertEqual(run["tradable_from"], "2026-09-14")
+
+    def test_missing_next_open_skips_batch_instead_of_guessing(self):
+        # 交易日历缺失时不能臆造 data_as_of+1（可能是周末/节假日，DATA-03 会让
+        # 批次永远没有跟踪结果）：应告警并跳过，不落盘。
+        with tempfile.TemporaryDirectory() as tmp:
+            rec_dir = Path(tmp)
+            with self.assertLogs("astock.backfill", level="WARNING") as logs:
+                created, status, payload = _run_backfill(rec_dir, next_open=None)
+            self.assertEqual(created, 0)
+            self.assertIsNone(payload)
+            self.assertEqual(list(rec_dir.glob("recommend_*_backfill.json")), [])
+            self.assertIn("tradable_from", status)
+
+        self.assertTrue(any("tradable_from" in line for line in logs.output))
 
 
 class SyncJsonDirTests(unittest.TestCase):
@@ -141,14 +178,9 @@ class SyncJsonDirTests(unittest.TestCase):
         self.assertTrue(any("schema_version" in line for line in logs.output))
 
     def test_valid_file_still_imports_with_contract_fields(self):
-        payload = {
-            "schema_version": 2,
-            "run_id": "rec_contract",
-            "generated_at": "2026-01-06T18:00:00",
-            "data_as_of": "2026-01-06",
-            "tradable_from": "2026-01-07",
-            "table": [],
-        }
+        payload = _valid_payload()
+        # 守卫：合法用例本身必须能过 RecommendationRun 契约。
+        contracts.validate_recommendation_run(payload, source="test")
         (self.rec_dir / "recommend_20260106_120000.json").write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8"
         )
@@ -161,6 +193,42 @@ class SyncJsonDirTests(unittest.TestCase):
         self.assertEqual(run["schema_version"], 2)
         self.assertEqual(run["data_as_of"], "2026-01-06")
         self.assertEqual(run["tradable_from"], "2026-01-07")
+
+    def test_incomplete_v2_file_is_rejected_by_contract(self):
+        payload = _valid_payload(run_id="rec_missing_tradable")
+        del payload["tradable_from"]
+        (self.rec_dir / "recommend_20260107_120000.json").write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+
+        with self.assertLogs("astock.ledger", level="WARNING") as logs:
+            imported = ledger.sync_json_dir(self.rec_dir)
+
+        self.assertEqual(imported, 0)
+        self.assertEqual(ledger.stats()["runs"], 0)
+        self.assertIsNone(ledger.get_run("rec_missing_tradable"))
+        self.assertTrue(any("tradable_from" in line for line in logs.output))
+
+    def test_malformed_v2_file_does_not_abort_remaining_sync(self):
+        bad = _valid_payload(run_id="rec_bad_table")
+        bad["table"] = {"代码": "600519.SH"}  # 形状不对：应为 list[dict]
+        good = _valid_payload(run_id="rec_good")
+        for name, payload in (
+            ("recommend_20260108_120000.json", bad),
+            ("recommend_20260109_120000.json", good),
+        ):
+            (self.rec_dir / name).write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+            )
+
+        with self.assertLogs("astock.ledger", level="WARNING") as logs:
+            imported = ledger.sync_json_dir(self.rec_dir)
+
+        self.assertEqual(imported, 1)
+        self.assertEqual(ledger.stats()["runs"], 1)
+        self.assertIsNone(ledger.get_run("rec_bad_table"))
+        self.assertIsNotNone(ledger.get_run("rec_good"))
+        self.assertTrue(any("rec_bad_table" in line or "table" in line for line in logs.output))
 
 
 if __name__ == "__main__":
