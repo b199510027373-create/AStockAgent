@@ -1,16 +1,18 @@
 """ADR-010 C1/C2 回归：研究语义动作词、候选池分位与旧批次兼容映射。"""
 
 import ast
+import io
 import json
 import math
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 
-from astock import contracts, ledger, recommend, use_cases
+from astock import contracts, events, ledger, recommend, scoring, use_cases
 
 ROOT = Path(recommend.__file__).resolve().parents[1]
 
@@ -372,6 +374,187 @@ class SiteWideVocabularyTests(unittest.TestCase):
         self.assertNotIn("你是A股投顾", source)
         self.assertNotIn("给操作建议", source)
         self.assertGreaterEqual(source.count("不给出买卖"), 3)
+
+
+class EventScoringCalibrationTests(unittest.TestCase):
+    def test_events_reexports_the_single_point_implementation(self):
+        self.assertIs(events.score_events, scoring.score_events)
+        self.assertIs(events.sentiment, scoring.sentiment)
+
+    def test_run_params_carry_event_scoring_snapshot(self):
+        params = recommend._build_run_params(5, 15, 7, True)
+        snapshot = params["event_scoring"]
+        self.assertEqual(snapshot["version"], scoring.EVENT_SCORING_VERSION)
+        self.assertEqual(snapshot["type_weights"], scoring.EVENT_TYPE_WEIGHTS)
+        self.assertEqual(snapshot["rating_weight"], scoring.EVENT_RATING_WEIGHT)
+        self.assertEqual(snapshot["policy_bonus"], scoring.EVENT_POLICY_BONUS)
+        self.assertEqual(snapshot["calibration"]["samples"], scoring.CALIBRATION_SAMPLE_COUNT)
+        self.assertFalse(snapshot["calibration"]["llm_used"])
+        # 快照必须能直接 JSON 落盘，且不携带动作/置信度字段（ADR-009）。
+        payload = json.dumps(params, ensure_ascii=False)
+        self.assertNotIn('"action"', payload)
+        self.assertNotIn('"confidence"', payload)
+
+    def test_scoring_module_does_not_import_llm(self):
+        tree = ast.parse((ROOT / "astock" / "scoring.py").read_text(encoding="utf-8"))
+        imported: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.append(node.module or "")
+        self.assertFalse(
+            [name for name in imported if "llm" in name.lower() or "openai" in name.lower()]
+        )
+
+    def test_labeled_samples_cover_classes_and_volume(self):
+        samples = scoring.load_labeled_samples()
+        self.assertGreaterEqual(len(samples), 100)
+        self.assertEqual(len(samples), scoring.CALIBRATION_SAMPLE_COUNT)
+        labels = {sample["label"] for sample in samples}
+        self.assertEqual(labels, {-1, 0, 1})
+        self.assertGreaterEqual(sum(1 for sample in samples if sample["label"] == 0), 20)
+        cases = {sample["case_id"] for sample in samples}
+        self.assertEqual(len(cases), scoring.CALIBRATION_CASE_COUNT)
+        for case_id in cases:
+            items = [sample for sample in samples if sample["case_id"] == case_id]
+            self.assertEqual(len(items), 3, case_id)
+            self.assertEqual(len({sample["case_strength"] for sample in items}), 1, case_id)
+
+    def test_calibrated_weights_improve_accuracy_and_ic(self):
+        samples = scoring.load_labeled_samples()
+        legacy = scoring.evaluate_event_config(
+            samples, scoring.legacy_event_config(), now="2026-11-28"
+        )
+        current = scoring.evaluate_event_config(samples, now="2026-11-28")
+        self.assertEqual(current["type_weights"], scoring.EVENT_TYPE_WEIGHTS)
+        self.assertGreaterEqual(current["item_accuracy"], 0.95)
+        self.assertGreaterEqual(current["case_accuracy"], 0.95)
+        self.assertIsNotNone(current["ic"])
+        self.assertGreater(current["item_accuracy"], legacy["item_accuracy"])
+        self.assertGreater(current["case_accuracy"], legacy["case_accuracy"])
+        self.assertGreater(current["ic"], legacy["ic"])
+
+    def test_weight_override_changes_aggregation(self):
+        evidence = [
+            {"kind": "公告", "title": "公司签订重大合同", "pub_time": "2026-11-28"},
+            {"kind": "政策", "title": "公司业绩预减", "pub_time": "2026-11-28"},
+        ]
+        announcement_heavy = {"type_weights": {"公告": 2.0, "政策": 0.1}}
+        policy_heavy = {"type_weights": {"公告": 0.1, "政策": 2.0}}
+        high, _ = scoring.score_events(evidence, config=announcement_heavy, now="2026-11-28")
+        low, _ = scoring.score_events(evidence, config=policy_heavy, now="2026-11-28")
+        self.assertGreater(high, 50.0)
+        self.assertLess(low, 50.0)
+
+    def test_ranking_comparison_reports_before_and_after(self):
+        candidates = [
+            {
+                "code": "600001.SH",
+                "name": "公告驱动",
+                "technical_score": 90.0,
+                "evidence": [
+                    {"kind": "公告", "title": "公司签订5亿元重大合同", "pub_time": "2026-11-27"},
+                    {"kind": "新闻", "title": "公司召开投资者交流会", "pub_time": "2026-11-27"},
+                ],
+            },
+            {
+                "code": "600002.SH",
+                "name": "新闻驱动",
+                "technical_score": 90.0,
+                "evidence": [
+                    {"kind": "新闻", "title": "公司股价涨停", "pub_time": "2026-11-27"},
+                    {"kind": "新闻", "title": "公司签订大额合同", "pub_time": "2026-11-27"},
+                    {"kind": "公告", "title": "关于召开临时股东大会的通知", "pub_time": "2026-11-27"},
+                ],
+            },
+            {
+                "code": "600003.SH",
+                "name": "研报驱动",
+                "technical_score": 90.0,
+                "evidence": [
+                    {"kind": "研报", "title": "维持买入评级", "rating": "买入", "pub_time": "2026-11-27"}
+                ],
+            },
+            {
+                "code": "600004.SH",
+                "name": "中性事件",
+                "technical_score": 90.0,
+                "evidence": [
+                    {"kind": "公告", "title": "关于召开临时股东大会的通知", "pub_time": "2026-11-27"}
+                ],
+            },
+        ]
+        result = scoring.compare_event_rankings(candidates, now="2026-11-27")
+        rows = {row["code"]: row for row in result["rows"]}
+        self.assertEqual(len(rows), 4)
+        self.assertIsNotNone(result["rank_correlation"])
+        self.assertEqual(result["top_n_overlap"], 4)
+        # 公告权重上调、新闻权重下调后，公告驱动应超过新闻驱动。
+        self.assertGreater(rows["600001.SH"]["event_score_new"], rows["600001.SH"]["event_score_old"])
+        self.assertLess(rows["600002.SH"]["event_score_new"], rows["600002.SH"]["event_score_old"])
+        self.assertLess(rows["600001.SH"]["rank_new"], rows["600002.SH"]["rank_new"])
+        self.assertGreater(rows["600001.SH"]["rank_old"], rows["600002.SH"]["rank_old"])
+        self.assertEqual(rows["600001.SH"]["rank_delta"], 1)
+
+    def test_score_events_handles_empty_and_malformed_evidence(self):
+        score, stats = scoring.score_events([])
+        self.assertEqual(score, 50.0)
+        self.assertEqual(stats["n"], 0)
+
+        score, stats = scoring.score_events(
+            [
+                {"kind": "公告", "title": "", "pub_time": "not-a-date", "rating": "未知评级"},
+                {"kind": "未知类型", "title": "公司公告", "pub_time": None},
+                {"kind": "研报", "title": "公司公告", "rating": "未知评级", "pub_time": "2026-11-28"},
+            ],
+            now="2026-11-28",
+        )
+        self.assertEqual(stats["n"], 3)
+        self.assertGreaterEqual(score, 0.0)
+        self.assertLessEqual(score, 100.0)
+
+    def test_calibration_grid_selects_config_from_samples(self):
+        samples = scoring.load_labeled_samples()[:12]
+        result = scoring.calibrate_event_weights(samples, now="2026-11-28", top_k=1)
+        self.assertEqual(result["grid_points"], 648)
+        self.assertEqual(len(result["top"]), 1)
+        self.assertIn("item_accuracy", result["metrics"])
+        self.assertIn("公告", result["config"]["type_weights"])
+
+    def test_label_loader_rejects_invalid_label(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "labels.csv"
+            path.write_text(
+                "case_id,label,case_strength,item_label,kind,title,rating,strength\n"
+                "c1,2,1.0,1,公告,公司签订重大合同,,1.0\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                scoring.load_labeled_samples(path)
+
+    def test_cli_emits_auditable_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "labels.csv"
+            path.write_text(
+                "case_id,label,case_strength,item_label,kind,title,rating,strength\n"
+                "c1,1,1.0,1,公告,公司签订重大合同,,1.0\n"
+                "c1,1,1.0,0,公告,公司召开股东大会,,1.0\n"
+                "c1,1,1.0,-1,公告,公司业绩预减,,1.0\n",
+                encoding="utf-8",
+            )
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                code = scoring.main(["--labels", str(path), "--now", "2026-11-28"])
+
+        payload = json.loads(buffer.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["samples"], 3)
+        selected = payload["selected"]["type_weights"]
+        self.assertEqual(set(selected), set(scoring.EVENT_TYPE_WEIGHTS))
+        self.assertTrue(all(0.0 < float(value) <= 1.2 for value in selected.values()))
+        self.assertIn("legacy", payload)
+        self.assertIn("calibrated", payload)
 
 
 if __name__ == "__main__":

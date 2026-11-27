@@ -35,6 +35,7 @@ from .events import (
     sentiment,
     stock_basic,
 )
+from .scoring import event_scoring_params
 from .tushare_client import TushareClient
 from .utils import is_code, normalize_code
 
@@ -453,6 +454,18 @@ def _market_snapshot(
     if policy is not None and not policy.empty:
         parts.append("政策：" + "；".join(policy["title"].head(2).tolist()))
     return "。".join(parts) + "。"
+
+
+def _build_run_params(top_n: int, candidate_n: int, news_days: int, use_llm: bool) -> dict:
+    """组装可审计的 run.params；事件权重快照必须随推荐一起落盘。"""
+    return {
+        "top_n": top_n,
+        "candidate_n": candidate_n,
+        "news_days": news_days,
+        "use_llm": bool(use_llm),
+        "composite_weights": {"technical": 0.65, "event": 0.35},
+        "event_scoring": event_scoring_params(),
+    }
 
 
 def _report_markdown(
@@ -893,13 +906,7 @@ def generate_recommendation(
     if failed:
         status += f" · 失败/剔除 {len(failed)} 只（详见 JSON diagnostics）"
     step(0.92, "保存结果")
-    params = {
-        "top_n": top_n,
-        "candidate_n": candidate_n,
-        "news_days": news_days,
-        "use_llm": bool(use_llm),
-        "composite_weights": {"technical": 0.65, "event": 0.35},
-    }
+    params = _build_run_params(top_n, candidate_n, news_days, use_llm)
     csv_path, json_path = _save(
         final_rows,
         market,
