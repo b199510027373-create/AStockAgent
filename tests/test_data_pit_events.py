@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 
 from astock import data, events, pit
@@ -634,6 +637,261 @@ class LatestBarTimeTests(unittest.TestCase):
         df = pd.DataFrame({"trade_date": pd.to_datetime(["2024-01-02"])})
         with self.assertRaises(ValueError):
             data.latest_bar_time(df, freq="1m")
+
+
+class FakeUniverseClient:
+    """多代码 Tushare 替身：按 ``ts_code`` 分发 daily / adj_factor，并记录调用。"""
+
+    def __init__(self, daily: dict[str, pd.DataFrame], factors: dict[str, pd.DataFrame] | None = None):
+        self.daily = daily
+        self.factors = factors or {}
+        self.calls: list[tuple[str, str]] = []
+
+    @staticmethod
+    def _window(df: pd.DataFrame, start, end) -> pd.DataFrame:
+        out = df.copy()
+        if start:
+            out = out[out["trade_date"] >= pd.Timestamp(start)]
+        if end:
+            out = out[out["trade_date"] <= pd.Timestamp(end)]
+        return out
+
+    def query(self, api_name, **kwargs):
+        code = str(kwargs.get("ts_code") or "")
+        self.calls.append((api_name, code))
+        frame = self.daily.get(code) if api_name == "daily" else self.factors.get(code)
+        if frame is None:
+            return pd.DataFrame()
+        return self._window(frame, kwargs.get("start_date"), kwargs.get("end_date"))
+
+
+def _universe_frames(codes: tuple[str, ...], days: int = 6) -> tuple[dict[str, pd.DataFrame], dict[str, pd.DataFrame]]:
+    """构造多代码行情与复权因子（因子 1.0,1.5,2.0,...，每只股票基准不同）。"""
+    dates = pd.bdate_range("2025-01-02", periods=days)
+    daily: dict[str, pd.DataFrame] = {}
+    factors: dict[str, pd.DataFrame] = {}
+    for offset, code in enumerate(codes):
+        close = np.arange(len(dates), dtype=float) + 10.0 + offset
+        daily[code] = pd.DataFrame(
+            {
+                "ts_code": [code] * len(dates),
+                "trade_date": dates,
+                "open": close - 0.2,
+                "high": close + 0.5,
+                "low": close - 0.5,
+                "close": close,
+                "pre_close": close - 1.0,
+                "vol": (np.arange(len(dates), dtype=float) + 1.0) * 1000 + offset * 100,
+                "amount": (np.arange(len(dates), dtype=float) + 1.0) * 10000 + offset * 1000,
+            }
+        )
+        factors[code] = pd.DataFrame(
+            {"trade_date": dates, "adj_factor": 1.0 + 0.5 * np.arange(len(dates), dtype=float) + offset}
+        )
+    return daily, factors
+
+
+class DailyDatasetTests(unittest.TestCase):
+    """plan-20261103-011：日线缓存按 trade_date 分区 + 横截面 scan。
+
+    覆盖验收：分区落盘形状、scan 与逐股读取逐值一致、热路径不再联网/逐股 load、
+    逐股缓存变化即失效重建、缺口代码回填、``end`` 截止语义、面板 API 兼容。
+    """
+
+    CODES = ("000001.SZ", "600519.SH")
+    START = "2025-01-02"
+    END = "2025-01-09"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.daily, self.factors = _universe_frames(self.CODES)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @contextmanager
+    def env(self):
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(data, "DAILY_DIR", self.root))
+            stack.enter_context(patch.object(data, "_DAILY_MEM", {}))
+            stack.enter_context(patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")))
+            stack.enter_context(
+                patch.object(data, "last_open_date", side_effect=lambda x: pd.Timestamp(x).normalize())
+            )
+            yield
+
+    def seed(self, codes: tuple[str, ...] | None = None, adj: str = "qfq") -> None:
+        """用真实 load_daily 写逐股缓存（等价旧缓存形态）。"""
+        codes = codes or self.CODES
+        client = FakeUniverseClient(self.daily, self.factors)
+        for code in codes:
+            data.load_daily(code, start=self.START, end=self.END, adj=adj, client=client)
+
+    def scan(self, codes=None, **kwargs):
+        return data.scan_daily(
+            list(codes or self.CODES), start=kwargs.pop("start", self.START), end=kwargs.pop("end", self.END), **kwargs
+        )
+
+    def dataset_dir(self, adj: str = "qfq") -> Path:
+        return self.root / "_dataset" / f"adj={data._adj_key(adj)}"
+
+    def read_meta(self, adj: str = "qfq") -> dict:
+        return json.loads((self.dataset_dir(adj) / "_meta.json").read_text(encoding="utf-8"))
+
+    # --- 分区落盘形状 -----------------------------------------------------
+    def test_scan_daily_writes_trade_date_partitions(self):
+        with self.env():
+            self.seed()
+            out = self.scan()
+        self.assertEqual(len(out), len(self.CODES) * 6)
+        builds = sorted(self.dataset_dir().glob("build=*"))
+        self.assertEqual(len(builds), 1)
+        partitions = sorted(p.name for p in builds[0].glob("trade_date=*"))
+        self.assertEqual(
+            partitions,
+            [f"trade_date={d}" for d in ("20250102", "20250103", "20250106", "20250107", "20250108", "20250109")],
+        )
+        part_file = next(builds[0].glob("trade_date=*/part-*.parquet"))
+        stored = pd.read_parquet(part_file)
+        # 分区列由目录名提供，不重复落进文件（否则 scan 时同名列冲突）。
+        self.assertNotIn("trade_date", stored.columns)
+        self.assertEqual(set(stored["ts_code"]), set(self.CODES))
+
+        meta = self.read_meta()
+        self.assertEqual(meta["version"], data.DATASET_VERSION)
+        self.assertEqual(meta["adj"], "qfq")
+        self.assertEqual(meta["end_eff"], "20250109")
+        self.assertEqual(sorted(meta["codes"]), sorted(self.CODES))
+        self.assertEqual(meta["rows"], len(out))
+
+    def test_scan_daily_matches_per_code_load_daily(self):
+        with self.env():
+            self.seed()
+            scanned = self.scan()
+            per_code = pd.concat(
+                [data.load_daily(code, start=self.START, end=self.END, adj="qfq") for code in self.CODES],
+                ignore_index=True,
+            ).sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
+        self.assertEqual(scanned.attrs["adjustment"]["adj_source"], "daily_dataset")
+        self.assertEqual(scanned.attrs["adjustment"]["adj"], "qfq")
+        self.assertEqual(sorted(scanned.attrs["adjustment"]["adj_bases"]), sorted(self.CODES))
+        columns = list(per_code.columns)
+        pd.testing.assert_frame_equal(
+            scanned[columns].reset_index(drop=True),
+            per_code[columns],
+            check_dtype=False,
+        )
+
+    def test_columns_argument_projects_without_extra_fetch(self):
+        with self.env():
+            self.seed()
+            out = self.scan(columns=["ts_code", "trade_date", "close"])
+        self.assertEqual(list(out.columns), ["ts_code", "trade_date", "close"])
+        self.assertEqual(len(out), len(self.CODES) * 6)
+
+    # --- 热路径：不再逐股 load / 不联网 -----------------------------------
+    def test_warm_scan_reuses_dataset_without_touching_network(self):
+        with self.env():
+            self.seed()
+            first = self.scan()
+            build = self.read_meta()["build"]
+            data._DAILY_MEM.clear()
+            with patch.object(data, "_fetch_daily", side_effect=AssertionError("热路径不应联网")):
+                second = self.scan()
+            status = data.dataset_status("qfq")
+        self.assertEqual(len(first), len(second))
+        self.assertEqual(self.read_meta()["build"], build)  # 没有重建
+        self.assertTrue(status["usable"])
+        pd.testing.assert_frame_equal(first.reset_index(drop=True), second.reset_index(drop=True), check_dtype=False)
+
+    # --- ADR-011：逐股缓存变化即失效 --------------------------------------
+    def test_dataset_is_rebuilt_when_per_code_cache_changes(self):
+        with self.env():
+            self.seed()
+            self.scan()
+            first_build = self.read_meta()["build"]
+
+            path, _ = data._cache_paths("000001.SZ", "qfq")
+            edited = pd.read_parquet(path)
+            edited["vol"] = edited["vol"] * 2
+            edited.to_parquet(path, index=False)  # 文件签名变化 → 数据集不可再用
+
+            data._DAILY_MEM.clear()
+            out = self.scan()
+            status = data.dataset_status("qfq")
+        self.assertNotEqual(self.read_meta()["build"], first_build)
+        self.assertTrue(status["usable"])
+        bumped = out.loc[out["ts_code"] == "000001.SZ", "vol"].to_numpy(dtype=float)
+        self.assertTrue(np.allclose(bumped, self.daily["000001.SZ"]["vol"].to_numpy(dtype=float) * 2))
+
+    def test_legacy_per_code_cache_is_migrated_by_scan(self):
+        """旧缓存形态（只有逐股 parquet+json，没有 _dataset）可直接迁移。"""
+        with self.env():
+            self.seed()
+            self.assertFalse(self.dataset_dir().exists())
+            out = self.scan()
+        self.assertTrue((self.dataset_dir() / "_meta.json").exists())
+        self.assertEqual(len(out), len(self.CODES) * 6)
+
+    # --- 缺口回填 ---------------------------------------------------------
+    def test_missing_code_is_fetched_and_added_to_dataset(self):
+        third = "300750.SZ"
+        daily, factors = _universe_frames((third,))
+        with self.env():
+            self.seed()
+            self.scan()
+            client = FakeUniverseClient(daily, factors)
+            with patch.object(data, "get_client", return_value=client):
+                out = data.scan_daily([third], start=self.START, end=self.END, adj="qfq")
+            status = data.dataset_status("qfq")
+        self.assertEqual(set(out["ts_code"]), {third})
+        self.assertIn(("daily", third), client.calls)
+        # 补齐后重新落盘的数据集覆盖全部已缓存代码，而不是只剩本次请求的那一只。
+        self.assertEqual(status["codes"], len(self.CODES) + 1)
+
+    # --- 时间语义 ---------------------------------------------------------
+    def test_end_eff_limits_rows_and_is_recorded(self):
+        with self.env():
+            self.seed()
+            # 请求截止更早的日期时，逐股缓存里的 qfq 基准（末行因子）不再匹配，
+            # scan 会回退 load_daily 重拉；用替身客户端保证这条回退路径不联网。
+            with patch.object(data, "get_client", return_value=FakeUniverseClient(self.daily, self.factors)):
+                out = self.scan(end="2025-01-06")
+            meta = self.read_meta()
+        self.assertEqual(pd.Timestamp(out["trade_date"].max()), pd.Timestamp("2025-01-06"))
+        self.assertEqual(meta["end_eff"], "20250106")
+        self.assertEqual(meta["end"], "20250106")
+
+    def test_unknown_adj_is_rejected(self):
+        with self.env(), self.assertRaises(ValueError):
+            data.scan_daily(list(self.CODES), adj="raw")
+
+    # --- 面板 API 兼容 ----------------------------------------------------
+    def test_load_daily_panel_matches_enriched_load_daily(self):
+        with self.env():
+            self.seed()
+            panel = data.load_daily_panel(list(self.CODES), start=self.START, end=self.END)
+            direct = {
+                code: data.enrich(data.load_daily(code, start=self.START, end=self.END, adj="qfq"))
+                for code in self.CODES
+            }
+        self.assertEqual(sorted(panel), sorted(self.CODES))
+        for code, frame in panel.items():
+            with self.subTest(code=code):
+                self.assertIn("vol_ma20", frame.columns)  # enrich 指标在位（因子模块依赖）
+                self.assertIn("ts_code", frame.columns)
+                self.assertEqual(frame.attrs["adjustment"]["adj_source"], "daily")
+                self.assertEqual(frame.attrs["adjustment"]["adj_base"], "2025-01-09")
+                self.assertAlmostEqual(
+                    frame.attrs["adjustment"]["base_factor"],
+                    float(self.factors[code]["adj_factor"].iloc[-1]),
+                )
+                pd.testing.assert_frame_equal(frame, direct[code], check_dtype=False)
+
+    def test_load_daily_panel_empty_codes(self):
+        with self.env():
+            self.assertEqual(data.load_daily_panel([]), {})
 
 
 if __name__ == "__main__":

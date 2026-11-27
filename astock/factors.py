@@ -10,11 +10,10 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from . import pit
-from .data import load_trade_cal
+from .data import load_daily_panel, load_trade_cal
 from .events import stock_basic
-from .recommend import load_many, parse_universe
+from .recommend import parse_universe
 from .stats import benjamini_hochberg, effective_n, student_t_p
-from .track import _forward_return
 from .universe import latest_size_map, market_cap_universe, pit_market_cap_universe
 
 FACTORS = {
@@ -49,26 +48,36 @@ def _normal_p(t: float) -> float:
     return float(2 * (1 - 0.5 * (1 + math.erf(abs(t) / math.sqrt(2)))))
 
 
-def _add_factors(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    close = out["close"]
-    out["momentum_20"] = close / close.shift(20) - 1
-    out["momentum_60"] = close / close.shift(60) - 1
-    out["reversal_5"] = -(close / close.shift(5) - 1)
-    out["volatility_20"] = close.pct_change().rolling(20, min_periods=15).std()
-    out["volume_ratio"] = out["vol"] / out["vol_ma20"]
-    amount_ma = out["amount"].rolling(20, min_periods=15).mean()
-    out["amount_ratio"] = out["amount"] / amount_ma
-    out["amihud_20"] = (
-        (close.pct_change().abs() / out["amount"].replace(0, np.nan))
-        .rolling(20, min_periods=15)
-        .mean()
-        * 1e8
+def _factor_matrix(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """按 trade_date 排序后算 11 个因子，返回 (日期轴, 收盘价, 因子矩阵)。
+
+    计算口径与逐列写入 DataFrame 的旧实现完全相同（同样走 pandas 的 shift/rolling），
+    只是省掉每只股票 11 次列插入的固定开销——49 只股票时这是面板构建的主要成本。
+    """
+    x = df.sort_values("trade_date")
+    dates_axis = x["trade_date"].to_numpy(dtype="datetime64[ns]")
+    close = x["close"]
+    closes = close.to_numpy(dtype=float)
+    sources = ("vol", "vol_ma20", "amount", "ma20", "rsi14", "macd_hist", "atr14")
+    if any(name not in x.columns for name in sources):  # 未 enrich 的帧：因子全 NaN，调仓日全部跳过
+        return dates_axis, closes, np.full((len(x), len(FACTORS)), np.nan)
+    pct = close.pct_change()
+    amount = x["amount"]
+    columns = (
+        close / close.shift(20) - 1,
+        close / close.shift(60) - 1,
+        -(close / close.shift(5) - 1),
+        pct.rolling(20, min_periods=15).std(),
+        x["vol"] / x["vol_ma20"],
+        amount / amount.rolling(20, min_periods=15).mean(),
+        (pct.abs() / amount.replace(0, np.nan)).rolling(20, min_periods=15).mean() * 1e8,
+        close / x["ma20"] - 1,
+        x["rsi14"],
+        x["macd_hist"],
+        x["atr14"] / close,
     )
-    out["ma_gap_20"] = close / out["ma20"] - 1
-    out["rsi_14"] = out["rsi14"]
-    out["atr_pct"] = out["atr14"] / close
-    return out
+    matrix = np.column_stack([col.to_numpy(dtype=float) for col in columns])
+    return dates_axis, closes, matrix
 
 
 def build_panel(
@@ -83,16 +92,19 @@ def build_panel(
 ) -> pd.DataFrame:
     if not daily_map:
         return pd.DataFrame()
-    prepared: dict[str, pd.DataFrame] = {}
+    # 逐 (调仓日, 股票) 的 O(rows) 布尔索引是这里的历史瓶颈：49 只 × 上百个调仓日
+    # 会把同一份 time×factor 面板扫上千遍。改为每只股票预计算一次 numpy 轴，
+    # 调仓日用 searchsorted 做 O(log n) 定位；取到的行、收益与原来逐值一致。
+    axes: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
     all_dates: set[pd.Timestamp] = set()
     for code, df in daily_map.items():
         if df is None or len(df) < 80:
             continue
-        x = _add_factors(df).sort_values("trade_date").reset_index(drop=True)
-        prepared[code] = x
-        dates = set(x["trade_date"].tail(250 * 3))
-        all_dates |= dates
-    if not prepared or not all_dates:
+        x = df.sort_values("trade_date")
+        dates_axis, closes, matrix = _factor_matrix(x)
+        axes[code] = (dates_axis, closes, matrix)
+        all_dates |= set(x["trade_date"].tail(250 * 3))
+    if not axes or not all_dates:
         return pd.DataFrame()
 
     date_values = sorted(all_dates)
@@ -101,8 +113,10 @@ def build_panel(
     rows = []
     membership_dates = sorted(universe_by_date) if universe_by_date else []
     membership = universe_by_date or {}
+    column_order = list(FACTORS)
     for date in date_values:
         date = pd.Timestamp(date)
+        stamp = date.to_datetime64()
         allowed = None
         current_sizes = size_map or {}
         current_industry = industry_map or {}
@@ -114,15 +128,29 @@ def build_panel(
             allowed = membership.get(mdate, set())
             current_sizes = (size_by_date or {}).get(mdate, current_sizes)
             current_industry = (industry_by_date or {}).get(mdate, current_industry)
-        for code, df in prepared.items():
+        for code in axes:
             if allowed is not None and code not in allowed:
                 continue
-            idx = df.index[df["trade_date"] <= date]
-            if len(idx) == 0:
+            dates_axis, closes, matrix = axes[code]
+            # 因子取“<= date 的最后一根 bar”（原 df.index[df.trade_date <= date][-1]）
+            pos = int(np.searchsorted(dates_axis, stamp, side="right")) - 1
+            if pos < 0:
                 continue
-            row = df.iloc[int(idx[-1])]
-            fwd = _forward_return(df, date, horizon)
-            if fwd is None or not math.isfinite(fwd):
+            # 收益要求 date 当天恰有一根 bar（原 track._forward_return 的精确匹配）
+            entry = int(np.searchsorted(dates_axis, stamp, side="left"))
+            if entry >= len(dates_axis) or dates_axis[entry] != stamp:
+                continue
+            exit_pos = entry + horizon
+            if exit_pos >= len(dates_axis):
+                continue
+            base = float(closes[entry])
+            if not base or not math.isfinite(base):
+                continue
+            fwd = float(closes[exit_pos]) / base - 1
+            if not math.isfinite(fwd):
+                continue
+            values = matrix[pos]
+            if not np.all(np.isfinite(values)):
                 continue
             item = {
                 "date": date,
@@ -131,15 +159,8 @@ def build_panel(
                 "industry": current_industry.get(code, "其他") or "其他",
                 "size": current_sizes.get(code, np.nan),
             }
-            ok = True
-            for factor in FACTORS:
-                value = row.get(factor)
-                if value is None or not math.isfinite(float(value)):
-                    ok = False
-                    break
-                item[factor] = float(value)
-            if ok:
-                rows.append(item)
+            item.update(zip(column_order, (float(v) for v in values)))
+            rows.append(item)
     return pd.DataFrame(rows)
 
 
@@ -375,7 +396,9 @@ def run_factor_ic(
     year_n = {"1年": 1, "3年": 3, "5年": 5}.get(years, 3)
     if progress is not None:
         progress(0.15, desc=f"加载 {len(codes)} 只股票日线")
-    daily_map = load_many(codes, progress=None, years=year_n)
+    # 横截面面板直接 scan 按 trade_date 分区的数据集，不再逐股 load + concat
+    # （plan-20261103-011）；返回同构 dict[str, enriched DataFrame]，口径不变。
+    daily_map = load_daily_panel(codes, years=year_n)
     # 按选择区间截断
     if days:
         daily_map = {
