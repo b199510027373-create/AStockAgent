@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
 import traceback
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -34,11 +34,9 @@ _THREAD = None
 
 def _log(message: str) -> None:
     line = f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {message}"
-    try:
-        with LOG_PATH.open("a", encoding="utf-8") as fh:
-            fh.write(line + "\n")
-    except Exception:
-        pass
+    # 写日志失败绝不能反噬调用方：_log 常在 except 分支里执行，二次异常会掩盖原始错误。
+    with contextlib.suppress(Exception), LOG_PATH.open("a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
 
 
 def _run_time() -> tuple[int, int]:
@@ -46,7 +44,7 @@ def _run_time() -> tuple[int, int]:
     try:
         hour, minute = [int(x) for x in raw.split(":")[:2]]
         return max(0, min(23, hour)), max(0, min(59, minute))
-    except Exception:
+    except ValueError:  # 环境变量不是 H:MM（含缺少冒号/非数字）时退回默认收盘时间
         return 16, 40
 
 
@@ -66,7 +64,7 @@ def _heartbeat_threshold() -> int:
     raw = os.getenv("ASTOCK_HEARTBEAT_THRESHOLD_DAYS", str(DEFAULT_HEARTBEAT_THRESHOLD_DAYS))
     try:
         return max(1, int(raw))
-    except Exception:
+    except ValueError:  # 环境变量不是整数时用默认阈值，避免心跳检查整条挂掉
         return DEFAULT_HEARTBEAT_THRESHOLD_DAYS
 
 
@@ -79,14 +77,14 @@ def _is_trading_day(day: pd.Timestamp) -> bool:
         cal = load_trade_cal()
         rows = cal[cal["cal_date"] == pd.Timestamp(day).normalize()]
         return bool(len(rows)) and int(rows.iloc[0]["is_open"]) == 1
-    except Exception:
+    except Exception:  # noqa: BLE001 - 交易日历不可用（缺文件/列变更）时退回工作日近似，不能阻断调度
         return pd.Timestamp(day).weekday() < 5
 
 
 def _next_run(now: datetime) -> datetime:
     hour, minute = _run_time()
     day = pd.Timestamp(now.date())
-    for offset in range(0, 15):
+    for offset in range(15):
         candidate_day = day + pd.Timedelta(days=offset)
         if not _is_trading_day(candidate_day):
             continue
@@ -103,7 +101,7 @@ def _read_state() -> dict:
     try:
         data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except (OSError, ValueError):  # 文件缺失/不可读/JSON 损坏都视为「无旧状态」
         return {}
 
 
@@ -117,7 +115,8 @@ def _recent_trading_days(now: datetime, count: int) -> list[pd.Timestamp]:
     if reference is None:
         return []
     reference = pd.Timestamp(reference).normalize()
-    try:
+    # 交易日历不可用时退回「周一至周五」近似：心跳与验收报表宁可粗算，也不能整条失败。
+    with contextlib.suppress(Exception):
         cal = load_trade_cal()
         rows = cal[
             (cal["is_open"].astype(int) == 1) & (pd.to_datetime(cal["cal_date"]) <= reference)
@@ -125,8 +124,6 @@ def _recent_trading_days(now: datetime, count: int) -> list[pd.Timestamp]:
         days = sorted({pd.Timestamp(x).normalize() for x in rows["cal_date"]}, reverse=True)
         if days:
             return days[:count]
-    except Exception:
-        pass
     days = []
     day = reference
     while len(days) < count:
@@ -179,7 +176,7 @@ def recover_interrupted_jobs(
         started_raw = job.get("started_at")
         try:
             started = datetime.fromisoformat(started_raw) if started_raw else None
-        except Exception:
+        except (TypeError, ValueError):  # 台账里的 started_at 是脏值时按「无开始时间」处理
             started = None
         if started is not None and (now - started).total_seconds() < stale_after_min * 60:
             continue
@@ -237,14 +234,14 @@ def _last_alert_signature() -> str | None:
     """从告警文件读取最后一次心跳签名，保证重启后仍能去重。"""
     try:
         lines = ALERTS_PATH.read_text(encoding="utf-8").splitlines()
-    except Exception:
+    except OSError:  # 告警文件还不存在（首次部署）等同于「没有历史签名」
         return None
     for line in reversed(lines):
         if not line.strip():
             continue
         try:
             record = json.loads(line)
-        except Exception:
+        except json.JSONDecodeError:  # 手改过的坏行跳过，继续找上一条有效告警
             continue
         if record.get("kind") != "scheduler_heartbeat":
             continue
@@ -257,7 +254,7 @@ def _last_alert_signature() -> str | None:
                 int(record.get("streak")),
                 int(record.get("threshold_days")),
             )
-        except Exception:
+        except (TypeError, ValueError):  # 字段缺失/非数字时视为无法解析的旧记录
             return None
     return None
 
@@ -357,7 +354,7 @@ def heartbeat_check(
                 with ALERTS_PATH.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(record, ensure_ascii=False) + "\n")
                 alerted = True
-            except Exception:  # noqa: BLE001 - 告警写盘失败不能拖垮调度
+            except OSError:  # 磁盘满/无权限时只降级为「未告警」，不能拖垮调度
                 _log("心跳告警写盘失败：" + traceback.format_exc())
             _log(
                 f"ALERT 心跳异常：连续 {streak} 个交易日无成功 close 任务"
@@ -424,17 +421,17 @@ def startup_maintenance(now: datetime | None = None) -> dict[str, Any]:
     recovered: list[str] = []
     try:
         recovered = recover_interrupted_jobs(now)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - 中断恢复失败只记日志，后续自检照常进行
         _log("启动自检-中断恢复失败：" + traceback.format_exc())
     due: str | None = None
     try:
         due = sync_due_job(now)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - 到期登记失败只记日志，不阻断心跳检查
         _log("启动自检-到期登记失败：" + traceback.format_exc())
     heartbeat: dict[str, Any] = {}
     try:
         heartbeat = heartbeat_check(now, alert=True)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - 心跳检查失败降级为 ALERT 状态返回
         _log("启动自检-心跳检查失败：" + traceback.format_exc())
         heartbeat = {"ok": False, "initialized": False, "error": "heartbeat_failed"}
     _log(
@@ -473,12 +470,10 @@ def _acquire_lock():
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         _LOCK_HANDLE = handle
         return handle
-    except Exception:
-        try:
+    except Exception:  # noqa: BLE001 - 抢锁失败（含跨平台锁 API 差异）一律视为「锁已被占用」
+        with contextlib.suppress(Exception):
             if handle is not None:
                 handle.close()
-        except Exception:
-            pass
         return None
 
 
@@ -486,7 +481,8 @@ def _release_lock() -> None:
     global _LOCK_HANDLE
     if _LOCK_HANDLE is None:
         return
-    try:
+    # 释放锁/关句柄失败不能向上抛：本函数就在进程退出与重建锁句柄的边界上。
+    with contextlib.suppress(Exception):
         _LOCK_HANDLE.seek(0)
         if os.name == "nt":
             msvcrt = __import__("msvcrt")
@@ -496,12 +492,8 @@ def _release_lock() -> None:
             fcntl = __import__("fcntl")
 
             fcntl.flock(_LOCK_HANDLE.fileno(), fcntl.LOCK_UN)
-    except Exception:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         _LOCK_HANDLE.close()
-    except Exception:
-        pass
     _LOCK_HANDLE = None
 
 
@@ -533,7 +525,7 @@ def run_once(
     late_by = max(0.0, (now - scheduled).total_seconds() / 60.0)
     try:
         previous = ledger.get_job(key)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - 读不到任务状态时跳过本轮，避免重复执行状态未知的 job
         _log("读取任务状态失败，本轮跳过：" + traceback.format_exc())
         return None
     if not force and previous is not None and previous.get("status") == "success":
@@ -615,7 +607,7 @@ def run_once(
             _log("跟踪结算失败：" + traceback.format_exc())
         _log("完成：" + result.status)
         return result
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 单轮推荐任何异常都必须落库为 failed 后返回，不能冒泡到线程
         try:
             ledger.update_job(
                 key,
