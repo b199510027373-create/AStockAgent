@@ -41,14 +41,15 @@
       "2026-11-28T00:06:01 python -m astock.jobs --report 5 -> exit 0, passed=5/5；快照 docs/AStockAgent_scheduler_5d_report_2026-11-28.json sha256 E21FD988F785FD0EEE64CE4340B8BB0949C50FC6B56B518F05CEAEBDE898D121",
       "2026-11-28 python -m astock.jobs --heartbeat -> exit 0, ok=true, streak=0, alerted=false；快照 docs/AStockAgent_scheduler_5d_heartbeat_2026-11-28.json sha256 13098E3F316925A6B643EFBD8CBAB5CDF761B8715BB34D0C7E83E1BDC7A9AEE7",
       "2026-11-28 复跑 pytest tests/test_scheduler_ledger.py tests/test_hardening.py tests/test_data_pit_events.py -q -> 79 passed, 1 warning, 22.60s (main 4a09291)",
+      "2026-11-28 复跑 pytest tests/test_scheduler_ledger.py tests/test_hardening.py -q -> 50 passed, 15.83s (round 2 修订后)",
       "2026-11-28 复跑 python -m mypy astock app.py -> Success: no issues found in 45 source files",
       "2026-11-27 全量 pytest tests -q -> 956 passed, 3 skipped, 46 subtests passed in 176.48s (main 84f459c)",
-      "python -m astock.jobs --once --slot close -> exit 0, 已完成跳过",
       "心跳现场：11-18 streak=8 alerted=true、11-19 streak=9 alerted=true、11-20 streak=1 alerted=false（scheduler_task.log / scheduler_alerts.jsonl）",
-      "回归：tests/test_data_pit_events.py 3 条空 code 用例；tests/test_scheduler_ledger.py 覆盖 running 超时恢复/到期 pending/心跳阈值/去重"
+      "回归：tests/test_data_pit_events.py 3 条空 code 用例；tests/test_scheduler_ledger.py 覆盖 running 超时恢复/到期 pending/心跳阈值/去重",
+      "CI 46038051726 success（c84fe3a，test+png-export）；d27f936 46031056050、dc55c5c 46032323734、408623b 46032800193 均 success"
     ]
   },
   "createdAt": "2026-11-13T19:08:42.795Z",
-  "updatedAt": "2026-11-27T16:52:46.790Z",
+  "updatedAt": "2026-11-27T17:01:10.808Z",
   "devSessionId": "session-26fd9368-10b9-4097-8e89-204c2931b1c4"
 }

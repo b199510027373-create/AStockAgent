@@ -1,0 +1,121 @@
+{
+  "id": "ho-20261128-010",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261114-004",
+  "threadId": null,
+  "sessionId": "",
+  "title": "main 状态补充：c84fe3a 已推送，CI 46038051726 全绿",
+  "summary": "main 状态补充：9a853fc（§2.1 L123-129 修正）与 c84fe3a（issue 回填 fixed + handoff + plan 元数据）已推送 origin/main，main HEAD=c84fe3a，CI run 46038051726 全绿（test + png-export）。本轮 4 条 issue 全部 status=fixed、feedback=good/effective，openP0/P1/P2=0；plan-20261114-004 保持 in_review/100%，links.test 含 50 passed 与 CI 记录。推送时直连 github.com 两次 Connection reset，第三次改用 http.version=HTTP/1.1 成功。",
+  "requirements": [
+    {
+      "id": "R2-P2-125",
+      "text": "§2.1 L125 窗口解释不准确（11-18 不在窗口、11-19 已 success）——已改为仅 11-20 旧失败",
+      "source": "rev-20261128-001-r2 iss-mwz7a1ls-b51941"
+    },
+    {
+      "id": "R2-BLOCK",
+      "text": "4 条 issue 仍 open/feedback=null 阻塞关闭——已全部回填 fixed，review 计数 open=0",
+      "source": "rev-20261128-001-r2 完全解决条件 a/b/c"
+    },
+    {
+      "id": "AC1",
+      "text": "EventFrame 空 code 修复 + 回归（astock/events.py:528、tests/test_data_pit_events.py:418-439）",
+      "source": "plan-20261114-004 acceptance #1"
+    },
+    {
+      "id": "AC2",
+      "text": "test_scheduler_ledger.py + test_hardening.py 通过（50 passed）",
+      "source": "plan-20261114-004 acceptance #2"
+    },
+    {
+      "id": "AC3",
+      "text": "11-23..11-27 --report 5 全 success（5/5，快照 sha256 已固化）",
+      "source": "plan-20261114-004 acceptance #3"
+    },
+    {
+      "id": "AC4",
+      "text": "心跳 2 日触发/1 日不触发/签名去重（11-18/19 alerted=true，11-20 false）",
+      "source": "plan-20261114-004 acceptance #4"
+    },
+    {
+      "id": "AC5",
+      "text": "running 超时恢复 failed、到期 pending、late_by_min 正确",
+      "source": "plan-20261114-004 acceptance #5"
+    },
+    {
+      "id": "AC6",
+      "text": "空台账/长期停摆不误报；验收已回写 plan-20261103-007",
+      "source": "plan-20261114-004 acceptance #6"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/reviews/rev-20261128-001/issues/*.json",
+      "summary": "4 条 issue 回填 fixed + feedback，线程计数 openP0/P1/P2=0",
+      "commit": "c84fe3a"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261128-008.json",
+      "summary": "round 2 修复 handoff（§2.1 L123-129 + 4 条 issue 回填）",
+      "commit": "c84fe3a"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261114-004.json",
+      "summary": "in_review/100%，links.test 新增 50 passed 行与 CI 记录（9 条）",
+      "commit": "c84fe3a"
+    },
+    {
+      "path": "docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md",
+      "summary": "§2.1 L123-129 窗口解释更正为仅 11-20 旧失败",
+      "commit": "9a853fc"
+    }
+  ],
+  "tests": [
+    {
+      "command": "python -m pytest tests/test_scheduler_ledger.py tests/test_hardening.py -q",
+      "result": "50 passed, 1 warning in 15.83s",
+      "passed": true,
+      "evidence": "ho-20261128-008 / plan links.test"
+    },
+    {
+      "command": "gh run view 46038051726 --json status,conclusion,jobs",
+      "result": "completed success",
+      "passed": true,
+      "evidence": "test success, png-export success, head c84fe3a"
+    },
+    {
+      "command": "gh api repos/b199510027373-create/AStockAgent/commits/main --jq .sha",
+      "result": "c84fe3ac26e2445b9e46804bc16f4c6322de5d21",
+      "passed": true,
+      "evidence": "远端 HEAD 与本地一致"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github-cli-push",
+      "reason": "推送 main 需绕过失效的仓库级代理；首次两次 Connection reset，第三次 HTTP/1.1 成功",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "c84fe3a（main HEAD）；文档修正 9a853fc",
+    "pr": "无",
+    "ci": "46038051726 success（c84fe3a，test+png-export）；46031056050/46032323734/46032800193 均 success",
+    "merge": "n/a（直接提交 main）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-008",
+  "next": "评审 rev-20261128-001 重跑 devloop_review finish（scope 建议 full_recheck/targeted）：4 条 issue 已 fixed、feedback 完整、openP0/P1/P2=0，复核 9a853fc §2.1 L123-129 后即可 approve 并将 plan-20261114-004 置 done。之后如需长期观察：token 过期等 pre-ledger 失败仍不可见于 jobs 台账，建议另开 issue 增加 heartbeat_failed 告警或日志巡检。",
+  "createdAt": "2026-11-27T17:01:17.760Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-010.md"
+}
