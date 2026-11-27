@@ -41,7 +41,8 @@
     ],
     "handoff": [
       "ho-20261128-012",
-      "ho-20261128-013"
+      "ho-20261128-013",
+      "ho-20261128-014"
     ],
     "module": "ci",
     "pr": "https://github.com/b199510027373-create/AStockAgent/pull/50",
@@ -53,10 +54,10 @@
       "pytest tests/test_ci_quality_gates.py -q → 17 passed",
       "变异自证：architecture_v1.3 76.45%→75.45%、product_snapshot 本地覆盖率 76.68%→75.45% → 2 failed（用例按预期变红），随后 git restore 复原",
       "CI PR run 46047574586 success（952 passed / 4 skipped / coverage 80.56% / ruff All checks passed / mypy 45 files）",
-      "CI main run 46048029684 (e73c49c) success、46048643343 (4d02fec 记录) success；前一次 main run 46038545567 亦 success ⇒ main 连续三次绿"
+      "CI main runs 46038545567 (801aa6c) / 46048029684 (e73c49c) / 46048643343 (4d02fec) / 46049387833 (1d81656) 均 success ⇒ main 连续绿"
     ]
   },
   "createdAt": "2026-11-16T19:45:31.506Z",
-  "updatedAt": "2026-11-27T18:25:28.168Z",
+  "updatedAt": "2026-11-27T18:29:07.107Z",
   "devSessionId": "session-c468f8e2-c39d-4e4d-a7fb-ebb0adfeb569"
 }

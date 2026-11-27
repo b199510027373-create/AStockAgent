@@ -1,0 +1,69 @@
+{
+  "id": "ho-20261128-014",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261117-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "交付更新：main run 46049387833 绿，开发侧收口",
+  "summary": "main 状态增量记录：update handoff 记录提交 1d81656（plan 链接 + ho-20261128-013）触发 main run 46049387833 → completed/success。至此本项相关 main 提交（e73c49c 代码、4d02fec 记录、1d81656 记录）的 CI 全部绿，开发侧收口完成。",
+  "requirements": [
+    {
+      "id": "A5",
+      "text": "CI PR 与 main 连续绿 —— 已达成并持续核实：PR run 46047574586 + main run 46048029684 / 46048643343 / 46049387833 全部 success",
+      "source": "plan-20261117-001 acceptance[4]"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/handoffs/ho-20261128-013.json",
+      "summary": "上一份 update 交付（相对 ho-20261128-012 的评审/记录侧收口）；本份仅记录其落地后的 main CI 结果",
+      "commit": "1d81656"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261117-001.json",
+      "summary": "links.handoff 改为 [ho-20261128-012, ho-20261128-013]；links.test 末尾补充 main run 46048643343 与 46049387833 的证据",
+      "commit": "1d81656"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261103-012.json",
+      "summary": "links.handoff 追加 ho-20261128-013（保留 test_history 10 条历史证据）",
+      "commit": "1d81656"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh run view 46049387833",
+      "result": "completed / success",
+      "passed": true,
+      "evidence": "1d81656（仅 .devloop 记录）触发 main 全量 CI"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI 写权限",
+      "reason": "push 需临时绕过失效的本地代理 127.0.0.1:7890（-c http.proxy= -c http.https://github.com.proxy=），未改仓库配置",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261117-001-ruff-docs-guard（已随 #50 合并删除）",
+    "commit": "e73c49cc18ed7aa5ea91b9f1ab7e648d9f695e6a（代码+测试） + 4d02fec（DevLoop 记录） + 1d816568",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/50（已 merged）",
+    "ci": "PR run 46047574586 success；main run 46048029684 (e73c49c) success；main run 46048643343 (4d02fec) success；main run 46049387833 (1d81656) success ⇒ 所有相关 main 提交均绿",
+    "merge": "代码 squash merged 到 main（e73c49c）；后续均为 .devloop 记录提交",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-013",
+  "next": "本项开发侧已收口，等评审复核 A2/A3/A4 后置 done。无需再迭代本项；如需继续质量工作，可另开项处理 ruff format 与 P3 族（RUF001-003、B905）。",
+  "createdAt": "2026-11-27T18:29:04.596Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-014.md"
+}
