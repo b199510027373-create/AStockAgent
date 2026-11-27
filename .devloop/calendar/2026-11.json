@@ -1286,6 +1286,16 @@
       "notes": "第 2 轮 · approve"
     },
     {
+      "id": "cal-rev-20261128-002-r3",
+      "type": "review",
+      "title": "评审：评审：观察期后收口：Ruff 豁免移除与文档基线守护加固",
+      "start": "2026-11-27T19:34:40.715Z",
+      "end": "2026-11-27T19:34:53.545Z",
+      "planItemId": "plan-20261117-001",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261114-002-planned",
       "type": "planned",
       "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
