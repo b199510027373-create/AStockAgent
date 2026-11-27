@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 import pandas as pd
 
 from .config import BASE_DIR
+from .contracts import validate_recommendation_run
+from .data import next_open_date
 from .events import stock_basic
 from .recommend import (
     _action,
@@ -18,6 +21,8 @@ from .recommend import (
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
 REC_DIR.mkdir(parents=True, exist_ok=True)
+
+logger = logging.getLogger(__name__)
 
 
 def _existing_as_of() -> set[str]:
@@ -124,8 +129,23 @@ def backfill_technical(
                     "理由": r["reason"],
                 }
             )
+        next_open = next_open_date(date)
+        if next_open is None:
+            # 没有晚于 data_as_of 的开市日 = 交易日历缺失/已到末尾；臆造 data_as_of+1
+            # 可能落到周末或节假日，DATA-03 会让该批次永远没有跟踪结果。
+            logger.warning(
+                "无法从交易日历推导 %s 的 tradable_from，跳过该回填批次", key
+            )
+            skipped += 1
+            continue
+        tradable_from = pd.Timestamp(next_open).strftime("%Y-%m-%d")
+        generated_at = datetime.now().isoformat(timespec="seconds")
         payload = {
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "schema_version": 2,
+            "run_id": f"backfill_{date:%Y%m%d}",
+            "generated_at": generated_at,
+            "data_as_of": key,
+            "tradable_from": tradable_from,
             "as_of": key,
             "source": "backfill_technical",
             "market": (
@@ -134,6 +154,9 @@ def backfill_technical(
             ),
             "params": {"candidate_n": int(candidate_n), "pool_size": pool_n},
             "diagnostics": {
+                "generated_at": generated_at,
+                "data_as_of": key,
+                "tradable_from": tradable_from,
                 "candidate_n": pool_n,
                 "percentile_basis": "candidate_pool",
                 "candidate_pool": [
@@ -144,15 +167,20 @@ def backfill_technical(
             "table": table,
             "evidence": {},
         }
+        payload = validate_recommendation_run(payload, source="backfill_technical")
         path = REC_DIR / f"recommend_{date:%Y%m%d}_backfill.json"
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False),
+            encoding="utf-8",
+        )
         created += 1
         existing.add(key)
         if progress is not None:
             progress(min(0.95, 0.1 + 0.8 * created / max(1, int(days))), desc=f"回填 {created}/{days}")
 
     status = (
-        f"技术分回填完成：新增 {created} 个批次，跳过已存在的 {skipped} 个日期。"
+        f"技术分回填完成：新增 {created} 个批次，跳过 {skipped} 个日期"
+        "（已存在或无法从交易日历推导 tradable_from）。"
         "事件分固定 50，结果只用于检验技术分排序，不等同于完整每日推荐。"
     )
     return created, status

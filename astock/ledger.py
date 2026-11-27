@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -10,7 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import BASE_DIR
-from .contracts import normalize_action
+from .contracts import normalize_action, validate_recommendation_run
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(os.getenv("ASTOCK_DB_PATH") or (BASE_DIR / "data" / "astock.db"))
 REC_DIR = BASE_DIR / "data" / "recommendations"
@@ -513,7 +516,14 @@ def save_tracking(run_id: str, rows: list[dict]) -> None:
 
 
 def sync_json_dir(path: Path | str | None = None) -> int:
-    """One-shot import of existing recommendation JSON files."""
+    """One-shot import of existing recommendation JSON files.
+
+    只接收通过 ``RecommendationRun`` 契约校验的 ``schema_version == 2`` 批次
+    （DATA-01）。旧文件没有该字段时不再补 ``legacy_*`` run_id 入账——那样会写入
+    schema_version/tradable_from 为 NULL 的行，ledger 无法自证数据口径；残缺的 v2
+    文件（缺 tradable_from/diagnostics、table/evidence 形状不对）同理拒在库外，
+    逐条告警后跳过，不影响其余文件迁移。
+    """
     folder = Path(path or REC_DIR)
     if not folder.exists():
         return 0
@@ -521,13 +531,27 @@ def sync_json_dir(path: Path | str | None = None) -> int:
     for file in sorted(folder.glob("recommend_*.json")):
         try:
             payload = json.loads(file.read_text(encoding="utf-8"))
-            if not payload.get("run_id"):
-                # 老文件没有 run_id，补一个稳定 ID，避免覆盖
-                payload["run_id"] = f"legacy_{file.stem}"
+            if not isinstance(payload, dict):
+                logger.warning("skip recommendation JSON (not an object): %s", file)
+                continue
+            schema_version = payload.get("schema_version")
+            if schema_version != 2:
+                logger.warning(
+                    "skip legacy recommendation JSON without schema_version=2 (got %r): %s",
+                    schema_version,
+                    file,
+                )
+                continue
+            if not str(payload.get("run_id") or "").strip():
+                logger.warning("skip recommendation JSON without run_id: %s", file)
+                continue
+            # 完整契约校验：缺字段/形状不对的文件不能以 NULL 口径入库。
+            payload = validate_recommendation_run(payload, source=str(file))
             if save_run(payload, json_path=str(file)):
                 count += 1
-        except (OSError, ValueError, TypeError, sqlite3.Error):
+        except (OSError, ValueError, TypeError, AttributeError, sqlite3.Error) as exc:
             # 单个历史 JSON 损坏/写库失败（磁盘、约束）跳过，不影响其余迁移
+            logger.warning("skip unreadable recommendation JSON %s: %s", file, exc)
             continue
     return count
 
