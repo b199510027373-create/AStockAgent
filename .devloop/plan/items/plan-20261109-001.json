@@ -28,29 +28,30 @@
       "ADR-002"
     ],
     "branch": "feat/plan-20261109-001-backfill-contract",
-    "issue": "iss-mw81x690-cbec5c",
-    "module": "contracts",
-    "review": "rev-20261108-004",
-    "test": [
-      "pytest tests/test_backfill_ledger_contract.py -q => 7 passed in 6.04s",
-      "pytest tests -q -m \"not png\" => 961 passed, 3 skipped, 6 deselected, 46 subtests passed in 282.38s",
-      "ruff check astock tests => All checks passed",
-      "mypy astock app.py => Success: no issues found in 45 source files",
-      "PR #53 CI run 46063703330 => test pass 2m22s, png-export pass 55s",
-      "main CI run 46064470258 (5b47503) => test pass 1m58s, png-export pass 1m16s"
-    ],
-    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/53",
-    "ci": "PR run 46063703330 success; main run 46064470258 success (5b47503)",
-    "merge": "5b47503 (squash, PR #53, main 2026-11-28)",
+    "ci": "PR run 46063703330 success; main run 46064470258 success (5b47503); closeout run 46064880414 success (54730bf)",
     "files": [
       "astock/backfill.py",
       "astock/ledger.py",
       "tests/test_backfill_ledger_contract.py",
       "tests/test_contracts.py",
       "tests/test_research_semantics.py"
+    ],
+    "issue": "iss-mw81x690-cbec5c",
+    "merge": "5b47503 (squash, PR #53, main 2026-11-28)",
+    "module": "contracts",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/53",
+    "review": "rev-20261128-004",
+    "test": [
+      "pytest tests/test_backfill_ledger_contract.py -q => 7 passed in 6.04s",
+      "pytest tests -q -m \"not png\" => 961 passed, 3 skipped, 6 deselected, 46 subtests passed in 282.38s",
+      "ruff check astock tests => All checks passed",
+      "mypy astock app.py => Success: no issues found in 45 source files",
+      "PR #53 CI run 46063703330 => test pass 2m22s, png-export pass 55s",
+      "main CI run 46064470258 (5b47503) => test pass 1m58s, png-export pass 1m16s",
+      "main CI run 46064880414 (54730bf closeout) => test pass, png-export pass"
     ]
   },
   "createdAt": "2026-11-08T16:42:55.179Z",
-  "updatedAt": "2026-11-27T20:36:03.737Z",
+  "updatedAt": "2026-11-27T20:39:33.797Z",
   "devSessionId": "session-b33a5664-99c6-4f2d-b2c1-2e55ce110763"
 }

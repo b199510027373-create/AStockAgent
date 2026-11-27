@@ -1,0 +1,109 @@
+{
+  "id": "ho-20261128-032",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261109-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "backfill 推荐 JSON 接入 RecommendationRun 契约，ledger 拒绝无 schema_version 的入库",
+  "summary": "合并后收口提交 54730bf 已推到 main：plan-20261109-001 置 done/100 并补 links.merge=5b47503、links.review=rev-20261128-004、PR/main/收口三次 CI 证据；提交 handoff 025/026/028/030/031 与日历记录。main CI 两次均绿：run 46064470258（5b47503，test 1m58s / png 1m16s）与 run 46064880414（54730bf closeout）。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "backfill JSON 契约字段齐全并过 validate_recommendation_run（main 生效）",
+      "source": "plan-20261109-001 acceptance #1"
+    },
+    {
+      "id": "REQ-2",
+      "text": "sync_json_dir 拒绝无 schema_version/残缺 v2 文件并有测试（main 生效）",
+      "source": "plan-20261109-001 acceptance #2"
+    },
+    {
+      "id": "REQ-3",
+      "text": "全量 pytest、ruff、mypy 与 CI 全部通过",
+      "source": "plan-20261109-001 acceptance #3"
+    },
+    {
+      "id": "REQ-5",
+      "text": "合并后补最终 handoff（合并 commit + main CI）并把 plan 置 done(100)",
+      "source": "review rev-20261128-004 round 2"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261109-001.json",
+      "summary": "status=done/progress=100；links 记录 merge、review、三次 CI 与测试证据",
+      "commit": "54730bf"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261128-031.md",
+      "summary": "合并后最终 handoff（合并提交 + main CI）",
+      "commit": "54730bf"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_backfill_ledger_contract.py -q",
+      "result": "7 passed in 6.04s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "pytest tests -q -m \"not png\"",
+      "result": "961 passed, 3 skipped, 6 deselected, 46 subtests passed in 282.38s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "main CI run 46064470258 (5b47503)",
+      "result": "test pass 1m58s, png-export pass 1m16s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "main CI run 46064880414 (54730bf)",
+      "result": "test pass, png-export pass",
+      "passed": true,
+      "evidence": ""
+    }
+  ],
+  "permissions": [
+    {
+      "name": "git push main (devloop 元数据)",
+      "reason": "提交 plan done/merge 链接、handoff 与日历记录",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "54730bf",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/53",
+    "ci": "main runs 46064470258 (5b47503) and 46064880414 (54730bf) success",
+    "merge": "5b47503 squash-merged 2026-11-28",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-031",
+  "next": "无开发者待办。plan-20261109-001 已 done/100，PR #53 已合并（5b47503），main 与收口提交 CI 均绿。",
+  "createdAt": "2026-11-27T20:39:39.253Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-032.md"
+}
