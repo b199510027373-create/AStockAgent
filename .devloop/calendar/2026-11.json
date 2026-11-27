@@ -667,17 +667,6 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261103-007-planned",
-      "type": "planned",
-      "title": "调度状态机迁移 jobs 表 + 心跳告警",
-      "start": "2026-11-18T00:00:00+08:00",
-      "end": "2026-11-22T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261103-007",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
       "id": "cal-plan-20261107-008-planned",
       "type": "planned",
       "title": "Agent 审计表与安全限额（v2：内容/版本/引用）",
@@ -696,6 +685,17 @@
       "end": "2026-11-22T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261114-003",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261103-007-planned",
+      "type": "planned",
+      "title": "调度状态机迁移 jobs 表 + 心跳告警",
+      "start": "2026-11-18T00:00:00+08:00",
+      "end": "2026-11-22T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-007",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
