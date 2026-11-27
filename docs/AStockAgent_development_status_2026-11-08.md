@@ -140,7 +140,7 @@ CI 内容（2026-11-17 按 plan-20261103-012 更新到当前形态）：
 
 ```text
 pytest tests -m "not png": 953 passed, 3 skipped, 6 deselected
-mypy astock app.py: Success, no issues found in 45 source files
+mypy astock app.py: Success, no issues found in 46 source files
 ruff check astock tests: All checks passed!
 coverage: 12474 statements / 2395 miss = 80.80%（CI Linux 12474/2425 = 80.56%，门禁 80.56%）
 ```

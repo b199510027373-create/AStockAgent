@@ -8,6 +8,7 @@ import pandas as pd
 
 from .config import CACHE_DIR
 from .contracts import ContractError, validate_events, validate_evidence_list
+from .scoring import score_events, sentiment  # noqa: F401 - 兼容 events.score_events/sentiment 旧导入路径
 from .tushare_client import TushareError, get_client
 
 EVENT_DIR = CACHE_DIR / "events"
@@ -21,19 +22,6 @@ _BASIC_ALL: pd.DataFrame | None = None
 _BASIC_DAY: str | None = None
 _BASIC_ALL_DAY: str | None = None
 
-POSITIVE_WORDS = [
-    "预增", "扭亏", "增长", "回购", "增持", "中标", "签约", "签订", "合同",
-    "获批", "投产", "涨价", "提价", "突破", "超预期", "分红", "订单", "合作",
-    "买入", "增持", "强烈推荐", "推荐", "上调", "创新高", "放量", "利好",
-    "上涨", "大涨", "小涨", "走强", "拉升", "反弹", "涨停",
-]
-POSITIVE_WORDS = list(dict.fromkeys(POSITIVE_WORDS))
-NEGATIVE_WORDS = [
-    "预减", "亏损", "减持", "质押", "诉讼", "仲裁", "处罚", "立案", "问询",
-    "终止", "下修", "下调", "风险提示", "退市", "停牌", "冻结", "担保",
-    "逾期", "违规", "跌停", "下滑", "不及预期", "卖出", "利空", "解禁",
-    "下跌", "大跌", "走弱", "回落", "承压",
-]
 GENERIC_ALIASES = {
     "银行", "时代", "科技", "股份", "集团", "控股", "中国", "国际", "证券",
     "保险", "地产", "能源", "电力", "汽车", "医药", "白酒", "食品", "材料",
@@ -46,18 +34,6 @@ REGION_ALIASES = {
     "四川", "福建", "湖南", "湖北", "河南", "河北", "安徽", "江西", "陕西",
     "重庆", "天津", "云南", "广西", "海南", "辽宁", "吉林", "黑龙江", "山西",
     "甘肃", "宁夏", "青海", "新疆", "西藏", "内蒙古",
-}
-RATING_WORDS = {
-    "强烈推荐": 2.0,
-    "买入": 2.0,
-    "增持": 1.5,
-    "推荐": 1.0,
-    "优于大市": 1.0,
-    "跑赢行业": 1.0,
-    "中性": 0.0,
-    "持有": 0.0,
-    "减持": -1.5,
-    "卖出": -2.0,
 }
 INDUSTRY_KEYWORDS = {
     "白酒": ["白酒", "酒类", "食品饮料"],
@@ -704,13 +680,6 @@ def fetch_reports(days: int = 7, codes: list[str] | None = None) -> pd.DataFrame
     return _cache_put(key, out.sort_values("pub_time", ascending=False).reset_index(drop=True))
 
 
-def sentiment(text: str) -> tuple[int, int]:
-    text = str(text or "")
-    positive = sum(text.count(word) for word in POSITIVE_WORDS)
-    negative = sum(text.count(word) for word in NEGATIVE_WORDS)
-    return positive, negative
-
-
 def _matches(text: str, aliases: set[str]) -> bool:
     text = str(text or "")
     return any(alias and alias in text for alias in aliases)
@@ -821,62 +790,6 @@ def evidence_for_stock(
     return validate_evidence_list(
         out.to_dict("records"), field=f"evidence_for_stock({code})"
     )
-
-
-def score_events(evidence: list[dict]) -> tuple[float, dict]:
-    """把证据聚合成 0–100 的事件分（加权情绪均值）。
-
-    - 每条证据先算极性（正/负词、研报评级），再按类型权重和时效权重加权；
-    - 证据条数只影响平均的稳定性，不再让“新闻多 = 接近 100”；
-    - 没有证据时固定 50，中性证据也接近 50。
-    """
-    stats = {"pos": 0, "neg": 0, "news": 0, "anns": 0, "reports": 0, "policy": 0, "n": len(evidence)}
-    if not evidence:
-        return 50.0, stats
-
-    type_weights = {"公告": 1.0, "研报": 1.2, "新闻": 0.8, "政策": 0.7}
-    now = pd.Timestamp.now()
-    weighted_sum = 0.0
-    weight_sum = 0.0
-    for item in evidence:
-        title = str(item.get("title", ""))
-        positive, negative = sentiment(title)
-        stats["pos"] += positive
-        stats["neg"] += negative
-        kind = str(item.get("kind", ""))
-        if kind == "公告":
-            stats["anns"] += 1
-        elif kind == "研报":
-            stats["reports"] += 1
-        elif kind == "新闻":
-            stats["news"] += 1
-        elif kind == "政策":
-            stats["policy"] += 1
-
-        denom = max(1, positive + negative)
-        polarity = (positive - negative) / denom
-        if kind == "研报":
-            rating = str(item.get("rating", ""))
-            rating_bonus = next((v for k, v in RATING_WORDS.items() if k in rating), 0.0)
-            polarity += 0.35 * (rating_bonus / 2.0)
-        elif kind == "政策":
-            polarity += 0.05
-        polarity = max(-1.0, min(1.0, polarity))
-        item_score = 50.0 + 50.0 * polarity
-
-        weight = type_weights.get(kind, 0.7)
-        try:
-            # pub_time 是契约字段；date 是旧版证据 dict 的兼容字段
-            pub = pd.Timestamp(item.get("pub_time") or item.get("date"))
-            age = max(0, (now.normalize() - pub.normalize()).days)
-            weight *= 1.0 / (1.0 + age / 45.0)
-        except (TypeError, ValueError):  # 发布时间缺失/非法时不做时间衰减
-            pass
-        weighted_sum += item_score * weight
-        weight_sum += weight
-
-    score = weighted_sum / weight_sum if weight_sum > 0 else 50.0
-    return round(max(0.0, min(100.0, score)), 1), stats
 
 
 def build_ai_context(message: str, limit: int = 8) -> tuple[str, list[dict]]:
