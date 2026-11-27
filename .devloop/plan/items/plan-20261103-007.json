@@ -1,7 +1,7 @@
 {
   "id": "plan-20261103-007",
   "title": "调度状态机迁移 jobs 表 + 心跳告警",
-  "description": "ADR-004 已实现锁、墙钟、幂等与补偿，但调度状态仍主要写 scheduler_state.json，jobs 表只记录了少量任务。目标：状态机与 attempts/late_by_min 完整落 jobs 表，启动时从表判断\"该跑但没跑\"，并加心跳检查（超时告警）。这是评审 §4.6 P0 验收\"连续 5 个交易日 job 全 success\"的基础。",
+  "description": "ADR-004 已实现锁、墙钟、幂等与补偿，但调度状态仍主要写 scheduler_state.json，jobs 表只记录了少量任务。目标：状态机与 attempts/late_by_min 完整落 jobs 表，启动时从表判断\"该跑但没跑\"，并加心跳检查（超时告警）。这是评审 §4.6 P0 验收\"连续 5 个交易日 job 全 success\"的基础。 2026-11-27 验收回写（plan-20261114-004）：EventFrame 空 code 根因修复后，11-23..11-27 连续 5 个交易日 close job 全 success（--report 5 exit 0，passed=5/5）；心跳 11-18/19（streak 8/9）告警、11-20（streak=1）不告警，恢复后 streak=0；留存 docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md。",
   "status": "done",
   "priority": "P1",
   "milestone": "ms-quality",
@@ -36,10 +36,11 @@
       "python -m mypy astock app.py -> Success: no issues found in 31 source files",
       "python -m ruff check astock app.py tests --select E9,F63,F7,F82 -> All checks passed!",
       "python -m compileall -q astock app.py -> exit 0",
-      "GitHub Actions PR #9 run 43291879416 -> test pass; main run 43292151867 -> success"
+      "GitHub Actions PR #9 run 43291879416 -> test pass; main run 43292151867 -> success",
+      "2026-11-27 现场验收：python -m astock.jobs --report 5 -> exit 0, all_success=true, passed=5/5 (11-23..11-27)；留存 docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md"
     ]
   },
   "createdAt": "2026-11-03T12:10:40.568Z",
-  "updatedAt": "2026-11-12T19:39:29.279Z",
+  "updatedAt": "2026-11-27T15:44:28.909Z",
   "devSessionId": "session-680f1ea7-de6d-4144-b50d-61c8204ae454"
 }
