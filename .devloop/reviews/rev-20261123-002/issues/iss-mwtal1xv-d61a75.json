@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwtal1xv-d61a75",
+  "threadId": "rev-20261123-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": "astock/agent/evals.py",
+  "lines": "514-519",
+  "title": "ADR-018 的 market 字段断言缺少负向测试",
+  "evidence": "_check_outcome 在 514-519 对 MARKET_TOOLS 检查 step.result.data_as_of/data_time，但 tests/test_agent_evals.py:66-82 只断言 20/20 全过；没有任何用例构造缺少这两个字段的 quote/kline/indicator 结果并断言评测失败。若这段检查被误删或条件写错，现有测试仍会全绿，ADR-018 的关键约束就失去回归保护。",
+  "suggestion": "新增一个负向单测：取 kline-001（或 quote-001）的 calls[0].result，replace 掉 data_as_of/data_time 后 run_task，断言 passed=False 且 failures 含「缺少 data_as_of/data_time」。该测试只改内存中的 ToolResult，不触碰数据集文件。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:41.852Z"
+  },
+  "createdAt": "2026-11-23T13:19:02.419Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:41.852Z"
+    }
+  ]
+}

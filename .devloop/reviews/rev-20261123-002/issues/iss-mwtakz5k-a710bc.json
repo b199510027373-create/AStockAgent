@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwtakz5k-a710bc",
+  "threadId": "rev-20261123-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": ".devloop/evals/agent_eval_tasks.json",
+  "lines": "595-598,629-632",
+  "title": "refusal-001/002 的 final_answer 与实际断言不一致，扫描件/加密原因从未被验证",
+  "evidence": "refusal-001 的 final_answer 写「该 PDF 是扫描件…」（595 行），refusal-002 写「PDF 已加密…」（629 行），但 expect.answer_contains 都只有「未在文件中找到」（598/632 行）。latest 报告 651/684 行的实际回答也确实只有「未在文件中找到」：runtime.py:343-344 对文件工具回答调用 citations.finalize_file_answer，citations.py:239-240 在无可信引用时直接返回 CITATION_NOT_FOUND。于是数据集声明的拒答原因从未被断言，基准把「通用兜底」固化成期望；如果运行时以后对扫描件/加密文件返回同样的通用文案，评测无法区分。",
+  "suggestion": "二选一并写清楚：a) 修复文件回答收口，让 file_search 的 scan_suspected/加密错误在无引用时仍保留原因，然后把 answer_contains 改为具体原因（如「扫描件」「加密」）；b) 若产品接受通用文案，则把 final_answer 改成与断言一致的「未在文件中找到」，并在任务说明中注明本用例只验证「不编造数字」，不验证原因解释。不要保留与断言不一致的 final_answer。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:38.389Z"
+  },
+  "createdAt": "2026-11-23T13:18:58.808Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:38.389Z"
+    }
+  ]
+}

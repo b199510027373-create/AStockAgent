@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwtakwqk-2ff17c",
+  "threadId": "rev-20261123-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": "astock/agent/evals.py",
+  "lines": "285-287,534-562",
+  "title": "tool_selection_accuracy 恒为 1.0，不能反映工具选择能力",
+  "evidence": "validate_dataset 在 285-287 强制 `task.expect_tools == tuple(call.name for call in task.calls)`；run_task 又用同一份 task.calls 构造 FakeModel 的脚本。因此实际工具序列与脚本序列在数据集合法时必然一致，只要 20 条任务全过，tool_selection_accuracy 就恒为 1.0（latest 报告也是 1.0）。该指标无法区分「模型选对了工具」与「脚本本来就这么写」，handoff 把它作为「工具选择准确率 100%」汇报会误导验收。",
+  "suggestion": "把该指标改名为 scripted_tool_consistency（或 scripted_sequence_match）并在报告/README 说明它只验证「运行时按脚本执行」，不衡量模型选择；若要衡量选择能力，另加一个不强制 expect.tools==calls 的候选模型/策略评测，或至少增加一个「脚本给出错误工具、应判失败」的负向用例来证明断言有效。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:34.852Z"
+  },
+  "createdAt": "2026-11-23T13:18:55.676Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:34.852Z"
+    }
+  ]
+}

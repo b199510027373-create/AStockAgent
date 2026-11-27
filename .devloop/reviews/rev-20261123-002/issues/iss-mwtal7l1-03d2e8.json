@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwtal7l1-03d2e8",
+  "threadId": "rev-20261123-002",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "maintainability",
+  "file": "astock/agent/runtime.py",
+  "lines": "89-100",
+  "title": "_default_registry 私有导致评测复制注册表，生产新增工具时会漏检",
+  "evidence": "_default_registry() 是私有函数，evals.py:306-312 只能复制 `register_market_tools(build_file_registry())`。两份注册表各自维护：生产新增工具/调整顺序时，评测不会自动跟随；validate_dataset 用旧注册表会把新工具判为未知工具，或评测覆盖不到生产实际注册表。这是表格图等新能力容易再次漏测的结构性原因。",
+  "suggestion": "在 runtime.py 暴露公共 `build_default_registry()`（或把 _default_registry 改为公共名并保留别名），evals._catalog 与 runtime 都调用同一函数；这样新增工具只需改一处，评测自动跟随。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:45.150Z"
+  },
+  "createdAt": "2026-11-23T13:19:09.733Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:45.150Z"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261123-002-r2",
+  "threadId": "rev-20261123-002",
+  "roundNo": 2,
+  "scope": "full",
+  "scopeReason": "手动指定",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 2 轮全量评审核验完成（scope=full）。历史 6 条已按代码/测试核验为已修复：iss-mwtakt0o-5897b8（CI 新增 Agent offline eval baseline gate，加载 .devloop/evals/agent_eval_baseline.json，回归返回 1 会使 test job 失败）；iss-mwtakutg-1e8d0d（新增真实 table_chart 工具与 tests/test_agent_tools.py::test_table_chart_renders_chart_spec_and_artifact，xlsx-005 改为 table_chart 并断言 figure/chart_spec；eval fixture 仍是固定 stub，按 harness 设计可接受，但 figure 断言本身不等于真实渲染）；iss-mwtakwqk-2ff17c（evals.py docstring 明确 tool_selection_accuracy 是脚本工具一致率，并新增错工具负向测试）；iss-mwtakz5k-a710bc（refusal-001/002 文案改为「未在文件中找到」并补 notes，扫描件/加密原因由 step metadata 证明）；iss-mwtal1xv-d61a75（新增 market 缺 data_as_of/data_time 负向测试）；iss-mwtal7l1-03d2e8（runtime 公开 build_default_registry，evals._catalog 复用并有对照测试）。验收 #1/#2/#3/#4/#5 均有对应实现或测试证据。本轮新增 3 条问题（2 P1 + 1 P2），故 verdict=request_changes：iss-mwthi1tw-365766（P1，runtime.py:97-110/242-252：build_default_registry 不传 audit_db_path，且 AgentRuntime 先建注册表后设 self.db_path，导致自定义 db_path 调 table_chart 时 render_chart 在默认库查不到 run_id 而抛错；db_path=None 时又会写默认库，违反无副作用承诺）；iss-mwthi1uv-38c1a2（P1，file_tools.py:663-673：table_chart 使用 include_plotlyjs=\"cdn\"，偏离 ADR-016 决策 3 的自包含 HTML，离线 artifact 会空白，测试只查 <html）；iss-mwthi1vw-f4c474（P2，tests/test_agent_evals.py:181-197：只有 --no-baseline 成功路径，缺 main(... --baseline ...) 回归返回 1 的用例，CI gate 失败路径无测试保护）。责任与完成条件：开发在 feat/plan-20261107-009-agent-evals 上修复两条 P1（透传 audit_db_path/artifact_root 并调整 AgentRuntime 构建顺序；table_chart 改 inline 或记录 ADR 例外并补离线断言），并补 P2 CLI 回归用例；修复后需附新的 CI run（含 baseline gate）与相关测试结果。评审在下一轮逐条核验：自定义 db_path 的 AgentRuntime 调 table_chart 审计落在 tmp 库、无 db_path 不写 DEFAULT_DB_PATH、HTML 无 CDN 外链、main 回归返回 1。完全解决条件=openP0=0、openP1=0，且本轮 3 条关闭；历史 6 条已核验修复但评审工具无逐条关闭接口，线程内仍显示 open，以本 summary 与 reviewer 交付为准。评审未执行测试（测试执行归开发），证据来自 handoff ho-20261124-001、CI run 45216113661 与仓库文件。",
+  "startedAt": "2026-11-23T16:27:25.879Z",
+  "finishedAt": "2026-11-23T16:32:49.881Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 1,
+    "total": 3
+  }
+}

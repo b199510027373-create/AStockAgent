@@ -1,0 +1,71 @@
+{
+  "id": "ho-20261128-016",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261117-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "PR #51 合并就绪性核对：需合并，但须评审 round 2 approve + CI 绿",
+  "summary": "核对 PR #51（feat/plan-20261117-001-baseline-refresh → main，提交 81a9a5b）是否可合并。结论：**需要合并，但现在不能合并**——评审线程 rev-20261128-002 仍为 changes_requested（openP1=1 iss-mwzbx2ma-bd56b1、openP2=2 iss-mwzbx2no-cbaa41 / iss-mwzbx91j-da1a81，feedback=0，尚未对 81a9a5b 复评），PR 的 reviewDecision 为空、mergeStateStatus=UNSTABLE，CI run 46056498460 中 png-export success、test 仍 IN_PROGRESS。main 当前为 4e14cec，不含 81a9a5b 的修复，因此 PR 内容本身是必要的（P1 基线仍锁 76.45% / 610 passed / mypy 36 files，与本项 CI 实测 80.56% / 952 passed / mypy 45 files 矛盾）。本地已在分支上按评审判据核验 81a9a5b：ruff check astock tests 全绿；tests/test_ci_quality_gates.py 17 passed；mypy astock app.py 45 files Success；docs/README 已无「36 个源文件」；.coveragerc fail_under=80.56 与 CI 12474/2425 自洽；ruff.toml 已声明扫描 astock/** 并给 11 处历史 noqa 补理由。另：工作区仍有未提交的 .devloop 元数据（plan-20261117-001、calendar、rev-20261128-001 台账、ho-20261128-015 等），建议合并前随 PR 一并收口。",
+  "requirements": [],
+  "changes": [],
+  "tests": [
+    {
+      "command": "ruff check astock tests（分支 feat/plan-20261117-001-baseline-refresh @81a9a5b）",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "pytest tests/test_ci_quality_gates.py -q",
+      "result": "17 passed, 1 warning in 0.50s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "Select-String docs/*.md README.md -Pattern '36 个源文件'",
+      "result": "no matches（P1 判定条件满足）",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "gh pr view 51 --json statusCheckRollup,reviewDecision",
+      "result": "png-export SUCCESS；test IN_PROGRESS；reviewDecision 为空；mergeStateStatus UNSTABLE",
+      "passed": false,
+      "evidence": "CI run 46056498460"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "merge PR #51",
+      "reason": "合并动作需评审 approve 且 CI 绿后才可执行，当前不应合并",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261117-001-baseline-refresh",
+    "commit": "81a9a5b",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/51",
+    "ci": "run 46056498460：png-export success，test IN_PROGRESS",
+    "merge": "未合并（等评审 round 2 approve）",
+    "status": "blocked"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-014",
+  "next": "等 CI run 46056498460 的 test job 出结果 → 评审对 81a9a5b 跑 rev-20261128-002 round 2 并逐条回填 feedback（P1 基线刷新、P2 ruff 措辞/扫描范围、P2 15 处 BLE001 审计表）→ approve 后 squash 合并 PR #51 → 回填 plan-20261117-001 done 与 main CI 证据。",
+  "createdAt": "2026-11-27T19:26:17.883Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-016.md"
+}

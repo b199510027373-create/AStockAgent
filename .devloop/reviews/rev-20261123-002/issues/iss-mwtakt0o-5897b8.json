@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwtakt0o-5897b8",
+  "threadId": "rev-20261123-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "test",
+  "file": ".github/workflows/ci.yml",
+  "lines": "68-84",
+  "title": "验收标准 #5 未落地：CI/测试从不使用已提交 baseline 做回归比较",
+  "evidence": "CI 的 test job 只执行 `ruff check astock tests`、`mypy astock app.py`、`coverage run -m pytest tests -q -m \"not png\"`，没有 `python -m astock.agent.evals`；workflows 中检索 evals/agent_eval 无匹配。tests/test_agent_evals.py:85-107 的 baseline 比较是把新报告与自身或人工改坏的副本比较，从未加载 .devloop/evals/agent_eval_baseline.json。astock/agent/evals.py:684-716 虽支持 --baseline，但仓库内没有任何调用方。结果是提交的 baseline 只是静态文件，PR 改动导致 avg_steps 上升、任务被替换/删除等回归不会被 CI 拦住，验收标准 #5「每次改动后跑评测，结果可对比」缺少自动化证据。",
+  "suggestion": "在 CI test job 增加一步（输出写到临时路径，避免改动受版本控制的 latest）：`python -m astock.agent.evals --tasks .devloop/evals/agent_eval_tasks.json --output \"$RUNNER_TEMP/agent_eval.json\" --baseline .devloop/evals/agent_eval_baseline.json`，回归时退出码 1 使 job 失败；或新增 pytest 用例加载 DEFAULT_BASELINE_PATH，对 run_evaluation 的结果调用 compare_reports 并断言 ok。两者至少落地一个，并在 PR 日志中能看到 baseline 比较结果。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:18.624Z"
+  },
+  "createdAt": "2026-11-23T13:18:50.856Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:18.624Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwu98ak2-0940d1",
+  "threadId": "rev-20261124-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/chat.py",
+  "lines": "402-403, 444-455",
+  "title": "K 线等 export_png=False 的图表被误报为「PNG 降级：kaleido/Chrome 不可用」",
+  "evidence": "导出逻辑对「没有 png_path」的图一律按环境降级归因，但 K 线等工具是设计上不导出 PNG：astock/agent/tools/market_tools.py:1149 调 render_chart 时显式传 export_png=False，chart_service.py:203 因此写 png_path=None。结果 chat.py:402-403 对每张 K 线图都追加 status 文案「（图表 xxx 未生成 PNG（kaleido/Chrome 不可用时仅 HTML））」，chat.py:444-455 的 figure_embed_html 也据此显示「PNG：未生成」。即使本机 kaleido+Chrome 完全正常，最常用的 K 线图每轮都会向用户宣称「kaleido/Chrome 可能不可用」，把设计选择误报成环境故障；status_text 还出现「（…（…））」双层括号。",
+  "suggestion": "区分「工具未请求 PNG」与「请求了但降级」：在 Figure 上增加 png_requested/png_mode 字段（collect_figures 从 metadata 的 png_mode/export_png 或 png_path 键是否存在推导），export_figures 只在 png_requested 且 png_path 为空时才追加降级说明；figure_embed_html 对未请求 PNG 的图显示「PNG：不适用（该工具不导出 PNG，仅 HTML）」或不显示该行。status 文案改为单层括号，例如「已完成；图表 KLINE…：仅 HTML（该工具不导出 PNG）」。补一条覆盖 export_png=False 工具（K 线）的 UI 断言：status_text 不含「kaleido/Chrome」字样。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-24T11:12:36.624Z"
+  },
+  "createdAt": "2026-11-24T05:28:53.618Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-24T11:12:36.624Z"
+    }
+  ]
+}

@@ -1,0 +1,175 @@
+{
+  "id": "ho-20261124-004",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "第二轮评审 3 项修复完成：table_chart 审计路由、内联图表与 CLI baseline 回归",
+  "summary": "已关闭 rev-20261123-002 第二轮全部 3 个问题：AgentRuntime 的 table_chart 审计库/产物根透传且 db_path=None 时不再写默认库；table_chart 改为内联 Plotly HTML，离线打开无外部 script；新增 CLI baseline 成功/回归两条路径测试。目标 60 passed，全量 935 passed/3 skipped，评测 20/20、工具选择 100%、平均 1.30 步/0.72ms、baseline 通过，ruff/mypy 通过；PR #48 当前 HEAD e8a8122 的 CI run 45219521406 全绿（test 1m46s、png-export 1m7s，含 eval baseline gate）。评审仍为 changes_requested，等待复审。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "20 条评测任务覆盖 PDF 问答、Excel 表格图、分钟 K 线指标、边界拒答四类，每类 5 条。",
+      "source": "plan-20261107-009 验收 #1 / m00001"
+    },
+    {
+      "id": "R2",
+      "text": "FakeModel + 固定工具桩离线运行，CI 不依赖网络或真实模型。",
+      "source": "验收 #2 / m00001"
+    },
+    {
+      "id": "R3",
+      "text": "记录任务成功率、工具选择准确率、平均步数/时延，并与提交的 baseline 对比。",
+      "source": "验收 #3/#5 / m00001"
+    },
+    {
+      "id": "R4",
+      "text": "扫描件 PDF、加密 PDF、无该股票、分钟超范围、未知指标均有明确拒答且不编造数值。",
+      "source": "验收 #4 / m00001"
+    },
+    {
+      "id": "R5",
+      "text": "Excel 表格图必须真实产出 figure/ChartSpec/artifact，覆盖 table_chart 聚合→chart_service 渲染/审计链路。",
+      "source": "评审 P1 iss-mwtakutg-1e8d0d / m00550、m00678"
+    },
+    {
+      "id": "R6",
+      "text": "自定义 db_path 时 table_chart 审计写入同一库并关联 run；db_path=None 时不得写默认审计库。",
+      "source": "第二轮评审 P1 iss-mwthi1tw-365766 / m01026"
+    },
+    {
+      "id": "R7",
+      "text": "图表 HTML 必须离线自包含，不依赖 CDN 外部脚本。",
+      "source": "第二轮评审 P1 iss-mwthi1uv-38c1a2 / m01026"
+    },
+    {
+      "id": "R8",
+      "text": "CLI 使用 --baseline 时：匹配 baseline 返回 0，出现 regression 返回 1。",
+      "source": "第二轮评审 P2 iss-mwthi1vw-f4c474 / m01026"
+    },
+    {
+      "id": "R9",
+      "text": "改动后重跑目标测试、相关全量测试、评测、ruff、mypy，并记录 CI 证据。",
+      "source": "开发硬规则 / m00001"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "build_default_registry 透传 audit_db_path/artifact_root；AgentRuntime 先初始化 db_path/artifact_root 再建默认 registry；db_path=None 时 table_chart 用 :memory: 审计库，未指定 artifact_root 时用临时目录，避免写默认库/默认产物根。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": "astock/agent/tools/file_tools.py",
+      "summary": "table_chart 的 render_chart 改为 include_plotlyjs='inline'，产出离线自包含 HTML。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "table_chart 测试改为断言无外部 <script src>；新增自定义审计库路由测试（查 agent_run_artifacts）与 db_path=None 无默认库副作用测试。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": "tests/test_agent_evals.py",
+      "summary": "新增 CLI 匹配 baseline 返回 0、baseline regression 返回 1 两条测试。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": ".devloop/evals/agent_eval_baseline.json",
+      "summary": "用本轮最终评测结果刷新 baseline（20/20、100%、1.30 步、0.72ms）。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": ".devloop/evals/agent_eval_latest.json",
+      "summary": "本轮最终评测报告。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261107-009.json",
+      "summary": "记录第二轮修复的 test/CI 证据，状态 in_review、progress 100。",
+      "commit": "e8a8122"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "记录第二轮修复验证工作单元。",
+      "commit": "e8a8122"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_evals.py::test_cli_matching_baseline_returns_zero tests/test_agent_evals.py::test_cli_baseline_regression_returns_one tests/test_agent_tools.py::test_table_chart_renders_chart_spec_and_artifact tests/test_agent_tools.py::test_runtime_custom_audit_db_routes_table_chart_artifact tests/test_agent_tools.py::test_runtime_without_db_path_does_not_write_default_audit_db -q",
+      "result": "5 passed, 1 warning in 3.32s",
+      "passed": true,
+      "evidence": "覆盖本轮 3 项评审修复的定向测试全绿。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_evals.py tests/test_agent_tools.py -q -m \"not png\"",
+      "result": "60 passed in 16.50s",
+      "passed": true,
+      "evidence": "评测与 Agent 工具相关测试全绿。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\"",
+      "result": "935 passed, 3 skipped, 5 deselected, 46 subtests passed in 92.15s",
+      "passed": true,
+      "evidence": "全量非 PNG 测试通过。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m astock.agent.evals",
+      "result": "20/20 通过，tool_selection_accuracy=100.00%，avg_steps=1.30，avg_latency=0.72ms，baseline=passed，regressions=[]",
+      "passed": true,
+      "evidence": "离线评测与提交 baseline 对比通过。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "ruff 通过。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": "mypy 通过。"
+    },
+    {
+      "command": "gh run watch 45219521406 --exit-status",
+      "result": "test 1m46s、png-export 1m7s，均通过；test 含 Agent offline eval baseline gate",
+      "passed": true,
+      "evidence": "PR #48 当前 HEAD e8a8122 的 GitHub Actions run 45219521406 全绿。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github:push",
+      "reason": "推送分支 feat/plan-20261107-009-agent-evals 的修复提交。",
+      "status": "granted"
+    },
+    {
+      "name": "github:pr",
+      "reason": "更新并维护 PR #48。",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-009-agent-evals",
+    "commit": "e8a8122",
+    "pr": "48",
+    "ci": "run 45219521406: test passed 1m46s, png-export passed 1m7s, Agent offline eval baseline gate passed",
+    "merge": "not merged",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261124-003",
+  "next": "请评审复核 rev-20261123-002 第二轮 3 个问题（runtime 审计路由、inline HTML、CLI baseline 回归），确认后合并 PR #48。评审当前仍为 changes_requested；table_chart 的 ADR/UI/PNG 后续工作已拆到 plan-20261124-001。",
+  "createdAt": "2026-11-23T16:44:57.623Z",
+  "markdownPath": ".devloop/handoffs/ho-20261124-004.md"
+}

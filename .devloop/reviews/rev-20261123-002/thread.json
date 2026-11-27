@@ -1,0 +1,23 @@
+{
+  "id": "rev-20261123-002",
+  "title": "评审：Agent 评测集与离线回归",
+  "planItemId": "plan-20261107-009",
+  "sourceDevSessionId": "session-16e94b00-18ee-4cbf-9919-f9aae04a91d8",
+  "branch": "feat/plan-20261107-009-agent-evals",
+  "base": "main",
+  "files": [
+    ".github/workflows/ci.yml",
+    "astock/agent/evals.py",
+    "astock/agent/runtime.py",
+    "astock/agent/tools/__init__.py",
+    "astock/agent/tools/file_tools.py",
+    "docs/AStockAgent_interface_freeze_v1.md",
+    "tests/test_agent_evals.py",
+    "tests/test_agent_tools.py",
+    "tests/test_ci_quality_gates.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-23T13:15:23.173Z",
+  "updatedAt": "2026-11-23T16:55:49.546Z",
+  "reviewSessionId": "session-1c392bee-5e87-4bef-9618-b4604b0ab347"
+}

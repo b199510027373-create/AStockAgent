@@ -2,7 +2,7 @@
   "id": "plan-20261114-004",
   "title": "PR #9 调度 5 日生产验收与心跳告警观察",
   "description": "PR #9（plan-20261103-007）已合并 a9c1248，jobs 表状态机与心跳告警进入 main；合并时仅完成 50 个自动化测试，真实交易日 5 日全 success 验收需在产线执行。2026-11-21 复核 `python -m astock.jobs --report 5`：11/16 failed、11/17 failed、11/18 failed、11/19 success、11/20 failed，仅 1/5 通过；失败原因是推荐流水线抛 ContractError: [EventFrame] 列 code 存在空值（例如公告/研报映射缺失），不是调度状态机失败。目标改为：先修复 EventFrame 空 code 的根因并补回归，再从修复后的交易日重新累计连续 5 个交易日（11/23–11/27），确认 pending/running/success、attempts、late_by_min、heartbeat 告警与去重均符合预期。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
@@ -50,6 +50,6 @@
     ]
   },
   "createdAt": "2026-11-13T19:08:42.795Z",
-  "updatedAt": "2026-11-27T17:01:10.808Z",
+  "updatedAt": "2026-11-27T17:39:13.486Z",
   "devSessionId": "session-26fd9368-10b9-4097-8e89-204c2931b1c4"
 }

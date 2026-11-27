@@ -1,0 +1,23 @@
+{
+  "id": "rev-20261124-001",
+  "title": "评审：table_chart 表格图表能力：契约、UI 集成与 PNG 导出",
+  "planItemId": "plan-20261124-001",
+  "sourceDevSessionId": "session-a91f4e33-41ee-46f5-89e2-ac5e6a097d9e",
+  "branch": "feat/plan-20261124-001-table-chart",
+  "base": "main",
+  "files": [
+    ".github/workflows/ci.yml",
+    "app.py",
+    "astock/agent/chat.py",
+    "astock/agent/tools/file_tools.py",
+    "astock/agent_chat_ui.py",
+    "docs/AStockAgent_interface_freeze_v2.md",
+    "tests/test_agent_chart_spec.py",
+    "tests/test_agent_chat.py",
+    "tests/test_agent_tools.py"
+  ],
+  "status": "approved",
+  "createdAt": "2026-11-24T05:26:08.021Z",
+  "updatedAt": "2026-11-27T16:53:09.375Z",
+  "reviewSessionId": "session-fc2fd29a-3770-4176-bdba-8a228595dea2"
+}

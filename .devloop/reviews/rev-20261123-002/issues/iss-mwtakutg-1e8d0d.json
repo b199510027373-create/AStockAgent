@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwtakutg-1e8d0d",
+  "threadId": "rev-20261123-002",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "acceptance",
+  "file": ".devloop/evals/agent_eval_tasks.json",
+  "lines": "362-403",
+  "title": "验收标准 #1 的「表格图」未被真实覆盖：xlsx-005 只有表格数据，没有图表/figure",
+  "evidence": "xlsx-005（第 362-403 行）只有一次 table_query 调用，result.text 是 12 行数据表，metadata 无 figure；latest 报告第 448 行回答也只是「已整理 12 个月的柱状图数据」。四类标签里 table_stats 写作「Excel 表格统计图」，但 20 条任务均无图表渲染/图表对象断言；handoff 也明确承认「未真实渲染图表，为独立能力缺口」。因此验收标准 #1「覆盖…表格图…」目前只覆盖了表格聚合，未覆盖图。",
+  "suggestion": "由需求方二选一：a) 在本计划内新增真实的表格图能力（工具返回 figure/图表对象）并加一条断言 figure 的 table_chart 任务；b) 若确认本计划只做表格统计，则把验收标准 #1 的「表格图」修订为「表格统计（数据表）」并在 plan/README 注明图表能力另立计划。修订前不应把该验收项标为已完成；解决条件=数据集出现真实图表断言，或验收标准经需求方正式书面降级。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:23.672Z"
+  },
+  "createdAt": "2026-11-23T13:18:53.188Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:23.672Z"
+    }
+  ]
+}

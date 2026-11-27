@@ -1,0 +1,34 @@
+{
+  "id": "ho-20261124-010",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261124-001",
+  "sessionId": "",
+  "title": "评审：table_chart 表格图表能力：契约、UI 集成与 PNG 导出",
+  "summary": "## 第 2 轮（scope=full_recheck）复核：代码侧 7 项问题全部真实修复，本轮 0 条新问题；不通过的唯一原因是台账未回填（openP1=2 仍挂在第 1 轮 issue 上），不需要改代码\n\n### 一、复核范围与证据基线\n- 范围：base=main，修复段 5593a2c（第 1 轮被评 head）→ 17822de，3 个提交（d62d59d 代码修复、63326cd/17822de 计划与 CI 证据回填），改动仍限 9 个文件 + .devloop/architecture/adr/ADR-017 回填 + plan JSON，未出现范围外文件。\n- 交付：ho-20261124-009（update，previousHandoffId=ho-20261124-007）逐条把 REV-1..REV-7 映射回 issue id（source 字段），PR #49 head 17822de，CI run 45352310856 双 job SUCCESS。\n- 测试执行归开发：本会话无 shell（pytest/gh/ruff/mypy 均未执行），159 passed / 950 passed / 6 png passed / ruff / mypy / CI 结论采信 ho-20261124-009 + plan-20261124-001.links.test；我的判断建立在「新增用例代码是否真的能区分新旧行为」的逐条阅读上，而不是只读数字。\n\n### 二、第 1 轮 7 条问题逐条闭环核验（全部成立）\n| issue | 级别 | 修复证据 | 判别力核对 |\n|---|---|---|---|\n| iss-mwu98ak2-0940d1 | P1 | astock/agent/chat.py:310 新增 `png_requested`/`png_mode`，:344-351 由 `png_path` 字段/`png_mode in {auto,require}`/`export_png` 推导，`png_mode==\"off\"` 置 False；:448 `if not figure.png_requested: continue` 不再写降级 note；:504-506 图注三态（有 PNG／未生成／不适用） | 与真实工具对齐：astock/agent/tools/market_tools.py:1157-1172 组装的 meta 里没有 png_path 键（全文只有 :1149 的 `export_png=False`），故 K 线 `\"png_path\" in chart` 为 False → 不误报；tests/test_agent_chat.py:1090 test_kline_without_png_is_not_reported_as_export_degradation 断言 final[3] 含「PNG：不适用」、final[5] 不含 kaleido/Chrome/未生成 PNG、final[6] 无 .png；:1043 用例锁住「（」「）」各出现 1 次 |\n| iss-mwu99fzu-7d2a8f | P1 | tests/test_agent_chat.py:1187-1238 test_gradio_serves_exported_html_and_png：真写导出文件 → `gr.Blocks` + `gr.File` → `demo.launch(server_name=\"127.0.0.1\", server_port=<空闲端口>, prevent_thread_lock=True, allowed_paths=agent_export_allowed_paths(), quiet=True)` → 对每个 `f\"{demo.local_api_url}file={urlparse.quote(path)}\"` urlopen 断言 status 200，.html 断言 text/html 且正文含 plotly-download，.png 断言 image/png 且魔数 `b\"\\x89PNG\"`，`self.addCleanup(demo.close)` | 这正是第 1 轮缺的运行时证据：不再是源码字符串断言或 is_allowed_file 直调，而是 Gradio 自己的 /file= 端点真实 200；用例无 skipif/marker，落在主 test job（`-m \"not png\"`）里，CI 双绿即证明在 CI 也跑通 |\n| iss-mwu98doy-52d606 | P2 | astock/agent/tools/file_tools.py:635-656 空结果返回 15 个冻结字段（chart_spec=None、artifact_id=\"\"、artifact_version=0、artifact_path=\"\"、png_path=\"\"、png_mode=\"auto\"、warnings=[\"没有可绘制的数据\"]…），非空分支 :725 增 png_mode | tests/test_agent_tools.py:697 起 test_table_chart_empty_result_keeps_frozen_metadata_shape 用 `set(metadata) == {15 键}` 精确锁定，并用真实空表 xlsx 走 registry.invoke，不是构造 dict 断言 |\n| iss-mwu98gf8-204e08 | P2 | tests/test_agent_tools.py:36 `from astock.agent.store import PNG_DEGRADED_WARNING_PREFIX`；:663-670、:1092-1100 两处缺失分支改 `assert png_path == \"\"` + `any(warning.startswith(PNG_DEGRADED_WARNING_PREFIX) …)`；png 用例 :856-861 同样用前缀 | 关键点：table_chart 在 PNG 成功时也必有 time_semantics=none 与「视图时点未知」warning，旧断言 `assert warnings` 恒真；改前缀后只有真降级才能通过，判别力成立 |\n| iss-mwu98p0w-651dd6 | P2 | astock/agent/tools/file_tools.py:609-614 `COALESCE(CAST(...) AS VARCHAR), '(空)')` + `TRY_CAST(regexp_extract(..., '^[0-9]+', 0) AS BIGINT)` 作 natural_key，`ORDER BY natural_key NULLS LAST, category`；:626 Python 侧同步归一 `(空)` | tests/test_agent_tools.py:731 起 test_table_chart_natural_orders_month_text_and_normalizes_null 用乱序 12 个月 + 一行 None 的真实 xlsx，断言 `categories == [f\"{m}月\" for m in range(1,13)] + [\"(空)\"]` 且 `chart_spec[\"data\"][\"rows\"] == result.table`；旧字典序实现会得到 10月,11月,12月,1月…，断言能区分 |\n| iss-mwu98vpf-68fbd2 | P2 | astock/agent_chat_ui.py:57-70 新增 `agent_export_dir()`（`ASTOCK_AGENT_EXPORT_DIR` 覆盖 + `expanduser().resolve()`，默认 `%TEMP%/astock-agent-exports`），allowed_paths 与 respond 导出同源；astock/agent/chat.py:398-423 `_prune_exports(base, keep=50, max_age_days=7)` 在 :436 写入前调用 | UI/下载/清理三处用例：tests/test_agent_chat.py:417 test_export_figures_prunes_stale_files（8 天前 stale.html 被删 + 本次导出路径正确）、UI 端到端与下载用例全部 `mock.patch.dict(os.environ, {\"ASTOCK_AGENT_EXPORT_DIR\": <tmp>})`，不再往宿主 %TEMP% 写盘 |\n| iss-mwu9943p-4f57cc | P2 | astock/agent/tools/file_tools.py:633-634 `chart_title = chart_title[:120]` 后由空结果分支/spec(:661)/metadata 共用，spec 不再二次截断 | tests/test_agent_tools.py:765 起 test_table_chart_truncates_title_once：`title=\"长\"*200` → `len(metadata[\"title\"]) == 1",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 2,
+    "verdict": "request_changes",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 2,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261124-008",
+  "next": "",
+  "createdAt": "2026-11-24T08:18:04.467Z",
+  "markdownPath": ".devloop/handoffs/ho-20261124-010.md"
+}

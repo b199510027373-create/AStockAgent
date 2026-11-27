@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwu99fzu-7d2a8f",
+  "threadId": "rev-20261124-001",
+  "roundNo": 1,
+  "severity": "P1",
+  "category": "test",
+  "file": "app.py",
+  "lines": "508-524",
+  "title": "AC-2 的下载链路缺运行时证据：launch 与 /file= 从未被启动验证，handoff 自认未走查",
+  "evidence": "AC-2 要求「会话 UI 支持 PNG/HTML 导出」，但这条链路的最后一环（浏览器通过 Gradio /file= 真正下载）没有任何运行时证据：①handoff（ho-20261124-007）自认「未做真实浏览器点击走查，建议启动 app.py 确认图表 iframe 与「图表导出」区可下载 HTML/PNG」；②allowed_paths 相关测试只做了两件事——对 app.py 源码做字符串断言 `\"allowed_paths=agent_export_allowed_paths()\"`，以及直接调 `gradio_utils.is_allowed_file(path, allowed)`，都没有经过 `app.launch()`；③app.py:508-524 的 launch 只在 `__main__` 分支执行，ci.yml 的 test / png-export 两个 job 都不启动 app；④目前若 Gradio 该版本对 `launch(allowed_paths=...)` 的关键字/语义有差异，或导出目录在 launch 之后才创建，表现只会是启动即崩或下载 403，而现有测试全部绿。也就是说「文件已生成并传给了 gr.File 组件」被验证了，「用户能下载到」没有被验证。",
+  "suggestion": "由开发补一次运行时证据，二选一即可：①手工验证——本地 `python app.py` 启动，对一张真实 Excel 让 agent 调 table_chart，打开「图表导出」区分别下载 HTML 与 PNG，确认 HTTP 非 403、PNG 能打开、HTML 内联 plotly 正常渲染，把命令/截图/日志写进 handoff 的 tests 字段；②自动化——新增一条集成用例用 `demo.launch(prevent_thread_lock=True, allowed_paths=[...])` 起本地端口，对导出文件 URL 做 `urllib.request.urlopen` 断言 200 且 `Content-Type` 为 text/html、image/png，然后 `demo.close()`。两种方式任一落地并在 handoff 留证据，本条即可关闭；在此之前 AC-2 视为未完全验证。",
+  "confidence": 0.8,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-24T11:12:41.844Z"
+  },
+  "createdAt": "2026-11-24T05:29:47.322Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-24T11:12:41.844Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwthi1tw-365766",
+  "threadId": "rev-20261123-002",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "correctness",
+  "file": "astock/agent/runtime.py",
+  "lines": "97-110,242-252",
+  "title": "table_chart 的审计库 wiring 断裂：默认注册表不传 audit_db_path，自定义 db_path 时图表渲染必失败",
+  "evidence": "`build_default_registry()`（runtime.py:97-110）只调用 `register_market_tools(build_file_registry())`，没有把 `audit_db_path`/`artifact_root` 传下去；`AgentRuntime.__init__` 在 runtime.py:242 先用 `_default_registry()` 建注册表，:252 才设置 `self.db_path`。file_tools.py:663-673 的 table_chart 把 `audit_db_path`（默认 None）传给 chart_service.render_chart；chart_service.py:105-107 在 db_path=None 时 `connect(None)` 到 DEFAULT_DB_PATH，:117-125 又要求 run_id 必须存在于该库的 agent_runs。因此 `AgentRuntime(db_path=tmp/audit.db)` + 默认注册表调用 table_chart 时，run 在 tmp 库、render_chart 查默认 data/astock.db，直接抛 `ValueError: run_id=... 不存在`；而 db_path=None 时又会把 artifact/审计写到默认库，违反 runtime.py:250-251 的“测试与纯内存调用无副作用”。tests/test_agent_tools.py:604-651 只直接调用带 audit_db_path 的 build_file_registry，未覆盖 AgentRuntime 自定义 db_path，所以该断裂未被测试发现。",
+  "suggestion": "让 `build_default_registry(*, audit_db_path=None, artifact_root=None)` 透传 `build_file_registry(audit_db_path=..., artifact_root=...)`；AgentRuntime 先确定 `self.db_path` 再构建默认 registry（或显式把 `self.db_path` 作为 audit_db_path；db_path=None 时用临时/内存审计库，或明确禁止 table_chart 落默认库）。补一个 `AgentRuntime(db_path=tmp)` 调用 table_chart 的回归测试，断言 `agent_runs`/`agent_artifacts` 落在 tmp 库且 artifact 的 run link 正确；同时断言 db_path=None 时不会写 DEFAULT_DB_PATH。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:27.528Z"
+  },
+  "createdAt": "2026-11-23T16:32:39.620Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:27.528Z"
+    }
+  ]
+}

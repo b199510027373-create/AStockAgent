@@ -1,0 +1,79 @@
+{
+  "id": "ho-20261128-006",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261124-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "table_chart main 状态补充：6d75c8a 与后续 408623b CI 均绿",
+  "summary": "main 状态补充：本任务的台账提交 6d75c8a 已推送并通过 CI run 46032470188（test + png-export 均 success）。随后并行会话为 plan-20261114-004 提交 ho-20261128-004（408623b）并推送，main HEAD 前移；该提交仅新增两个 handoff 文件，不涉及 table_chart 代码，CI run 46032800193 同样 test + png-export success。`git merge-base --is-ancestor 6d75c8a HEAD` 成立，本任务证据仍有效。业务代码自 d62d59d 后未再改动，评审线程 rev-20261124-001 仍为 7/7 fixed、0 open，等待 reviewer 重跑 finish 刷新 PR.md。",
+  "requirements": [
+    {
+      "id": "AC-1",
+      "text": "table_chart 的权限、审计与引用语义写入 ADR/接口契约",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-2",
+      "text": "会话 UI 能展示 table_chart 的 figure 并支持 PNG/HTML 导出",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-3",
+      "text": "真实 Excel 数据端到端测试覆盖 table_chart 聚合、渲染和 artifact 审计",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-4",
+      "text": "xlsx-005 评测保持 figure/ChartSpec 断言且 CI 通过",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "REV-1..7",
+      "text": "7 条 P1/P2 修复与证据见 ho-20261128-003；本轮无新增修改",
+      "source": "rev-20261124-001 / ho-20261128-003"
+    }
+  ],
+  "changes": [],
+  "tests": [
+    {
+      "command": "gh run view 46032470188 --json status,conclusion,headSha,jobs",
+      "result": "completed success, head 6d75c8a",
+      "passed": true,
+      "evidence": "jobs: test success, png-export success"
+    },
+    {
+      "command": "gh run view 46032800193 --json status,conclusion,headSha,jobs",
+      "result": "completed success, head 408623b",
+      "passed": true,
+      "evidence": "仅 handoff 元数据提交，test + png-export 仍 success"
+    },
+    {
+      "command": "git merge-base --is-ancestor 6d75c8a HEAD",
+      "result": "exit 0",
+      "passed": true,
+      "evidence": "6d75c8a 是当前 main 祖先"
+    }
+  ],
+  "permissions": [],
+  "delivery": {
+    "branch": "main",
+    "commit": "6d75c8a; main HEAD 408623b",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/49",
+    "ci": "46032470188 success (6d75c8a); 46032800193 success (408623b)",
+    "merge": "PR #49 merged as 9fe4a47; 本任务台账 6d75c8a 已推送；main HEAD 为并行 plan-20261114-004 的元数据提交 408623b",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-005",
+  "next": "评审侧对 rev-20261124-001 重跑 finish 即可关闭：7/7 issue fixed、openP0/P1/P2=0；PR.md 仍是 2026-11-24T08:18 旧快照。开发者侧无剩余代码或证据工作；可选硬化仅为 _try_png 首帧退避，不阻塞。",
+  "createdAt": "2026-11-27T16:23:07.509Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-006.md"
+}

@@ -1,0 +1,65 @@
+{
+  "id": "ho-20261128-017",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261117-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "PR #51 CI 转绿（CLEAN）：仍待评审 round 2 approve 才可合并",
+  "summary": "补记 PR #51 CI 结果：run 46056498460 的 test 与 png-export 均 COMPLETED SUCCESS，mergeStateStatus 从 UNSTABLE 变为 CLEAN；本地核验仍为 ruff 0 / test_ci_quality_gates 17 passed / mypy 45 files / docs 无「36 个源文件」。评审侧未变：rev-20261128-002 仍 changes_requested（openP1=1、openP2=2、feedback=0），PR reviewDecision 为空——因此结论不变：PR #51 需要合并，但必须先由评审对 81a9a5b 跑 round 2 并 approve，不可直接合并。",
+  "requirements": [],
+  "changes": [],
+  "tests": [
+    {
+      "command": "gh pr view 51 --json statusCheckRollup,mergeStateStatus",
+      "result": "test COMPLETED SUCCESS；png-export COMPLETED SUCCESS；mergeStateStatus CLEAN",
+      "passed": true,
+      "evidence": "CI run 46056498460"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "pytest tests/test_ci_quality_gates.py -q",
+      "result": "17 passed, 1 warning",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": ""
+    }
+  ],
+  "permissions": [
+    {
+      "name": "merge PR #51",
+      "reason": "CI 已绿，但评审尚未对 81a9a5b 复评，按流程合并需 approve",
+      "status": "blocked"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261117-001-baseline-refresh",
+    "commit": "81a9a5b",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/51",
+    "ci": "run 46056498460：test SUCCESS、png-export SUCCESS，mergeStateStatus CLEAN",
+    "merge": "未合并（等 rev-20261128-002 round 2 评审 approve）",
+    "status": "blocked"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-016",
+  "next": "评审对 81a9a5b 跑 rev-20261128-002 round 2，逐条回填 3 条 issue 的 feedback（P1 基线/文档/mypy 守护、P2 ruff 措辞与扫描范围、P2 15 处 BLE001 审计表）；approve 后 squash 合并 PR #51，再回填 plan-20261117-001 done 与 main CI。",
+  "createdAt": "2026-11-27T19:26:27.273Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-017.md"
+}

@@ -1,0 +1,205 @@
+{
+  "id": "ho-20261128-005",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261124-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "table_chart 评审闭环：证据已推送 main，main CI 双绿",
+  "summary": "承接 ho-20261128-003。业务代码未再改动：reviewer ho-20261124-010 的 round 2 full_recheck 已确认 7 项问题真实修复、0 条新问题，唯一阻塞是评审台账未回填。本轮将复跑证据与台账提交为 6d75c8a 并推送 origin/main（需绕过失效的仓库级代理 127.0.0.1:7890）；main CI run 46032470188（head 6d75c8a）test + png-export 均 SUCCESS。评审线程 rev-20261124-001 仍为 changes_requested，但 7 条 issue 全部 fixed、openP0/P1/P2 均为 0，PR.md 是 2026-11-24T08:18 的旧快照，需 reviewer 重跑 finish 刷新；开发者不代替评审 finish/approve。计划项保持 done/100（PR #49 已合并）。",
+  "requirements": [
+    {
+      "id": "AC-1",
+      "text": "table_chart 的权限、审计与引用语义写入 ADR/接口契约",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-2",
+      "text": "会话 UI 能展示 table_chart 的 figure 并支持 PNG/HTML 导出",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-3",
+      "text": "真实 Excel 数据端到端测试覆盖 table_chart 聚合、渲染和 artifact 审计",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-4",
+      "text": "xlsx-005 评测保持 figure/ChartSpec 断言且 CI 通过",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "REV-1",
+      "text": "iss-mwu98ak2-0940d1：export_png=False 不应被误报 PNG 降级（png_requested 三态）",
+      "source": "rev-20261124-001"
+    },
+    {
+      "id": "REV-2",
+      "text": "iss-mwu99fzu-7d2a8f：AC-2 下载链路需真实 Gradio /file= 运行时证据",
+      "source": "rev-20261124-001"
+    },
+    {
+      "id": "REV-3",
+      "text": "iss-mwu98doy-52d606：空结果 metadata 必须保留 15 个冻结字段",
+      "source": "rev-20261124-001"
+    },
+    {
+      "id": "REV-4",
+      "text": "iss-mwu98gf8-204e08：PNG 缺失断言不得恒真，需校验降级 warning 前缀",
+      "source": "rev-20261124-001"
+    },
+    {
+      "id": "REV-5",
+      "text": "iss-mwu98p0w-651dd6：NULL 分组归一为 (空)，数值按 natural order 排序",
+      "source": "rev-20261124-001"
+    },
+    {
+      "id": "REV-6",
+      "text": "iss-mwu98vpf-68fbd2：导出目录可注入并清理过期文件",
+      "source": "rev-20261124-001"
+    },
+    {
+      "id": "REV-7",
+      "text": "iss-mwu9943p-4f57cc：title 截断口径在 spec 与 metadata 间一致",
+      "source": "rev-20261124-001"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261124-001.json",
+      "summary": "links.test 由 10 条扩到 14 条（新增目标 159、全量 950、png 首跑+复跑、ruff/mypy），新增 links.review 台账说明；status 保持 done/100",
+      "commit": "6d75c8a"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261128-003.json",
+      "summary": "round 2 复核与复跑证据的 developer update handoff",
+      "commit": "6d75c8a"
+    },
+    {
+      "path": ".devloop/handoffs/ho-20261128-003.md",
+      "summary": "同上 Markdown 版本",
+      "commit": "6d75c8a"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "追加 2026-11-28 复核工作单元 log-1795796208050-95afb9",
+      "commit": "6d75c8a"
+    },
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "评审修复提交 d62d59d：png_requested/png_mode、导出图注三态、_prune_exports",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "astock/agent/tools/file_tools.py",
+      "summary": "评审修复提交 d62d59d：空结果 15 字段、NULL/natural order、title 单次截断",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "astock/agent_chat_ui.py",
+      "summary": "评审修复提交 d62d59d：agent_export_dir() 与 ASTOCK_AGENT_EXPORT_DIR",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "评审修复提交 d62d59d：K 线三态、真实 Gradio 下载、清理测试",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "评审修复提交 d62d59d：metadata、PNG 前缀、NULL 排序、title 截断断言",
+      "commit": "d62d59d"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-017-agent-audit-security.md",
+      "summary": "评审修复提交 d62d59d：权限/审计边界",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v2.md",
+      "summary": "评审修复提交 d62d59d：ChartSpec/metadata 冻结字段",
+      "commit": "d62d59d"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_tools.py tests/test_agent_chart_spec.py -q --basetemp=.tmp-tests/pytest-run-ledger",
+      "result": "159 passed, 3 warnings in 106.64s（danger-full-access；workspace-write 首跑 6 例沙箱 ACL PermissionError 假失败）",
+      "passed": true,
+      "evidence": "含 test_gradio_serves_exported_html_and_png：真实 Gradio /file= HTML 200 text/html、PNG 200 image/png 且 \\x89PNG 魔数"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" --timeout=120 --basetemp=.tmp-tests/pytest-run-final3",
+      "result": "950 passed, 3 skipped, 6 deselected, 46 subtests passed in 305.92s",
+      "passed": true,
+      "evidence": "后台 job pwsh-7d990537db66437a exit 0"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 --basetemp=.tmp-tests/pytest-run-png-final",
+      "result": "首跑 5 passed / 1 failed：test_chinese_candlestick_png_renders_glyphs 报 ReferenceError: kaleido_scopes is not defined（chart_render.py:1679），kaleido 1.5.1+Chrome 首帧竞态，非确定性",
+      "passed": false,
+      "evidence": "同命令 --basetemp=.tmp-tests/pytest-run-png-final2 复跑 6 passed, 51 deselected in 51.91s；astock/agent/chart_render.py:1450-1452 已含 _TRANSIENT_PNG_ERROR_HINTS 与 _try_png 重试；CI run 45352310856 png-export SUCCESS"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests",
+      "result": "All checks passed!（RUFF_EXIT=0）",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "Success: no issues found in 45 source files（MYPY_EXIT=0）",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "gh run view 46032470188 --json status,conclusion,headSha",
+      "result": "completed success, head 6d75c8a",
+      "passed": true,
+      "evidence": "jobs: test success, png-export success（main push 触发）"
+    },
+    {
+      "command": "gh run view 45352310856 --repo b199510027373-create/AStockAgent --json status,conclusion,headSha,jobs",
+      "result": "completed success, head 17822de, test + png-export 均 success",
+      "passed": true,
+      "evidence": "PR #49 合并前 CI"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "danger-full-access 文件沙箱",
+      "reason": "workspace-write 下 pytest 写入/渲染 .tmp-tests/*/index.html 与删除 .pytest_cache 被 ACL 拒绝，产生 6 例 PermissionError 假失败；同一命令完整权限重跑通过",
+      "status": "granted"
+    },
+    {
+      "name": "网络直连 GitHub",
+      "reason": "仓库级 http.https://github.com.proxy=http://127.0.0.1:7890 已失效，push 需用 git -c \"http.https://github.com.proxy=\" 直连；gh CLI 登录有效",
+      "status": "granted"
+    },
+    {
+      "name": "kaleido 1.5.1 + Chrome/字体",
+      "reason": "PNG 真实导出测试依赖；本机首帧偶发 kaleido_scopes 竞态，CI 稳定通过",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "6d75c8a",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/49",
+    "ci": "run 46032470188 success（head 6d75c8a，test + png-export）；PR 合并前 run 45352310856 success",
+    "merge": "PR #49 merged as 9fe4a47ce9475d7ec66a3548bedfa005ab2bfe83（2026-11-24T08:35:53Z）；业务修复 d62d59d；台账提交 6d75c8a 已推送 main",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-003",
+  "next": "请 reviewer 对 rev-20261124-001 重跑 finish：7 条 issue 已全部 fixed、open 计数为 0，重跑后线程应离开 changes_requested 并刷新 PR.md（当前仍是 2026-11-24T08:18 旧快照）。可选硬化：在 astock/agent/chart_render.py 的 _try_png 两次尝试间加短退避/等待 Chrome ready，降低本地 kaleido_scopes 首帧抖动（CI 已稳定，不阻塞本项）。开发者侧无剩余代码工作。",
+  "createdAt": "2026-11-27T16:20:53.756Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-005.md"
+}

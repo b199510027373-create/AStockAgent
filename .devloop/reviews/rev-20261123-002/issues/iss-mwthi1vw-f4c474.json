@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwthi1vw-f4c474",
+  "threadId": "rev-20261123-002",
+  "roundNo": 2,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_agent_evals.py",
+  "lines": "181-197",
+  "title": "CLI 只测了 --no-baseline 成功路径，缺 baseline 回归返回 1 的用例，CI gate 的失败路径无保护",
+  "evidence": "tests/test_agent_evals.py:181-197 的 `test_cli_writes_report_without_baseline` 只调用 `main([... --no-baseline])` 并断言返回 0；没有任何用例调用 `main([... --baseline ...])`。evals.py:684-716 的 baseline 分支正是 CI 新 gate 的失败路径：回归时返回 1 才会让 test job 失败。现有 `test_committed_baseline_matches_current_evaluation` 只覆盖 compare_reports 全绿，不覆盖 CLI 退出码/错误摘要；若 main 的返回值或 baseline 参数处理写错，CI 仍可能全绿。",
+  "suggestion": "新增一个 CLI 失败路径用例：把 `.devloop/evals/agent_eval_baseline.json` 复制到 tmp，构造一个回归（例如把某 task 的 passed 改 false，或把 avg_steps 改大），调用 `main([\"--tasks\", ..., \"--output\", tmp, \"--baseline\", regressed])`，断言返回 1 且报告 comparison.ok 为 false；再补一个 baseline 与当前一致的返回 0 用例。测试只读 baseline 副本，不改受版本控制的文件。",
+  "confidence": 0.9,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:49.546Z"
+  },
+  "createdAt": "2026-11-23T16:32:39.692Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:49.546Z"
+    }
+  ]
+}

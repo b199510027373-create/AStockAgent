@@ -1,0 +1,150 @@
+{
+  "id": "ho-20261123-024",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261107-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 离线评测集与回归基线",
+  "summary": "依据 ADR-013/017 新增 20 条 Agent 离线评测集与可对比回归。astock/agent/evals.py 复用生产 ToolSpec schema/权限，仅替换 handler 为固定桩，用 FakeModel 回放工具调用与最终回答；逐任务校验工具序列、引用/时效、停止原因与回答，并统计任务成功率、工具选择/序列准确率、平均步数与平均/P95 时延。20/20 通过，工具选择/序列准确率 100%，平均 1.30 步、0.57ms；baseline 比较通过。相关测试 104 passed，ruff/mypy 通过，PR #48 的 test 与 png-export 均通过。Excel 表格图当前以 table_query 聚合数据表覆盖，未真实渲染图表，已在交付中记录为独立能力缺口。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "20 条评测任务，覆盖 PDF 问答、Excel 表格统计、分钟 K 线指标、边界拒答四类，各 5 条。",
+      "source": "plan-20261107-009 描述与验收标准 #1"
+    },
+    {
+      "id": "R2",
+      "text": "PDF 研报问答需带页码引用。",
+      "source": "plan-20261107-009 描述①"
+    },
+    {
+      "id": "R3",
+      "text": "Excel 表格统计图任务。",
+      "source": "plan-20261107-009 描述②"
+    },
+    {
+      "id": "R4",
+      "text": "指定股票与指标的分钟 K 线任务。",
+      "source": "plan-20261107-009 描述③"
+    },
+    {
+      "id": "R5",
+      "text": "扫描件 PDF、无该股票、超出范围等边界必须明确拒答。",
+      "source": "plan-20261107-009 描述④与验收标准 #4"
+    },
+    {
+      "id": "R6",
+      "text": "FakeModel + 固定工具桩离线运行，CI 不依赖网络；记录工具选择准确率、任务成功率、平均步数/时延。",
+      "source": "plan-20261107-009 验收标准 #2/#3"
+    },
+    {
+      "id": "R7",
+      "text": "每次改动后跑评测，结果可与 baseline 对比。",
+      "source": "plan-20261107-009 验收标准 #5"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/evals.py",
+      "summary": "新增离线评测 harness：任务模型、生产 ToolSpec schema 校验、固定工具桩、指标汇总、baseline 对比与 CLI。",
+      "commit": "a33ae03"
+    },
+    {
+      "path": ".devloop/evals/agent_eval_tasks.json",
+      "summary": "新增 20 条任务，四类各 5 条：pdf-001..005、xlsx-001..005、kline-001..005、refusal-001..005。",
+      "commit": "a33ae03"
+    },
+    {
+      "path": ".devloop/evals/agent_eval_baseline.json",
+      "summary": "新增可对比 baseline；latest 报告为 20/20、全指标 100%、平均 1.30 步。",
+      "commit": "a33ae03"
+    },
+    {
+      "path": "tests/test_agent_evals.py",
+      "summary": "新增 6 个测试：数据集完整性/类别覆盖、离线执行、报告 round-trip 与回归识别、缺引用失败、CLI。",
+      "commit": "a33ae03"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "新增 evals.py 后受检非 UI 模块由 43 变 44，同步 EXPECTED_CHECKED_MODULES 和注释。",
+      "commit": "7064eb5"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m astock.agent.evals",
+      "result": "20/20 通过；tool_selection_accuracy=100.00%；avg_steps=1.30；avg_latency_ms=0.57；baseline 比较通过",
+      "passed": true,
+      "evidence": ".devloop/evals/agent_eval_latest.json"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_evals.py -q",
+      "result": "6 passed",
+      "passed": true,
+      "evidence": "目标测试"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_evals.py tests/test_agent_runtime.py tests/test_agent_tools.py -q -m \"not png\"",
+      "result": "104 passed",
+      "passed": true,
+      "evidence": "相关全量测试；修复 .tmp-tests 遗留 ACL 后通过"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_ci_quality_gates.py::test_mypy_exclude_matches_frozen_ui_whitelist tests/test_agent_evals.py -q",
+      "result": "7 passed",
+      "passed": true,
+      "evidence": "mypy 白名单门禁回归"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同名命令"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": "CI 同名命令"
+    },
+    {
+      "command": "gh pr checks 48 --watch",
+      "result": "test pass 1m53s；png-export pass 1m54s",
+      "passed": true,
+      "evidence": "GitHub Actions run 45163149211"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github:push",
+      "reason": "推送分支 feat/plan-20261107-009-agent-evals",
+      "status": "granted"
+    },
+    {
+      "name": "github:pr",
+      "reason": "创建并更新 PR #48",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-009-agent-evals",
+    "commit": "4cab3e5",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/48",
+    "ci": "test 与 png-export 均通过（run 45163149211）",
+    "merge": "未合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "等待评审 PR #48；评审通过后合并。Excel 表格“真实统计图”当前无生产工具，xlsx-005 只覆盖 table_query 聚合数据表；如需真实渲染，应另开 ADR/任务新增表格图表工具。",
+  "createdAt": "2026-11-23T11:15:23.206Z",
+  "markdownPath": ".devloop/handoffs/ho-20261123-024.md"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwu98vpf-68fbd2",
+  "threadId": "rev-20261124-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "maintainability",
+  "file": "astock/agent_chat_ui.py",
+  "lines": "50-61",
+  "title": "图表导出目录固化在 %TEMP% 且无清理/无注入点，UI 测试往真实临时目录写盘",
+  "evidence": "astock/agent_chat_ui.py:50-61 把导出目录固化成 `Path(tempfile.gettempdir()) / \"astock-agent-exports\"`，没有环境变量/参数注入点，也没有清理或数量上限；注释写「只放本轮可下载的 HTML/PNG」，但实际历史轮次产物会永久留在 %TEMP%，并因为 launch(allowed_paths=...) 一直被 /file= 端点服务。每张图导出的是 chart_service.py:91 默认 `include_plotlyjs=\"inline\"` 的 HTML（内联 plotly 通常数 MB），K 线/表格图少量使用就会累计数百 MB。另一侧，tests/test_agent_chat.py 的 UI 端到端用例（断言 final[6] 含 .html/.png）直接对真实 AGENT_EXPORT_DIR 落盘 art_ui_table.html/png，测试写宿主临时目录、不隔离、可与其他并发/历史运行互相污染（例如同 artifact_id 残留文件让断言在没有真正导出时也通过）。",
+  "suggestion": "①给目录一个注入点：读环境变量（如 `ASTOCK_AGENT_EXPORT_DIR`，缺省仍是 temp 子目录），让测试与部署都能覆盖；②增加保留策略：导出后清掉本目录中超过 N 天或超过 M 个文件的旧产物（或每个 session 一个子目录并在新会话时回收上一个），并在文档里写明位置与清理规则；③测试改为 monkeypatch `agent_chat_ui.AGENT_EXPORT_DIR` 指向 `tmp_path`（或直接对 `export_figures` 传 `tmp_path`），断言文件确实产生在该目录内，避免依赖宿主 %TEMP% 残留。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-24T11:12:58.548Z"
+  },
+  "createdAt": "2026-11-24T05:29:21.027Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-24T11:12:58.548Z"
+    }
+  ]
+}

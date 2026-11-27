@@ -2,14 +2,14 @@
   "id": "plan-20261117-001",
   "title": "观察期后收口：Ruff 豁免移除与文档基线守护加固",
   "description": "承接 ho-20261117-014 第 3 轮评审的 2 条 P2：① test_docs_baseline_matches_measured_numbers 列了 5 个文档但只对 3 个做正向数字断言，architecture_v1.3:107 与 product_snapshot:51 改错仍绿；② stale 标记含裸 \"50%\"，README 写「单票仓位上限 50%」会误报。PR #9 五日观察（2026-11-21）结束后，删除 ruff.toml 中 astock/scheduler.py、astock/jobs.py 的 per-file-ignores，清理这两个文件存量 22 条，并在同一提交补齐 5 个文档的正向断言、把 \"50%\" 换成「覆盖率门槛 50%」等带上下文标记。不改变运行时语义。",
-  "status": "in_review",
+  "status": "done",
   "priority": "P2",
   "milestone": "ms-quality",
   "owner": "human",
   "start": "2026-11-27",
   "due": "2026-11-28",
   "estimateH": 6,
-  "progress": 95,
+  "progress": 100,
   "acceptance": [
     "删除 ruff.toml 中 astock/scheduler.py、astock/jobs.py 的 per-file-ignores，`ruff check astock tests` 为 0，且不新增文件级豁免",
     "清理 scheduler/jobs 存量 22 条：BLE001/S110/S112 逐条审计，能收窄则收窄，边界兜底加注释；其余按规则修复",
@@ -76,6 +76,6 @@
     ]
   },
   "createdAt": "2026-11-16T19:45:31.506Z",
-  "updatedAt": "2026-11-27T19:30:07.849Z",
+  "updatedAt": "2026-11-27T19:32:15.902Z",
   "devSessionId": "session-c468f8e2-c39d-4e4d-a7fb-ebb0adfeb569"
 }

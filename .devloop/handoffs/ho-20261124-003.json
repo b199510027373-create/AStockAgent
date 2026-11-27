@@ -1,0 +1,195 @@
+{
+  "id": "ho-20261124-003",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "Agent 评测集与离线回归：第二轮评审修复",
+  "summary": "按 rev-20261123-002 第二轮 3 项反馈完成修复并重新交付。runtime 的 build_default_registry 现在透传 audit_db_path/artifact_root，AgentRuntime 先确定 self.db_path 再构建注册表；db_path=None 时 table_chart 使用 :memory: 审计库与临时 artifact 根，不写默认库。table_chart 改为 include_plotlyjs=\"inline\"，并新增无外部 <script src> 的离线断言；补 AgentRuntime 自定义 db_path、无 db_path 副作用、CLI baseline 一致/回归退出码测试。评测 20/20、工具脚本一致率 100%、平均 1.30 步/0.72ms、baseline 通过；目标 60 passed、全量 935 passed/3 skipped、ruff/mypy 通过；PR #48 CI run 45219066185 全绿（含 baseline gate）。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "20 条评测任务，覆盖 PDF 问答、Excel 表格统计图、分钟 K 线指标、边界拒答四类，各 5 条。",
+      "source": "plan-20261107-009 验收标准 #1"
+    },
+    {
+      "id": "R2",
+      "text": "PDF 研报问答需带页码/工作表引用。",
+      "source": "plan-20261107-009 描述①"
+    },
+    {
+      "id": "R3",
+      "text": "Excel 表格统计图任务必须产生真实 figure 与 ChartSpec，而非仅聚合数据表。",
+      "source": "rev-20261123-002 iss-mwtakutg-1e8d0d"
+    },
+    {
+      "id": "R4",
+      "text": "指定股票与指标的分钟 K 线任务。",
+      "source": "plan-20261107-009 描述③"
+    },
+    {
+      "id": "R5",
+      "text": "扫描件 PDF、加密 PDF、无该股票、超范围、未知指标必须明确拒答且不编造数值。",
+      "source": "plan-20261107-009 描述④与验收标准 #4"
+    },
+    {
+      "id": "R6",
+      "text": "FakeModel + 固定工具桩离线运行，CI 不依赖网络；记录任务成功率、工具选择/序列准确率、平均步数/时延。",
+      "source": "plan-20261107-009 验收标准 #2/#3"
+    },
+    {
+      "id": "R7",
+      "text": "每次改动后跑评测，结果可与已提交 baseline 比较；CI 必须真正加载 baseline。",
+      "source": "plan-20261107-009 验收标准 #5 / rev-20261123-002 iss-mwtakt0o-5897b8"
+    },
+    {
+      "id": "R8",
+      "text": "工具选择指标必须用负向用例证明不是恒真；错脚本工具应判失败。",
+      "source": "rev-20261123-002 iss-mwtakwqk-2ff17c"
+    },
+    {
+      "id": "R9",
+      "text": "refusal-001/002 最终回答文案必须与运行时收口一致，扫描件/加密原因由 step 元数据证明。",
+      "source": "rev-20261123-002 iss-mwtakz5k-a710bc"
+    },
+    {
+      "id": "R10",
+      "text": "market 工具缺 data_as_of/data_time 时评测必须判失败，并有负向测试。",
+      "source": "rev-20261123-002 iss-mwtal1xv-d61a75"
+    },
+    {
+      "id": "R11",
+      "text": "runtime 与评测共用公开默认注册表，避免私有函数和复制注册逻辑。",
+      "source": "rev-20261123-002 iss-mwtal7l1-03d2e8"
+    },
+    {
+      "id": "R12",
+      "text": "table_chart 的 ADR/契约、UI 集成与 PNG 导出另立计划项跟踪。",
+      "source": "用户裁决 m00678"
+    },
+    {
+      "id": "R13",
+      "text": "默认注册表必须透传 audit_db_path/artifact_root；AgentRuntime 自定义 db_path 时 table_chart 审计落在同一库，db_path=None 时不写 DEFAULT_DB_PATH。",
+      "source": "rev-20261123-002 第二轮 iss-mwthi1tw-365766"
+    },
+    {
+      "id": "R14",
+      "text": "table_chart 必须输出自包含 HTML，不依赖 CDN 外部脚本，离线可打开。",
+      "source": "rev-20261123-002 第二轮 iss-mwthi1uv-38c1a2"
+    },
+    {
+      "id": "R15",
+      "text": "CLI --baseline 一致时返回 0、回归时返回 1，保护 CI baseline gate 失败路径。",
+      "source": "rev-20261123-002 第二轮 iss-mwthi1vw-f4c474"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/runtime.py",
+      "summary": "build_default_registry 新增 audit_db_path/artifact_root 并透传；AgentRuntime 新增 artifact_root，先确定 self.db_path 再构建 registry；db_path=None 时用 :memory: 审计库和临时 artifact 根。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": "astock/agent/tools/file_tools.py",
+      "summary": "table_chart 改为 include_plotlyjs=\"inline\"，HTML 自包含。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "新增 AgentRuntime 自定义审计库路由、无 db_path 不写默认库测试；table_chart 离线断言改为无外部 <script src>；使用 agent_run_artifacts 校验 run 关联。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": "tests/test_agent_evals.py",
+      "summary": "新增 CLI baseline 一致返回 0、回归返回 1 两个用例。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": ".devloop/evals/agent_eval_baseline.json",
+      "summary": "用修复后的评测结果刷新 baseline（20/20、1.30 步）。",
+      "commit": "3f1525f"
+    },
+    {
+      "path": ".devloop/evals/agent_eval_latest.json",
+      "summary": "最新评测报告。",
+      "commit": "3f1525f"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_evals.py::test_cli_matching_baseline_returns_zero tests/test_agent_evals.py::test_cli_baseline_regression_returns_one tests/test_agent_tools.py::test_table_chart_renders_chart_spec_and_artifact tests/test_agent_tools.py::test_runtime_custom_audit_db_routes_table_chart_artifact tests/test_agent_tools.py::test_runtime_without_db_path_does_not_write_default_audit_db -q",
+      "result": "5 passed",
+      "passed": true,
+      "evidence": "第二轮 3 项评审修复的定向测试"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_evals.py tests/test_agent_tools.py -q -m \"not png\"",
+      "result": "60 passed (16.50s)",
+      "passed": true,
+      "evidence": "评测与工具目标测试"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\"",
+      "result": "935 passed, 3 skipped, 5 deselected, 46 subtests passed (92.15s)",
+      "passed": true,
+      "evidence": "相关全量测试"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m astock.agent.evals",
+      "result": "20/20 通过；tool_selection_accuracy=100.00%；avg_steps=1.30；avg_latency=0.72ms；baseline 比较通过，regressions=[]",
+      "passed": true,
+      "evidence": ".devloop/evals/agent_eval_latest.json"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m ruff check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "CI 同名 lint 命令"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": "CI 同名类型检查"
+    },
+    {
+      "command": "gh run watch 45219066185 --exit-status",
+      "result": "test 1m38s、png-export 1m6s 均通过；test 含 Agent offline eval baseline gate",
+      "passed": true,
+      "evidence": "PR #48 最新 CI run 45219066185"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github:push",
+      "reason": "推送第二轮评审修复提交到 feat/plan-20261107-009-agent-evals",
+      "status": "granted"
+    },
+    {
+      "name": "github:pr",
+      "reason": "更新 PR #48 并运行 CI",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261107-009-agent-evals",
+    "commit": "3f1525f",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/48",
+    "ci": "run 45219066185：test 1m38s、png-export 1m6s，均通过，含 baseline gate",
+    "merge": "未合并",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261124-001",
+  "next": "请评审复核 rev-20261123-002 第二轮 3 项（iss-mwthi1tw-365766、iss-mwthi1uv-38c1a2、iss-mwthi1vw-f4c474）；通过后合并 PR #48。table_chart 的 ADR/契约、UI 集成与 PNG 导出由 plan-20261124-001 跟踪。注意：inline Plotly 源码内仍含 topojsonURL 默认常量字符串 cdn.plot.ly，但 HTML 无外部 <script src>，离线可打开；测试按“无外链脚本”断言。",
+  "createdAt": "2026-11-23T16:42:10.387Z",
+  "markdownPath": ".devloop/handoffs/ho-20261124-003.md"
+}

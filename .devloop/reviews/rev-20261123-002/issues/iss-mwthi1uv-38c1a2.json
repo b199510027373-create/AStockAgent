@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwthi1uv-38c1a2",
+  "threadId": "rev-20261123-002",
+  "roundNo": 2,
+  "severity": "P1",
+  "category": "architecture",
+  "file": "astock/agent/tools/file_tools.py",
+  "lines": "663-673",
+  "title": "table_chart 用 CDN 渲染 HTML，偏离 ADR-016「自包含 HTML」决策，离线 artifact 会空白",
+  "evidence": "file_tools.py:671 显式传入 `include_plotlyjs=\"cdn\"`；ADR-016 决策 3（.devloop/architecture/adr/ADR-016-chart-spec.md:32）要求 spec → Plotly Figure → 自包含 HTML，chart_render.py:1 与 :1520 也自述“自包含 HTML”，chart_service.render_chart 默认值为 `include_plotlyjs: str | bool = \"inline\"`（chart_service.py:91）。tests/test_agent_tools.py:641-643 只断言 `\"<html\" in result.figure.lower()`，不检查外部脚本，因此测试无法发现离线打开 artifact/UI 时 Plotly 不加载、图表空白。该偏差只出现在新 table_chart 路径，市场图表未受影响。",
+  "suggestion": "改为 `include_plotlyjs=\"inline\"`（若担心 figure 过大，可在 ToolResult 中只回 artifact 句柄，UI 从 artifact 取完整 HTML，而不是降级为 CDN）；在 tests/test_agent_tools.py:604-651 增加断言 HTML 不含 `cdn.plot.ly` 外链，或至少覆盖一次无网络/离线渲染。若确需 CDN 例外，必须在 ADR-016 或接口冻结文档中记录理由、范围和离线降级方案，不能只留实现差异。",
+  "confidence": 0.85,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-23T16:55:31.015Z"
+  },
+  "createdAt": "2026-11-23T16:32:39.655Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-23T16:55:31.015Z"
+    }
+  ]
+}

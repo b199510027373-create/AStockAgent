@@ -1,0 +1,118 @@
+{
+  "id": "ho-20261124-006",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261107-009",
+  "threadId": null,
+  "sessionId": "",
+  "title": "PR #48 已合并，plan-20261107-009 关闭",
+  "summary": "PR #48 已按用户指令合并到 main（merge commit 3956a0d），plan-20261107-009 已置为 done/progress=100。合并后 main CI run 45221904929 全绿（test 1m48s、png-export 1m19s，含 Agent offline eval baseline gate）；随后元数据提交 fec58b1 的 main CI run 45222017151 也全绿（test 2m0s、png-export 1m15s）。本任务交付完成，评审 rev-20261123-002 第 3 轮已 approve。",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "PR #48 合并到 main，保留完整提交历史与 CI 证据。",
+      "source": "用户指令 m01256"
+    },
+    {
+      "id": "R2",
+      "text": "合并后 main CI 必须通过，且包含离线评测 baseline gate。",
+      "source": "交付流程 / m01257"
+    },
+    {
+      "id": "R3",
+      "text": "plan-20261107-009 关闭为 done，后续 table_chart 工作由独立计划项跟踪。",
+      "source": "plan-20261107-009 验收 / m00001"
+    },
+    {
+      "id": "R4",
+      "text": "交付后工作区不残留本任务相关未提交代码改动。",
+      "source": "开发硬规则 / m00001"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261107-009.json",
+      "summary": "状态改为 done、progress=100；links 增加 mergeCommit=3956a0d，记录 PR/CI 测试证据。",
+      "commit": "fec58b1"
+    },
+    {
+      "path": ".devloop/calendar/2026-11.json",
+      "summary": "记录第 3 轮评审 approve 与计划项完成事件。",
+      "commit": "fec58b1"
+    },
+    {
+      "path": ".devloop/worklog/2026-11.jsonl",
+      "summary": "记录第 3 轮评审 approve、计划项 in_review→done。",
+      "commit": "fec58b1"
+    },
+    {
+      "path": "main",
+      "summary": "PR #48 以 merge commit 3956a0d 合并；无额外源码改动。",
+      "commit": "3956a0d"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 48",
+      "result": "test pass 1m46s; png-export pass 1m7s",
+      "passed": true,
+      "evidence": "PR #48 head e8a8122 的 PR CI 全绿。"
+    },
+    {
+      "command": "gh run watch 45221904929 --exit-status",
+      "result": "main CI: test pass 1m48s; png-export pass 1m19s; Agent offline eval baseline gate pass",
+      "passed": true,
+      "evidence": "合并提交 3956a0d 的 main CI 全绿。"
+    },
+    {
+      "command": "gh run watch 45222017151 --exit-status",
+      "result": "main CI: test pass 2m0s; png-export pass 1m15s; Agent offline eval baseline gate pass",
+      "passed": true,
+      "evidence": "元数据提交 fec58b1（当前 main HEAD）的 CI 全绿。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m astock.agent.evals",
+      "result": "20/20, tool_selection_accuracy=100.00%, avg_steps=1.30, avg_latency=0.72ms, baseline=passed",
+      "passed": true,
+      "evidence": "合并前最终离线评测；main CI 的 baseline gate 再次验证。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\"",
+      "result": "935 passed, 3 skipped, 5 deselected, 46 subtests passed",
+      "passed": true,
+      "evidence": "合并前全量非 PNG 测试。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "github:merge",
+      "reason": "按用户指令合并 PR #48 到 main。",
+      "status": "granted"
+    },
+    {
+      "name": "github:push",
+      "reason": "推送合并后的 main 元数据提交。",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "fec58b1",
+    "pr": "48",
+    "ci": "main run 45222017151 passed (test 2m0s, png-export 1m15s, baseline gate passed); merge run 45221904929 passed",
+    "merge": "merged into main at 3956a0d; metadata commit fec58b1",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261124-004",
+  "next": "已合并，无待办。table_chart 的正式 ADR、UI 集成与 PNG 导出继续由 plan-20261124-001 跟踪。",
+  "createdAt": "2026-11-23T16:58:25.272Z",
+  "markdownPath": ".devloop/handoffs/ho-20261124-006.md"
+}

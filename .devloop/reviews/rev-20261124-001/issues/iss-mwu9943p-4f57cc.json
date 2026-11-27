@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwu9943p-4f57cc",
+  "threadId": "rev-20261124-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "contract",
+  "file": "docs/AStockAgent_interface_freeze_v2.md",
+  "lines": "81",
+  "title": "§3.5「title 截断到 120 字符」与实现不一致（只截 chart_spec，metadata.title 未截）",
+  "evidence": "docs/AStockAgent_interface_freeze_v2.md:81 写「`title` 截断到 120 字符」，但实现只在 chart_spec 上截断：`\"title\": chart_title[:120]`（astock/agent/tools/file_tools.py:635），冻结字段 `metadata[\"title\"]` 写入的是未截断的 `chart_title`（file_tools.py:693）。chat.py 的 Figure.title 取自 metadata.title，figure_embed_html 的 figcaption 直接渲染它，于是超长标题时图内标题被截断、页面 caption/导出 HTML 里是完整长串，同一张图出现两个标题文本；契约描述与实现不一致。<br>本轮同时确认 §3.5 其余条目与实现基本吻合：签名（file_tools.py:563-578）、聚合 SQL 与 ORDER BY 1（file_tools.py:606-608）、空结果不生成 figure/artifact（file_tools.py:624-629）、ChartSpec 的 data/encode/meta（file_tools.py:632-658）、citation 与 citations=[citation]（file_tools.py:692）、export_png=True/png_mode=\"auto\"（file_tools.py:674-675）、allowed_paths（app.py:510-520 + agent_chat_ui.py:55-61）。",
+  "suggestion": "把描述收敛成单一可验证口径：要么实现侧在 file_tools.py:631 之后统一 `chart_title = chart_title[:120]`，让 spec.title 与 metadata.title 完全一致；要么文档改成「`chart_spec.title` 截断到 120 字符，`metadata.title` 保留用户原始标题」，并在 tests/test_agent_tools.py 加一条超长标题用例把两者关系固定下来（断言 len(spec.title) <= 120 且 metadata.title 与 spec.title 的关系符合文档声明）。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-24T11:13:04.922Z"
+  },
+  "createdAt": "2026-11-24T05:29:31.909Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-24T11:13:04.922Z"
+    }
+  ]
+}

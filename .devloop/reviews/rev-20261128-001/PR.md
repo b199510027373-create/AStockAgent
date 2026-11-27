@@ -1,55 +1,53 @@
 # PR 评审：评审：PR #9 调度 5 日生产验收与心跳告警观察
 
-> 自动生成于 2026-11-27T16:33:17.061Z；可直接转交开发会话。
+> 自动生成于 2026-11-27T17:19:10.224Z；可直接转交开发会话。
 
 ## 概览
 
 - 线程：`rev-20261128-001`
 - 计划项：`plan-20261114-004`
 - 分支：`main` → `main`
-- 轮次：第 2 轮（full）
-- 结论：需要修改（request_changes）
+- 轮次：第 3 轮（full）
+- 结论：通过（approve）
 - 开发会话：`session-26fd9368-10b9-4097-8e89-204c2931b1c4`
-- 本轮问题：1（P0 0 / P1 0 / P2 1）
-- 线程未闭环：P0 0 / P1 1 / P2 3
+- 本轮问题：0（P0 0 / P1 0 / P2 0）
+- 线程未闭环：P0 0 / P1 0 / P2 0
 
 ## 本轮结论
 
-第 2 轮 full 复核完成（round 2）。开发者 d27f936 对三条问题的文档修复均已逐条核对：
+第 3 轮 full 复核通过，线程可完全解决。
 
-1) P1（iss-mwz67nhp-876f04）：新增 §2.1（docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md L77-130），引用 scheduler_task.log L3379-3381（11-23 双 start、首跑无 exit）与 L3855-3895（11-25 16:45 TushareError token已过期、heartbeat_failed、report JSONDecodeError、17:16 重跑 exit=0），并说明失败发生在 scheduler.py:527 `last_completed_trade_date` 之前，早于 get_job(535)/save_job(547)，故无 jobs 行、attempts=1；token 已续期，11-23..11-27 5/5 success 结论不变。引用行号与日志一致，技术内容通过。
+一、复核范围
+第 2 轮 finish 后实际变更仅 3 个提交，均无业务代码：
+- 9a853fc：仅 docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md（6 insertions/2 deletions），修正 §2.1 L123-129 的 11-25 report 5 失败窗口说明；
+- c84fe3a：仅 .devloop/（4 条 issue 回填 fixed、handoffs、plan、PR.md、rounds）；
+- 801aa6c：仅 handoff + plan 的 CI 记录。
+调度/EventFrame 代码仍为 442fbb9、4a09291、d27f936，自第 2 轮未被改动。
 
-2) P2-a（iss-mwz67nj7-d58f04）：§1 L21-35 改为以 2026-11-28T00:06:01 手工快照为锚，给出 report/heartbeat sha256，并说明 acceptance_5d.json/.ok 每约 30 分钟被计划任务重写；快照 rows 与 23:47:05 留存件一致。通过。
+二、4 条 issue 均已 fixed 且 feedback effective=true
+- iss-mwz67nhp-876f04（P1）：§2.1 已补 11-25 16:45 计划任务失败（TushareError token已过期）、jobs 行未生成的原因（scheduler.py:527 last_completed_trade_date 早于 535 get_job/547 save_job），并说明 token 已续期。
+- iss-mwz67nj7-d58f04（P2）：§1 改为以 2026-11-28T00:06:01 手工快照为锚，记录 report/heartbeat sha256，并说明 acceptance_5d.json/.ok 每 30 分钟被计划任务重写。
+- iss-mwz67nky-ab84ba（P2）：§3 改为“只与最后一条 scheduler_heartbeat 签名比较、无 24h 窗口”，与 scheduler.py:344/236-262/232-233 及 tests/test_scheduler_ledger.py:418/268 一致。
+- iss-mwz7a1ls-b51941（P2）：§2.1 L123-129 已改为 11-25 17:17/17:45 的 report 5 exit=2 仅因窗口 11-19..11-25 中 11-20 旧失败（4/5）；11-19 已 success、11-18 不在窗口；与 scheduler.py:114-127 及 issue feedback 一致，并注明当次 stdout 未单独留存。
+当前 openP0=0、openP1=0、openP2=0，fixed=4、effective=4。
 
-3) P2-b（iss-mwz67nky-ab84ba）：§3 L151-160 改为只与最后一条 scheduler_heartbeat 签名比较、明确没有 24h 时间窗口，引 scheduler.py:344/236-262/232-233 与测试 L418/L268。通过。
+三、验收标准 1-6 均有可核证据
+1) EventFrame 空 code：astock/events.py::_drop_unattributed_reports（528-544）+ tests/test_data_pit_events.py 3 条回归（L427/L433/L437）。
+2) tests/test_scheduler_ledger.py + tests/test_hardening.py：50 passed 15.83s（round 2 修订后）。
+3) 5 日验收：2026-11-28T00:06:01 快照 all_success=true、passed=5/5，report sha256 E21FD988...D121，heartbeat sha256 13098E3F...AEE7；rows 11-23..11-27 attempts 2/1/1/1/1，late_by_min 110.8/18.3/36.2/115.7/157.3。
+4) 心跳：11-18 streak=8 告警、11-19 streak=9 告警、11-20 streak=1 不告警；签名去重按实现描述（仅最后一条）。
+5) jobs 表：running 超时恢复 failed、到期登记 pending、late_by_min 均有 tests/test_scheduler_ledger.py 覆盖（L223/L249/L325/L346 等）。
+6) 空台账/长期停摆不误报：L372/L311；验收结果已回写 plan-20261103-007。
+辅助证据：79 passed、全量 956 passed/3 skipped/46 subtests、mypy 45 files clean；CI 46038051726（c84fe3a）及 46031056050/46032323734/46032800193 均 success。
 
-4) 本轮新记 P2（iss-mwz7a1ls-b51941）：§2.1 L125 把 11-25 17:17/17:45 的 report 5 exit=2 解释为「窗口仍含 11-18/11-20 旧失败」；实际 `_recent_trading_days`（scheduler.py:114-127）在 17:17 的窗口是 11-19..11-25，11-18 不在内，且 §3 表 L148 表明 11-19 已 success，窗口内旧失败只有 11-20。需改文案或补当次 stdout。
+四、结论
+approve；rev-20261128-001 判定完全解决，plan-20261114-004 可由架构师置为 done。
 
-阻塞不在技术内容：4 条 issue 在 .devloop/reviews/rev-20261128-001/issues/ 仍 status=open、feedback=null；devloop_review 无关闭入口，需开发侧回填 feedback=fixed（引用 d27f936 与具体行号），或由用户在 DevLoop UI 关闭。当前 openP1=1、openP2=4，故 verdict=request_changes，线程不标记完全解决。
-
-完全解决条件：a) 开发者修正 L125；b) 将 4 条 issue 标记 fixed；c) 评审重跑 finish，openP0=0 且 openP1=0 后 approve，plan-20261114-004 方可置 done。无需再改代码；79 passed/mypy 45 files/CI 46031056050 采信 developer handoff，本会话无 shell 未独立执行。
+剩余风险（不阻塞，已在文档 §5 记录）：pre-ledger 的 token 过期失败不会进入 jobs 表、11-23 18:24 首跑中断无退出记录、token 若再过期需重开 5 日窗口。若后续修改调度代码或重新开启验收窗口，应另开评审线程。
 
 ## 本轮问题
 
-### P2 · §2.1 对 11-25 report 5 失败窗口的说明不准确：11-18 不在窗口内，11-19 已 success
-
-- 位置：`docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md:125`
-- 状态：未闭环
-- 置信度：0.86
-
-**证据**
-
-doc L125 称「17:17/17:45 的 report 5 exit=2 是窗口仍含 11-18/11-20 旧失败」。但 `astock/scheduler.py:114-127` 的 `_recent_trading_days(now, 5)` 以 `last_completed_trade_date(_due_reference(now))` 为 reference；`astock/data.py:87-101` 在 15:00 后返回当天，故 11-25 17:17 的 reference=11-25，窗口为 11-19..11-25，不含 11-18。又据同一文档 §3 表 L148「11-20 上一成功 11-19，streak=1」，11-19 已在盘后补跑成功；窗口内旧失败只有 11-20，不是 11-18/11-20。该错误只影响对 17:17/17:45 exit=2 原因的解释，不改变 11-23..11-27 5/5 success 的结论。
-
-**建议**
-
-将 L125 改为「窗口仍含 11-20 旧失败（11-19 已于盘后补跑成功）」，或直接引用 17:17/17:45 两次 `--report 5` 的 stdout 中 5 行 status 作为证据；不要写 11-18。若无法取回当次 stdout，则用 `_recent_trading_days` 的窗口推导 + §3 的 heartbeat 表说明，并注明 11-18 不在窗口内。
-
-## 历史未闭环问题
-
-- P1 · 五日验收遗漏 11-25 16:45 计划任务失败（token 过期），“11-24 起均一次成功”的结论不成立 · `docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md:55, 106`（第 1 轮）
-- P2 · 留存报告时间与文档转录不一致，且 acceptance_5d.json/.ok 每 30 分钟被计划任务重写 · `docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md:13, 19-21, 36`（第 1 轮）
-- P2 · 心跳去重描述“24h 内只落一条”与实现不符：仅比较最后一条签名，无时间窗口 · `docs/AStockAgent_scheduler_5d_acceptance_2026-11-27.md:77`（第 1 轮）
+本轮未记录问题。
 
 ## 变更文件
 

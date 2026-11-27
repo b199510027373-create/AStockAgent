@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwu98doy-52d606",
+  "threadId": "rev-20261124-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "contract",
+  "file": "astock/agent/tools/file_tools.py",
+  "lines": "624-629",
+  "title": "空结果分支 metadata 与 §3.5 冻结字段集不一致（缺 citations/png_path/warnings 等）",
+  "evidence": "docs/AStockAgent_interface_freeze_v2.md §3.5 冻结 ToolResult.metadata 字段集（file_id/file/sheet/citation/citations/title/chart_spec/artifact_id/artifact_version/artifact_path/png_path/data_as_of/data_time/warnings），但空结果早退分支只返回三个键：`metadata={\"citation\": citation, \"file_id\": file_id, \"sheet\": sheet}`（file_tools.py:624-629），缺 file、citations、title、chart_spec、artifact_*、png_path、data_as_of、data_time、warnings。§3.5 只写「空结果返回成功但不生成 figure/artifact」，没有任何字段例外说明；AC-1 要求 table_chart 的引用/审计语义写进冻结契约，现在契约说一套、代码给另一套，后续任何按冻结键集读取 metadata 的消费者（例如 chat.py:531 的 citations 回退逻辑目前只是因为才没暴露）都会在空表时拿到缺失键。",
+  "suggestion": "二选一并保持唯一口径：①代码对齐契约——空结果同样返回完整字段集（file=file_name、citations=[citation]、title=chart_title、chart_spec=None、artifact_id=\"\"、artifact_version=0、artifact_path=\"\"、png_path=\"\"、data_as_of=\"\"、data_time=\"\"、warnings=[\"没有可绘制的数据\"]）；②文档对齐代码——在 §3.5 明写「空结果分支仅返回 citation/file_id/sheet，其余字段不出现」。无论选哪种，在 tests/test_agent_tools.py 增加一条空结果用例断言实际键集与契约一致（例如断言 set(metadata) 等于冻结集合或等于文档声明的子集）。",
+  "confidence": 0.7,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-24T11:12:46.642Z"
+  },
+  "createdAt": "2026-11-24T05:28:57.682Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-24T11:12:46.642Z"
+    }
+  ]
+}

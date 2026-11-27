@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261123-002-r1",
+  "threadId": "rev-20261123-002",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮全量评审完成（scope=full）。已核对 astock/agent/evals.py 全量、tests/test_agent_evals.py、tests/test_ci_quality_gates.py 改动，以及任务集/baseline/latest、CI workflow、runtime/citations 关键路径。结论：request_changes。验收 #2（离线 FakeModel、CI 不依赖网络）已满足；#3 指标有记录，但 tool_selection_accuracy 因脚本回放恒为 1.0（P2）；#4 有拒答用例，但扫描件/加密原因从未断言（P2）；#1「表格图」未真实覆盖（P1）；#5 的 baseline 比较未进入 CI/测试（P1）。阻断项两条：iss-mwtakt0o-5897b8（CI 或 pytest 必须实际加载 .devloop/evals/agent_eval_baseline.json 做 compare_reports，回归时失败）、iss-mwtakutg-1e8d0d（新增真实图表/figure 任务，或由需求方把验收 #1 正式降级为「表格统计（数据表）」并注明图表能力另立计划）。非阻断项四条：iss-mwtakwqk-2ff17c（指标改名/标注）、iss-mwtakz5k-a710bc（refusal-001/002 的 final_answer 与断言对齐）、iss-mwtal1xv-d61a75（补 market 字段缺失负向单测）、iss-mwtal7l1-03d2e8（runtime 暴露公共 build_default_registry 供评测复用）。修复责任：开发在 feat/plan-20261107-009-agent-evals 上完成两条 P1 与四条 P2，并附修复后的 CI run 链接；评审在下一轮逐条核验。完全解决条件：openP0=0、openP1=0，且四条 P2 全部关闭或经需求方书面接受；表格图若走验收降级，必须有 plan owner 的书面确认。本轮评审未执行测试（测试执行归开发），测试证据来自 handoff 与仓库报告文件。",
+  "startedAt": "2026-11-23T13:15:23.306Z",
+  "finishedAt": "2026-11-23T13:19:19.080Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 4,
+    "total": 6
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwu98p0w-651dd6",
+  "threadId": "rev-20261124-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "correctness",
+  "file": "astock/agent/tools/file_tools.py",
+  "lines": "606-608, 618-621",
+  "title": "空分组被序列化成字面量「None」，文本分类按字典序排序导致 x 轴顺序失真",
+  "evidence": "分组键为 NULL（Excel 空单元格，DuckDB GROUP BY 会产出 NULL 组）时，file_tools.py:618-621 的 `{\"category\": str(row.get(\"category\")), \"value\": row.get(\"value\")}` 会把 NULL 序列化成字面量字符串 \"None\" 写进 ChartSpec 与 tool.table，用户看到的柱状图上会出现一根标注 \"None\" 的柱子、工具回文本也照此展示。另外聚合 SQL 是 `SELECT \"group_by\" AS category, SUM(CAST(metric AS DOUBLE)) AS value FROM t GROUP BY 1 ORDER BY 1`（file_tools.py:606-608），group_by 不做类型规整，文本型分类（Excel 极常见的「1月…12月」）按字典序排序，x 轴会变成 1月,10月,11月,12月,2月…；折线图顺序会明显失真。现有测试（tests/test_agent_tools.py 的 table_chart 用例）只断言 kind/encode/PNG，未覆盖 NULL 分组与分类顺序。",
+  "suggestion": "构造 spec 前做分类归一化：①NULL 组——SQL 加 `WHERE \"g\" IS NOT NULL` 过滤，或显式映射成「(空)」，绝不让 `str(None)` 变 \"None\"；②顺序——文本分类要么在 SQL 里加数值排序键（如 `ORDER BY TRY_CAST(\"g\" AS DOUBLE) NULLS LAST, \"g\"`），要么在 §3.5 明写「文本类别按字典序排序」把限制公开。并在 tests/test_agent_tools.py 增加一条用例：用真实 Excel 月份文本构造数据，断言 spec.data.rows 的分类顺序为 1..12 且不出现 \"None\"（若有空分组则断言被过滤或标注为「(空)」）。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-24T11:12:54.309Z"
+  },
+  "createdAt": "2026-11-24T05:29:12.368Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-24T11:12:54.309Z"
+    }
+  ]
+}

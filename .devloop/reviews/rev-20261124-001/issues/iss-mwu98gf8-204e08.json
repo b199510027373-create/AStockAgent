@@ -1,0 +1,33 @@
+{
+  "id": "iss-mwu98gf8-204e08",
+  "threadId": "rev-20261124-001",
+  "roundNo": 1,
+  "severity": "P2",
+  "category": "test",
+  "file": "tests/test_agent_tools.py",
+  "lines": "660-665, 955-959",
+  "title": "PNG 缺失分支的断言恒真，无法证明「降级」发生了",
+  "evidence": "PNG 缺失分支的断言是 `else: assert result.metadata[\"warnings\"]`（tests/test_agent_tools.py:660-665）和 `else: assert step.result.metadata[\"warnings\"]`（tests/test_agent_tools.py:955-959）。但 table_chart 固定 data.time_semantics=\"none\"，chart_render.py:1563 与 :1588 必然追加「time_semantics=none…」「视图时点未知…」两条 warning，所以 warnings 在任何情况下都非空——这两个 else 分支无论「PNG 真的降级了」还是「降级逻辑根本没触发/被写坏」都会通过，等于没有校验降级语义。同类断言在 @pytest.mark.png 用例里用的是 `not any(\"PNG\" in warning …)`（tests/test_agent_tools.py:726），说明仓库已有更强的写法，只是缺失分支没跟上。",
+  "suggestion": "把两个 else 分支改成正向判定降级语义：import chart_render.PNG_DEGRADED_WARNING_PREFIX，断言 `any(w.startswith(PNG_DEGRADED_WARNING_PREFIX) for w in metadata[\"warnings\"])`（或断言任一 warning 同时含「仅 HTML artifact」），并补一条反向断言 `metadata[\"png_path\"] == \"\"`；png 用例里也把 `\"PNG\" in warning` 换成同一常量前缀，避免靠字面量偶合通过。",
+  "confidence": 0.75,
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-24T11:12:50.479Z"
+  },
+  "createdAt": "2026-11-24T05:29:01.220Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-24T11:12:50.479Z"
+    }
+  ]
+}

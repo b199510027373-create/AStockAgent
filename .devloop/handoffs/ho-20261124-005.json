@@ -1,0 +1,34 @@
+{
+  "id": "ho-20261124-005",
+  "role": "reviewer",
+  "kind": "review",
+  "planItemId": null,
+  "threadId": "rev-20261123-002",
+  "sessionId": "",
+  "title": "评审：Agent 评测集与离线回归",
+  "summary": "第 3 轮全量评审完成（scope=full）。按 handoff ho-20261124-004、commit 3f1525f/e8a8122、CI run 45219521406 与仓库代码逐项核验，第 2 轮 3 条问题均已修复：\n1) iss-mwthi1tw-365766（table_chart 审计库 wiring）：runtime.py:98-122 新增 build_default_registry(*, audit_db_path, artifact_root) 并透传 build_file_registry；runtime.py:264-282 先确定 self.db_path/artifact_root，再构建默认 registry；db_path=None 时用 \":memory:\" 审计库 + tempfile.TemporaryDirectory 承接 artifact，不写 DEFAULT_DB_PATH。tests/test_agent_tools.py:817-887 覆盖自定义 db_path 的 agent_runs/agent_run_artifacts link 与 artifact 文件；:890-950 覆盖 db_path=None 不写默认审计库。证据成立。\n2) iss-mwthi1uv-38c1a2（CDN）：file_tools.py:671 已改为 include_plotlyjs=\"inline\"；tests/test_agent_tools.py 新增无 \"<script src\" 外链断言，HTML 自包含。证据成立。\n3) iss-mwthi1vw-f4c474（CLI baseline 失败路径）：tests/test_agent_evals.py 新增 test_cli_matching_baseline_returns_zero 与 test_cli_baseline_regression_returns_one，覆盖 main --baseline 的 0/1 退出码。证据成立。\n历史 6 条（iss-mwtakt0o-5897b8、iss-mwtakutg-1e8d0d、iss-mwtakwqk-2ff17c、iss-mwtakz5k-a710bc、iss-mwtal1xv-d61a75、iss-mwtal7l1-03d2e8）在第 2 轮已逐条核验为修复，本轮未回退：CI 有 baseline gate；xlsx-005 用 table_chart，真实工具测试在 tests/test_agent_tools.py；evals.py docstring 明确 tool_selection_accuracy 为脚本一致率且有错工具负向测试；refusal-001/002 文案与运行时收口一致并由 step metadata 证明原因；market 缺 data_as_of/data_time 有负向测试；evals._catalog 复用 build_default_registry。验收 #1-#5 均有实现或测试证据；测试执行归开发，本轮未执行测试，证据来自 handoff 的 60 passed / 935 passed 与 CI run 45219521406。结论：approve，本轮未新增问题。线程 openP1=4 是前两轮历史 issue 未被工具逐条关闭导致的展示计数，不是本轮代码缺口；以本 summary 与 reviewer 交付为准。完全解决条件：openP0=0、openP1=0（代码核验已满足；工具计数若仍显示历史 open，需由维护者按历史记录关闭，不需要开发再改代码）。",
+  "requirements": [],
+  "changes": [],
+  "tests": [],
+  "permissions": [],
+  "delivery": {
+    "branch": "",
+    "commit": "",
+    "pr": "",
+    "ci": "",
+    "merge": "",
+    "status": "pending"
+  },
+  "review": {
+    "roundNo": 3,
+    "verdict": "approve",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 4,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261124-002",
+  "next": "",
+  "createdAt": "2026-11-23T16:51:52.381Z",
+  "markdownPath": ".devloop/handoffs/ho-20261124-005.md"
+}

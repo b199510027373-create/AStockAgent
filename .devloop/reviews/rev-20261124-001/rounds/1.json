@@ -1,0 +1,19 @@
+{
+  "id": "rev-20261124-001-r1",
+  "threadId": "rev-20261124-001",
+  "roundNo": 1,
+  "scope": "full",
+  "scopeReason": "第 1 轮：全量代码",
+  "status": "completed",
+  "verdict": "request_changes",
+  "summary": "第 1 轮（full）评审 plan-20261124-001 / PR #49（head 5593a2c，base main）：结论 request_changes，openP0=0、openP1=2、openP2=5。改动面与交付一致（仅 9 个文件 + ADR-017 回填），未发现架构越界：app.py:508-524 只做 launch/allowed_paths 装配、agent_chat_ui.py 只做组件与 allowed_paths、table_chart 仍走 chart_service.render_chart 唯一审计入口（无自建 SQL 写审计表），工具权限未扩大，ADR-016 ChartSpec v1 字段与 §3.5 主体一致。\n\n必须修（P1，两条都要，缺一不可）：\n1) iss-mwu98ak2-0940d1（astock/agent/chat.py:402-403,444-455）：K 线等 design-time `export_png=False` 的工具（market_tools.py:1149）被统一渲染成「未生成 PNG（kaleido/Chrome 不可用时仅 HTML）」「PNG：未生成」，把设计选择误报成环境降级。修法见 issue（Figure 增 png_requested/png_mode，只在真降级时提示；补 K 线 UI 断言）。\n2) iss-mwu99fzu-7d2a8f（app.py:508-524）：AC-2 的下载链路缺运行时证据——handoff 自认未做浏览器走查，allowed_paths 只有源码字符串断言 + is_allowed_file 直调，`launch()` 与 /file= 端到端从未跑过。修法：开发者本地跑一次 app.py 触发 table_chart 并下载 HTML/PNG 留证据，或补一条 launch + urlopen 200 的集成用例。\n\n建议修（P2，按需取舍）：空结果分支 metadata 与 §3.5 冻结字段集不一致（file_tools.py:624-629）；PNG 缺失分支断言恒真（tests/test_agent_tools.py:660-665,955-959）；NULL 分组被序列化成 \"None\" 且文本分类按字典序排序（file_tools.py:606-608,618-621）；导出目录固化 %TEMP% 无清理/无注入点且 UI 测试写真实目录（agent_chat_ui.py:50-61）；§3.5「title 截断 120」与实现不一致（docs/AStockAgent_interface_freeze_v2.md:81 与 file_tools.py:635,693）。\n\n已核实无需改动：AC-4 的 xlsx-005 评测（.devloop/evals/agent_eval_tasks.json:361-426）未修改、figure_contains/chart_spec 断言保持；ci.yml:157 png-export job 已纳入 tests/test_agent_tools.py 的 png 用例，主 job 仍 -m \"not png\"，离线评测 baseline gate 未动；空结果仍能通过 chat.py:531 的 citation 回退产生引用。本会话无 shell，ruff/mypy/pytest/gh 未能本地复核，测试与 CI 结论采信 handoff 的 run 45330981541（两个 job SUCCESS）；plan 的 links.test 仍指向旧 run 45228173131/head 0161ed6，交付元数据新旧不一致，建议同步（不计为缺陷）。\n\n完全解决的判定条件：两条 P1 关闭（代码修复 + 新增断言/运行时证据入库并在 handoff 记录），且开发者就 P2 逐条答复「修 / 明确接受并写入文档」；届时重跑 3 文件 151 passed、全量 not png、png marker、ruff、mypy 并更新 plan 的 links.test（含最新 CI run 与 head）。在此之前 AC-2 视为未完全验证，本轮不 approve。",
+  "startedAt": "2026-11-24T05:26:08.134Z",
+  "finishedAt": "2026-11-24T05:29:53.443Z",
+  "rulesVersion": "v1.1",
+  "counts": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 5,
+    "total": 7
+  }
+}

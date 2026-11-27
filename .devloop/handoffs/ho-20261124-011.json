@@ -1,0 +1,189 @@
+{
+  "id": "ho-20261124-011",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261124-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "table_chart 产品化：PR #49 已合并，交付收尾",
+  "summary": "PR #49 已按用户要求合并（merge commit 9fe4a47，2026-11-24T08:35:53Z），CI run 45352310856 的 test 与 png-export 均 SUCCESS。二轮复核 rev-20261124-001-r2 确认首轮 7 项问题（2 P1 + 5 P2）代码侧全部真实修复，0 条新问题，明确“不需要改代码”；唯一遗留是 reviewer 台账仍把 2 条 P1 标为 open，需评审侧关闭。计划项已置 done/100，合并记录已写入 calendar/worklog 与 plan links。",
+  "requirements": [
+    {
+      "id": "AC-1",
+      "text": "table_chart 的权限、审计与引用语义写入 ADR/接口契约",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-2",
+      "text": "会话 UI 能展示 table_chart 的 figure 并支持 PNG/HTML 导出",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-3",
+      "text": "真实 Excel 数据端到端测试覆盖 table_chart 聚合、渲染和 artifact 审计",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "AC-4",
+      "text": "xlsx-005 评测保持 figure/ChartSpec 断言且 CI 通过",
+      "source": "plan-20261124-001 验收标准"
+    },
+    {
+      "id": "REV-1",
+      "text": "K 线等 export_png=False 图表不得被误报为 PNG 降级；补 K 线 UI 断言",
+      "source": "rev-20261124-001 / iss-mwu98ak2-0940d1"
+    },
+    {
+      "id": "REV-2",
+      "text": "空结果 metadata 与 §3.5 冻结字段集一致",
+      "source": "rev-20261124-001 / iss-mwu98doy-52d606"
+    },
+    {
+      "id": "REV-3",
+      "text": "PNG 缺失断言使用 PNG_DEGRADED_WARNING_PREFIX，避免恒真",
+      "source": "rev-20261124-001 / iss-mwu98gf8-204e08"
+    },
+    {
+      "id": "REV-4",
+      "text": "NULL 分组归一为 (空)，文本分类按自然序排列",
+      "source": "rev-20261124-001 / iss-mwu98p0w-651dd6"
+    },
+    {
+      "id": "REV-5",
+      "text": "导出目录支持环境变量覆盖、保留清理，测试隔离",
+      "source": "rev-20261124-001 / iss-mwu98vpf-68fbd2"
+    },
+    {
+      "id": "REV-6",
+      "text": "title 统一截断 120，spec.title 与 metadata.title 一致",
+      "source": "rev-20261124-001 / iss-mwu9943p-4f57cc"
+    },
+    {
+      "id": "REV-7",
+      "text": "提供 Gradio /gradio_api/file= 下载链路运行时证据",
+      "source": "rev-20261124-001 / iss-mwu99fzu-7d2a8f"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "Figure 增加 png_requested/png_mode；K 线不误报降级；导出目录保留清理；HTML/PNG 导出与图注三态。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "astock/agent/tools/file_tools.py",
+      "summary": "table_chart 分类自然序/NULL→(空)、空结果 15 字段、title 单次截断、PNG auto 导出。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "astock/agent_chat_ui.py",
+      "summary": "图表导出 gr.File、ASTOCK_AGENT_EXPORT_DIR 覆盖、allowed_paths 同源、7 元组输出。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "app.py",
+      "summary": "launch 传入 agent_export_allowed_paths()。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 K 线降级、导出清理、环境隔离、真实 Gradio 下载集成测试。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "新增空结果字段集、自然序、title 截断、PNG 降级前缀断言。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v2.md",
+      "summary": "§3.5 冻结 table_chart 权限/审计/引用/PNG/UI 语义。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-017-agent-audit-security.md",
+      "summary": "评审回填 table_chart 权限、审计、引用与降级边界。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "summary": "png-export job 纳入 tests/test_agent_tools.py。",
+      "commit": "d62d59d"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_agent_chat.py tests/test_agent_tools.py tests/test_agent_chart_spec.py -q",
+      "result": "159 passed, 3 warnings in 65.99s",
+      "passed": true,
+      "evidence": "含 test_gradio_serves_exported_html_and_png：真实 launch 后 GET /gradio_api/file= HTML/PNG 均 200"
+    },
+    {
+      "command": "pytest tests -q -m \"not png\" --timeout=120",
+      "result": "950 passed, 3 skipped, 6 deselected, 46 subtests passed",
+      "passed": true,
+      "evidence": "全量非 PNG 套件"
+    },
+    {
+      "command": "pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180",
+      "result": "6 passed, 51 deselected",
+      "passed": true,
+      "evidence": "PNG export marker 套件，含 test_table_chart_exports_real_png"
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": "静态检查通过"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success, no issues in 45 source files",
+      "passed": true,
+      "evidence": "类型检查通过"
+    },
+    {
+      "command": "gh pr view 49 / gh pr checks 49",
+      "result": "PR MERGED, merge commit 9fe4a47, CI run 45352310856 test+png-export SUCCESS",
+      "passed": true,
+      "evidence": "PR #49 合并状态与 CI 结果"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub repo write / PR merge",
+      "reason": "按用户要求合并 PR #49",
+      "status": "granted"
+    },
+    {
+      "name": "Gradio allowed_paths 导出目录",
+      "reason": "agent_export_allowed_paths() 已接入 launch",
+      "status": "granted"
+    },
+    {
+      "name": "PNG 导出工具链（kaleido + Chrome）",
+      "reason": "本机 PNG 导出测试通过",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261124-001-table-chart",
+    "commit": "9fe4a47ce9475d7ec66a3548bedfa005ab2bfe83",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/49",
+    "ci": "run 45352310856: test SUCCESS, png-export SUCCESS",
+    "merge": "已合并到 main，merge commit 9fe4a47",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261124-009",
+  "next": "代码与合并已完成，计划项 done/100。建议 reviewer 在 rev-20261124-001 中关闭仍标 open 的 2 条 P1（二轮复核已确认代码修复且 0 条新问题），并可将该评审线程归档；无需再改代码。",
+  "createdAt": "2026-11-24T08:37:10.386Z",
+  "markdownPath": ".devloop/handoffs/ho-20261124-011.md"
+}

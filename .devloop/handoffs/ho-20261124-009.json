@@ -1,0 +1,179 @@
+{
+  "id": "ho-20261124-009",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261124-001",
+  "threadId": null,
+  "sessionId": "session-a91f4e33-41ee-46f5-89e2-ac5e6a097d9e",
+  "title": "table_chart 二轮评审修复：7 项问题关闭与真实下载证据",
+  "summary": "已按 rev-20261124-001 逐条关闭 2 P1 + 5 P2。修复 K 线 PNG 误报（png_requested/png_mode）、空结果 metadata 对齐 §3.5、PNG 降级断言改用前缀常量、分类自然序与 NULL→(空)、导出目录可配置+7 天/50 文件清理、标题只截断一次；新增真实 Gradio 服务 GET /gradio_api/file= 的 HTML/PNG 200 下载集成测试，补齐 AC-2 运行证据。目标测试 159 passed，全量 not png 950 passed，png marker 6 passed，ruff/mypy 通过；PR #49 最终 head 17822de CI run 45352310856 双 job SUCCESS。plan 已回到 in_review / progress 98，等待复核。",
+  "requirements": [
+    {
+      "id": "REV-1",
+      "text": "P1：K 线固定 export_png=False 时不得把无 PNG 误报为 kaleido/Chrome 降级；状态栏不得出现双括号。",
+      "source": "rev-20261124-001 iss-mwu98ak2-0940d1"
+    },
+    {
+      "id": "REV-2",
+      "text": "P2：table_chart 空结果 metadata 必须与 §3.5 冻结字段一致。",
+      "source": "rev-20261124-001 iss-mwu98doy-52d606"
+    },
+    {
+      "id": "REV-3",
+      "text": "P2：PNG 缺失测试不得用恒真的 warnings 断言，必须使用 PNG_DEGRADED_WARNING_PREFIX。",
+      "source": "rev-20261124-001 iss-mwu98gf8-204e08"
+    },
+    {
+      "id": "REV-4",
+      "text": "P2：分类聚合需自然排序（1月..12月），SQL NULL 归一为 (空) 而不是 None。",
+      "source": "rev-20261124-001 iss-mwu98p0w-651dd6"
+    },
+    {
+      "id": "REV-5",
+      "text": "P2：导出目录需支持环境变量覆盖与保留期清理，UI 测试不得写宿主临时目录。",
+      "source": "rev-20261124-001 iss-mwu98vpf-68fbd2"
+    },
+    {
+      "id": "REV-6",
+      "text": "P2：标题只截断一次，chart_spec.title 与 metadata.title 必须一致且不超过 120 字符。",
+      "source": "rev-20261124-001 iss-mwu9943p-4f57cc"
+    },
+    {
+      "id": "REV-7",
+      "text": "P1：AC-2 下载链路必须有运行时证据，不能只做字符串/is_allowed_file 断言；需真实启动 Gradio 并 GET HTML/PNG。",
+      "source": "rev-20261124-001 iss-mwu99fzu-7d2a8f"
+    },
+    {
+      "id": "AC-2",
+      "text": "会话 UI 能展示 table_chart 的 figure 并支持 PNG/HTML 导出。",
+      "source": "plan-20261124-001 acceptance #2"
+    }
+  ],
+  "changes": [
+    {
+      "path": "astock/agent/chat.py",
+      "summary": "Figure 增加 png_requested/png_mode；collect_figures 以 png_path 字段/模式推导是否请求 PNG，K 线显示「PNG：不适用」；新增 _prune_exports（7 天/50 文件）与单括号降级状态拼接。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "astock/agent/tools/file_tools.py",
+      "summary": "分类 SQL 使用 COALESCE→(空) 与数字前缀自然序，Python 侧同步归一 None；chart_title 只截断一次并复用于 spec/metadata；空结果返回完整 15 个冻结 metadata 字段；非空 metadata 增加 png_mode。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "astock/agent_chat_ui.py",
+      "summary": "新增 agent_export_dir()，支持 ASTOCK_AGENT_EXPORT_DIR；allowed_paths 与 respond 导出均走该函数；状态栏改为单层说明。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "docs/AStockAgent_interface_freeze_v2.md",
+      "summary": "§3.5 补充自然序/NULL 归一、空结果冻结字段、标题一次截断、png_mode、png_requested、K 线不适用、环境变量覆盖、保留清理与 /gradio_api/file= 运行测试。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": ".devloop/architecture/adr/ADR-017-agent-audit-security.md",
+      "summary": "回填空结果字段、分类语义、标题、PNG 请求语义、导出目录配置/清理与真实 HTTP 下载验收。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "tests/test_agent_tools.py",
+      "summary": "改用 PNG_DEGRADED_WARNING_PREFIX；新增空结果冻结字段、标题一次截断、12 月自然序+NULL 归一测试；真实 Excel 运行链保持 artifact/版本/link 断言。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "tests/test_agent_chat.py",
+      "summary": "新增 K 线不误报、PNG 导出不降级、保留清理、状态单括号、环境变量隔离、真实 Gradio /gradio_api/file= HTML/PNG 下载测试；table_chart UI 用例改用 tmp 导出目录。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": "tests/test_agent_chart_spec.py",
+      "summary": "契约测试增加 png_mode、(空)、ASTOCK_AGENT_EXPORT_DIR、/gradio_api/file=、png_requested 与真实下载用例标记。",
+      "commit": "d62d59d"
+    },
+    {
+      "path": ".devloop/plan/items/plan-20261124-001.json",
+      "summary": "状态同步为 in_review / progress 98，links.test 更新评审修复后的 159/950/6、ruff/mypy 与 CI 证据。",
+      "commit": "17822de"
+    }
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chat.py tests/test_agent_tools.py tests/test_agent_chart_spec.py -q --basetemp=.tmp-tests/pytest-run-review4",
+      "result": "159 passed, 3 warnings in 65.99s",
+      "passed": true,
+      "evidence": "含 7 项修复新增用例；test_gradio_serves_exported_html_and_png 真实启动本地 Gradio，GET /gradio_api/file= 的 HTML 与 PNG 均 200 且 content-type 正确。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests -q -m \"not png\" --timeout=120 --basetemp=.tmp-tests/pytest-run-final2",
+      "result": "950 passed, 3 skipped, 6 deselected, 46 subtests passed",
+      "passed": true,
+      "evidence": "最终代码后的全量非 PNG 回归；含 xlsx-005 评测基线。"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_agent_chart_png_export.py tests/test_agent_chart_png_zh.py tests/test_agent_tools.py -q -m png --timeout=180 --basetemp=.tmp-tests/pytest-run-reviewpng",
+      "result": "6 passed, 51 deselected",
+      "passed": true,
+      "evidence": "含 test_table_chart_exports_real_png，kaleido/Chrome 真实 PNG 导出。"
+    },
+    {
+      "command": ".venv\\Scripts\\ruff.exe check astock tests",
+      "result": "All checks passed!",
+      "passed": true,
+      "evidence": "修改后的源码与测试 lint 通过。"
+    },
+    {
+      "command": ".venv\\Scripts\\mypy.exe astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": "类型检查通过。"
+    },
+    {
+      "command": "gh run view 45352310856 --json status,conclusion,jobs",
+      "result": "completed/success；test 与 png-export 均 success",
+      "passed": true,
+      "evidence": "PR #49 最终 head 17822de 的 CI 双 job 全绿；此前代码提交 d62d59d run 45346904939 亦双绿。"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "repo:write / pull_request:update",
+      "reason": "向既有 PR #49 推送评审修复提交；GitHub CLI 已登录。",
+      "status": "granted"
+    },
+    {
+      "name": "Gradio allowed_paths 仅导出目录",
+      "reason": "agent_export_allowed_paths() 只放行 agent_export_dir()；不暴露 artifact 根目录。",
+      "status": "granted"
+    },
+    {
+      "name": "ASTOCK_AGENT_EXPORT_DIR 部署配置",
+      "reason": "允许部署/测试把导出目录指向独立可写目录；默认仍为 %TEMP%/astock-agent-exports。",
+      "status": "granted"
+    },
+    {
+      "name": "真实 PNG 工具链 kaleido + Chrome",
+      "reason": "本地与 CI png-export job 均可用；不可用时 auto 降级且不失败。",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261124-001-table-chart",
+    "commit": "17822de",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/49",
+    "ci": "CI run 45352310856：test + png-export 均 SUCCESS（head 17822de）",
+    "merge": "未合并，等待二轮评审",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261124-007",
+  "next": "请评审 rev-20261124-001 的 7 项问题：重点复核 P1 K 线不再误报 PNG 降级、P1 真实 Gradio /gradio_api/file= 下载测试是否满足 AC-2 运行证据；P2 对应空结果字段、PNG 前缀断言、自然序/NULL、导出目录清理、标题一致性。PR #49 head 17822de 双 CI 已绿。建议评审通过后合并 main 并标 plan-20261124-001 done；如需最后一道人工验证，可启动 app.py 对真实 Excel 触发 table_chart，点击「图表导出」下载 HTML/PNG。",
+  "createdAt": "2026-11-24T08:02:31.460Z",
+  "markdownPath": ".devloop/handoffs/ho-20261124-009.md"
+}
