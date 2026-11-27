@@ -1088,17 +1088,6 @@
       "notes": "由计划项自动生成"
     },
     {
-      "id": "cal-plan-20261103-012-planned",
-      "type": "planned",
-      "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
-      "start": "2026-11-23T00:00:00+08:00",
-      "end": "2026-11-27T23:59:00+08:00",
-      "allDay": true,
-      "planItemId": "plan-20261103-012",
-      "source": "devloop",
-      "notes": "由计划项自动生成"
-    },
-    {
       "id": "cal-plan-20261107-004-planned",
       "type": "planned",
       "title": "文件检索 / 表格查询 + 强制引用",
@@ -1150,6 +1139,17 @@
       "end": "2026-11-27T23:59:00+08:00",
       "allDay": true,
       "planItemId": "plan-20261114-004",
+      "source": "devloop",
+      "notes": "由计划项自动生成"
+    },
+    {
+      "id": "cal-plan-20261103-012-planned",
+      "type": "planned",
+      "title": "CI 深化：全库 mypy + 覆盖率基线 + 依赖锁定 + 全仓 Ruff 基线",
+      "start": "2026-11-23T00:00:00+08:00",
+      "end": "2026-11-27T23:59:00+08:00",
+      "allDay": true,
+      "planItemId": "plan-20261103-012",
       "source": "devloop",
       "notes": "由计划项自动生成"
     },
@@ -1252,6 +1252,16 @@
       "start": "2026-11-27T16:51:39.629Z",
       "end": "2026-11-27T16:53:09.375Z",
       "planItemId": "plan-20261124-001",
+      "source": "reviewer-agent",
+      "notes": "第 3 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261128-001-r3",
+      "type": "review",
+      "title": "评审：评审：PR #9 调度 5 日生产验收与心跳告警观察",
+      "start": "2026-11-27T17:18:45.377Z",
+      "end": "2026-11-27T17:19:10.224Z",
+      "planItemId": "plan-20261114-004",
       "source": "reviewer-agent",
       "notes": "第 3 轮 · approve"
     },

@@ -10,7 +10,24 @@
   "evidence": "tests/test_ci_quality_gates.py:181 的 stale 元组里有一条是裸字符串 `\"50%\"`，作用是拦住旧的「50% 门槛」表述。但子串匹配无上下文：README.md 是本项目的产品说明（股票推荐代理），任何一句合法表述只要含「50%」就会让这个覆盖率守护用例变红，并报出误导性信息「README.md 仍残留旧基线表述 '50%'」。可预期的场景：写「单票仓位上限 50%」「胜率 50%」「涨跌幅 150%」（`150%` 含子串 `50%`）等。当前 5 个文件里没有 \"50%\"，所以现在不红，但这是一次「文档正常演进 → 覆盖率门禁红 → 有人来削弱守护」的可预见路径。",
   "suggestion": "把裸 `\"50%\"` 换成带上下文的标记，例如 `\"门槛 50%\"`、`\"覆盖率 50%\"`、`\"50% 的门槛\"`、`\"覆盖率门槛 50%\"`（与 A7 要清理的那句原始表述一致），其余标记同理检查是否够具体（`\"606 passed\"`、`\"606 个\"` 已经足够具体，可保留）。这样既保住「旧 50% 门槛表述不得回归」的意图，又不会误伤产品文案里的百分数。\n\n完全解决标准：在 README.md 里写一句含「50%」的正常产品表述（如「单票仓位上限 50%」）时 test_docs_baseline_matches_measured_numbers 仍绿，而写入「覆盖率门槛 50%」时变红。",
   "confidence": 0.7,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-16T19:39:33.507Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "fixed in e73c49c (PR #50, squash-merged): STALE_MARKERS 去掉裸 \"50%\"，改为「覆盖率门槛 50%」；新增 test_stale_markers_require_context_around_percentage：「单票仓位上限 50%」「涨跌幅限制 150%，单票上限 20%」→ 绿，「旧门槛：覆盖率门槛 50%」→ 红。CI PR run 46047574586 与 main run 46048029684 均绿。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-27T18:20:00.000Z"
+  },
+  "createdAt": "2026-11-16T19:39:33.507Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "fixed in e73c49c (PR #50, squash-merged): STALE_MARKERS 去掉裸 \"50%\"，改为「覆盖率门槛 50%」；新增 test_stale_markers_require_context_around_percentage：「单票仓位上限 50%」「涨跌幅限制 150%，单票上限 20%」→ 绿，「旧门槛：覆盖率门槛 50%」→ 红。CI PR run 46047574586 与 main run 46048029684 均绿。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-27T18:20:00.000Z"
+    }
+  ]
 }

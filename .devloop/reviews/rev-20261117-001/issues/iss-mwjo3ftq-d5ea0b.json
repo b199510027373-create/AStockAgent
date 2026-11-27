@@ -10,7 +10,24 @@
   "evidence": "新用例 test_docs_baseline_matches_measured_numbers 的 docstring 声称「四处文档与 README 的基线数字必须等于 .coveragerc 实测」，DOCS_WITH_BASELINE 也确实列了 5 个文件（tests/test_ci_quality_gates.py:140-146：CI 日历、development_status、architecture_v1.3、product_snapshot、README）。\n\n但循环里只做了「旧标记扫描」（:181 `stale = (\"9247 statements\", \"2155 miss\", \"9247/2155\", \"606 passed\", \"606 个\", \"50%\")`），正向数字比对只覆盖 3 个文件：\n- development_status：断言 `f\"{local_stmts} statements / {local_miss} miss = {local_pct:.2f}%\"`；\n- CI 日历：断言 `{ci_stmts}/{ci_miss}`、`{local_stmts}/{local_miss}` 与两个百分比；\n- README：断言 `f\"{local_passed} passed\"`。\narchitecture_v1.3.md:107 与 product_snapshot_v1.3.md:51 只有 stale 扫描，没有正向断言。\n\n后果：把 architecture_v1.3:107 的「76.45%（=CI Linux 实测显示值，本地 76.68%）」改成 76.40% 或删掉百分比，把 product_snapshot:51 的「本地覆盖率 76.68%，CI Linux 76.45%」改成别的数，用例仍然全绿——正是上一轮 iss-mwjnea54-cbaf29 那类「文档数字漂移」在这两个文件上复发的通道。当前两者数字是对的（76.45/76.68），但守护强度与 docstring 承诺不一致。",
   "suggestion": "把「正向断言」改成对 DOCS_WITH_BASELINE 里每个文件都执行：例如在循环里统一断言 `f\"{ci_pct:.2f}%\" in text and f\"{local_pct:.2f}%\" in text`（这两组百分比现在 5 个文件都有），再对 development_status 保留精确行断言、对 calendar 保留 stmts/miss、对 README 保留用例数断言作为加强项。可以先把 5 个文件当前应含的片段写成 dict 常量（文件名 → 必需片段元组），断言时逐个 `in`，这样某文件被改坏时错误信息能直接指出是哪个文件少了哪个数字。\n\n完全解决标准：把 tests/test_ci_quality_gates.py 的正向断言覆盖到 architecture_v1.3.md:107 与 product_snapshot_v1.3.md:51；把这两处百分比任改成非 76.45/76.68 的值时该用例变红。",
   "confidence": 0.8,
-  "status": "open",
-  "feedback": null,
-  "createdAt": "2026-11-16T19:39:33.470Z"
+  "status": "fixed",
+  "feedback": {
+    "verdict": "good",
+    "option": "fixed",
+    "comment": "fixed in e73c49c (PR #50, squash-merged): DOCS_WITH_BASELINE 的 5 个文件全部改为正向断言——新增 _doc_baseline_problems，以 .coveragerc 注释为唯一数据源要求 architecture_v1.3 含「覆盖率门槛 76.45%」「本地 76.68%」、product_snapshot 含「本地覆盖率 76.68%」「CI Linux 76.45%」「门槛 76.45%」「610 passed」；新增 test_docs_baseline_guard_goes_red_on_wrong_numbers 对 5 个文档逐一变异（arch 76.45→75.45、snapshot 本地覆盖率 76.68→75.45 等）断言必红。变异自证实测 2 failed。",
+    "rating": null,
+    "effective": true,
+    "at": "2026-11-27T18:20:00.000Z"
+  },
+  "createdAt": "2026-11-16T19:39:33.470Z",
+  "feedbackHistory": [
+    {
+      "verdict": "good",
+      "option": "fixed",
+      "comment": "fixed in e73c49c (PR #50, squash-merged): DOCS_WITH_BASELINE 的 5 个文件全部改为正向断言——新增 _doc_baseline_problems，以 .coveragerc 注释为唯一数据源要求 architecture_v1.3 含「覆盖率门槛 76.45%」「本地 76.68%」、product_snapshot 含「本地覆盖率 76.68%」「CI Linux 76.45%」「门槛 76.45%」「610 passed」；新增 test_docs_baseline_guard_goes_red_on_wrong_numbers 对 5 个文档逐一变异（arch 76.45→75.45、snapshot 本地覆盖率 76.68→75.45 等）断言必红。变异自证实测 2 failed。",
+      "rating": null,
+      "effective": true,
+      "at": "2026-11-27T18:20:00.000Z"
+    }
+  ]
 }

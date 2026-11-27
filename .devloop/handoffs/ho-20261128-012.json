@@ -1,0 +1,145 @@
+{
+  "id": "ho-20261128-012",
+  "role": "developer",
+  "kind": "initial",
+  "planItemId": "plan-20261117-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "开发交付：观察期后收口（Ruff 豁免移除 + 文档基线守护加固）",
+  "summary": "承接 ho-20261117-014 第 3 轮评审的 2 条 P2（iss-mwjo3ftq-d5ea0b、iss-mwjo3fur-2f386a），在 PR #9 五日观察期结束后同一提交内完成收口：①删除 ruff.toml 中 astock/scheduler.py、astock/jobs.py 两条 per-file-ignores，并按规则逐条清理 scheduler.py 的 23 条存量（BLE001 能收窄则收窄到 ValueError/TypeError/OSError，try/except/pass 改 contextlib.suppress，保留的边界兜底写 `# noqa: BLE001 - 理由`；jobs.py 实测 0 条）；②tests/test_ci_quality_gates.py 对 DOCS_WITH_BASELINE 的 5 个文件全部做正向数字断言（数据源 .coveragerc 注释），并新增变异自证用例，改错 architecture_v1.3:107 / product_snapshot:51 必红；③stale 标记去掉裸 \"50%\"，改「覆盖率门槛 50%」，新增两条语义用例（「单票仓位上限 50%」绿、「覆盖率门槛 50%」红）。不改变运行时语义：幂等键、单实例锁、stale 结算逻辑均未动，OPS-01 落点测试保持绿。PR #50 已 squash 合并（e73c49c），PR run 46047574586 与 main run 46048029684 均绿。评审线程两条 P2 已置 fixed。",
+  "requirements": [
+    {
+      "id": "A1",
+      "text": "删除 ruff.toml 中 astock/scheduler.py、astock/jobs.py 的 per-file-ignores，`ruff check astock tests` 为 0，且不新增文件级豁免",
+      "source": "plan-20261117-001 acceptance[0]"
+    },
+    {
+      "id": "A2",
+      "text": "清理 scheduler/jobs 存量 22 条：BLE001/S110/S112 逐条审计，能收窄则收窄，边界兜底加注释；其余按规则修复（实测 23 条，其中 jobs.py 0 条）",
+      "source": "plan-20261117-001 acceptance[1]"
+    },
+    {
+      "id": "A3",
+      "text": "tests/test_ci_quality_gates.py 对 DOCS_WITH_BASELINE 的 5 个文件全部做正向断言；改错 architecture_v1.3:107 或 product_snapshot:51 的数字时必须变红",
+      "source": "plan-20261117-001 acceptance[2] / iss-mwjo3ftq-d5ea0b"
+    },
+    {
+      "id": "A4",
+      "text": "stale 标记去掉裸 \"50%\"，改为「覆盖率门槛 50%」等带上下文标记；写「单票仓位上限 50%」仍绿，写「覆盖率门槛 50%」变红",
+      "source": "plan-20261117-001 acceptance[3] / iss-mwjo3fur-2f386a"
+    },
+    {
+      "id": "A5",
+      "text": "全量 pytest、mypy 36 files、ruff 0 通过；CI PR 与 main 连续两次绿",
+      "source": "plan-20261117-001 acceptance[4]"
+    },
+    {
+      "id": "A6",
+      "text": "更新评审线程 rev-20261117-001 与 handoff，plan-20261103-012 链接到本项",
+      "source": "plan-20261117-001 acceptance[5]"
+    },
+    {
+      "id": "D1",
+      "text": "PR #9 五日观察（2026-11-21）结束后，删除 ruff.toml 中 astock/scheduler.py、astock/jobs.py 的 per-file-ignores，清理这两个文件存量，并在同一提交补齐 5 个文档的正向断言、把 \"50%\" 换成带上下文标记。不改变运行时语义。",
+      "source": "plan-20261117-001 description"
+    }
+  ],
+  "changes": [
+    {
+      "path": "ruff.toml",
+      "summary": "删除 [lint.per-file-ignores] 整节（含 14 处 BLE001 站点清单）；文件头 P2 改为 plan-20261117-001 收口说明（23 条实测存量）并新增「盲捕异常策略（OPS-01 调度边界）」段，指向守护测试 test_blind_except_exemptions_carry_reasons",
+      "commit": "e73c49c"
+    },
+    {
+      "path": "astock/scheduler.py",
+      "summary": "清理 23 条：删未用 pathlib import；range(0,15)→range(15)；_run_time/_heartbeat_threshold/_read_state/recover_interrupted_jobs/_last_alert_signature 等 8 处 except Exception 收窄为 ValueError/TypeError/OSError/json.JSONDecodeError；_log、_recent_trading_days、_acquire_lock、_release_lock 的 try/except/pass 改 contextlib.suppress；保留的 6 处 BLE001 边界兜底（_is_trading_day、startup_maintenance×3、run_once 外层、_acquire_lock）全部补写理由；心跳告警写盘 OSError 收窄。运行时逻辑不变",
+      "commit": "e73c49c"
+    },
+    {
+      "path": "tests/test_ci_quality_gates.py",
+      "summary": "新增 STALE_MARKERS/_stale_markers_found/_doc_baseline_problems（5 个文档逐一正向断言，数据源 .coveragerc 注释 + MIN_COVERAGE_FLOOR）；重写 test_docs_baseline_matches_measured_numbers；新增 test_docs_baseline_guard_goes_red_on_wrong_numbers（5 个文档逐一变异 + 「覆盖率门槛 50%」注入）与 test_stale_markers_require_context_around_percentage；删除 test_ruff_config_keeps_scheduler_observation_window_exemption，改为 test_ruff_config_has_no_per_file_exemptions + test_blind_except_exemptions_carry_reasons",
+      "commit": "e73c49c"
+    }
+  ],
+  "tests": [
+    {
+      "command": "ruff check astock tests --output-format concise",
+      "result": "All checks passed!（0 条；删除 per-file-ignores 后无新增豁免）",
+      "passed": true,
+      "evidence": "本地 .venv ruff 0.17.3；CI run 46047574586 日志同报 All checks passed!"
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": "本地与 CI run 46047574586 均报 45 files（验收文字写的 36 files 是 plan-20261103-012 时的旧计数，模块增加后 CI 实测 45）"
+    },
+    {
+      "command": "pytest tests -q -m \"not png\"",
+      "result": "953 passed, 3 skipped, 6 deselected, 46 subtests passed in 277.11s",
+      "passed": true,
+      "evidence": "本地 Windows 全量；CI Linux run 46047574586 为 952 passed, 4 skipped, 6 deselected, 46 subtests passed，coverage TOTAL 12474 stmts / 2425 miss = 80.56%（门槛 76.45）"
+    },
+    {
+      "command": "pytest tests/test_ci_quality_gates.py -q",
+      "result": "17 passed",
+      "passed": true,
+      "evidence": "目标测试文件；含新增 6 个用例"
+    },
+    {
+      "command": "变异自证：架构文档 76.45%→75.45%、product_snapshot 本地覆盖率 76.68%→75.45%",
+      "result": "2 failed, 15 passed，失败项恰好只报这两处缺失；随后 git restore 复原",
+      "passed": true,
+      "evidence": "验收 A3 的「改错必红」；test_docs_baseline_guard_goes_red_on_wrong_numbers 已把该变异固化为常驻用例"
+    },
+    {
+      "command": "pytest tests/test_hardening.py -q（纯净 HEAD 对照）",
+      "result": "12 failed, 14 passed, 9 errors，与本改动后的结果完全一致",
+      "passed": false,
+      "evidence": "确认该组失败与本次改动无关：Windows 下 tempfile 临时目录被 DSH 沙箱拒绝写入（PermissionError WinError 5 + sqlite3 unable to open database file），放宽沙箱后全量 953 passed 全绿"
+    },
+    {
+      "command": "gh pr checks 50 / gh run view 46048029684",
+      "result": "PR run 46047574586: test pass 2m1s / png-export pass 1m9s；main run 46048029684 (e73c49c): success",
+      "passed": true,
+      "evidence": "验收 A5「PR 与 main 连续两次绿」：main 前一次 run 46038545567 亦 success"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "Windows 临时目录写权限（pytest）",
+      "reason": "DSH workspace-write 沙箱下 tempfile.mkdtemp 子目录内无法建文件/sqlite 库，导致所有 TemporaryDirectory 型测试必挂；本轮以 danger-full-access 运行一次全量 pytest 取得真实绿证据，会话后续已切换为 danger-full-access",
+      "status": "granted"
+    },
+    {
+      "name": "GitHub CLI 写权限（建 PR / 合并）",
+      "reason": "gh auth status 确认已登录 b199510027373-create（scopes: repo/workflow），用于 push、gh pr create、API squash merge 与 run 查询",
+      "status": "granted"
+    },
+    {
+      "name": "本地 git 代理绕过",
+      "reason": ".git/config 配置的 http://127.0.0.1:7890 代理未运行，push/fetch 需以 `-c http.proxy= -c http.https://github.com.proxy=` 临时绕过；未修改仓库配置",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261117-001-ruff-docs-guard（已随合并删除）",
+    "commit": "e73c49cc18ed7aa5ea91b9f1ab7e648d9f695e6a",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/50",
+    "ci": "PR run 46047574586 success（test 2m1s / png-export 1m9s）；main run 46048029684 success；前一次 main run 46038545567 亦 success",
+    "merge": "squash merged 到 main（e73c49c）",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": null,
+  "next": "评审侧：复核 A2 的 6 处保留 BLE001（_is_trading_day / startup_maintenance×3 / run_once 外层 / _acquire_lock）理由是否足够，以及 A3 的 5 文件正向片段是否覆盖你要求的行；确认后可将 plan-20261117-001 置 done。后续可选：ruff format 未纳入门禁（scheduler.py 存在旧格式差异），如需统一可在下一质量项单独处理；P3 族（RUF001-003、B905）仍未开启。",
+  "createdAt": "2026-11-27T18:19:15.668Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-012.md"
+}
