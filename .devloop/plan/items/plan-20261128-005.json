@@ -1,0 +1,38 @@
+{
+  "id": "plan-20261128-005",
+  "title": "Agent 体验：引用、表格图、导出与可重放",
+  "description": "P2 Agent 体验：引用来源、自然语言表格→图、PNG/HTML 导出、可重放、失败明说；table_chart 已完成契约/工具/UI 基础，本项收口体验与证据。与论文 006 协调：演示材料只引用论文已定稿结果。",
+  "status": "todo",
+  "priority": "P2",
+  "milestone": "ms-agent",
+  "owner": "human",
+  "start": "2026-12-08",
+  "due": "2026-12-10",
+  "estimateH": 12,
+  "progress": 0,
+  "acceptance": [
+    "Agent 回答带可点击来源，文件回答带文件名/页码或工作表/单元格",
+    "自然语言请求表格图时能返回真实 figure，不降级为文字",
+    "图表/结果支持 PNG/HTML 导出与一次可重放",
+    "失败时说明原因与缺失输入，不静默降级"
+  ],
+  "tags": [
+    "wave-2"
+  ],
+  "deps": [
+    "plan-20261128-002"
+  ],
+  "links": {
+    "files": [
+      "astock/agent/agent_chat_ui.py",
+      "astock/agent/files.py",
+      "astock/agent/evals.py",
+      "tests/test_agent_runtime.py",
+      "tests/test_agent_chat_ui.py"
+    ],
+    "fact_source": "docs/thesis_product_fact_source_v1.json",
+    "handoff": "docs/AStockAgent_thesis_product_handoff_v1.md"
+  },
+  "createdAt": "2026-11-27T20:47:29.657Z",
+  "updatedAt": "2026-11-27T21:21:42.597Z"
+}

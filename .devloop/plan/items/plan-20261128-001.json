@@ -1,0 +1,56 @@
+{
+  "id": "plan-20261128-001",
+  "title": "产品交付收口：GitHub 描述、PDF 图文说明与面试教学文档",
+  "description": "产品改进完成后的最后一步：一个会话产出 GitHub 产品描述、PDF 图文说明、面试教学文档。三份共用同一事实源/截图/数字；PDF 覆盖定位、用户、三个工作流、架构图、真实截图、能力边界、alpha 未证明、路线图；教学文档覆盖 pitch、架构、取舍、demo、追问与边界。不另起仓库。",
+  "status": "backlog",
+  "priority": "P2",
+  "milestone": "ms-product",
+  "owner": "human",
+  "start": "2027-01-13",
+  "due": "2027-01-15",
+  "estimateH": 12,
+  "progress": 0,
+  "acceptance": [
+    "GitHub 产品描述：定位、目标用户、三个核心工作流、架构图、真实截图、能力边界、路线图",
+    "PDF 图文说明：与 GitHub 描述共用同一事实源、截图与数字；明确 alpha 未证明",
+    "面试教学文档：30 秒/2 分钟 pitch、架构讲解、关键取舍、demo 脚本、常见追问、诚实边界",
+    "三份材料不另起仓库；不把缩小版/合成结果写成正式实证",
+    "与论文 006 定稿口径一致，引用论文已定稿结果",
+    "有最终检查清单：链接、截图、数字、限制说明"
+  ],
+  "tags": [
+    "product",
+    "docs",
+    "pdf",
+    "interview",
+    "final",
+    "final-last",
+    "thesis-coordinated"
+  ],
+  "deps": [
+    "plan-20261128-003",
+    "plan-20261128-004",
+    "plan-20261128-005",
+    "plan-20261103-014"
+  ],
+  "links": {
+    "adr": [
+      "adr-0019"
+    ],
+    "files": [
+      "README.md",
+      "docs/AStockAgent_product_snapshot_v1.3.md",
+      "deliverables/"
+    ],
+    "docs": [
+      "docs/AStockAgent_product_snapshot_v1.3.md",
+      "README.md",
+      "deliverables/",
+      "D:\\毕业论文\\论文需要\\M1_论文总体框架_交接文档_给框架会话_v1.0.md"
+    ],
+    "fact_source": "docs/thesis_product_fact_source_v1.json",
+    "handoff": "docs/AStockAgent_thesis_product_handoff_v1.md"
+  },
+  "createdAt": "2026-11-27T20:25:56.361Z",
+  "updatedAt": "2026-11-27T21:21:42.436Z"
+}

@@ -19,14 +19,30 @@
   "tags": [
     "research",
     "significance",
-    "review"
+    "review",
+    "time-gated-20-batches",
+    "wave-3"
   ],
   "links": {
     "adr": [
       "ADR-006",
       "ADR-007"
-    ]
+    ],
+    "files": [
+      "docs/AStockAgent_research_conclusions_v1.3.md",
+      "astock/recommend_ui.py",
+      "tests/test_research_semantics.py"
+    ],
+    "fact_source": "docs/thesis_product_fact_source_v1.json",
+    "handoff": "docs/AStockAgent_thesis_product_handoff_v1.md",
+    "sync_check": "tools/check_thesis_sync.py"
   },
   "createdAt": "2026-11-03T12:11:02.745Z",
-  "updatedAt": "2026-11-21T07:38:22.309Z"
+  "updatedAt": "2026-11-27T21:21:42.269Z",
+  "deps": [
+    "plan-20261103-010",
+    "plan-20261103-011",
+    "plan-20261128-002",
+    "plan-20261128-003"
+  ]
 }
