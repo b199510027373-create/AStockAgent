@@ -69,7 +69,7 @@ def chat(
             )
             _CLIENT, _MODE = client, mode
             return resp.choices[0].message.content or ""
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - 逐个网络模式探活：SDK/网络异常统一换下一种模式重试
             last_error = exc
             continue
     raise RuntimeError(f"DeepSeek 调用失败：{last_error}")

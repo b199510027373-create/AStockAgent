@@ -122,7 +122,7 @@ def _load_one(code: str, start: str, end: str) -> tuple[str, pd.DataFrame | None
     except ContractError:
         # schema 漂移不是"单票缺数据"：直接失败整轮 run，不静默退出候选池。
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 单票加载失败只降级为诊断，不退出整轮候选池（ContractError 已单独 raise）
         return code, None, f"{type(exc).__name__}: {exc}"
 
 
@@ -145,7 +145,7 @@ def load_many(
                 code, df, error = future.result()
             except ContractError:
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - future.result 的非 ContractError 异常降级为该票诊断，单票失败不拖垮整批
                 code, df, error = futures[future], None, f"{type(exc).__name__}: {exc}"
             if df is not None and not df.empty:
                 out[code] = df

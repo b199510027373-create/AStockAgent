@@ -134,15 +134,15 @@ CI 内容（2026-11-17 按 plan-20261103-012 更新到当前形态）：
 5. `ruff check astock tests` 全仓 blocking（规则集固定在 `ruff.toml`）
 6. `mypy astock app.py`（全部非 UI 模块）
 7. 运行全部测试
-8. 覆盖率门槛 76.45%（`.coveragerc`；=CI Linux 实测显示值，本地 76.68%，分阶段目标 80% / 85%）
+8. 覆盖率门槛 80.56%（`.coveragerc`；=CI Linux 实测显示值，本地 80.80%，分阶段目标 80%（已达成）/ 85%）
 
-本地验证结果（2026-11-17 实测）：
+本地验证结果（2026-11-27 实测）：
 
 ```text
-pytest tests -m "not png": 610 passed, 1 skipped, 5 deselected
-mypy astock app.py: Success, no issues found in 36 source files
+pytest tests -m "not png": 953 passed, 3 skipped, 6 deselected
+mypy astock app.py: Success, no issues found in 45 source files
 ruff check astock tests: All checks passed!
-coverage: 9248 statements / 2157 miss = 76.68%（CI Linux 9248/2178 = 76.45%，门禁 76.45%）
+coverage: 12474 statements / 2395 miss = 80.80%（CI Linux 12474/2425 = 80.56%，门禁 80.56%）
 ```
 
 ## 5. 已完成的主要开发内容

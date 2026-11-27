@@ -26,7 +26,7 @@ def run_factor(
             progress=progress,
         )
         return result.status, result.ic_table, result.quantile_table, ic_figure(result)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - UI 事件回调边界：因子计算异常转成页面错误提示，不能打断界面
         return f"❌ 因子 IC 计算失败：{exc}", pd.DataFrame(), pd.DataFrame(), None
 
 

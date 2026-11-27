@@ -10,7 +10,7 @@ def run_backfill(progress=gr.Progress()):  # noqa: B008 - Gradio 回调惯例：
     try:
         _, message = backfill_technical(days=30, top_n=5, progress=progress)
         return message
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - UI 事件回调边界：回填异常转成页面错误提示，不能打断界面
         return f"❌ 回填失败：{exc}"
 
 

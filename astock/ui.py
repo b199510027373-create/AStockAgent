@@ -214,7 +214,7 @@ def render(
         return _error(f"❌ 权限不足：{exc}")
     except TushareError as exc:
         return _error(f"❌ 数据加载失败：{exc}")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - UI 事件回调边界：未知异常转成页面错误提示，不能打断 Gradio 事件循环
         return _error(f"❌ 未预期错误：{exc}")
 
 

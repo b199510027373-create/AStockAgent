@@ -13,10 +13,12 @@
 #              其余真正的边界兜底保留 `# noqa: BLE001 - 理由`。现在没有任何文件级豁免。
 #   P3：逐族开启 RUF001/RUF002/RUF003（中文全角标点）与 B905（zip strict），先评估再决定。
 #
-# 盲捕异常策略（OPS-01 调度边界）：BLE001 只允许出现在「任何异常都不能让调度线程退出 /
-# 不能让状态机失真」的兜底处，且必须写理由；纯解析类代码（int()/json.loads/
+# 盲捕异常策略：BLE001 只允许出现在「任何异常都不能让调用方 / 调度线程退出」的边界兜底处，
+# 且每处 noqa 必须写理由（`# noqa: BLE001 - 理由`）；纯解析类代码（int()/json.loads/
 # fromisoformat）一律收窄到 ValueError/TypeError/OSError，不得用 Exception 兜。
-# tests/test_ci_quality_gates.py::test_blind_except_exemptions_carry_reasons 守护这条约定。
+# 守护范围 = astock/ 全量（含 UI 事件回调边界）：tests/test_ci_quality_gates.py::
+# test_blind_except_exemptions_carry_reasons 扫描 astock/**/*.py，缺理由即红。
+# （评审 iss-mwzbx2no-cbaa41：策略措辞与实际扫描范围必须一致。）
 target-version = "py313"
 line-length = 120
 # app.py 是仓库根的历史原型脚本（单文件 Streamlit/Gradio 试作，113 条 E402/E701/E702 等），

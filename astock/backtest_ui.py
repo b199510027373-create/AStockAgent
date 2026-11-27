@@ -54,7 +54,7 @@ def run(
             name=name,
             list_date=list_date,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - UI 事件回调边界：回测异常转成页面错误提示，不能打断界面
         message = f"❌ 回测失败：{exc}"
         return message, empty_figure("回测失败"), _empty_trades(), message
 
