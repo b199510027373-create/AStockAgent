@@ -1,0 +1,86 @@
+{
+  "id": "ho-20261128-026",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261109-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "backfill 推荐 JSON 接入 RecommendationRun 契约（CI 全绿，待评审）",
+  "summary": "相对初版交付（ho-20261128-025）的修改痕迹：代码与测试未变，均为 8008f3f；唯一变化是补齐 CI 证据与计划项元数据——PR #53 CI run 46061333673 中 test 通过（2m10s）、png-export 通过（56s），plan links.test 追加 CI 记录，progress 90→95。PR 仍待评审，未合并。",
+  "requirements": [],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261109-001.json",
+      "summary": "相对初版交付：links.test 追加 PR #53 CI run 46061333673（test pass 2m10s、png-export pass 56s），progress 90→95；代码无改动",
+      "commit": "8008f3f"
+    },
+    {
+      "path": "astock/backfill.py",
+      "summary": "代码与初版一致，未再修改",
+      "commit": "8008f3f"
+    },
+    {
+      "path": "astock/ledger.py",
+      "summary": "代码与初版一致，未再修改",
+      "commit": "8008f3f"
+    },
+    {
+      "path": "tests/test_backfill_ledger_contract.py",
+      "summary": "测试与初版一致，未再修改",
+      "commit": "8008f3f"
+    }
+  ],
+  "tests": [
+    {
+      "command": "gh pr checks 53 --watch",
+      "result": "test pass 2m10s; png-export pass 56s",
+      "passed": true,
+      "evidence": "GitHub Actions run 46061333673：test pass 2m10s（job 140716059057）、png-export pass 56s（job 140716058562）"
+    },
+    {
+      "command": "pytest tests/test_backfill_ledger_contract.py tests/test_contracts.py tests/test_research_semantics.py tests/test_scheduler_ledger.py -q",
+      "result": "91 passed in 43.42s",
+      "passed": true,
+      "evidence": "本地初版交付证据，未变化"
+    },
+    {
+      "command": "pytest tests -q -m \"not png\"",
+      "result": "958 passed, 3 skipped, 6 deselected in 276.60s",
+      "passed": true,
+      "evidence": "本地初版交付证据，未变化"
+    },
+    {
+      "command": "ruff check astock tests; mypy astock app.py",
+      "result": "All checks passed; Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": "CI test job 内含 lint/typecheck 通过，本地亦通过"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI 认证（gh auth，repo/workflow scope）",
+      "reason": "已登录 b199510027373-create，用于 push 分支、创建 PR #53 与查看 CI",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "feat/plan-20261109-001-backfill-contract",
+    "commit": "8008f3f",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/53",
+    "ci": "run 46061333673：test pass 2m10s；png-export pass 56s",
+    "merge": "未合并（等待评审）",
+    "status": "ci-passed"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-025",
+  "next": "PR #53 CI 全绿，等待评审（rev 流程）。评审通过后合并 main、回写 plan 状态 done(100)、补最终 update handoff（合并 commit + main CI）。若评审提问题，按 devloop_review 逐条修复并追加 update handoff。",
+  "createdAt": "2026-11-27T20:09:02.525Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-026.md"
+}

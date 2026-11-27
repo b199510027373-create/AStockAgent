@@ -1,0 +1,118 @@
+{
+  "id": "ho-20261128-030",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261109-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "backfill 推荐 JSON 接入 RecommendationRun 契约，ledger 拒绝无 schema_version 的入库",
+  "summary": "按用户指示合并 PR #53。GitHub 侧以 squash 方式合并，main 新增 5b47503（含 backfill/ledger 修订、tests/test_backfill_ledger_contract.py 与计划项初始 links.test），远程特性分支已删除；本地已切回 main 并 fast-forward 到 5b47503。合并前后 CI 全绿（run 46063703330，head ad91664）。计划项补 links.merge=5b47503，状态保持 in_review（等待评审对 rev-20261128-004 两条 P2 做 recheck 后才能标 fixed/done）。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "backfill 写出的 recommend_*.json 带 schema_version=2/run_id/data_as_of/tradable_from/diagnostics 并过 validate_recommendation_run（已在 main 5b47503 生效）",
+      "source": "plan-20261109-001 acceptance #1"
+    },
+    {
+      "id": "REQ-2",
+      "text": "ledger.sync_json_dir 对无 schema_version 文件显式跳过，且有测试（已在 main 5b47503 生效）",
+      "source": "plan-20261109-001 acceptance #2"
+    },
+    {
+      "id": "REQ-3",
+      "text": "全量 pytest 通过（961 passed / 282.38s，ruff、mypy 通过）",
+      "source": "plan-20261109-001 acceptance #3"
+    },
+    {
+      "id": "REQ-4",
+      "text": "rev-20261128-004 两条 P2（ledger 全契约校验、backfill 不猜 tradable_from）已修订并随 PR #53 合入 main",
+      "source": "review rev-20261128-004"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261109-001.json",
+      "summary": "补 links.merge=5b47503，links.test/ci 更新为修订后证据；保持 in_review/progress 95",
+      "commit": ""
+    },
+    {
+      "path": "astock/backfill.py",
+      "summary": "合入 main：缺 next_open_date 时告警跳过，不猜自然日+1",
+      "commit": "5b47503"
+    },
+    {
+      "path": "astock/ledger.py",
+      "summary": "合入 main：sync_json_dir 过 validate_recommendation_run，兜底 AttributeError",
+      "commit": "5b47503"
+    },
+    {
+      "path": "tests/test_backfill_ledger_contract.py",
+      "summary": "合入 main：7 个契约/同步用例",
+      "commit": "5b47503"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_backfill_ledger_contract.py -q",
+      "result": "7 passed in 6.04s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "pytest tests -q -m \"not png\"",
+      "result": "961 passed, 3 skipped, 6 deselected, 46 subtests passed in 282.38s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "PR #53 CI run 46063703330 (pre-merge head ad91664)",
+      "result": "test pass 2m22s, png-export pass 55s",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/46063703330"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI merge",
+      "reason": "按用户指示合并 PR #53（squash + 删除远程分支）",
+      "status": "granted"
+    },
+    {
+      "name": "git push main (devloop 元数据)",
+      "reason": "提交计划项 merge 链接与 handoff 记录",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "5b47503",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/53",
+    "ci": "run 46063703330 success (pre-merge head ad91664)",
+    "merge": "5b47503 squash-merged 2026-11-28",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-028",
+  "next": "评审侧：对 rev-20261128-004 的 iss-mwzfa37k-56904d / iss-mwzfa38r-e5eb0e 在 main 5b47503 上做 targeted recheck 并标 fixed，随后可将 plan-20261109-001 置 done；开发者侧无待办。",
+  "createdAt": "2026-11-27T20:34:17.069Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-030.md"
+}

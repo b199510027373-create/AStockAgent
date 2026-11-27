@@ -1,0 +1,129 @@
+{
+  "id": "ho-20261128-031",
+  "role": "developer",
+  "kind": "update",
+  "planItemId": "plan-20261109-001",
+  "threadId": null,
+  "sessionId": "",
+  "title": "backfill 推荐 JSON 接入 RecommendationRun 契约，ledger 拒绝无 schema_version 的入库",
+  "summary": "PR #53 合并后的最终收口。评审 rev-20261128-004 第 2 轮 targeted recheck 已 approve（openP0/P1/P2=0，两条 P2 均 fixed）；PR 以 squash 合入 main，合并提交 5b47503；main CI run 46064470258 全绿（test 1m58s、png-export 1m16s）。按评审要求把 plan-20261109-001 置 done/100，links 补 merge 与 main CI 证据。开发者侧全部完成。",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "backfill 写出的 recommend_*.json 带 schema_version=2/run_id/data_as_of/tradable_from/diagnostics 且过 validate_recommendation_run（main 5b47503 生效）",
+      "source": "plan-20261109-001 acceptance #1"
+    },
+    {
+      "id": "REQ-2",
+      "text": "ledger.sync_json_dir 对无 schema_version 文件显式跳过，且有测试（main 5b47503 生效）",
+      "source": "plan-20261109-001 acceptance #2"
+    },
+    {
+      "id": "REQ-3",
+      "text": "全量 pytest 通过（961 passed），ruff/mypy 与 PR/main CI 均通过",
+      "source": "plan-20261109-001 acceptance #3"
+    },
+    {
+      "id": "REQ-4",
+      "text": "rev-20261128-004 两条 P2 修订完成，第 2 轮 targeted recheck approve、均标 fixed，openP2=0",
+      "source": "review rev-20261128-004 round 2"
+    },
+    {
+      "id": "REQ-5",
+      "text": "合并后补最终 handoff（合并 commit + main CI）并把 plan 置 done(100)",
+      "source": "review rev-20261128-004 round 2「剩余动作不在评审侧」"
+    }
+  ],
+  "changes": [
+    {
+      "path": ".devloop/plan/items/plan-20261109-001.json",
+      "summary": "status=done、progress=100；links 补 review=rev-20261128-004、merge=5b47503、main CI run 46064470258 与修订后测试证据",
+      "commit": ""
+    },
+    {
+      "path": "astock/backfill.py",
+      "summary": "合并入 main：payload 过契约校验、tradable_from 只来自 next_open_date、缺日历时告警跳过",
+      "commit": "5b47503"
+    },
+    {
+      "path": "astock/ledger.py",
+      "summary": "合并入 main：sync_json_dir 全契约校验 + AttributeError 兜底",
+      "commit": "5b47503"
+    },
+    {
+      "path": "tests/test_backfill_ledger_contract.py",
+      "summary": "合并入 main：7 个契约/同步用例",
+      "commit": "5b47503"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_backfill_ledger_contract.py -q",
+      "result": "7 passed in 6.04s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "pytest tests -q -m \"not png\"",
+      "result": "961 passed, 3 skipped, 6 deselected, 46 subtests passed in 282.38s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "ruff check astock tests",
+      "result": "All checks passed",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "mypy astock app.py",
+      "result": "Success: no issues found in 45 source files",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "PR #53 CI run 46063703330 (head ad91664)",
+      "result": "test pass 2m22s, png-export pass 55s",
+      "passed": true,
+      "evidence": ""
+    },
+    {
+      "command": "main CI run 46064470258 (5b47503)",
+      "result": "test pass 1m58s, png-export pass 1m16s",
+      "passed": true,
+      "evidence": "https://github.com/b199510027373-create/AStockAgent/actions/runs/46064470258"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "GitHub CLI merge",
+      "reason": "按用户指示 squash 合并 PR #53",
+      "status": "granted"
+    },
+    {
+      "name": "git push main (devloop 元数据)",
+      "reason": "提交计划项 done/merge 链接与最终 handoff",
+      "status": "granted"
+    }
+  ],
+  "delivery": {
+    "branch": "main",
+    "commit": "5b47503",
+    "pr": "https://github.com/b199510027373-create/AStockAgent/pull/53",
+    "ci": "main run 46064470258 success (test/png-export)",
+    "merge": "5b47503 squash-merged 2026-11-28",
+    "status": "merged"
+  },
+  "review": {
+    "roundNo": 0,
+    "verdict": "",
+    "resolved": false,
+    "openP0": 0,
+    "openP1": 0,
+    "issues": []
+  },
+  "previousHandoffId": "ho-20261128-030",
+  "next": "无开发者待办；评审 rev-20261128-004 已 approve 且两条 P2 fixed，plan-20261109-001 已 done/100。PR #53 已合并、main CI 绿。",
+  "createdAt": "2026-11-27T20:36:08.974Z",
+  "markdownPath": ".devloop/handoffs/ho-20261128-031.md"
+}

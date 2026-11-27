@@ -1296,6 +1296,36 @@
       "notes": "第 3 轮 · approve"
     },
     {
+      "id": "cal-rev-20261128-003-r1",
+      "type": "review",
+      "title": "评审：评审：修复 P2：compute_tracking 写库失败不应让「推荐跟踪」页整体失败",
+      "start": "2026-11-27T20:02:30.625Z",
+      "end": "2026-11-27T20:04:28.929Z",
+      "planItemId": "plan-20261110-001",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261128-004-r1",
+      "type": "review",
+      "title": "评审：评审：backfill 推荐 JSON 接入 RecommendationRun 契约，ledger 拒绝无 schema_version 的入库",
+      "start": "2026-11-27T20:10:04.167Z",
+      "end": "2026-11-27T20:17:14.707Z",
+      "planItemId": "plan-20261109-001",
+      "source": "reviewer-agent",
+      "notes": "第 1 轮 · approve"
+    },
+    {
+      "id": "cal-rev-20261128-004-r2",
+      "type": "review",
+      "title": "评审：评审：backfill 推荐 JSON 接入 RecommendationRun 契约，ledger 拒绝无 schema_version 的入库",
+      "start": "2026-11-27T20:32:08.301Z",
+      "end": "2026-11-27T20:32:20.115Z",
+      "planItemId": "plan-20261109-001",
+      "source": "reviewer-agent",
+      "notes": "第 2 轮 · approve"
+    },
+    {
       "id": "cal-plan-20261114-002-planned",
       "type": "planned",
       "title": "图表管线 v2：语义收口、审计迁移与 Q4/Q5",
