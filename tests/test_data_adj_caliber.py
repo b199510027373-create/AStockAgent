@@ -586,5 +586,81 @@ class AdjustmentMetadataPropagationTests(unittest.TestCase):
             self.assertEqual(meta["adj_base"], "2025-01-02")
 
 
+class DailyDatasetCaliberTests(unittest.TestCase):
+    """plan-20261103-011：分区数据集不得改变 qfq/hfq 口径（ADR-008 D1 / ADR-011）。
+
+    数据集是逐股缓存的派生索引：scan 出的价格必须与逐股 ``load_daily`` 逐值一致，
+    复权基准按 code 记录在 meta/attrs 里，不能把 hfq 当不复权、也不能混进 qfq 的根目录。
+    """
+
+    CODE = "600519.SH"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _seed(self, adj: str) -> pd.DataFrame:
+        return data.load_daily(
+            self.CODE,
+            start="2025-01-02",
+            end="2025-01-06",
+            adj=adj,
+            client=FakeClient(_daily_frame(), _factors()),
+        )
+
+    def _env(self):
+        return (
+            patch.object(data, "DAILY_DIR", self.root),
+            patch.object(data, "_DAILY_MEM", {}),
+            patch.object(data, "_today", return_value=pd.Timestamp("2025-01-10")),
+            patch.object(data, "last_open_date", side_effect=lambda x: pd.Timestamp(x)),
+        )
+
+    def _scan(self, adj: str) -> pd.DataFrame:
+        return data.scan_daily([self.CODE], start="2025-01-02", end="2025-01-06", adj=adj)
+
+    def test_dataset_qfq_rows_match_per_code_cache(self):
+        with self._env()[0], self._env()[1], self._env()[2], self._env()[3]:
+            direct = self._seed("qfq")
+            scanned = self._scan("qfq")
+            meta = json.loads(
+                (self.root / "_dataset" / "adj=qfq" / "_meta.json").read_text(encoding="utf-8")
+            )
+        self.assertTrue(np.allclose(scanned["close"].to_numpy(float), direct["close"].to_numpy(float)))
+        self.assertEqual(scanned.attrs["adjustment"]["adj"], "qfq")
+        self.assertEqual(scanned.attrs["adjustment"]["adj_source"], "daily_dataset")
+        self.assertEqual(scanned.attrs["adjustment"]["adj_bases"], {self.CODE: "2025-01-06"})
+        # 横截面帧混了多只股票、基准不唯一：只标口径与来源，逐 code 基准放 adj_bases。
+        self.assertIsNone(scanned.attrs["adjustment"]["base_factor"])
+        self.assertIsNone(scanned.attrs["adjustment"]["adj_base"])
+        self.assertEqual(meta["codes"][self.CODE]["base_factor"], 8.0)
+        self.assertEqual(meta["codes"][self.CODE]["adj_base"], "2025-01-06")
+
+    def test_dataset_hfq_scales_against_earliest_factor(self):
+        with self._env()[0], self._env()[1], self._env()[2], self._env()[3]:
+            self._seed("hfq")
+            scanned = self._scan("hfq")
+        raw = _daily_frame()
+        factors = np.array([2.0, 4.0, 8.0])
+        self.assertTrue(np.allclose(scanned["close"].to_numpy(float), raw["close"].to_numpy(float) * factors / 2.0))
+        # hfq 基准 = 最早交易日因子 2.0，不是 1.0、也不是最新因子
+        self.assertEqual(scanned.attrs["adjustment"]["adj"], "hfq")
+        self.assertEqual(scanned.attrs["adjustment"]["adj_bases"], {self.CODE: "2025-01-02"})
+
+    def test_qfq_and_hfq_datasets_stay_in_separate_roots(self):
+        with self._env()[0], self._env()[1], self._env()[2], self._env()[3]:
+            self._seed("qfq")
+            self._seed("hfq")
+            qfq = self._scan("qfq")
+            hfq = self._scan("hfq")
+        self.assertTrue((self.root / "_dataset" / "adj=qfq" / "_meta.json").exists())
+        self.assertTrue((self.root / "_dataset" / "adj=hfq" / "_meta.json").exists())
+        # 两种口径只是基准不同：逐行比值恒为 最新/最早 = 4.0
+        self.assertTrue(np.allclose(hfq["close"].to_numpy(float) / qfq["close"].to_numpy(float), 4.0))
+
+
 if __name__ == "__main__":
     unittest.main()

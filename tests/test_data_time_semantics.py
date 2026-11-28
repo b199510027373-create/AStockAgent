@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from types import SimpleNamespace
 from typing import Any
@@ -931,3 +932,101 @@ def test_no_pseudo_realtime_fields() -> None:
     result = M.quote(CODE, now=context.clock, deps=context.deps())
     assert not banned & set(_table(result)[0])
     assert not banned & set(result.metadata)
+
+
+# ---------------------------------------------------------------------------
+# plan-20261103-011：分区数据集的截止语义 / 跨日失效（PIT 不得回退成旧快照）
+# ---------------------------------------------------------------------------
+
+DATES = ["2024-01-02", "2024-01-03"]
+
+
+class _DatasetClient:
+    """``daily`` + ``adj_factor`` 的最小替身（不触网），按日期区间裁剪。"""
+
+    def __init__(self, daily: pd.DataFrame, factors: pd.DataFrame) -> None:
+        self.daily = daily
+        self.factors = factors
+
+    def query(self, api_name: str, **kwargs: Any) -> pd.DataFrame:
+        frame = self.daily if api_name == "daily" else self.factors
+        start, end = kwargs.get("start_date"), kwargs.get("end_date")
+        out = frame.copy()
+        if start:
+            out = out[out["trade_date"] >= pd.Timestamp(start)]
+        if end:
+            out = out[out["trade_date"] <= pd.Timestamp(end)]
+        return out
+
+
+def _factors_for(days: list[str]) -> pd.DataFrame:
+    return pd.DataFrame({"trade_date": [pd.Timestamp(d) for d in days], "adj_factor": [2.0, 4.0, 8.0][: len(days)]})
+
+
+@pytest.fixture()
+def dataset_env(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """隔离的缓存目录 + 固定“今天”=2024-01-03（当日最后一根 bar 也是 01-03）。"""
+    monkeypatch.setattr(market, "DAILY_DIR", tmp_path)
+    monkeypatch.setattr(market, "_DAILY_MEM", {})
+    monkeypatch.setattr(market, "_today", lambda: pd.Timestamp("2024-01-03"))
+    monkeypatch.setattr(
+        market, "last_open_date", lambda x: min(pd.Timestamp(x).normalize(), pd.Timestamp("2024-01-03"))
+    )
+    return tmp_path
+
+
+def _dataset_meta(root: Any) -> dict[str, Any]:
+    return json.loads((root / "_dataset" / "adj=qfq" / "_meta.json").read_text(encoding="utf-8"))
+
+
+def test_dataset_end_beyond_last_bar_stops_at_last_open_date(dataset_env: Any) -> None:
+    """请求 end 超过已收盘交易日时，数据集截止到 last_open_date，不留未来行。"""
+    client = _DatasetClient(_daily_frame(DATES), _factors_for(DATES))
+    market.load_daily(CODE, start="2024-01-02", end="2024-01-10", adj="qfq", client=client)
+
+    out = market.scan_daily([CODE], start="2024-01-02", end="2024-01-10", adj="qfq")
+
+    assert _dataset_meta(dataset_env)["end_eff"] == "20240103"
+    assert pd.Timestamp(out["trade_date"].max()) == pd.Timestamp("2024-01-03")
+    assert len(out) == len(DATES)
+
+
+def test_dataset_expires_across_days_and_refetches(dataset_env: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """跨日后旧数据集必须失效（ADR-011 fetched_at 语义），并重新拉取当日行情。"""
+    seed = _DatasetClient(_daily_frame(DATES), _factors_for(DATES))
+    market.load_daily(CODE, start="2024-01-02", end="2024-01-03", adj="qfq", client=seed)
+    market.scan_daily([CODE], start="2024-01-02", end="2024-01-03", adj="qfq")
+    assert market.dataset_status("qfq")["usable"] is True
+
+    monkeypatch.setattr(market, "_today", lambda: pd.Timestamp("2024-01-04"))
+    monkeypatch.setattr(market, "last_open_date", lambda x: pd.Timestamp(x).normalize())
+    monkeypatch.setattr(market, "_DAILY_MEM", {})  # 新进程：内存缓存不掩盖失效
+    assert market.dataset_status("qfq")["usable"] is False
+
+    days = [*DATES, "2024-01-04"]
+    fresh = _DatasetClient(_daily_frame(days), _factors_for(days))
+    monkeypatch.setattr(market, "get_client", lambda: fresh)
+    out = market.scan_daily([CODE], start="2024-01-02", end="2024-01-04", adj="qfq")
+
+    assert pd.Timestamp(out["trade_date"].max()) == pd.Timestamp("2024-01-04")
+    assert _dataset_meta(dataset_env)["end_eff"] == "20240104"
+    assert market.dataset_status("qfq")["usable"] is True
+
+
+def test_expired_dataset_never_serves_stale_rows_when_refetch_fails(
+    dataset_env: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """失效且补数失败时必须显式报错，而不是把昨天的快照当今天的数据返回。"""
+    seed = _DatasetClient(_daily_frame(DATES), _factors_for(DATES))
+    market.load_daily(CODE, start="2024-01-02", end="2024-01-03", adj="qfq", client=seed)
+    market.scan_daily([CODE], start="2024-01-02", end="2024-01-03", adj="qfq")
+
+    monkeypatch.setattr(market, "_today", lambda: pd.Timestamp("2024-01-04"))
+    monkeypatch.setattr(market, "last_open_date", lambda x: pd.Timestamp(x).normalize())
+    monkeypatch.setattr(market, "_DAILY_MEM", {})
+    monkeypatch.setattr(market, "get_client", lambda: (_ for _ in ()).throw(TushareError("network down")))
+
+    diagnostics: list[dict[str, Any]] = []
+    with pytest.raises(TushareError, match="扫描日线失败"):
+        market.scan_daily([CODE], start="2024-01-02", end="2024-01-04", adj="qfq", diagnostics=diagnostics)
+    assert diagnostics and diagnostics[0]["code"] == CODE
