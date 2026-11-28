@@ -324,6 +324,30 @@ def test_handoff_doc_covers_every_manifest_item(manifest: dict[str, Any]) -> Non
     assert "tools/check_thesis_sync.py" in text
 
 
+def test_validate_requires_evidence_for_closed_gate(manifest: dict[str, Any]) -> None:
+    payload = copy.deepcopy(manifest)
+    payload["pending_gates"][0]["status"] = "closed"
+    errors = validate_manifest(payload)
+    assert any("已关闭但缺少 closed_at" in error for error in errors)
+    assert any("已关闭但缺少 evidence" in error for error in errors)
+
+
+def test_plan_links_gate_closed_with_evidence(manifest: dict[str, Any]) -> None:
+    gates = {gate["id"]: gate for gate in manifest["pending_gates"]}
+    gate = gates["gate-thesis-plan-links"]
+    assert gate["status"] == "closed"
+    assert gate["closed_at"] == "2026-11-28"
+    assert "plan-20261123-005" in gate["evidence"]
+    assert "已关闭（2026-11-28）" in HANDOFF.read_text(encoding="utf-8")
+
+
+def test_thesis_result_gates_stay_open(manifest: dict[str, Any]) -> None:
+    gates = {gate["id"]: gate for gate in manifest["pending_gates"]}
+    for gate_id in ("gate-thesis-005-formal", "gate-thesis-006-final"):
+        assert gates[gate_id]["status"] == "open"
+        assert gates["gate-panel-hash"]["status"] == "watch"
+
+
 def test_manifest_and_module_agree_on_paths() -> None:
     assert (ROOT / thesis_sync.MANIFEST_RELATIVE).is_file()
     assert (ROOT / thesis_sync.HANDOFF_RELATIVE).is_file()

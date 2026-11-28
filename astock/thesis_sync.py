@@ -283,6 +283,10 @@ def _validate_gates(gates: Any) -> list[str]:
                 errors.append(f"pending_gates[{idx}].{key} 必须是非空字符串")
         if gate.get("status") not in {"open", "closed", "watch"}:
             errors.append(f"pending_gates[{idx}].status 必须是 open / closed / watch")
+        if gate.get("status") == "closed":
+            for key in ("closed_at", "evidence"):
+                if not isinstance(gate.get(key), str) or not gate[key]:
+                    errors.append(f"pending_gates[{idx}] 已关闭但缺少 {key}（关闭闸门必须留证据）")
     return errors
 
 

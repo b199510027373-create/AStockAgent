@@ -75,7 +75,7 @@
 2. **数字只出现一次**：同一指标在产品文档里必须直接引用论文数并注明“论文口径 + 样本期”；不允许四舍五入后再造一个数。
 3. **面板或方向表变更**：改 `panel.sha256` / `direction_table.version`（`gate-panel-hash` 触发）→ 冻结一切既有引用 → 论文侧重跑 → 更新 `citable.evidence` → 产品侧重新跑 `tools/check_thesis_sync.py --check`。未走完流程前不发布数字。
 4. **闸门**：`gate-thesis-005-formal`（正式版未落地）与 `gate-thesis-006-final`（论文未定稿）未关闭时，对外材料标“工作稿”，只引用 §3.1。
-5. **论文侧计划 links 闸门** `gate-thesis-plan-links`：论文会话执行 `python tools/apply_thesis_plan_links.py --root D:\毕业论文` 后关闭；此前只声明产品侧已挂 links。
+5. **论文侧计划 links 闸门** `gate-thesis-plan-links`：已关闭（2026-11-28）。plan-20261123-005/006 均已写入 `fact_source` / `handoff` / `sync_check` / `data` / `counterpart_plan` 五键（写前备份 `*.json.bak`），复跑 `--dry-run` 返回 SKIP，`tools/check_thesis_sync.py` 仍为 OK。后续论文侧若改 links，只需重跑同一命令（只增不改）。
 
 ---
 
@@ -85,7 +85,7 @@
 `plan-20261128-006` 的 `links` 增加 `fact_source`、`handoff`、`module`、`checker`、`tests`、`test`、`thesis_plans`；
 `plan-20261128-002/003/014` 与 `plan-20261128-001/005` 增加 `fact_source`、`handoff`（002/003/014 另加 `sync_check`）。
 
-论文侧（`D:\毕业论文\.devloop`，本会话实测只读）：一条命令合并，只增不改、自动备份。脚本内容来自 manifest 的 `thesis_link_patch`：
+论文侧（`D:\毕业论文\.devloop`）：**已合并（2026-11-28）**，`plan-20261123-005` 与 `plan-20261123-006` 的 `links` 已写入下面五个键，写前各留一份 `*.json.bak`；复跑 `--dry-run` 返回 SKIP（幂等）。脚本内容来自 manifest 的 `thesis_link_patch`，只增不改：
 
 ```powershell
 cd C:\Users\b1995\Documents\AStockAgent
@@ -106,6 +106,8 @@ python tools/apply_thesis_plan_links.py --root D:\毕业论文             # 写
 ```
 
 冲突规则：已存在同名 key 且值不同 → 报 `links.<key> 已存在且不同` 并退出 1，不覆盖；先人工对齐再重跑。
+
+写入权限提示：本仓库 `.venv` 里的 python 写 `D:\毕业论文` 会被系统拒绝（`PermissionError: [Errno 13]`），而同一目录用 `C:\Anaconda\python.exe` 或 PowerShell 可写；论文会话在自己环境执行即可，无需改脚本。
 
 ---
 

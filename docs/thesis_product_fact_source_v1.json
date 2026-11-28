@@ -271,10 +271,12 @@
     },
     {
       "id": "gate-thesis-plan-links",
-      "status": "open",
+      "status": "closed",
       "blocks": "论文侧计划项仍不带事实源 links 时的“两边同源”声明",
       "until": "论文会话执行 tools/apply_thesis_plan_links.py --root D:\\毕业论文 并复跑 tools/check_thesis_sync.py",
-      "fallback": "只声明产品侧已挂 links；论文侧以本文件 thesis_link_patch 为准"
+      "fallback": "只声明产品侧已挂 links；论文侧以本文件 thesis_link_patch 为准",
+      "closed_at": "2026-11-28",
+      "evidence": "plan-20261123-005/006 已写入 fact_source/handoff/sync_check/data/counterpart_plan 五键（备份 *.json.bak）；复跑 apply --dry-run 返回 SKIP（幂等）；tools/check_thesis_sync.py 仍为 OK"
     }
   ],
   "citable": [
