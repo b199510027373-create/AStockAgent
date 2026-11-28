@@ -168,7 +168,7 @@ test_heartbeat_dedup_uses_persisted_alert_file` 覆盖“最后一条为同签�
 | 命令 | 结果 |
 | --- | --- |
 | `python -m pytest tests/test_scheduler_ledger.py tests/test_hardening.py tests/test_data_pit_events.py -q` | **79 passed**（50 + 29），1 warning，22.60s |
-| `python -m mypy astock app.py` | Success: no issues found in 45 source files |
+| `python -m mypy astock app.py` | Success: no issues found in 46 source files |
 
 2026-11-27 在 `84f459c` 上的全量结果（此后代码未变，仅文档/plan 元数据提交）：
 `tests/test_scheduler_ledger.py tests/test_hardening.py -q` → 50 passed；`tests -q` →

@@ -1,0 +1,41 @@
+{
+  "id": "plan-20261128-003",
+  "title": "产品组合层：波动率目标、约束与成本",
+  "description": "P1 组合层：在推荐结果之上做波动率目标、行业/市值/beta 约束、单票上限、换手与成本控制；先做约束型组合，不做均值方差/风险平价优化器。与论文 003/005 协调：使用同一 panel/因子，不重跑论文实证。",
+  "status": "todo",
+  "priority": "P1",
+  "milestone": "ms-product",
+  "owner": "human",
+  "start": "2026-12-08",
+  "due": "2026-12-12",
+  "estimateH": 16,
+  "progress": 0,
+  "acceptance": [
+    "组合输出含波动率目标、行业/市值/beta 约束、单票上限与换手/成本",
+    "约束前后对比可复现，权重与净值可追溯到同一 run",
+    "不引入均值方差优化器；先把约束做对",
+    "有单测；不改变已有 TopN 排序"
+  ],
+  "tags": [
+    "wave-2",
+    "thesis-coordinated"
+  ],
+  "deps": [
+    "plan-20261128-002"
+  ],
+  "links": {
+    "files": [
+      "astock/recommend.py",
+      "astock/recommend_ui.py",
+      "tests/test_research_semantics.py"
+    ],
+    "docs": [
+      "D:\\毕业论文\\论文需要\\M1_合成诊断缩小版交付说明_v3.md"
+    ],
+    "fact_source": "docs/thesis_product_fact_source_v1.json",
+    "handoff": "docs/AStockAgent_thesis_product_handoff_v1.md",
+    "sync_check": "tools/check_thesis_sync.py"
+  },
+  "createdAt": "2026-11-27T20:47:20.415Z",
+  "updatedAt": "2026-11-27T21:21:42.106Z"
+}

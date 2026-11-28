@@ -52,7 +52,8 @@ MYPY_UI_WHITELIST = {
 # 白名单里，因此同样受 mypy 检查（UI 白名单只豁免历史 Gradio 模块）。
 # plan-20261114-002 新增 astock/agent/chart_service.py（QL5 唯一审计入口，非 UI，受检）。
 # plan-20261107-009 新增 astock/agent/evals.py（离线评测 harness，非 UI，受检）。
-EXPECTED_CHECKED_MODULES = 44
+# plan-20261128-006 新增 astock/thesis_sync.py（产品×论文事实源校验，非 UI，受检）。
+EXPECTED_CHECKED_MODULES = 45
 
 
 def _ci() -> dict[str, Any]:

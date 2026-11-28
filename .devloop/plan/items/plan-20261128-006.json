@@ -1,0 +1,44 @@
+{
+  "id": "plan-20261128-006",
+  "title": "产品×论文协同：数据版本、因子口径与结果交接",
+  "description": "产品×论文协同：统一 panel v2、因子方向与结果交接。明确论文 005 正式版/006 论文交付与产品 002 证据链/003 组合层/014 实盘复核的边界；产品只引用论文已定稿结果，不另跑一套实证；冲突时以论文定稿口径为准。",
+  "status": "doing",
+  "priority": "P1",
+  "milestone": "ms-product",
+  "owner": "human",
+  "start": "2026-11-29",
+  "due": "2026-11-30",
+  "estimateH": 4,
+  "progress": 10,
+  "acceptance": [
+    "产品与论文使用同一 panel_monthly_v2 与因子方向表，不重复造数",
+    "明确论文 005 正式版/006 论文交付与产品 002/003/014 的输入输出边界",
+    "有一页交接说明，列明哪些结果可以对外引用、哪些不能",
+    "后续两边计划只引用同一事实源，冲突时以论文定稿口径为准"
+  ],
+  "tags": [
+    "coordination",
+    "thesis-coordinated"
+  ],
+  "deps": [],
+  "links": {
+    "docs": [
+      "D:\\毕业论文\\论文需要\\M1_论文总体框架_交接文档_给框架会话_v1.0.md",
+      "D:\\毕业论文\\论文需要\\M1_合成诊断缩小版交付说明_v3.md",
+      "D:\\毕业论文\\论文需要\\M1_研究局限与边际性分析_v1.0.md"
+    ],
+    "fact_source": "docs/thesis_product_fact_source_v1.json",
+    "handoff": "docs/AStockAgent_thesis_product_handoff_v1.md",
+    "module": "astock/thesis_sync.py",
+    "checker": "tools/check_thesis_sync.py",
+    "tests": "tests/test_thesis_sync.py",
+    "test": "pytest tests/test_thesis_sync.py -q -> 24 passed; ruff check astock/thesis_sync.py tools/check_thesis_sync.py tests/test_thesis_sync.py -> All checks passed; mypy -> no issues; tools/check_thesis_sync.py -> ok (panel sha256 28d06335aed752842f2014d15a84940d8e7507d893fa50e22f1aa7cbe07108c8, 671631 rows, 3 direction copies matched)",
+    "thesis_plans": [
+      "plan-20261123-005",
+      "plan-20261123-006"
+    ]
+  },
+  "createdAt": "2026-11-27T20:47:34.909Z",
+  "updatedAt": "2026-11-27T21:21:37.752Z",
+  "devSessionId": "session-c6119bd6-8400-4295-8ffa-b42c56163c98"
+}

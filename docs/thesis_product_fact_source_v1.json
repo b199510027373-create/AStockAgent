@@ -1,0 +1,420 @@
+{
+  "schema_version": 1,
+  "id": "thesis-product-fact-source",
+  "version": "1.0.0",
+  "status": "v1-frozen",
+  "generated_at": "2026-11-28T06:05:00+08:00",
+  "owner_plan": "plan-20261128-006",
+  "purpose": "产品与论文的唯一事实源：面板版本、因子方向表、可引用/不可引用结果、两边的输入输出边界。产品只引用本文已定稿条目，不另跑一套实证。",
+  "conflict_rule": {
+    "authority": "thesis-caliber",
+    "statement": "产品与论文引用同一事实源；口径冲突时以论文定稿口径为准（论文 006 定稿后以该文档为准，定稿前以论文 005 正式版产物为准）。产品不得改写数字、不得四舍五入后另立一套、不得用产品样本替代论文样本。",
+    "tie_breakers": [
+      "同一指标在论文与产品都有数：引用论文数，并注明论文口径与样本期",
+      "产品新增数只在 product_only 区出现，且必须带 product-observation 标签",
+      "无法判定时停在 pending_gates，不发布数字"
+    ]
+  },
+  "panel": {
+    "id": "panel_monthly_v2",
+    "contract": "v2",
+    "root": "D:\\毕业论文\\论文需要\\data",
+    "file": "panel_monthly_v2.parquet",
+    "sha256": "28d06335aed752842f2014d15a84940d8e7507d893fa50e22f1aa7cbe07108c8",
+    "rows": 671631,
+    "columns": 40,
+    "codes": 5431,
+    "months": 192,
+    "start": "2010-01-29",
+    "end": "2025-12-31",
+    "gate": "passed",
+    "gate_evidence": "D:\\毕业论文\\论文需要\\数据契约v2_第4轮修复证据_v1.md §7.2（build 22:13，panel 671,631 行 / 5,431 只 / 192 月；survival PASS(136/112/2/0)；pit max_diff 0）",
+    "caliber_doc": "D:\\毕业论文\\论文需要\\README_v2.md",
+    "superseded": [
+      {
+        "id": "panel_monthly",
+        "file": "panel_monthly.parquet",
+        "scope": "60 个月 / 989 只 / 2021-01..2025-12",
+        "use": "只用于缩小版诊断（v3）；不得作为正式版或产品面板"
+      }
+    ],
+    "calibers": {
+      "price": "后复权 hfq，基准=各股首个缓存交易日 adj_factor",
+      "universe": "全 A 含退市、剔除北交所，月末 PIT",
+      "tradeable": "!suspended & listed_months>=6 & !is_st",
+      "investable": "tradeable & !limit_up_open & !limit_down_open",
+      "benchmark": "000300.SH",
+      "amount_m": "元",
+      "ret_std_d": "日收益标准差，ddof=1",
+      "total_mv_circ_mv_free_float_mv": "万元；表格展示除以 1e4 换算为亿",
+      "fwd_ret_1m": "退市/停牌用 last_trade 收盘价；fwd_ret_src 标记来源",
+      "industry_l1": "SW2021；跨 2021-12-13 的行业结论必须按版本分段陈述"
+    },
+    "required_columns": [
+      "date",
+      "code",
+      "close_hfq",
+      "ret_1m",
+      "fwd_ret_1m",
+      "bench_ret_1m",
+      "industry_l1",
+      "total_mv",
+      "circ_mv",
+      "free_float_mv",
+      "tradeable",
+      "investable",
+      "momentum_20",
+      "momentum_60",
+      "reversal_5",
+      "volatility_20",
+      "volume_ratio",
+      "amount_ratio",
+      "amihud_20",
+      "ma_gap_20",
+      "rsi_14",
+      "macd_hist",
+      "atr_pct",
+      "turnover_20"
+    ]
+  },
+  "direction_table": {
+    "id": "factor_directions",
+    "version": "b40-v1",
+    "rows": 40,
+    "source_of_truth": "D:\\毕业论文\\M1_合成诊断代码\\compose\\types.py::DIRECTIONS",
+    "exported_by": "D:\\毕业论文\\M1_合成诊断代码\\compose\\backtest.py:511（_factor_table().to_csv(out_dir/\"factor_directions.csv\")）",
+    "base12_source": "D:\\毕业论文\\论文需要\\data\\factor_def_v2.csv（列 factor, direction）",
+    "export_paths": [
+      "D:\\毕业论文\\论文需要\\M1_合成诊断缩小版_v3_rerun_20261125\\factor_directions.csv",
+      "D:\\毕业论文\\论文需要\\M1_合成诊断缩小版_v3\\factor_directions.csv",
+      "D:\\毕业论文\\论文需要\\M1_合成诊断缩小版_v2\\factor_directions.csv"
+    ],
+    "export_note": "2026-11-28 核对：上述 3 份副本与 .tmp 下 2 份历史副本 sha256 前 12 位均为 FEB0C332681C（688 字节，40 行）；校验器对每个存在的副本逐一比对，任一不一致即 invalid。",
+    "semantics": "direction 是事前经济方向：乘到原始特征后再做截面标准化，使“越大越预期高超额”。-1 表示反向使用，不是“因子无效”。",
+    "base": {
+      "momentum_20": 1.0,
+      "momentum_60": 1.0,
+      "reversal_5": 1.0,
+      "volatility_20": -1.0,
+      "volume_ratio": -1.0,
+      "amount_ratio": -1.0,
+      "amihud_20": -1.0,
+      "ma_gap_20": 1.0,
+      "rsi_14": -1.0,
+      "macd_hist": 1.0,
+      "atr_pct": -1.0,
+      "turnover_20": -1.0
+    },
+    "derived": {
+      "ret_1m": 1.0,
+      "ret_3m": 1.0,
+      "ret_6m": 1.0,
+      "ret_12m": 1.0,
+      "vol_3m": -1.0,
+      "vol_6m": -1.0,
+      "vol_12m": -1.0,
+      "max_dd_6m": 1.0,
+      "max_dd_12m": 1.0,
+      "skew_6m": 1.0,
+      "skew_12m": 1.0,
+      "kurt_6m": -1.0,
+      "kurt_12m": -1.0,
+      "turnover_mean_3m": -1.0,
+      "turnover_std_3m": -1.0,
+      "turnover_trend": -1.0,
+      "amihud_mean_3m": -1.0,
+      "amihud_std_6m": -1.0,
+      "volume_ratio_3m": -1.0,
+      "amount_ratio_3m": -1.0,
+      "ma_gap_60": 1.0,
+      "price_position_12m": 1.0,
+      "beta_12m": -1.0,
+      "corr_12m": -1.0,
+      "idio_vol_12m": -1.0,
+      "log_total_mv": -1.0,
+      "log_circ_mv": -1.0,
+      "circ_ratio": 1.0
+    },
+    "supplement": {
+      "amount_m": -1.0,
+      "ret_std_d": -1.0,
+      "free_float_mv": -1.0
+    },
+    "note": "base 12 行必须与 factor_def_v2.csv 的 direction 逐行一致；derived 28 行由 compose/features.py 从 panel_monthly_v2 的 close_hfq/ret_1m/bench_ret_1m/total_mv/circ_mv 构造（月频近似），不是 panel 的原始列。"
+  },
+  "roles": {
+    "thesis-005": {
+      "plan": "plan-20261123-005",
+      "owner": "thesis",
+      "title": "正式版：180 个月全 A 五层与频率衰减",
+      "inputs": [
+        "panel_monthly_v2（只读，按 sha256 固定）",
+        "direction_table（base 12 + derived 28）",
+        "日线缓存（FIP 等季频特征）",
+        "compose 代码（DEFAULT_PANEL 须从 panel_monthly.parquet 切到 panel_monthly_v2.parquet）"
+      ],
+      "outputs": [
+        "正式版结果目录（summary.csv / factor_directions.csv / 表图 / 哈希清单）",
+        "中性化与 bootstrap 口径说明",
+        "可复现哈希"
+      ],
+      "forbidden": [
+        "沿用 60 个月缩小版数字冒充正式版",
+        "改动 direction_table 而不升 version",
+        "把产品台账数据并入论文样本"
+      ],
+      "status": "pending"
+    },
+    "thesis-006": {
+      "plan": "plan-20261123-006",
+      "owner": "thesis",
+      "title": "论文交付：方法、结果与限制（v5 口径）",
+      "inputs": [
+        "thesis-005 正式版产物",
+        "M1_论文总体框架 v1.0",
+        "M1_研究局限与边际性分析 v1.0"
+      ],
+      "outputs": [
+        "论文正文/表/图/附录",
+        "口径与版本对照说明",
+        "open items 清单"
+      ],
+      "forbidden": [
+        "表图与代码版本脱钩",
+        "写入 not_citable 中的任一条",
+        "在正文与附录使用两套数字"
+      ],
+      "status": "pending"
+    },
+    "product-002": {
+      "plan": "plan-20261128-002",
+      "owner": "product",
+      "title": "产品证据链：推荐详情、批次复盘与可追溯导出",
+      "inputs": [
+        "panel_monthly_v2（只读；经 astock/thesis_sync.py 校验后使用）",
+        "SQLite 台账 data/astock.db（LEDGER-01 事实源）",
+        "推荐/回测既有 run"
+      ],
+      "outputs": [
+        "run_id / evidence_id 级追溯链",
+        "TopN 后续表现、超额、命中率、回撤复盘",
+        "可导出证据包"
+      ],
+      "forbidden": [
+        "重跑论文实证或另建面板",
+        "改动排序逻辑后宣称 alpha",
+        "把产品复盘数写成论文结论"
+      ],
+      "status": "pending"
+    },
+    "product-003": {
+      "plan": "plan-20261128-003",
+      "owner": "product",
+      "title": "产品组合层：波动率目标、约束与成本",
+      "inputs": [
+        "product-002 证据链",
+        "panel_monthly_v2（波动率/流动性字段）",
+        "成本模型"
+      ],
+      "outputs": [
+        "组合权重与约束配置",
+        "换手/成本报告"
+      ],
+      "forbidden": [
+        "引入均值-方差优化器",
+        "用组合层结果反推因子有效性",
+        "自建因子方向表"
+      ],
+      "status": "pending"
+    },
+    "product-014": {
+      "plan": "plan-20261103-014",
+      "owner": "product",
+      "title": "实盘样本复核：20+ 批次显著性重跑",
+      "inputs": [
+        "台账实盘批次（live 20 条）",
+        "product-002 统计口径"
+      ],
+      "outputs": [
+        "实盘样本显著性复核报告（product-observation 口径）",
+        "有效独立样本数与隐藏 p 的说明"
+      ],
+      "forbidden": [
+        "把实盘复核当作论文实证",
+        "与论文数字合并成一个结论",
+        "在 n<10 时显示 p 值"
+      ],
+      "status": "pending"
+    }
+  },
+  "pending_gates": [
+    {
+      "id": "gate-thesis-005-formal",
+      "status": "open",
+      "blocks": "任何 v2/180 个月正式结果的外发引用",
+      "until": "论文 005 正式版产物落地并写入本文件 citable",
+      "fallback": "只可引用缩小版（60 个月 / 989 只 / 23 个样本外月），且必须带样本标签"
+    },
+    {
+      "id": "gate-thesis-006-final",
+      "status": "open",
+      "blocks": "对外 PDF / GitHub 描述 / 面试材料的定稿措辞",
+      "until": "论文 006 定稿并把表格映射到代码版本",
+      "fallback": "对外材料标注“工作稿”，只引用 citable 条目"
+    },
+    {
+      "id": "gate-panel-hash",
+      "status": "watch",
+      "blocks": "面板 sha256 变化后的一切既有数字",
+      "until": "论文侧重跑并更新 panel.sha256 与 citable 证据",
+      "fallback": "冻结引用，先不动产品文案"
+    },
+    {
+      "id": "gate-thesis-plan-links",
+      "status": "closed",
+      "blocks": "论文侧计划项仍不带事实源 links 时的“两边同源”声明",
+      "until": "论文会话执行 tools/apply_thesis_plan_links.py --root D:\\毕业论文 并复跑 tools/check_thesis_sync.py",
+      "fallback": "只声明产品侧已挂 links；论文侧以本文件 thesis_link_patch 为准",
+      "closed_at": "2026-11-28",
+      "evidence": "plan-20261123-005/006 已写入 fact_source/handoff/sync_check/data/counterpart_plan 五键（备份 *.json.bak）；复跑 apply --dry-run 返回 SKIP（幂等）；tools/check_thesis_sync.py 仍为 OK"
+    }
+  ],
+  "citable": [
+    {
+      "id": "panel-v2-caliber",
+      "statement": "面板 v2：671,631 行 × 40 列、5,431 只、192 个月（2010-01-29..2025-12-31），contract v2、gate=passed、sha256 28d06335…",
+      "evidence": "D:\\毕业论文\\论文需要\\数据契约v2_第4轮修复证据_v1.md §7.2；README_v2.md",
+      "owner": "thesis-005",
+      "label": "数据口径"
+    },
+    {
+      "id": "factor-direction-base12",
+      "statement": "12 个基础因子的事前方向与 factor_def_v2.csv 一致（动量/反转/均线/ MACD 为正，波动/量比/额比/Amihud/RSI/ATR/换手为负），另 3 个补充字段 amount_m/ret_std_d/free_float_mv 方向均为 −1",
+      "evidence": "factor_def_v2.csv；compose/types.py DIRECTIONS；factor_directions.csv（40 行）",
+      "owner": "thesis-005",
+      "label": "因子口径"
+    },
+    {
+      "id": "reduced-v3-method",
+      "statement": "缩小版方法链路（特征→模型→top-10 组合→累计超额→成本→t 统计）闭合，54/54 项可由不 import compose 的独立脚本复算",
+      "evidence": "M1_合成诊断缩小版交付说明_v3.md §9.4、§10",
+      "owner": "thesis-005",
+      "label": "缩小版，不可外推"
+    },
+    {
+      "id": "reduced-v3-results",
+      "statement": "缩小版（60 个月、989 只、23 个样本外月）：五层 mean IC 全为正但不显著（IC t 0.22–0.52），净收益四负一正，没有一层取得统计显著超额；lgbm_40 必须双口径引用：剔除不可观测持仓 +1.84%/月（t=1.87），按 −100% 记账 −9.83%/月",
+      "evidence": "M1_合成诊断缩小版交付说明_v3.md §3、§9.2",
+      "owner": "thesis-005",
+      "label": "缩小版，不可外推；引用必须同时给出两个缺失口径"
+    },
+    {
+      "id": "random-label-null",
+      "statement": "10 个随机标签种子的对照 |z|<1，真实 IC 未超出打乱标签分布",
+      "evidence": "M1_合成诊断缩小版交付说明_v3.md §5",
+      "owner": "thesis-005",
+      "label": "缩小版"
+    },
+    {
+      "id": "synthetic-recovery",
+      "statement": "合成实验：衰减估计器 RMSE 1.2–1.9 月；零信号下 81.5% 不会被误报为可估",
+      "evidence": "M1_合成诊断缩小版交付说明_v3.md §8",
+      "owner": "thesis-005",
+      "label": "合成数据，不是 A 股实证"
+    },
+    {
+      "id": "limitation-set",
+      "statement": "边界集合：单基准 000300.SH、单市场、滚动 Top500+HS300 近似池（非全 A）、未做行业/市值/beta 中性化、free_float_mv 缺失用 circ_mv 近似、SW2021 轻微前视、成本仅平方根冲击、100+ 组结果未做多重比较校正",
+      "evidence": "M1_合成诊断缩小版交付说明_v3.md §9；M1_研究局限与边际性分析_v1.0.md §1",
+      "owner": "thesis-006",
+      "label": "必须随任何引用一起出现"
+    }
+  ],
+  "product_only": [
+    {
+      "id": "live-sample-observation",
+      "statement": "产品侧 39 个批次 / 195 条记录（实盘 20 条、技术分回填 175 条）：Top2−其余 T+1 绝对超额 +0.34pp（p≈0.197），T+5/T+20 有效独立样本约 6.8/1.0，p 值隐藏",
+      "evidence": "docs/AStockAgent_research_conclusions_v1.3.md §2–§3",
+      "owner": "product-002",
+      "label": "product-observation：产品样本，不是论文实证样本；不得写入论文结果章"
+    },
+    {
+      "id": "product-walkforward",
+      "statement": "产品侧 walk-forward 连续回测跑输沪深300；1 年沪深300 PIT 下 11 个技术因子无 BH 显著项",
+      "evidence": "docs/AStockAgent_research_conclusions_v1.3.md §4–§5",
+      "owner": "product-002",
+      "label": "product-observation：口径与论文不同，不能写成“论文证明策略无效”"
+    }
+  ],
+  "not_citable": [
+    {
+      "id": "lgbm-22pct",
+      "statement": "“lgbm_40 有效 / 年化 22%”",
+      "reason": "t=1.87、随机标签 z=0.94，且符号完全落在缺失收益口径区间内（+1.84% … −9.83%）",
+      "instead": "按 reduced-v3-results 双口径陈述"
+    },
+    {
+      "id": "ridge12-reverse",
+      "statement": "“ridge_12 反向有效”",
+      "reason": "净 t=−2.15 未做多重比较校正，且同一层 IC 为正，不能解释为反向选股能力",
+      "instead": "只说“净收益显著为负、最可能来自成本与市值暴露”"
+    },
+    {
+      "id": "smallcap-beta-tilt",
+      "statement": "“模型偏好小市值 / 高 beta”",
+      "reason": "v3 主口径显示相反（偏大市值 1.3–3.6 倍、beta 接近全截面）；合并中位数口径下 equal_12/lgbm_40 市值倍数 <1",
+      "instead": "按估计量分别陈述，或直接不写暴露结论"
+    },
+    {
+      "id": "half-life-2m",
+      "statement": "“半衰期约 2 个月”",
+      "reason": "五层均不可估；估计器 RMSE 与真值同量级",
+      "instead": "写“不可估”，并引用 synthetic-recovery 的不确定度"
+    },
+    {
+      "id": "alla-180m-live-extrapolation",
+      "statement": "把缩小版结论外推到全 A / 180 个月 / 实盘",
+      "reason": "缩小版是 60 个月、989 只、滚动 Top500+HS300 近似池，与正式版口径不同",
+      "instead": "等 gate-thesis-005-formal 关闭后引用正式版"
+    },
+    {
+      "id": "product-live-as-thesis-evidence",
+      "statement": "把产品 195 条记录（含回填 175 条）当作论文实证样本",
+      "reason": "实盘仅 20 条、T+5/T+20 有效独立样本约 6.8/1.0；回填批次事件分固定 50，只检验技术分排序",
+      "instead": "论文用面板 v2；产品数只作 product_only 引用"
+    },
+    {
+      "id": "synthetic-as-ashare-evidence",
+      "statement": "用合成面板的诊断结论证明“事件驱动因子在 A 股有效”",
+      "reason": "合成数据只验证管道与估计器，不是 A 股实证",
+      "instead": "写“方法可运行”，不写“因子有效”"
+    },
+    {
+      "id": "sw-cross-version-ic",
+      "statement": "跨 2021-12-13 直接比较行业 IC / 行业中性化结果",
+      "reason": "全 A 31.14% 股票换标签、沪深300 14.70% 权重换标签（结构性 10.05%）",
+      "instead": "按 SW2014 / SW2021 分段陈述，或使用行业对级 crosswalk"
+    }
+  ],
+  "thesis_link_patch": {
+    "note": "论文侧 .devloop 在 D:\\毕业论文，不在本仓库；由论文会话执行 `python tools/apply_thesis_plan_links.py --root D:\\毕业论文` 合并（只增不改，自动备份）。2026-11-28 产品会话实测该目录对本会话只读（PermissionError），因此没有在本会话直接改论文计划项。",
+    "plan-20261123-005": {
+      "links": {
+        "fact_source": "C:\\Users\\b1995\\Documents\\AStockAgent\\docs\\thesis_product_fact_source_v1.json",
+        "handoff": "C:\\Users\\b1995\\Documents\\AStockAgent\\docs\\AStockAgent_thesis_product_handoff_v1.md",
+        "sync_check": "C:\\Users\\b1995\\Documents\\AStockAgent\\tools\\check_thesis_sync.py",
+        "data": "D:\\毕业论文\\论文需要\\data\\panel_monthly_v2.parquet",
+        "counterpart_plan": "plan-20261128-006"
+      }
+    },
+    "plan-20261123-006": {
+      "links": {
+        "fact_source": "C:\\Users\\b1995\\Documents\\AStockAgent\\docs\\thesis_product_fact_source_v1.json",
+        "handoff": "C:\\Users\\b1995\\Documents\\AStockAgent\\docs\\AStockAgent_thesis_product_handoff_v1.md",
+        "sync_check": "C:\\Users\\b1995\\Documents\\AStockAgent\\tools\\check_thesis_sync.py",
+        "data": "D:\\毕业论文\\论文需要\\data\\panel_monthly_v2.parquet",
+        "counterpart_plan": "plan-20261128-006"
+      }
+    }
+  }
+}

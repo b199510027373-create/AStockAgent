@@ -8,7 +8,7 @@
 
 - CI 已配置、已提交、已推送。
 - GitHub Actions 对应提交已运行完成，结果为 `success`。
-- 质量门禁已深化（plan-20261103-012，2026-11-17；plan-20261117-001 于 2026-11-27 复核）：`ruff check astock tests` 全仓 0 条并 blocking、`mypy astock app.py` 覆盖全部非 UI 模块（45 个源文件 Success）、覆盖率门槛按实测重设为 80.56%（=CI Linux 实测显示值，本地 80.80%），依赖全部精确锁定。
+- 质量门禁已深化（plan-20261103-012，2026-11-17；plan-20261117-001 于 2026-11-27 复核）：`ruff check astock tests` 全仓 0 条并 blocking、`mypy astock app.py` 覆盖全部非 UI 模块（46 个源文件 Success）、覆盖率门槛按实测重设为 80.56%（=CI Linux 实测显示值，本地 80.80%），依赖全部精确锁定。
 - 当前 `main` 与 `origin/main` 一致。
 - 没有提交 `.env`、密钥、虚拟环境、缓存、推荐产物或 Python 字节码。
 
@@ -143,7 +143,7 @@ C:\Users\b1995\Documents\AStockAgent
 ```text
 953 passed, 3 skipped, 6 deselected, 46 subtests passed
 All checks passed!
-Success: no issues found in 45 source files
+Success: no issues found in 46 source files
 ```
 
 ### 4.2 暂存区审计
@@ -184,7 +184,7 @@ https://github.com/b199510027373-create/AStockAgent/actions/runs/41402554097
 - `git ls-files` 未发现 `.env`、`env.env`、`.venv/`、`cache/`、`data/recommendations/`、`__pycache__/`、`*.pyc`；`.env.example` 已跟踪。
 - CI 覆盖「依赖安装（精确锁定）+ 敏感文件检查 + 语法编译 + 全仓 `ruff check astock tests` + `mypy astock app.py` + pytest + 覆盖率门槛（`.coveragerc`，当前 80.56%）」；UI/图表模块在 `.coveragerc` 中排除。
 - 历史基线（2026-11-03，已被取代）：`mypy` 覆盖 22 个源文件；覆盖率 57%（3492 statements / 1493 miss）。
-- 当前基线（2026-11-27 复核，plan-20261117-001，CI run 46047574586）：`mypy astock app.py` = 45 source files Success；`pytest tests -q -m "not png"` 本地 953 passed / 3 skipped / 6 deselected（CI Linux 952 passed / 4 skipped）；覆盖率 CI Linux 12474/2425 = 80.56%（门禁权威值）、本地 12474/2395 = 80.80%。
+- 当前基线（2026-11-27 复核，plan-20261117-001，CI run 46047574586）：`mypy astock app.py` = 46 source files Success；`pytest tests -q -m "not png"` 本地 953 passed / 3 skipped / 6 deselected（CI Linux 952 passed / 4 skipped）；覆盖率 CI Linux 12474/2425 = 80.56%（门禁权威值）、本地 12474/2395 = 80.80%。
 
 ## 5. 安全红线
 

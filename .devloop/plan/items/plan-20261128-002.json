@@ -1,0 +1,43 @@
+{
+  "id": "plan-20261128-002",
+  "title": "产品证据链：推荐详情、批次复盘与可追溯导出",
+  "description": "P0 推荐证据链。把“为什么推这只”做成可追溯页面/接口：数据时点、因子贡献、事件证据、同批对比；批次复盘看 TopN 后续、超额、命中率、回撤；所有数字能回到 run_id/evidence_id。与论文 005/006 协调：共用 panel v2 和现有结果，不另跑一套实证。",
+  "status": "doing",
+  "priority": "P0",
+  "milestone": "ms-product",
+  "owner": "human",
+  "start": "2026-12-01",
+  "due": "2026-12-05",
+  "estimateH": 20,
+  "progress": 5,
+  "acceptance": [
+    "单条推荐详情可追溯到 data_as_of、因子贡献、事件证据与同批对比",
+    "批次复盘输出 TopN 后续收益、超额、命中率、回撤与样本数",
+    "支持 run_id/evidence_id 追溯，能导出单批简报",
+    "新增逻辑有测试；不改变现有推荐排序与 alpha 声明"
+  ],
+  "tags": [
+    "wave-1",
+    "thesis-coordinated"
+  ],
+  "deps": [
+    "plan-20261109-001"
+  ],
+  "links": {
+    "files": [
+      "astock/recommend.py",
+      "astock/recommend_ui.py",
+      "astock/ledger.py",
+      "tests/test_research_semantics.py"
+    ],
+    "docs": [
+      "D:\\毕业论文\\论文需要\\M1_合成诊断缩小版交付说明_v3.md"
+    ],
+    "fact_source": "docs/thesis_product_fact_source_v1.json",
+    "handoff": "docs/AStockAgent_thesis_product_handoff_v1.md",
+    "sync_check": "tools/check_thesis_sync.py"
+  },
+  "createdAt": "2026-11-27T20:47:16.159Z",
+  "updatedAt": "2026-11-27T21:21:41.883Z",
+  "devSessionId": "session-b4aff568-7a2a-4d58-9519-997792f257ee"
+}
