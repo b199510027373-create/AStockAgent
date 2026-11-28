@@ -3,6 +3,7 @@ from __future__ import annotations
 import gradio as gr
 import pandas as pd
 
+from . import recommend as recommend_mod
 from .use_cases import (
     HISTORY_COLUMNS,
     RunResult,
@@ -43,15 +44,36 @@ def banner_markdown() -> str:
     return str(run_alpha_banner().payload.get("banner_md") or "")
 
 
-def run_recommend(
+def _table_codes(table) -> list[str]:
+    if isinstance(table, pd.DataFrame):
+        column = "代码" if "代码" in table.columns else None
+        values = table[column].tolist() if column else []
+    elif isinstance(table, list):
+        values = [row.get("代码") for row in table if isinstance(row, dict)]
+    else:
+        values = []
+    return [str(x) for x in values if x]
+
+
+def _context_outputs(result: RunResult):
+    """6 个结果位 + 当前 run_id + 代码选择器；不改原有 6 元组契约。"""
+    codes = _table_codes(result.payload.get("table"))
+    return (
+        *_outputs(result),
+        str(result.payload.get("run_id") or ""),
+        gr.update(choices=codes, value=codes[0] if codes else None),
+    )
+
+
+def _run_generate(
     universe_text: str,
     top_n: int,
     candidate_n: int,
     news_range: str,
     use_llm: bool,
-    progress=gr.Progress(),  # noqa: B008 - Gradio 回调惯例：Progress 默认实例由框架注入
+    progress,
 ):
-    result = run_recommendation(
+    return run_recommendation(
         mode="generate",
         universe_text=universe_text or "",
         top_n=int(top_n),
@@ -60,12 +82,43 @@ def run_recommend(
         use_llm=bool(use_llm),
         progress=progress,
     )
+
+
+def run_recommend(
+    universe_text: str,
+    top_n: int,
+    candidate_n: int,
+    news_range: str,
+    use_llm: bool,
+    progress=gr.Progress(),  # noqa: B008 - Gradio 回调惯例：Progress 默认实例由框架注入
+):
+    result = _run_generate(
+        universe_text, top_n, candidate_n, news_range, use_llm, progress
+    )
     return _outputs(result)
+
+
+def run_recommend_with_context(
+    universe_text: str,
+    top_n: int,
+    candidate_n: int,
+    news_range: str,
+    use_llm: bool,
+    progress=gr.Progress(),  # noqa: B008
+):
+    result = _run_generate(
+        universe_text, top_n, candidate_n, news_range, use_llm, progress
+    )
+    return _context_outputs(result)
 
 
 def load_latest_ledger():
     """读取台账最近一批；渲染与新鲜度判断都在用例层完成。"""
     return _outputs(run_recommendation(mode="latest"))
+
+
+def load_latest_with_context():
+    return _context_outputs(run_recommendation(mode="latest"))
 
 
 def _initial_history() -> tuple[pd.DataFrame, list[str], str]:
@@ -92,6 +145,42 @@ def load_history_list():
 def load_history_run(run_id: str | None):
     """加载下拉框选中的批次；空选择由用例层给出明确提示。"""
     return _outputs(run_selected_recommendation(run_id))
+
+
+def load_history_run_with_context(run_id: str | None):
+    return _context_outputs(run_selected_recommendation(run_id))
+
+
+def load_detail(run_id: str | None, code: str | None) -> str:
+    """单条推荐的证据链详情；渲染口径全部在 recommend 模块。"""
+    if not run_id:
+        return "请先生成或加载一个批次，再选择代码查看详情。"
+    if not code:
+        return "请选择要查看的代码。"
+    try:
+        return recommend_mod.run_detail_markdown(str(run_id), str(code))
+    except Exception as exc:  # noqa: BLE001 - UI 只展示错误，不吞掉领域异常
+        return f"⚠️ 读取推荐详情失败：{type(exc).__name__}: {exc}"
+
+
+def load_review(run_id: str | None) -> str:
+    if not run_id:
+        return "请先生成或加载一个批次，再做批次复盘。"
+    try:
+        return recommend_mod.run_review_markdown(str(run_id))
+    except Exception as exc:  # noqa: BLE001 - UI 只展示错误，不吞掉领域异常
+        return f"⚠️ 批次复盘失败：{type(exc).__name__}: {exc}"
+
+
+def export_brief(run_id: str | None) -> str | None:
+    """导出单批 Markdown 简报，返回可下载路径。"""
+    if not run_id:
+        return None
+    try:
+        return recommend_mod.export_run_brief(str(run_id))
+    except Exception as exc:  # noqa: BLE001 - UI 只提示失败，不吞掉领域异常
+        gr.Warning(f"导出单批简报失败：{type(exc).__name__}: {exc}")
+        return None
 
 
 def build_recommend_tab() -> gr.Markdown:
@@ -142,35 +231,74 @@ def build_recommend_tab() -> gr.Markdown:
             evidence = gr.Markdown()
         files = gr.File(label="下载结果（CSV / JSON）", file_count="multiple")
 
+        gr.Markdown("### 单条详情 · 批次复盘 · 可追溯导出")
+        with gr.Row():
+            current_run = gr.Textbox(label="当前批次 run_id", interactive=False, scale=3)
+            code_picker = gr.Dropdown(choices=[], label="选择代码", scale=1)
+            detail_btn = gr.Button("查看推荐详情", variant="secondary")
+            review_btn = gr.Button("批次复盘", variant="secondary")
+            brief_btn = gr.Button("导出单批简报", variant="secondary")
+        detail_md = gr.Markdown()
+        review_md = gr.Markdown()
+        brief_file = gr.File(label="单批简报（Markdown）")
+
         detail_outputs = [status, table, report, evidence, files, batch_info]
+        context_outputs = [*detail_outputs, current_run, code_picker]
         history_outputs = [history, run_picker, history_status]
 
-        btn.click(
-            run_recommend,
-            inputs=[universe, top_n, candidate_n, news_range, use_llm],
-            outputs=detail_outputs,
+        def _with_context(event):
+            return event.then(
+                load_detail,
+                inputs=[current_run, code_picker],
+                outputs=[detail_md],
+            )
+
+        _with_context(
+            btn.click(
+                run_recommend_with_context,
+                inputs=[universe, top_n, candidate_n, news_range, use_llm],
+                outputs=context_outputs,
+            )
         ).then(load_history_list, outputs=history_outputs).then(
             banner_markdown, outputs=banner
         )
-        ledger_btn.click(
-            load_latest_ledger,
-            outputs=detail_outputs,
+        _with_context(
+            ledger_btn.click(
+                load_latest_with_context,
+                outputs=context_outputs,
+            )
         ).then(load_history_list, outputs=history_outputs).then(
             banner_markdown, outputs=banner
         )
-        load_run_btn.click(
-            load_history_run,
-            inputs=[run_picker],
-            outputs=detail_outputs,
+        _with_context(
+            load_run_btn.click(
+                load_history_run_with_context,
+                inputs=[run_picker],
+                outputs=context_outputs,
+            )
         ).then(banner_markdown, outputs=banner)
         refresh_history_btn.click(load_history_list, outputs=history_outputs)
-        universe.submit(
-            run_recommend,
-            inputs=[universe, top_n, candidate_n, news_range, use_llm],
-            outputs=detail_outputs,
+        _with_context(
+            universe.submit(
+                run_recommend_with_context,
+                inputs=[universe, top_n, candidate_n, news_range, use_llm],
+                outputs=context_outputs,
+            )
         ).then(load_history_list, outputs=history_outputs).then(
             banner_markdown, outputs=banner
         )
+        detail_btn.click(
+            load_detail,
+            inputs=[current_run, code_picker],
+            outputs=[detail_md],
+        )
+        code_picker.change(
+            load_detail,
+            inputs=[current_run, code_picker],
+            outputs=[detail_md],
+        )
+        review_btn.click(load_review, inputs=[current_run], outputs=[review_md])
+        brief_btn.click(export_brief, inputs=[current_run], outputs=[brief_file])
 
     return banner
 

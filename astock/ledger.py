@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS runs (
     error TEXT,
     params_json TEXT,
     diagnostics_json TEXT,
+    details_json TEXT,
     report_md TEXT,
     status_line TEXT,
     json_path TEXT,
@@ -56,6 +58,7 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE TABLE IF NOT EXISTS evidence (
     run_id TEXT NOT NULL,
     code TEXT,
+    evidence_id TEXT,
     kind TEXT,
     pub_time TEXT,
     title TEXT,
@@ -119,6 +122,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """旧库就地补列（CREATE TABLE IF NOT EXISTS 不会改旧表）。"""
     run_columns = {row["name"] for row in conn.execute("PRAGMA table_info(runs)")}
     for column, ddl in (
+        ("details_json", "TEXT"),
         ("report_md", "TEXT"),
         ("status_line", "TEXT"),
     ):
@@ -133,6 +137,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     ):
         if column not in item_columns:
             conn.execute(f"ALTER TABLE items ADD COLUMN {column} {ddl}")
+    evidence_columns = {row["name"] for row in conn.execute("PRAGMA table_info(evidence)")}
+    if evidence_columns and "evidence_id" not in evidence_columns:
+        conn.execute("ALTER TABLE evidence ADD COLUMN evidence_id TEXT")
     job_columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
     if job_columns and "as_of" not in job_columns:
         conn.execute("ALTER TABLE jobs ADD COLUMN as_of TEXT")
@@ -161,6 +168,47 @@ def transaction():
 
 def _json(value: Any) -> str:
     return json.dumps(value or {}, ensure_ascii=False, default=str)
+
+
+def normalize_pub_time(value: Any) -> str:
+    """Normalize an evidence publication time to one ISO representation.
+
+    The same evidence arrives as a pandas ``Timestamp`` during generation, an
+    ISO string from the JSON archive and a space-separated string from legacy
+    ledger rows.  The id hash must see identical bytes in all three cases,
+    otherwise the id written to JSON and the id backfilled from an old row
+    diverge.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    text = str(value).strip()
+    if not text:
+        return ""
+    try:
+        return datetime.fromisoformat(text).isoformat()
+    except ValueError:
+        return text
+
+
+def make_evidence_id(run_id: str, code: str, ev: dict) -> str:
+    """Deterministic evidence id shared by JSON, ledger and the detail page.
+
+    Lives in the platform layer so ``ledger.get_run`` can backfill old rows
+    without importing the domain module (ARCH-02).  The identity tuple matches
+    ``evidence``'s primary key, so a re-saved batch keeps the same ids.
+    """
+    raw = "|".join(
+        (
+            str(run_id or ""),
+            str(code or ""),
+            str(ev.get("kind") or ""),
+            normalize_pub_time(ev.get("pub_time")),
+            str(ev.get("title") or ""),
+        )
+    )
+    return "ev_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
 def _opt_float(value: Any) -> float | None:
@@ -195,9 +243,9 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
         conn.execute(
             """INSERT OR REPLACE INTO runs
                (run_id, schema_version, kind, data_as_of, tradable_from, generated_at,
-                source, status, error, params_json, diagnostics_json, report_md,
-                status_line, json_path, csv_path)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                source, status, error, params_json, diagnostics_json, details_json,
+                report_md, status_line, json_path, csv_path)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 run_id,
                 payload.get("schema_version"),
@@ -210,6 +258,7 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
                 payload.get("error"),
                 _json(payload.get("params")),
                 _json(payload.get("diagnostics")),
+                _json(payload.get("items_detail")),
                 payload.get("report_md"),
                 payload.get("status_line"),
                 json_path,
@@ -243,13 +292,14 @@ def save_run(payload: dict, json_path: str | None = None, csv_path: str | None =
             for ev in items or []:
                 conn.execute(
                     """INSERT OR REPLACE INTO evidence
-                       (run_id, code, kind, pub_time, title, url, source, content)
-                       VALUES (?,?,?,?,?,?,?,?)""",
+                       (run_id, code, evidence_id, kind, pub_time, title, url, source, content)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
                     (
                         run_id,
                         code,
+                        ev.get("evidence_id"),
                         ev.get("kind"),
-                        ev.get("pub_time"),
+                        normalize_pub_time(ev.get("pub_time")),
                         ev.get("title"),
                         ev.get("url"),
                         ev.get("source"),
@@ -361,6 +411,27 @@ def get_job(job_key: str) -> dict | None:
         return dict(row) if row else None
 
 
+def _tracking_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT t.run_id, t.code, t.horizon, t.entry_date, t.exit_date,
+               t.ret, t.excess, t.computed_at, i.rank, i.name, i.composite
+        FROM tracking t
+        LEFT JOIN items i ON i.run_id = t.run_id AND i.code = t.code
+        WHERE t.run_id = ?
+        ORDER BY t.horizon, i.rank
+        """,
+        (run_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def batch_tracking(run_id: str) -> list[dict]:
+    """Tracking rows of one batch, joined with the item's rank/name."""
+    with _read() as conn:
+        return _tracking_for_run(conn, run_id)
+
+
 def get_run(run_id: str) -> dict | None:
     with _read() as conn:
         run = conn.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
@@ -369,12 +440,22 @@ def get_run(run_id: str) -> dict | None:
         out = dict(run)
         out["params"] = json.loads(out.pop("params_json") or "{}")
         out["diagnostics"] = json.loads(out.pop("diagnostics_json") or "{}")
+        out["items_detail"] = json.loads(out.pop("details_json", None) or "{}")
         out["items"] = [dict(x) for x in conn.execute(
             "SELECT * FROM items WHERE run_id=? ORDER BY rank", (run_id,)
         )]
-        out["evidence"] = [dict(x) for x in conn.execute(
+        evidence = [dict(x) for x in conn.execute(
             "SELECT * FROM evidence WHERE run_id=?", (run_id,)
         )]
+        missing = [ev for ev in evidence if not ev.get("evidence_id")]
+        if missing:
+            # 旧库没有 evidence_id 列值：用与写入端相同的确定性 id 补齐。
+            for ev in missing:
+                ev["evidence_id"] = make_evidence_id(
+                    run_id, str(ev.get("code") or ""), ev
+                )
+        out["evidence"] = evidence
+        out["tracking"] = _tracking_for_run(conn, run_id)
         return out
 
 
