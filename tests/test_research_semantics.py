@@ -450,7 +450,7 @@ class _EvidenceChainFixtures(unittest.TestCase):
         items = [
             {
                 "rank": 1, "code": "600519.SH", "name": "贵州茅台", "industry": "白酒",
-                "composite": 82.0, "percentile": 92.0, "technical": 80.0,
+                "composite": 85.1, "percentile": 92.0, "technical": 84.6,
                 "event": 86.0, "action": "技术面强", "close": 1500.0,
                 "ret20": 0.032, "rsi": 58.0, "reason": "趋势向上",
             },
@@ -477,16 +477,27 @@ class _EvidenceChainFixtures(unittest.TestCase):
             "items_detail": {
                 "600519.SH": {
                     "scores": {
-                        "composite": 82.0, "technical": 80.0, "technical_raw": 78.0,
+                        "composite": 85.1, "technical": 84.6, "technical_raw": 78.0,
                         "technical_rank": 90.0, "score_before_clip": 80.0,
                         "event": 86.0, "percentile": 92.0,
                     },
                     "weights": {"technical": 0.65, "event": 0.35},
+                    "technical_blend": {"absolute": 0.45, "rank": 0.55},
                     "factor_contributions": [
                         {"factor": "base", "label": "基础分", "delta": 50.0,
                          "value": None, "unit": "", "detail": "起始 50 分"},
                         {"factor": "ma20", "label": "站上MA20", "delta": 8.0,
                          "value": 0.02, "unit": "ratio", "detail": "收盘 / MA20"},
+                        {"factor": "ma60", "label": "站上MA60", "delta": 5.0,
+                         "value": 0.04, "unit": "ratio", "detail": "收盘 / MA60"},
+                        {"factor": "macd_hist", "label": "MACD 红柱", "delta": 7.0,
+                         "value": 0.3, "unit": "", "detail": "MACD 柱 > 0"},
+                        {"factor": "rsi", "label": "RSI 中性偏强", "delta": 5.0,
+                         "value": 58.0, "unit": "", "detail": "45 ≤ RSI ≤ 70"},
+                        {"factor": "ret20", "label": "20日动量为正", "delta": 5.0,
+                         "value": 0.032, "unit": "ratio", "detail": "ret20 > 0"},
+                        {"factor": "clip", "label": "技术分截断", "delta": -2.0,
+                         "value": 80.0, "unit": "", "detail": "80.0 → 78.0"},
                     ],
                     "signals": {"close": 1500.0, "trend": "多头"},
                     "event_stats": {"n": 2},
@@ -519,7 +530,22 @@ class RecommendationDetailTests(_EvidenceChainFixtures):
         self.assertEqual(detail["peer"]["same_industry_count"], 1)
         self.assertEqual(len(detail["peer"]["top"]), 3)
         self.assertEqual(
-            [c["factor"] for c in detail["factor_contributions"]], ["base", "ma20"]
+            [c["factor"] for c in detail["factor_contributions"]],
+            ["base", "ma20", "ma60", "macd_hist", "rsi", "ret20", "clip"],
+        )
+        scores = detail["scores"]
+        self.assertAlmostEqual(
+            sum(c["delta"] for c in detail["factor_contributions"]), 78.0
+        )
+        self.assertAlmostEqual(
+            scores["technical"],
+            0.45 * scores["technical_raw"] + 0.55 * scores["technical_rank"],
+            places=1,
+        )
+        self.assertAlmostEqual(
+            scores["composite"],
+            0.65 * scores["technical"] + 0.35 * scores["event"],
+            places=1,
         )
         self.assertEqual(detail["evidence"][0]["evidence_id"], "ev_abc123456789")
         self.assertEqual(detail["tracking"]["5"]["ret"], 0.03)
@@ -532,6 +558,11 @@ class RecommendationDetailTests(_EvidenceChainFixtures):
         self.assertIn("因子贡献", markdown)
         self.assertIn("ev_abc123456789", markdown)
         self.assertIn("同批入选对比", markdown)
+        self.assertIn("0.45×技术原始分 78.0", markdown)
+        self.assertIn("0.55×批内排名分 90.0", markdown)
+        self.assertIn("展示技术 84.6", markdown)
+        self.assertIn("80.0 → 78.0", markdown)
+        self.assertNotIn("截断前合计", markdown)
 
     def test_old_batch_degrades_without_fake_factors(self):
         run = self._run()
@@ -590,7 +621,9 @@ class BatchReviewTests(_EvidenceChainFixtures):
         self.assertAlmostEqual(review["drawdown"]["value"], -0.0149, places=4)
 
     def test_daily_nav_drawdown_from_price_frames(self):
-        dates = pd.to_datetime(["2026-11-30", "2026-12-01", "2026-12-02"])
+        run = self._run()
+        run["tradable_from"] = "2026-11-20"
+        dates = pd.to_datetime(["2026-11-20", "2026-11-23", "2026-11-24"])
         frames = {
             "A": pd.DataFrame(
                 {"trade_date": dates, "open": [100.0, 101.0, 102.0],
@@ -602,7 +635,7 @@ class BatchReviewTests(_EvidenceChainFixtures):
             ),
         }
         review = recommend.batch_review(
-            self._run(), tracking=self._tracking(), top_n=2, price_frames=frames
+            run, tracking=self._tracking(), top_n=2, price_frames=frames
         )
         drawdown = review["drawdown"]
         self.assertEqual(drawdown["caliber"], "daily_nav")
@@ -635,6 +668,152 @@ class BriefExportTests(_EvidenceChainFixtures):
         self.assertIn("T+5", text)
         self.assertIn("run_id", text)
         self.assertIn("evidence_id", text)
+
+
+class EvidenceIdNormalizationTests(unittest.TestCase):
+    def test_pub_time_representations_share_one_id(self):
+        base = {
+            "kind": "announcement",
+            "title": "回购公告",
+            "source": "交易所",
+        }
+        ids = {
+            ledger.make_evidence_id(
+                "rec_1", "600519.SH", {**base, "pub_time": pub_time}
+            )
+            for pub_time in (
+                "2026-11-27T09:00:00",
+                "2026-11-27 09:00:00",
+                pd.Timestamp("2026-11-27 09:00:00"),
+            )
+        }
+        self.assertEqual(len(ids), 1)
+        self.assertRegex(ids.pop(), r"^ev_[0-9a-f]{12}$")
+
+
+class OldLedgerBackfillTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.patch = patch.object(ledger, "DB_PATH", self.dir / "ledger.db")
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        self.tmp.cleanup()
+
+    def test_old_evidence_row_gets_same_id_as_archive(self):
+        with ledger.transaction() as conn:
+            conn.execute(
+                "INSERT INTO runs (run_id, schema_version, generated_at, data_as_of, "
+                "tradable_from, source, status) VALUES (?,?,?,?,?,?,?)",
+                (
+                    "rec_old", 2, "2026-11-27T18:00:00", "2026-11-27",
+                    "2026-11-30", "live", "success",
+                ),
+            )
+            # 旧库写入的是空格分隔时间，且 evidence_id 为空。
+            conn.execute(
+                "INSERT INTO evidence (run_id, code, kind, pub_time, title, source) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    "rec_old", "600519.SH", "announcement",
+                    "2026-11-27 09:00:00", "回购公告", "交易所",
+                ),
+            )
+        run = ledger.get_run("rec_old")
+        self.assertIsNotNone(run)
+        self.assertEqual(run["items_detail"], {})
+        expected = ledger.make_evidence_id(
+            "rec_old",
+            "600519.SH",
+            {
+                "kind": "announcement",
+                "pub_time": "2026-11-27T09:00:00",
+                "title": "回购公告",
+            },
+        )
+        self.assertEqual(run["evidence"][0]["evidence_id"], expected)
+
+
+class ReviewWindowTests(unittest.TestCase):
+    def test_window_is_bounded_and_failures_are_visible(self):
+        run = _EvidenceChainFixtures._run()
+        run["tradable_from"] = "2026-11-20"
+        ends: list[pd.Timestamp] = []
+
+        def fake_load(code, start=None, end=None, adj=None):
+            ends.append(pd.Timestamp(end))
+            if code == "000001.SZ":
+                raise RuntimeError("日线缺失")
+            dates = pd.bdate_range("2026-11-20", periods=5)
+            return pd.DataFrame(
+                {
+                    "trade_date": dates,
+                    "open": [100.0] * 5,
+                    "close": [100.0, 101.0, 99.0, 102.0, 100.0],
+                }
+            )
+
+        with patch.object(recommend, "load_daily", side_effect=fake_load):
+            review = recommend.batch_review(run, tracking=[], top_n=2)
+
+        self.assertTrue(ends)
+        limit = pd.Timestamp("2026-11-20") + pd.offsets.BDay(20)
+        self.assertTrue(all(end <= limit for end in ends))
+        failed = review["drawdown"]["failed_codes"]
+        self.assertEqual([x["code"] for x in failed], ["000001.SZ"])
+        self.assertIn("日线缺失", failed[0]["error"])
+        self.assertEqual(review["drawdown"]["window"]["end"], ends[0].date().isoformat())
+
+
+class ArchitectureLayeringTests(unittest.TestCase):
+    def test_ledger_does_not_import_recommend(self):
+        tree = ast.parse(Path(ledger.__file__).read_text(encoding="utf-8"))
+        modules = [
+            node.module or ""
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+        ]
+        self.assertFalse(any(m == "recommend" or m.endswith(".recommend") for m in modules))
+
+
+class BriefWeightsTests(_EvidenceChainFixtures):
+    def test_brief_uses_recorded_weights(self):
+        run = self._run()
+        detail = run["items_detail"]["600519.SH"]
+        detail["weights"] = {"technical": 0.70, "event": 0.30}
+        detail["scores"]["composite"] = 0.70 * 84.6 + 0.30 * 86.0
+        review = recommend.batch_review(
+            run, tracking=self._tracking_for_brief(), top_n=2, price_frames={}
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            text = Path(
+                recommend.export_batch_brief(run, review=review, out_dir=tmp)
+            ).read_text(encoding="utf-8")
+        self.assertIn("0.70×技术 84.6", text)
+        self.assertIn("0.30×事件 86.0", text)
+
+    @staticmethod
+    def _tracking_for_brief() -> list[dict]:
+        return [
+            {"code": "600519.SH", "rank": 1, "horizon": 5, "ret": 0.03,
+             "excess": 0.01, "entry_date": "2026-11-30", "exit_date": "2026-12-05"},
+        ]
+
+
+class MomentumZeroTests(_EvidenceChainFixtures):
+    def test_ret20_zero_is_flat_not_negative(self):
+        frame = FactorContributionTests._frame()
+        close = frame["close"].copy()
+        close.iloc[-1] = close.iloc[-21]
+        frame["close"] = close
+        result = recommend.technical_score(frame)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["ret20"], 0.0)
+        row = next(c for c in result["contributions"] if c["factor"] == "ret20")
+        self.assertEqual(row["delta"], -3.0)
+        self.assertIn("持平", row["label"])
 
 
 class SaveRoundtripTests(unittest.TestCase):

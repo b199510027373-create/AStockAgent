@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
@@ -37,12 +36,16 @@ from .events import (
     sentiment,
     stock_basic,
 )
+from .ledger import make_evidence_id, normalize_pub_time
 from .tushare_client import TushareClient
 from .utils import is_code, normalize_code
 
 REC_DIR = BASE_DIR / "data" / "recommendations"
 REC_DIR.mkdir(parents=True, exist_ok=True)
 SCHEMA_VERSION = 2
+# 展示技术分 = 绝对技术分与批内排名分的固定混合；详情/简报必须披露这两步，
+# 否则「因子贡献 → 展示技术分」无法复算。
+TECHNICAL_BLEND = {"absolute": 0.45, "rank": 0.55}
 MISSING_PERCENTILE = "—"
 _TLS = threading.local()
 
@@ -295,8 +298,14 @@ def technical_score(df: pd.DataFrame) -> dict | None:
     if math.isfinite(ret20):
         delta = 5 if ret20 > 0 else -3
         score += delta
+        if ret20 > 0:
+            label = "20日动量为正"
+        elif ret20 < 0:
+            label = "20日动量为负"
+        else:
+            label = "20日动量持平（按 −3 计）"
         contributions.append(
-            _contribution("ret20", "20日动量为正" if delta > 0 else "20日动量为负", delta, ret20, "pct", f"20日收益 {ret20:+.2%}")
+            _contribution("ret20", label, delta, ret20, "pct", f"20日收益 {ret20:+.2%}")
         )
     if math.isfinite(ret60) and ret60 > 0:
         score += 3
@@ -659,26 +668,6 @@ def _atomic_write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def make_evidence_id(run_id: str, code: str, ev: dict) -> str:
-    """Stable evidence id shared by JSON, ledger and the detail page.
-
-    The id is derived from the run/code/evidence identity rather than a random
-    UUID, so a re-saved batch keeps the same ids and an old ledger row (written
-    before the column existed) can still be rendered with a matching id.
-    """
-    raw = "|".join(
-        str(part or "")
-        for part in (
-            run_id,
-            code,
-            ev.get("kind"),
-            ev.get("pub_time"),
-            ev.get("title"),
-        )
-    )
-    return "ev_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
-
-
 def _save(
     result_rows: list[dict],
     market: str,
@@ -748,6 +737,7 @@ def _save(
                 "percentile": row.get("percentile"),
             },
             "weights": weights,
+            "technical_blend": TECHNICAL_BLEND,
             "factor_contributions": row.get("contributions") or [],
             "signals": {
                 key: row.get(key)
@@ -785,7 +775,7 @@ def _save(
                 {
                     "evidence_id": make_evidence_id(run_id, code, ev),
                     "kind": ev.get("kind", ""),
-                    "pub_time": pd.Timestamp(ev.get("pub_time")).isoformat() if ev.get("pub_time") is not None else "",
+                    "pub_time": normalize_pub_time(ev.get("pub_time")),
                     "title": ev.get("title", ""),
                     "source": ev.get("source", ""),
                     "url": ev.get("url", ""),
@@ -924,7 +914,9 @@ def generate_recommendation(
         row["technical_raw"] = row["technical_score"]
         row["technical_rank"] = float(rank)
         row["technical_score"] = round(
-            0.45 * row["technical_raw"] + 0.55 * row["technical_rank"], 1
+            TECHNICAL_BLEND["absolute"] * row["technical_raw"]
+            + TECHNICAL_BLEND["rank"] * row["technical_rank"],
+            1,
         )
     rows.sort(key=lambda x: x["technical_score"], reverse=True)
     candidates = rows[:candidate_n]
@@ -1267,6 +1259,7 @@ def recommendation_detail(run: dict | None, code: str) -> dict | None:
             "percentile": _num(item.get("percentile")),
         },
         "weights": stored.get("weights") or {"technical": 0.65, "event": 0.35},
+        "technical_blend": stored.get("technical_blend") or TECHNICAL_BLEND,
         "factor_contributions": contributions,
         "signals": stored.get("signals") or {},
         "event_stats": stored.get("event_stats") or {},
@@ -1275,6 +1268,44 @@ def recommendation_detail(run: dict | None, code: str) -> dict | None:
         "tracking": tracking,
         "notes": notes,
     }
+
+
+def _scoring_bridge(detail: dict) -> list[str]:
+    """Two-step bridge: factor sum -> raw technical -> displayed technical.
+
+    The displayed technical score is a fixed blend of the clipped absolute
+    score and the batch rank; the detail page must show both steps, otherwise
+    the contribution table cannot reproduce the number on screen.
+    """
+    scores = detail.get("scores") or {}
+    raw = _num(scores.get("technical_raw"))
+    rank = _num(scores.get("technical_rank"))
+    before = _num(scores.get("score_before_clip"))
+    tech = _num(scores.get("technical"))
+    event = _num(scores.get("event"))
+    composite = _num(scores.get("composite"))
+    weights = detail.get("weights") or {"technical": 0.65, "event": 0.35}
+    blend = detail.get("technical_blend") or TECHNICAL_BLEND
+    lines = []
+    if raw is not None:
+        lines.append(f"- Σ因子贡献 = 技术原始分 {_fmt_score(raw)}（截断后）")
+    if before is not None and raw is not None:
+        lines.append(
+            f"- 截断：{_fmt_score(before)} → {_fmt_score(raw)}（clip {raw - before:+.1f}）"
+        )
+    if raw is not None and rank is not None and tech is not None:
+        lines.append(
+            f"- 技术分构成：展示技术 {_fmt_score(tech)} = "
+            f"{blend['absolute']:.2f}×技术原始分 {_fmt_score(raw)} + "
+            f"{blend['rank']:.2f}×批内排名分 {_fmt_score(rank)}（候选池百分位×100）"
+        )
+    if tech is not None and event is not None:
+        lines.append(
+            f"- 综合 {_fmt_score(composite)} = "
+            f"{weights.get('technical', 0.65):.2f}×技术 {_fmt_score(tech)} + "
+            f"{weights.get('event', 0.35):.2f}×事件 {_fmt_score(event)}"
+        )
+    return lines
 
 
 def recommendation_detail_markdown(run: dict | None, code: str) -> str:
@@ -1313,14 +1344,8 @@ def recommendation_detail_markdown(run: dict | None, code: str) -> str:
         f"技术分位 {_fmt_score(peer['percentile'])}%{same_text}"
     )
 
-    tech = detail["scores"]["technical"]
-    event = detail["scores"]["event"]
-    weight = detail["weights"]
-    lines.append(
-        f"- **打分拆解**：综合 {_fmt_score(detail['scores']['composite'])} = "
-        f"{weight.get('technical', 0.65):.2f}×技术 {_fmt_score(tech)} + "
-        f"{weight.get('event', 0.35):.2f}×事件 {_fmt_score(event)}"
-    )
+    lines += ["", "#### 打分拆解", ""]
+    lines += _scoring_bridge(detail)
 
     lines += ["", "#### 因子贡献（技术分规则逐条）", ""]
     if detail["factor_contributions"]:
@@ -1332,11 +1357,20 @@ def recommendation_detail_markdown(run: dict | None, code: str) -> str:
                 f"{_fmt_contribution_value(contribution)} | "
                 f"{contribution.get('detail') or '—'} |"
             )
-        before_clip = detail["scores"].get("score_before_clip")
-        if before_clip is not None:
+        raw = _num(detail["scores"].get("technical_raw"))
+        before_clip = _num(detail["scores"].get("score_before_clip"))
+        total = round(
+            sum(float(c.get("delta") or 0) for c in detail["factor_contributions"]),
+            1,
+        )
+        lines.append(
+            f"| **Σ贡献（截断后）** | **{total:+.1f}** | — | "
+            f"技术原始分 {_fmt_score(raw)} |"
+        )
+        if before_clip is not None and raw is not None:
             lines.append(
-                f"| **截断前合计** | **{before_clip:.1f}** | — | 技术分最终 "
-                f"{_fmt_score(tech)} |"
+                f"| **截断** | **{raw - before_clip:+.1f}** | — | "
+                f"{_fmt_score(before_clip)} → {_fmt_score(raw)} |"
             )
     else:
         lines.append("- 该批次未记录逐条因子贡献（旧批次）；技术分/事件分仍可追溯。")
@@ -1399,22 +1433,45 @@ def run_detail_markdown(run_id: str, code: str) -> str:
     return recommendation_detail_markdown(run, code)
 
 
-def _review_price_frames(codes: list[str], entry: pd.Timestamp) -> dict[str, pd.DataFrame]:
+DRAWDOWN_HORIZON = 20
+
+
+def _review_window(entry: pd.Timestamp) -> pd.Timestamp:
+    """Last settled day of the fixed T+20 review window.
+
+    The window is anchored at ``tradable_from`` and never extends to
+    ``now``: a batch's drawdown must not change every day.  Business days are
+    used as the trading-day proxy so the bound is deterministic offline.
+    """
+    cutoff = pd.bdate_range(entry, periods=DRAWDOWN_HORIZON + 1)[-1]
+    return min(cutoff, pd.Timestamp.now().normalize())
+
+
+def _review_price_frames(
+    codes: list[str], entry: pd.Timestamp, window_end: pd.Timestamp
+) -> tuple[dict[str, pd.DataFrame], list[dict]]:
     start = (entry - pd.Timedelta(days=10)).strftime("%Y%m%d")
-    end = datetime.now().strftime("%Y%m%d")
+    end = window_end.strftime("%Y%m%d")
     frames: dict[str, pd.DataFrame] = {}
+    failed: list[dict] = []
     for code in codes:
         try:
             frame = load_daily(code, start=start, end=end, adj="qfq")
-        except Exception:  # noqa: BLE001, S112 - 单票日线缺失只降低回撤覆盖率，不阻断复盘
+        except Exception as exc:  # noqa: BLE001 - 单票失败记入 failed_codes，不静默换口径
+            failed.append({"code": code, "error": str(exc)[:160]})
             continue
-        if frame is not None and not frame.empty:
-            frames[code] = frame
-    return frames
+        if frame is None or frame.empty:
+            failed.append({"code": code, "error": "empty daily frame"})
+            continue
+        frames[code] = frame
+    return frames, failed
 
 
 def _drawdown_from_prices(
-    frames: dict[str, pd.DataFrame], entry: pd.Timestamp
+    frames: dict[str, pd.DataFrame],
+    entry: pd.Timestamp,
+    window_end: pd.Timestamp,
+    failed_codes: list[dict] | None = None,
 ) -> dict | None:
     closes = {}
     entry_price = {}
@@ -1435,7 +1492,7 @@ def _drawdown_from_prices(
         if base is None or base <= 0:
             continue
         close = pd.to_numeric(daily["close"], errors="coerce")
-        close = close[close > 0]
+        close = close[(close > 0) & (close.index >= entry) & (close.index <= window_end)]
         if close.empty:
             continue
         closes[code] = close
@@ -1444,7 +1501,7 @@ def _drawdown_from_prices(
         return None
 
     prices = pd.DataFrame(closes).sort_index()
-    prices = prices[prices.index >= entry].ffill()
+    prices = prices.ffill()
     nav = (prices / pd.Series(entry_price, dtype=float)).mean(axis=1).dropna()
     if len(nav) < 2:
         return None
@@ -1454,20 +1511,37 @@ def _drawdown_from_prices(
         "caliber": "daily_nav",
         "start": nav.index[0].date().isoformat(),
         "end": nav.index[-1].date().isoformat(),
+        "as_of": nav.index[-1].date().isoformat(),
+        "window": {
+            "start": entry.date().isoformat(),
+            "end": window_end.date().isoformat(),
+        },
         "observations": len(nav),
         "n_codes": len(closes),
         "codes": sorted(closes),
+        "failed_codes": list(failed_codes or []),
     }
 
 
-def _drawdown_from_horizons(horizons: list[dict]) -> dict:
+def _drawdown_from_horizons(
+    horizons: list[dict],
+    failed_codes: list[dict] | None = None,
+    reason: str = "daily_frames_unavailable",
+) -> dict:
     points = [
         (int(row["horizon"]), 1.0 + float(row["mean_ret"]))
         for row in horizons
         if row.get("mean_ret") is not None
     ]
     if not points:
-        return {"value": None, "caliber": "unavailable", "observations": 0, "horizons": []}
+        return {
+            "value": None,
+            "caliber": "unavailable",
+            "observations": 0,
+            "horizons": [],
+            "reason": reason,
+            "failed_codes": list(failed_codes or []),
+        }
     nav = pd.Series([value for _, value in points], index=[h for h, _ in points], dtype=float)
     nav = nav.sort_index()
     drawdown = float((nav / nav.cummax() - 1.0).min())
@@ -1478,6 +1552,8 @@ def _drawdown_from_horizons(horizons: list[dict]) -> dict:
         "end": f"T+{nav.index[-1]}",
         "observations": len(nav),
         "horizons": [int(x) for x in nav.index],
+        "reason": reason,
+        "failed_codes": list(failed_codes or []),
     }
 
 
@@ -1547,19 +1623,29 @@ def batch_review(
         )
 
     drawdown = None
+    failed_codes: list[dict] = []
     entry_raw = run.get("tradable_from") or run.get("data_as_of")
     try:
         entry = pd.Timestamp(entry_raw).normalize() if entry_raw else None
     except (TypeError, ValueError):
         entry = None
-    if price_frames is None and entry is not None and top_items:
-        price_frames = _review_price_frames(
-            [str(x.get("code")) for x in top_items], entry
+    window_end = _review_window(entry) if entry is not None else None
+    if price_frames is None and window_end is not None and top_items:
+        price_frames, failed_codes = _review_price_frames(
+            [str(x.get("code")) for x in top_items], entry, window_end
         )
-    if price_frames and entry is not None:
-        drawdown = _drawdown_from_prices(price_frames, entry)
+    if price_frames and window_end is not None:
+        drawdown = _drawdown_from_prices(
+            price_frames, entry, window_end, failed_codes
+        )
     if drawdown is None:
-        drawdown = _drawdown_from_horizons(horizons)
+        if entry is None:
+            reason = "no_tradable_from"
+        elif not price_frames:
+            reason = "no_daily_frames"
+        else:
+            reason = "insufficient_daily_data"
+        drawdown = _drawdown_from_horizons(horizons, failed_codes, reason)
 
     return {
         "run_id": str(run.get("run_id") or ""),
@@ -1573,8 +1659,9 @@ def batch_review(
         "horizons": horizons,
         "primary_horizon": 5,
         "drawdown": drawdown,
+        "failed_codes": failed_codes,
         "settled_total": sum(row["samples"] for row in horizons),
-        "caveat": "样本为已结算的 T+N 跟踪记录；回撤口径见 drawdown.caliber；仅作研究记录，不构成 alpha 声明。",
+        "caveat": "样本为已结算的 T+N 跟踪记录；回撤窗口固定为 tradable_from 起 20 个交易日，口径见 drawdown.caliber；仅作研究记录，不构成 alpha 声明。",
     }
 
 
@@ -1608,19 +1695,30 @@ def batch_review_markdown(run: dict | None, review: dict | None = None) -> str:
 
     drawdown = review.get("drawdown") or {}
     value = _num(drawdown.get("value"))
+    failed = drawdown.get("failed_codes") or []
+    failed_text = (
+        "；日线失败：" + "、".join(str(x.get("code")) for x in failed)
+        if failed
+        else ""
+    )
     lines += ["", "#### 回撤", ""]
     if value is None:
-        lines.append("- 回撤：暂不可算（无已结算期限）。")
+        lines.append(
+            f"- 回撤：暂不可算（原因 {drawdown.get('reason') or '无已结算期限'}{failed_text}）。"
+        )
     elif drawdown.get("caliber") == "daily_nav":
         lines.append(
             f"- 回撤：**{value * 100:.2f}%**（口径：TopN 等权日净值，"
-            f"{drawdown.get('start')} 至 {drawdown.get('end')}，"
-            f"{drawdown.get('observations')} 个交易日，{drawdown.get('n_codes')} 只成分）"
+            f"窗口 {drawdown.get('window', {}).get('start')} 至 "
+            f"{drawdown.get('window', {}).get('end')}，as_of {drawdown.get('as_of')}，"
+            f"{drawdown.get('observations')} 个交易日，{drawdown.get('n_codes')} 只成分"
+            f"{failed_text}）"
         )
     else:
         lines.append(
             f"- 回撤：**{value * 100:.2f}%**（口径：已结算 T+N 等权净值路径，"
-            f"{drawdown.get('observations')} 个观测点；仅作期限结构参考）"
+            f"{drawdown.get('observations')} 个观测点；原因 {drawdown.get('reason') or '日线不可得'}"
+            f"{failed_text}；仅作期限结构参考）"
         )
 
     lines += ["", f"> {review.get('caveat') or '仅作研究记录，不构成 alpha 声明。'}"]
@@ -1709,12 +1807,8 @@ def export_batch_brief(
         item = detail["item"]
         lines.append(f"### {index}. {item.get('code')} {item.get('name') or ''}")
         lines.append("")
-        lines.append(
-            f"- 打分：综合 {_fmt_score(detail['scores']['composite'])} = "
-            f"0.65×技术 {_fmt_score(detail['scores']['technical'])} + "
-            f"0.35×事件 {_fmt_score(detail['scores']['event'])}；"
-            f"截断前技术分 {_fmt_score(detail['scores'].get('score_before_clip'))}"
-        )
+        lines.append("- 打分拆解：")
+        lines.extend(f"  {line}" for line in _scoring_bridge(detail))
         contributions = detail.get("factor_contributions") or []
         if contributions:
             parts = [
