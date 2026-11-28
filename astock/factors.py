@@ -30,6 +30,8 @@ FACTORS = {
     "atr_pct": "ATR占比",
 }
 HORIZONS = (5, 20)
+# 因子计算依赖的 enrich 派生列：缺任何一列都说明帧没走 data.enrich（不再静默空面板）。
+ENRICH_COLUMNS = ("vol_ma20", "ma20", "rsi14", "macd_hist", "atr14")
 
 
 @dataclass
@@ -92,6 +94,18 @@ def build_panel(
 ) -> pd.DataFrame:
     if not daily_map:
         return pd.DataFrame()
+    # 未 enrich 的帧会让每个调仓日都因因子 NaN 被跳过、最后静默返回空面板
+    # （旧实现是 KeyError）。误用（如 load_daily_panel(enrich_frames=False)）
+    # 必须显式报错，否则 IC 页只会显示空结果，无法区分「没样本」与「没 enrich」。
+    for code, frame in daily_map.items():
+        if frame is None or frame.empty:
+            continue
+        missing = [name for name in ENRICH_COLUMNS if name not in frame.columns]
+        if missing:
+            raise ValueError(
+                f"build_panel 需要 enrich 后的帧：{code} 缺少 {missing}；"
+                "请用 load_daily_panel(..., enrich_frames=True) 或 data.enrich 后再构建面板。"
+            )
     # 逐 (调仓日, 股票) 的 O(rows) 布尔索引是这里的历史瓶颈：49 只 × 上百个调仓日
     # 会把同一份 time×factor 面板扫上千遍。改为每只股票预计算一次 numpy 轴，
     # 调仓日用 searchsorted 做 O(log n) 定位；取到的行、收益与原来逐值一致。

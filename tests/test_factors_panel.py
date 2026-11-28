@@ -162,10 +162,11 @@ def test_build_panel_universe_filter_matches_reference(daily_map: dict[str, pd.D
     pd.testing.assert_frame_equal(actual, expected, check_dtype=False, check_exact=False, rtol=1e-12)
 
 
-def test_build_panel_without_enriched_columns_is_empty() -> None:
-    """未 enrich 的帧没有 vol_ma20/rsi14 等指标：跳过而不是拿 NaN 混进 IC。"""
+def test_build_panel_without_enriched_columns_raises() -> None:
+    """未 enrich 的帧没有 vol_ma20/rsi14 等指标：显式报错，而不是静默返回空面板。"""
     raw = {code: _synthetic_frame(code, enriched=False) for code in CODES}
-    assert build_panel(raw).empty
+    with pytest.raises(ValueError, match="enrich"):
+        build_panel(raw)
     assert build_panel({}).empty
 
 

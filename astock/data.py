@@ -232,6 +232,13 @@ DATASET_VERSION = 1
 
 _DATASET_LOCK = threading.RLock()
 
+TOLERATED_GAPS = ("stale_end", "no_rows_in_window", "empty")
+"""已知缺口：该 code 没有可加入数据集的行，但逐股缓存未被改动时不必重建。
+
+停牌/退市股在 ``end_eff`` 当日没有 bar 是正常状态（ADR-007：股票池含退市股），
+若把它当作「数据集不可用」，每次横截面扫描都会重建两次并联网重拉一次。
+"""
+
 
 def _dataset_root(adj: str | None) -> Path:
     return DAILY_DIR / "_dataset" / f"adj={_adj_key(adj)}"
@@ -303,10 +310,20 @@ def _write_dataset_partitions(df: pd.DataFrame, build_dir: Path) -> int:
 
 
 def _cleanup_dataset_builds(root: Path, keep: str) -> None:
-    """只保留当前 build（旧目录被 Windows 句柄占用时留到下次清理）。"""
-    for old in root.glob("build=*"):
-        if old.name != f"build={keep}":
-            shutil.rmtree(old, ignore_errors=True)
+    """保留当前 build 与上一代（旧目录被 Windows 句柄占用时留到下次清理）。
+
+    上一代必须留着：``jobs`` 是独立进程，另一进程可能刚读到旧 meta 指向的目录，
+    若这里立刻删掉，它的 ``pds.dataset`` 就会抛 ``FileNotFoundError``（CACHE-01
+    读侧容错）。build id 以日期开头，按名称倒序即为新旧顺序。
+    """
+    kept = {f"build={keep}"}
+    for old in sorted(root.glob("build=*"), key=lambda path: path.name, reverse=True):
+        if old.name in kept:
+            continue
+        if len(kept) < 2:
+            kept.add(old.name)
+            continue
+        shutil.rmtree(old, ignore_errors=True)
 
 
 def _read_dataset_meta(adj: str | None) -> dict:
@@ -672,6 +689,7 @@ def build_daily_dataset(
     frames: list[pd.DataFrame] = []
     included: dict[str, dict[str, Any]] = {}
     skipped: dict[str, str] = {}
+    excluded: dict[str, dict[str, Any]] = {}
     for code in code_list:
         path, meta_path = _cache_paths(code, adj)
         signature = _file_signature(path)
@@ -695,19 +713,40 @@ def build_daily_dataset(
             continue
         if cached.empty:
             skipped[code] = "empty"
+            excluded[code] = {**signature, "reason": "empty", "fetched_at": None}
             continue
         meta = _read_meta(meta_path)
         # ADR-011：base_factor 与缓存数据不一致 / adj_base 不可考 → 不进入数据集。
         if not _cache_base_valid(meta, cached, adj, end_eff=end_eff):
             skipped[code] = "base_factor_invalid"
             continue
-        if cached["trade_date"].max() < end_eff:
-            # 与 load_daily 的 covers 判定对齐：缓存没覆盖 end_eff 即不算当日可用。
-            skipped[code] = "stale_end"
-            continue
         window = cached[(cached["trade_date"] >= start_eff) & (cached["trade_date"] <= end_eff)]
+        last_bar = pd.Timestamp(cached["trade_date"].max()).normalize()
+        fetched_today = meta.get("fetched_at") == today
+        # 缓存是否就是按本次 ``end_eff`` 拉的那一份（ADR-011）。是的话，``last_bar``
+        # 早于 ``end_eff`` 只能说明该股在区间末尾没有 bar（停牌/退市/未上市），历史
+        # 行照常入集；否则缓存确实缺了 end_eff 之后的数据，交给 load_daily 重拉。
+        requested_end = pd.Timestamp(meta["end"]).normalize() if meta.get("end") else None
+        fresh_for_end = bool(fetched_today and requested_end is not None and requested_end >= end_eff)
         if window.empty:
             skipped[code] = "no_rows_in_window"
+            excluded[code] = {
+                **signature,
+                "reason": "no_rows_in_window",
+                "fetched_at": meta.get("fetched_at"),
+                "last_bar": last_bar.strftime("%Y%m%d"),
+            }
+            continue
+        if last_bar < end_eff and not fresh_for_end:
+            # 缓存没覆盖 end_eff（例如昨日缓存）：不拿旧数据冒充当日可用，
+            # 记为已知缺口让 scan 复用数据集，而不是每次扫描都重建+联网重拉。
+            skipped[code] = "stale_end"
+            excluded[code] = {
+                **signature,
+                "reason": "stale_end",
+                "fetched_at": meta.get("fetched_at"),
+                "last_bar": last_bar.strftime("%Y%m%d"),
+            }
             continue
         frames.append(window)
         included[code] = {
@@ -718,6 +757,8 @@ def build_daily_dataset(
             "fetched_at": meta.get("fetched_at"),
             "first_date": pd.Timestamp(window["trade_date"].min()).strftime("%Y%m%d"),
             "last_date": pd.Timestamp(window["trade_date"].max()).strftime("%Y%m%d"),
+            "last_bar": last_bar.strftime("%Y%m%d"),
+            "stale_end": bool(last_bar < end_eff),
         }
 
     summary: dict[str, Any] = {
@@ -731,6 +772,7 @@ def build_daily_dataset(
         "built_at": None,
         "built_day": today,
         "codes": included,
+        "excluded": excluded,
         "rows": 0,
         "partition_files": 0,
         "skipped": skipped,
@@ -806,8 +848,15 @@ def _dataset_usable(
     except (KeyError, TypeError, ValueError):
         return False
     table = meta.get("codes") or {}
+    # 已知缺口（缓存没覆盖 end_eff 的停牌/退市股、窗口内无行的代码）不参与行数据，
+    # 但只要逐股缓存没变就容忍——否则一只停牌股会让整个横截面每次扫描都重建+联网。
+    known_gaps = {
+        code: record
+        for code, record in (meta.get("excluded") or {}).items()
+        if record.get("reason") in TOLERATED_GAPS
+    }
     wanted = _normalize_codes(codes) if codes is not None else None
-    if wanted is not None and not set(wanted) <= set(table):
+    if wanted is not None and not set(wanted) <= (set(table) | set(known_gaps)):
         return False
     today = _today().strftime("%Y-%m-%d")
     for code, record in table.items():
@@ -819,6 +868,15 @@ def _dataset_usable(
         if not signature:
             return False
         if signature["mtime_ns"] != record.get("mtime_ns") or signature["size"] != record.get("size"):
+            return False
+    for code, record in known_gaps.items():
+        if wanted is not None and code not in wanted:
+            continue
+        signature = _file_signature(_cache_paths(code, adj)[0])
+        if not signature:
+            return False
+        if signature["mtime_ns"] != record.get("mtime_ns") or signature["size"] != record.get("size"):
+            # 缓存被刷新过：重建即可把它纳入（或重新确认缺口）。
             return False
     return True
 
@@ -839,7 +897,7 @@ def _scan_dataset(
     partitioning = pds.partitioning(pa.schema([("trade_date", pa.string())]), flavor="hive")
     dataset = pds.dataset(str(root), format="parquet", partitioning=partitioning)
     expression = (pds.field("trade_date") >= _fmt(start_eff)) & (pds.field("trade_date") <= _fmt(end_eff))
-    if codes:
+    if codes is not None:
         expression &= pds.field("ts_code").isin(list(codes))
     # 727 个分区文件时 pyarrow 默认多线程严重争用（实测 34s → 1.7s），必须串行读。
     table = dataset.to_table(filter=expression, use_threads=False)
@@ -905,6 +963,12 @@ def dataset_status(adj: str | None = "qfq") -> dict[str, Any]:
         "end_eff": meta.get("end_eff"),
         "codes": len(meta.get("codes") or {}),
         "rows": meta.get("rows"),
+        # 已知缺口（停牌/退市/窗口内无行）：不参与行数据，但数据集仍可用，
+        # 排障时能看出「哪些代码被跳过了、为什么」，而不是静默少几只股票。
+        "skipped": dict(meta.get("skipped") or {}),
+        "stale_codes": sorted(
+            code for code, record in (meta.get("codes") or {}).items() if record.get("stale_end")
+        ),
         "usable": False,
     }
     if status["available"]:
@@ -942,12 +1006,18 @@ def scan_daily(
       ``trade_date, ts_code`` 排序。
 
     Args:
-        codes: 证券代码集合；``None`` 表示数据集内全部代码。
+        codes: 证券代码集合；``None`` 表示数据集内全部代码；空集合返回空帧。
         start/end: 日期区间；``end`` 按最近已收盘交易日截止。
         adj: ``qfq``（默认）/``hfq``/``None``；口径与逐股缓存一一对应，不做回退。
-        columns: 需要的列（至少含 ``ts_code``/``trade_date``）；``None`` 取全部。
+        columns: 需要的列；``ts_code``/``trade_date`` 始终保留，未知列名抛 ``ValueError``。
         refresh: 绕过数据集并强制重拉逐股缓存。
         diagnostics: 传入 list 时逐条记录回退失败（不吞成“没有行情”）。
+
+    Notes:
+        缓存没覆盖 ``end_eff`` 的代码（停牌/退市/昨日的旧缓存）记为 meta 的
+        ``excluded`` 已知缺口：只要逐股缓存文件没变，数据集仍算可用，不重建也不
+        逐只联网重拉；它们的缓存被 ``load_daily`` 刷新后（文件签名变化）自动重新
+        纳入。``codes=None`` 时缺口可在 :func:`dataset_status` 里看到，不会静默消失。
     """
     adj = _normalize_adj(adj)
     end = end or _fmt(_today())
@@ -955,6 +1025,9 @@ def scan_daily(
     end_eff = pd.Timestamp(last_open_date(end) or pd.Timestamp(end)).normalize()
     start_eff = pd.Timestamp(start).normalize()
     requested = _normalize_codes(codes) if codes is not None else None
+    if requested is not None and not requested:
+        # 空股票池必须返回空帧：不能让 isin([]) 退化成「不过滤 = 全市场」。
+        return _finalize_scan(pd.DataFrame(), adj, {}, from_dataset=False)
     missing: list[str] = []
     frames: list[pd.DataFrame] = []
     used_dataset = False
@@ -968,11 +1041,23 @@ def scan_daily(
             meta = build_daily_dataset(scope, start=_fmt(start_eff), end=end, adj=adj)
             usable = _dataset_usable(meta, adj, requested, start_eff, end_eff)
         if usable:
-            frame = _scan_dataset(meta, adj, requested, start_eff, end_eff)
+            try:
+                frame = _scan_dataset(meta, adj, requested, start_eff, end_eff)
+            except (FileNotFoundError, OSError):
+                # jobs 是独立进程：另一进程的 cleanup 可能刚删掉这个 build。
+                # 重建一次再扫，而不是把裸 pyarrow 异常抛给调用方（CACHE-01）。
+                scope = requested if requested is not None else _iter_cache_codes(adj)
+                meta = build_daily_dataset(scope, start=_fmt(start_eff), end=end, adj=adj)
+                frame = _scan_dataset(meta, adj, requested, start_eff, end_eff)
             frames.append(frame)
             used_dataset = True
             present = set(frame["ts_code"].astype(str)) if not frame.empty else set()
-            missing = [code for code in (requested or []) if code not in present]
+            known = meta.get("excluded") or {}
+            missing = [
+                code
+                for code in (requested or [])
+                if code not in present and (refresh or code not in known)
+            ]
         else:
             missing = list(requested) if requested is not None else _iter_cache_codes(adj)
 
@@ -1006,9 +1091,13 @@ def scan_daily(
     out = _finalize_scan(out, adj, meta, from_dataset=used_dataset and not loaded)
     if columns is not None:
         requested_columns = [str(c) for c in columns]
-        keep = [c for c in out.columns if c in requested_columns]
-        if keep:
-            out = out[keep]
+        unknown = [c for c in requested_columns if c not in out.columns]
+        if unknown:
+            raise ValueError(f"scan_daily 未知列 {unknown}；可用列: {list(out.columns)}")
+        # ts_code/trade_date 是帧的键：投影时强制保留，否则下游 groupby 直接 KeyError。
+        keep = [c for c in ("ts_code", "trade_date") if c in out.columns]
+        keep += [c for c in requested_columns if c not in keep]
+        out = out[keep]
     return out
 
 

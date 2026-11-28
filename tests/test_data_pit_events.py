@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -721,12 +722,12 @@ class DailyDatasetTests(unittest.TestCase):
             )
             yield
 
-    def seed(self, codes: tuple[str, ...] | None = None, adj: str = "qfq") -> None:
+    def seed(self, codes: tuple[str, ...] | None = None, adj: str | None = "qfq", end: str | None = None) -> None:
         """用真实 load_daily 写逐股缓存（等价旧缓存形态）。"""
         codes = codes or self.CODES
         client = FakeUniverseClient(self.daily, self.factors)
         for code in codes:
-            data.load_daily(code, start=self.START, end=self.END, adj=adj, client=client)
+            data.load_daily(code, start=self.START, end=end or self.END, adj=adj, client=client)
 
     def scan(self, codes=None, **kwargs):
         return data.scan_daily(
@@ -868,6 +869,97 @@ class DailyDatasetTests(unittest.TestCase):
         self.assertEqual(pd.Timestamp(out["trade_date"].max()), pd.Timestamp("2025-01-06"))
         self.assertEqual(meta["end_eff"], "20250106")
         self.assertEqual(meta["end"], "20250106")
+
+    def test_stale_last_bar_from_fresh_cache_is_included(self):
+        """按 end_eff 拉过的缓存里最后 bar 更早（停牌/退市）不算缺失，历史行照常入集。"""
+        with self.env():
+            self.seed(end="2025-01-10")  # 缓存 meta.end=2025-01-10，但行情只到 01-09
+            with patch.object(data, "_fetch_daily", side_effect=AssertionError("不该联网重拉")):
+                out = self.scan(end="2025-01-10")
+            status = data.dataset_status("qfq")
+            meta = self.read_meta()
+        self.assertEqual(len(out), len(self.CODES) * 6)
+        self.assertEqual(pd.Timestamp(out["trade_date"].max()), pd.Timestamp("2025-01-09"))
+        self.assertTrue(status["usable"])  # 不再因为最后 bar 早于 end_eff 而永久失效
+        self.assertEqual(sorted(status["stale_codes"]), sorted(self.CODES))
+        self.assertEqual(list(meta["codes"]), sorted(self.CODES))
+
+    def test_known_gap_is_tolerated_without_rebuilding_or_refetching(self):
+        """昨日缓存的停牌股只记已知缺口：数据集仍可用，不重建、不逐只联网。"""
+        stale = ("600519.SH",)
+        with self.env():
+            self.seed(end="2025-01-09")
+            # 000001.SZ 已按 end=2025-01-10 拉过 → 入集；600519.SH 仍停在 01-09 → 已知缺口。
+            self.seed(("000001.SZ",), end="2025-01-10")
+            no_refetch = patch.object(data, "load_daily", side_effect=AssertionError("不该逐股重拉"))
+            with (
+                patch.object(data, "_fetch_daily", side_effect=AssertionError("不该联网")),
+                no_refetch,
+            ):
+                out = self.scan(end="2025-01-10")
+            status = data.dataset_status("qfq")
+        self.assertEqual(set(out["ts_code"]), {"000001.SZ"})
+        self.assertTrue(status["usable"])
+        self.assertEqual(status["skipped"].get(stale[0]), "stale_end")
+        self.assertEqual(status["stale_codes"], ["000001.SZ"])  # 入集但最后 bar 早于 end_eff
+
+    def test_empty_codes_returns_empty_frame(self):
+        """空股票池必须返回空帧：不能让 isin([]) 退化成「不过滤 = 全市场」。"""
+        with self.env():
+            self.seed()
+            self.scan()  # 先建好可用数据集
+            no_rebuild = patch.object(data, "build_daily_dataset", side_effect=AssertionError("不该重建"))
+            with no_rebuild:
+                out = data.scan_daily([], start=self.START, end=self.END, adj="qfq")
+        self.assertTrue(out.empty)
+        self.assertEqual(out.attrs["adjustment"]["adj"], "qfq")
+
+    def test_columns_keeps_key_columns_and_rejects_unknown(self):
+        """列投影不能丢掉 ts_code/trade_date，拼错的列名必须显式报错。"""
+        with self.env():
+            self.seed()
+            projected = self.scan(columns=["close"])
+            with self.assertRaises(ValueError):
+                self.scan(columns=["volume20"])
+        self.assertEqual(list(projected.columns), ["ts_code", "trade_date", "close"])
+
+    def test_raw_caliber_scan_matches_per_code_load(self):
+        """adj=None（不复权）走独立数据集根目录，且与逐股读取逐值一致。"""
+        with self.env():
+            self.seed(adj=None)
+            scanned = data.scan_daily(list(self.CODES), start=self.START, end=self.END, adj=None)
+            per_code = pd.concat(
+                [data.load_daily(code, start=self.START, end=self.END, adj=None) for code in self.CODES],
+                ignore_index=True,
+            ).sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
+            raw_root = self.dataset_dir(None)
+            raw_meta = json.loads((raw_root / "_meta.json").read_text(encoding="utf-8"))
+            qfq_codes = data._iter_cache_codes("qfq")
+        self.assertEqual(raw_meta["adj"], "raw")
+        self.assertEqual(qfq_codes, [])  # raw 缓存不会被 qfq 数据集误扫
+        self.assertEqual(scanned.attrs["adjustment"]["adj"], "none")  # 与逐股 load_daily 的 adj=None 标注一致
+        self.assertEqual(scanned.attrs["adjustment"]["adj_source"], "daily_dataset")
+        columns = list(per_code.columns)
+        pd.testing.assert_frame_equal(
+            scanned[columns].reset_index(drop=True),
+            per_code[columns],
+            check_dtype=False,
+        )
+
+    def test_deleted_build_directory_is_rebuilt_on_scan(self):
+        """build 目录被别的进程 cleanup 删掉时重建一次再扫，而不是抛裸 FileNotFoundError。"""
+        with self.env():
+            self.seed()
+            self.scan()
+            build_dir = self.dataset_dir() / f"build={self.read_meta()['build']}"
+            shutil.rmtree(build_dir)
+            data._DAILY_MEM.clear()
+            with patch.object(data, "_fetch_daily", side_effect=AssertionError("不该联网")):
+                out = self.scan()
+            status = data.dataset_status("qfq")
+        self.assertEqual(len(out), len(self.CODES) * 6)
+        self.assertNotEqual(self.read_meta()["build"], build_dir.name.split("=", 1)[1])
+        self.assertTrue(status["usable"])
 
     def test_unknown_adj_is_rejected(self):
         with self.env(), self.assertRaises(ValueError):
